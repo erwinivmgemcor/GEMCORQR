@@ -47,7 +47,6 @@
     .pin-dot.filled { background:var(--primary); border-color:var(--primary); }
     .production-banner { background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:#fff; border-radius:12px; padding:1rem; margin-bottom:1rem; text-align:center; }
   </style>
-<base target="_blank">
 </head>
 <body>
 
@@ -91,7 +90,7 @@
         </button>
         <div class="text-muted small mt-2">
           <i class="bi bi-info-circle me-1"></i>
-          Scan Document QR to auto-load &bull; Scan Item QR to verify
+          Scan Document QR to auto-load • Scan Item QR to verify
         </div>
       </div>
     </div>
@@ -99,7 +98,7 @@
     <div class="card">
       <div class="card-header bg-light"><strong><i class="bi bi-file-earmark-text me-2"></i>Select Document</strong></div>
       <div class="card-body">
-        <input type="text" id="docSearch" class="form-control doc-search" placeholder="Search document..." oninput="filterDocs()">
+        <input type="text" id="docSearch" class="form-control doc-search" placeholder="🔍 Search document..." oninput="filterDocs()">
         <select id="docSelect" class="form-select" onchange="onDocSelect(this.value)">
           <option value="">-- Select Document --</option>
         </select>
@@ -213,7 +212,7 @@
         </div>
         <div class="p-3">
           <p class="text-muted mb-1"><i class="bi bi-info-circle me-1"></i>Point camera at any QR code</p>
-          <small class="text-muted">Document QR auto-loads &bull; Item QR verifies</small>
+          <small class="text-muted">Document QR auto-loads • Item QR verifies</small>
         </div>
       </div>
       <div class="modal-footer justify-content-center">
@@ -286,7 +285,7 @@
     <div class="modal-content">
       <div class="modal-header"><h5 class="modal-title"><i class="bi bi-gear me-2"></i>Settings</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
-        <!-- Role Switcher (visible to ALL) -->
+        <!-- Role Switcher -->
         <div class="card mb-3">
           <div class="card-header bg-light"><strong><i class="bi bi-person-badge me-2"></i>Current Role</strong></div>
           <div class="card-body">
@@ -316,14 +315,12 @@
           </div>
         </div>
 
-        <!-- Sync (Warehouse only) -->
         <div id="syncSection">
           <button class="btn btn-outline-primary w-100 mb-3" onclick="syncModuleLinks()">
-            <span id="syncBtnText">Sync IDs from Master Sheet</span>
+            <span id="syncBtnText">🔄 Sync IDs from Master Sheet</span>
           </button>
         </div>
 
-        <!-- Sheet IDs (Warehouse only) -->
         <div id="sheetIdsSection">
           <div class="mb-3">
             <label class="form-label">MRR Sheet URL / ID</label>
@@ -341,7 +338,7 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-primary" id="saveSettingsBtn" onclick="saveSettings()">Save Settings</button>
+        <button type="button" class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
       </div>
     </div>
   </div>
@@ -558,12 +555,16 @@ function verifyPin() {
 function applyRoleUI() {
   const role = localStorage.getItem('ivm_userRole');
   const isProduction = (role === 'production');
+  
   document.getElementById('btnMRR').style.display = isProduction ? 'none' : '';
   document.getElementById('btnMRIF').style.display = isProduction ? 'none' : '';
   document.getElementById('btnMRS').style.display = isProduction ? 'none' : '';
+  
   document.getElementById('productionBanner').classList.toggle('d-none', !isProduction);
+  
   document.getElementById('docPickerSection').style.display = isProduction ? 'none' : '';
   document.getElementById('quickScanCard').style.display = isProduction ? 'none' : '';
+  
   if (isProduction) {
     document.getElementById('activeTransactionSection').classList.add('d-none');
   }
@@ -579,44 +580,37 @@ function changePin() {
   const newPin = document.getElementById('newPinInput').value;
   const storedPin = localStorage.getItem('ivm_warehousePin') || DEFAULT_PIN;
   const msg = document.getElementById('pinChangeMsg');
+  
   if (current !== storedPin) {
-    msg.textContent = 'Current PIN is incorrect';
+    msg.textContent = '❌ Current PIN is incorrect';
     msg.className = 'small mt-2 text-danger';
     return;
   }
   if (!/^\d{4}$/.test(newPin)) {
-    msg.textContent = 'New PIN must be exactly 4 digits';
+    msg.textContent = '❌ New PIN must be exactly 4 digits';
     msg.className = 'small mt-2 text-danger';
     return;
   }
   localStorage.setItem('ivm_warehousePin', newPin);
-  msg.textContent = 'PIN changed successfully';
+  msg.textContent = '✅ PIN changed successfully';
   msg.className = 'small mt-2 text-success';
   document.getElementById('currentPinInput').value = '';
   document.getElementById('newPinInput').value = '';
 }
-
-// ==================== NETWORK ====================
-function updateWifiIcon(online) {
-  const icon = document.getElementById('wifiIcon');
-  if (online) { icon.className = 'bi bi-wifi wifi-icon wifi-online'; icon.title = 'Online'; }
-  else { icon.className = 'bi bi-wifi-off wifi-icon wifi-offline'; icon.title = 'Offline'; }
-}
-window.addEventListener('online', () => updateWifiIcon(true));
-window.addEventListener('offline', () => updateWifiIcon(false));
-updateWifiIcon(navigator.onLine);
 
 // ==================== SETTINGS ====================
 function openSettings() {
   loadSettingsToUI();
   const role = localStorage.getItem('ivm_userRole');
   const isProduction = (role === 'production');
+  
   document.getElementById('pinManagementSection').style.display = isProduction ? 'none' : '';
   document.getElementById('syncSection').style.display = isProduction ? 'none' : '';
   document.getElementById('sheetIdsSection').style.display = isProduction ? 'none' : '';
-  document.getElementById('saveSettingsBtn').style.display = isProduction ? 'none' : '';
+  
   document.getElementById('currentRoleDisplay').textContent = role === 'warehouse' ? 'Warehouse Staff' : 'Production Staff';
   document.getElementById('currentRoleDisplay').className = role === 'warehouse' ? 'badge bg-success' : 'badge bg-primary';
+  
   settingsModal.show();
 }
 function loadSettingsToUI() {
@@ -855,7 +849,7 @@ function onScanSuccess(decodedText) {
   const docPattern = /^(MRIF|MRR|MRS)\d{6,}$/i;
   if (docPattern.test(decodedText)) {
     playSuccessBeep();
-    if (confirm('Document QR detected: ' + decodedText + '\n\nSwitch to this document?')) {
+    if (confirm('📄 Document QR detected: ' + decodedText + '\n\nSwitch to this document?')) {
       const mod = decodedText.substring(0, 4).toUpperCase();
       if (['MRIF','MRR','MRS'].includes(mod)) {
         selectModule(mod);
@@ -933,7 +927,7 @@ function onQuickScanSuccess(decodedText) {
     const mod = decodedText.substring(0, 4).toUpperCase();
     if (['MRIF','MRR','MRS'].includes(mod)) {
       playSuccessBeep();
-      showToast('Loading document ' + decodedText + '...', 'success');
+      showToast('📄 Loading document ' + decodedText + '...', 'success');
       selectModule(mod);
       setTimeout(() => onDocSelect(decodedText), 500);
       return;
@@ -950,7 +944,7 @@ function onQuickScanSuccess(decodedText) {
     }
   }
   playErrorBuzz();
-  showToast('No document loaded. Scan a Document QR first, or select a document from the dropdown.', 'danger');
+  showToast('❌ No document loaded. Scan a Document QR first, or select a document from the dropdown.', 'danger');
 }
 
 // ==================== QTY MODAL ====================
@@ -1009,7 +1003,7 @@ function showMismatchAlert(code) {
 }
 function showExceedError(msg) {
   const alert = document.getElementById('exceedErrorAlert');
-  document.getElementById('exceedText').textContent = 'Error: ' + msg;
+  document.getElementById('exceedText').textContent = '❌ Error: ' + msg;
   alert.classList.remove('d-none');
   clearTimeout(state.errorTimer);
   state.errorTimer = setTimeout(() => clearErrorAlert(), 4000);
@@ -1026,11 +1020,13 @@ async function onSubmit() {
   const verifiedItems = state.items.filter(i => i.verified);
   const total = state.items.length;
   const verified = verifiedItems.length;
+  
   if (verified < total) {
     if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly scanned/entered items will be sent.')) {
       return;
     }
   }
+  
   const payload = {
     docNo: state.currentDoc,
     docType: state.currentModule,
@@ -1044,7 +1040,9 @@ async function onSubmit() {
       scannedAt: new Date().toISOString()
     }))
   };
+  
   console.log('Submitting:', payload);
+  
   try {
     const result = await submitTransaction(payload);
     console.log('Result:', result);
@@ -1052,15 +1050,16 @@ async function onSubmit() {
       successModal.show();
       setTimeout(() => location.reload(), 2000);
     } else {
-      showToast('Error: ' + (result.error || 'Submission failed'), 'danger');
+      showToast('❌ ' + (result.error || 'Submission failed'), 'danger');
     }
   } catch(err) {
-    showToast('Error: ' + err.message, 'danger');
+    showToast('❌ ' + err.message, 'danger');
     console.error(err);
   }
 }
 
 async function submitTransaction(payload) {
+  // STEP 1: Try normal POST first
   try {
     const res = await fetch(API_URL, {
       method: 'POST',
@@ -1069,20 +1068,70 @@ async function submitTransaction(payload) {
       redirect: 'follow'
     });
     const text = await res.text();
-    console.log('POST raw:', text.substring(0,500));
+    console.log('POST response:', text.substring(0, 200));
     return parseResponse(text);
-  } catch(postErr) {
-    console.warn('POST failed, trying GET fallback:', postErr);
-    try {
-      const payloadStr = encodeURIComponent(JSON.stringify(payload));
-      const url = API_URL + '?action=submitTransaction&payload=' + payloadStr + '&_t=' + Date.now();
-      const res = await fetch(url, { redirect: 'follow' });
-      const text = await res.text();
-      console.log('GET raw:', text.substring(0,500));
-      return parseResponse(text);
-    } catch(getErr) {
-      throw new Error('Both POST and GET failed: ' + getErr.message);
+  } catch (postErr) {
+    console.warn('Normal POST failed (CORS), trying no-cors...');
+  }
+
+  // STEP 2: POST with no-cors (guaranteed to reach GAS, no CORS check)
+  try {
+    await fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      mode: 'no-cors',
+      redirect: 'follow'
+    });
+    console.log('no-cors POST sent');
+  } catch (e) {
+    console.log('no-cors POST network error:', e);
+  }
+
+  // STEP 3: Wait for GAS to process (3 seconds)
+  showToast('⏳ Processing transaction...', 'info');
+  await new Promise(r => setTimeout(r, 3000));
+
+  // STEP 4: Verify by fetching updated document items via GET
+  try {
+    const verifyUrl = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(payload.docNo) + '&docType=' + payload.docType + '&sheetId=' + payload.sheetId + '&_t=' + Date.now();
+    const res = await fetch(verifyUrl, { redirect: 'follow' });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch(e) { data = []; }
+    const items = Array.isArray(data) ? data : (data.items || []);
+
+    let updatedCount = 0;
+    payload.scannedItems.forEach(sent => {
+      const found = items.find(v => v.rowIndex === sent.rowIndex || v.inventoryId === sent.inventoryId);
+      if (found && Number(found.issuedQty) === Number(sent.issuedQty)) {
+        updatedCount++;
+      }
+    });
+
+    if (updatedCount === payload.scannedItems.length && payload.scannedItems.length > 0) {
+      return { success: true, message: 'Transaction completed (' + updatedCount + ' items updated)' };
+    } else if (payload.scannedItems.length === 0) {
+      return { success: true, message: 'No items to update' };
+    } else {
+      return await submitViaGet(payload);
     }
+  } catch (verifyErr) {
+    console.warn('Verify failed, trying GET fallback:', verifyErr);
+    return await submitViaGet(payload);
+  }
+}
+
+async function submitViaGet(payload) {
+  try {
+    const base64Data = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+    const url = API_URL + '?action=submitTransaction&data=' + encodeURIComponent(base64Data) + '&_t=' + Date.now();
+    const res = await fetch(url, { redirect: 'follow' });
+    const text = await res.text();
+    console.log('GET fallback response:', text.substring(0, 200));
+    return parseResponse(text);
+  } catch (getErr) {
+    throw new Error('All submission methods failed: ' + getErr.message);
   }
 }
 
@@ -1164,6 +1213,7 @@ async function submitNewRequest() {
   const requestor = document.getElementById('reqRequestor').value.trim();
   const department = document.getElementById('reqDepartment').value.trim();
   if (!requestor) { alert('Enter requestor name'); return; }
+  
   const items = [];
   document.querySelectorAll('#requestItemsContainer .row').forEach(row => {
     const code = row.querySelector('.req-item-code').value;
@@ -1172,6 +1222,7 @@ async function submitNewRequest() {
     if (code && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty });
   });
   if (items.length === 0) { alert('Add at least one item'); return; }
+  
   const payload = {
     action: 'createRequest',
     docType: docType,
@@ -1180,6 +1231,7 @@ async function submitNewRequest() {
     items: items,
     timestamp: new Date().toISOString()
   };
+  
   try {
     const res = await fetch(API_URL, {
       method: 'POST',
