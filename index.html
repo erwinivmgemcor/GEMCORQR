@@ -40,6 +40,12 @@
     .toast-container { z-index:1060; }
     .quick-scan-btn { font-size:1.1rem; padding:1rem; }
     .qr-display { border:4px solid #fff; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.15); }
+    .role-card { cursor:pointer; transition:all .2s; border:2px solid transparent; }
+    .role-card:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,0.1); }
+    .role-card.selected { border-color:var(--primary); background:#f0f7ff; }
+    .pin-dot { width:16px; height:16px; border-radius:50%; border:2px solid #dee2e6; display:inline-block; margin:0 4px; }
+    .pin-dot.filled { background:var(--primary); border-color:var(--primary); }
+    .production-banner { background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:#fff; border-radius:12px; padding:1rem; margin-bottom:1rem; text-align:center; }
   </style>
 </head>
 <body>
@@ -51,25 +57,32 @@
     <div class="d-flex align-items-center gap-2">
       <span id="moduleLabel" class="badge bg-light text-dark">MRIF</span>
       <i id="wifiIcon" class="bi bi-wifi wifi-icon wifi-online"></i>
-      <button class="btn btn-sm btn-outline-light" onclick="openSettings()"><i class="bi bi-gear-fill"></i></button>
+      <button id="settingsBtn" class="btn btn-sm btn-outline-light" onclick="openSettings()"><i class="bi bi-gear-fill"></i></button>
     </div>
   </div>
 </nav>
 
 <div class="container-fluid mt-3">
 
+  <!-- Production Banner (shown only for Production role) -->
+  <div id="productionBanner" class="production-banner d-none">
+    <i class="bi bi-person-badge" style="font-size:2rem;"></i>
+    <h5 class="mt-2 mb-1">Production Mode</h5>
+    <small>You can only create new requests.</small>
+  </div>
+
   <!-- Module Buttons -->
-  <div class="row g-2 mb-3">
-    <div class="col-3"><button class="btn btn-outline-primary w-100 module-btn" data-module="MRR" onclick="selectModule('MRR')"><i class="bi bi-box-arrow-in-down"></i><br>Receiving</button></div>
-    <div class="col-3"><button class="btn btn-outline-primary w-100 module-btn active" data-module="MRIF" onclick="selectModule('MRIF')"><i class="bi bi-box-arrow-up"></i><br>Releasing</button></div>
-    <div class="col-3"><button class="btn btn-outline-primary w-100 module-btn" data-module="MRS" onclick="selectModule('MRS')"><i class="bi bi-arrow-counterclockwise"></i><br>Returns</button></div>
-    <div class="col-3"><button class="btn btn-outline-success w-100 module-btn" data-module="REQUEST" onclick="openNewRequest()"><i class="bi bi-plus-lg"></i><br>New Request</button></div>
+  <div class="row g-2 mb-3" id="moduleButtonsRow">
+    <div class="col-3" id="btnMRR"><button class="btn btn-outline-primary w-100 module-btn" data-module="MRR" onclick="selectModule('MRR')"><i class="bi bi-box-arrow-in-down"></i><br>Receiving</button></div>
+    <div class="col-3" id="btnMRIF"><button class="btn btn-outline-primary w-100 module-btn active" data-module="MRIF" onclick="selectModule('MRIF')"><i class="bi bi-box-arrow-up"></i><br>Releasing</button></div>
+    <div class="col-3" id="btnMRS"><button class="btn btn-outline-primary w-100 module-btn" data-module="MRS" onclick="selectModule('MRS')"><i class="bi bi-arrow-counterclockwise"></i><br>Returns</button></div>
+    <div class="col-3" id="btnNewRequest"><button class="btn btn-outline-success w-100 module-btn" data-module="REQUEST" onclick="openNewRequest()"><i class="bi bi-plus-lg"></i><br>New Request</button></div>
   </div>
 
   <!-- Document Picker -->
   <div id="docPickerSection">
     <!-- QUICK SCAN BUTTON -->
-    <div class="card mb-3 border-primary shadow-sm">
+    <div id="quickScanCard" class="card mb-3 border-primary shadow-sm">
       <div class="card-body text-center py-4">
         <button class="btn btn-primary quick-scan-btn w-100" onclick="openQuickScan()">
           <i class="bi bi-qr-code-scan me-2" style="font-size:1.5rem;"></i>
@@ -209,12 +222,99 @@
   </div>
 </div>
 
+<!-- ROLE SELECTION MODAL -->
+<div class="modal fade" id="roleModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="bi bi-shield-lock me-2"></i>Select Your Role</h5>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="card role-card p-3 text-center" onclick="selectRole('production')">
+              <i class="bi bi-person-badge text-primary" style="font-size:2.5rem;"></i>
+              <h5 class="mt-2 mb-1">Production Staff</h5>
+              <small class="text-muted">Create material requests only</small>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="card role-card p-3 text-center" onclick="showPinEntry()">
+              <i class="bi bi-shield-check text-success" style="font-size:2.5rem;"></i>
+              <h5 class="mt-2 mb-1">Warehouse Staff</h5>
+              <small class="text-muted">Full access to all modules</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- PIN Entry (hidden by default) -->
+        <div id="pinEntrySection" class="d-none mt-3 text-center">
+          <hr>
+          <label class="form-label fw-bold">Enter Warehouse PIN</label>
+          <div class="mb-2">
+            <span id="pinDot1" class="pin-dot"></span>
+            <span id="pinDot2" class="pin-dot"></span>
+            <span id="pinDot3" class="pin-dot"></span>
+            <span id="pinDot4" class="pin-dot"></span>
+          </div>
+          <div class="row g-2 justify-content-center">
+            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(1)">1</button></div>
+            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(2)">2</button></div>
+            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(3)">3</button></div>
+            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(4)">4</button></div>
+            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(5)">5</button></div>
+            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(6)">6</button></div>
+            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(7)">7</button></div>
+            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(8)">8</button></div>
+            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(9)">9</button></div>
+            <div class="col-4"><button class="btn btn-outline-warning w-100" onclick="clearPin()">CLR</button></div>
+            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(0)">0</button></div>
+            <div class="col-4"><button class="btn btn-outline-danger w-100" onclick="backspacePin()"><i class="bi bi-backspace"></i></button></div>
+          </div>
+          <button class="btn btn-success w-100 mt-2" onclick="verifyPin()">Unlock</button>
+          <div id="pinError" class="text-danger small mt-2 d-none">Incorrect PIN. Try again.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Settings Modal -->
 <div class="modal fade" id="settingsModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header"><h5 class="modal-title"><i class="bi bi-gear me-2"></i>Settings</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
+        <!-- Role Switcher -->
+        <div class="card mb-3">
+          <div class="card-header bg-light"><strong><i class="bi bi-person-badge me-2"></i>Current Role</strong></div>
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+              <span id="currentRoleDisplay" class="badge bg-secondary">Unknown</span>
+              <button class="btn btn-sm btn-outline-primary" onclick="switchRole()">Switch Role</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PIN Management (Warehouse only) -->
+        <div id="pinManagementSection">
+          <div class="card mb-3">
+            <div class="card-header bg-light"><strong><i class="bi bi-key me-2"></i>Warehouse PIN</strong></div>
+            <div class="card-body">
+              <div class="mb-2">
+                <label class="form-label small">Current PIN</label>
+                <input type="password" id="currentPinInput" class="form-control" placeholder="Enter current PIN" maxlength="4">
+              </div>
+              <div class="mb-2">
+                <label class="form-label small">New PIN (4 digits)</label>
+                <input type="password" id="newPinInput" class="form-control" placeholder="Enter new PIN" maxlength="4">
+              </div>
+              <button class="btn btn-sm btn-primary w-100" onclick="changePin()">Change PIN</button>
+              <div id="pinChangeMsg" class="small mt-2"></div>
+            </div>
+          </div>
+        </div>
+
         <button class="btn btn-outline-primary w-100 mb-3" onclick="syncModuleLinks()">
           <span id="syncBtnText">🔄 Sync IDs from Master Sheet</span>
         </button>
@@ -319,6 +419,7 @@
 <script>
 // ==================== CONFIG ====================
 const API_URL = 'https://script.google.com/macros/s/AKfycbzGXpYbQXfcKHxMpVGJ7NfAHKwZOAY6jWMqzhsmljQAsPz2EG6fVBnzEgc--SKTJvKk/exec';
+const DEFAULT_PIN = '0000';
 
 // ==================== STATE ====================
 const state = {
@@ -332,7 +433,9 @@ const state = {
   cameras: [],
   requestInventoryList: [],
   errorTimer: null,
-  docList: []
+  docList: [],
+  pinBuffer: '',
+  pinAttempts: 0
 };
 
 const qtyModal = new bootstrap.Modal(document.getElementById('qtyModal'));
@@ -341,6 +444,7 @@ const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal
 const newRequestModal = new bootstrap.Modal(document.getElementById('newRequestModal'));
 const requestSuccessModal = new bootstrap.Modal(document.getElementById('requestSuccessModal'));
 const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
+const roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
 
 // ==================== AUDIO ====================
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -369,6 +473,136 @@ function playErrorBuzz() {
     osc.start(); osc.stop(audioCtx.currentTime + 0.4);
     if (navigator.vibrate) navigator.vibrate([100,50,100]);
   } catch(e) {}
+}
+
+// ==================== ROLE / SECURITY ====================
+function initRole() {
+  const role = localStorage.getItem('ivm_userRole');
+  if (!role) {
+    roleModal.show();
+  } else {
+    applyRoleUI();
+    if (role === 'warehouse') {
+      if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
+        setTimeout(() => settingsModal.show(), 500);
+      }
+      selectModule('MRIF');
+    }
+  }
+}
+function selectRole(role) {
+  if (role === 'production') {
+    localStorage.setItem('ivm_userRole', 'production');
+    roleModal.hide();
+    applyRoleUI();
+    showToast('Production mode activated', 'success');
+  }
+}
+function showPinEntry() {
+  document.getElementById('pinEntrySection').classList.remove('d-none');
+  clearPin();
+}
+function enterPinDigit(d) {
+  if (state.pinBuffer.length < 4) {
+    state.pinBuffer += d;
+    updatePinDots();
+  }
+}
+function backspacePin() {
+  state.pinBuffer = state.pinBuffer.slice(0, -1);
+  updatePinDots();
+}
+function clearPin() {
+  state.pinBuffer = '';
+  updatePinDots();
+  document.getElementById('pinError').classList.add('d-none');
+}
+function updatePinDots() {
+  for (let i = 1; i <= 4; i++) {
+    const dot = document.getElementById('pinDot' + i);
+    if (i <= state.pinBuffer.length) dot.classList.add('filled');
+    else dot.classList.remove('filled');
+  }
+}
+function verifyPin() {
+  const storedPin = localStorage.getItem('ivm_warehousePin') || DEFAULT_PIN;
+  if (state.pinBuffer === storedPin) {
+    localStorage.setItem('ivm_userRole', 'warehouse');
+    state.pinAttempts = 0;
+    roleModal.hide();
+    applyRoleUI();
+    showToast('Warehouse mode unlocked', 'success');
+    if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
+      setTimeout(() => settingsModal.show(), 500);
+    }
+    selectModule('MRIF');
+  } else {
+    state.pinAttempts++;
+    document.getElementById('pinError').classList.remove('d-none');
+    clearPin();
+    playErrorBuzz();
+    if (state.pinAttempts >= 3) {
+      alert('Too many failed attempts. Please contact admin.');
+      state.pinAttempts = 0;
+    }
+  }
+}
+function applyRoleUI() {
+  const role = localStorage.getItem('ivm_userRole');
+  const isProduction = (role === 'production');
+  
+  // Update navbar
+  document.getElementById('settingsBtn').style.display = isProduction ? 'none' : '';
+  
+  // Module buttons
+  document.getElementById('btnMRR').style.display = isProduction ? 'none' : '';
+  document.getElementById('btnMRIF').style.display = isProduction ? 'none' : '';
+  document.getElementById('btnMRS').style.display = isProduction ? 'none' : '';
+  
+  // Production banner
+  document.getElementById('productionBanner').classList.toggle('d-none', !isProduction);
+  
+  // Document picker & Quick Scan (warehouse only)
+  document.getElementById('docPickerSection').style.display = isProduction ? 'none' : '';
+  document.getElementById('quickScanCard').style.display = isProduction ? 'none' : '';
+  
+  // Active transaction section
+  if (isProduction) {
+    document.getElementById('activeTransactionSection').classList.add('d-none');
+  }
+  
+  // Settings modal adjustments
+  document.getElementById('currentRoleDisplay').textContent = role === 'warehouse' ? 'Warehouse Staff' : 'Production Staff';
+  document.getElementById('currentRoleDisplay').className = role === 'warehouse' ? 'badge bg-success' : 'badge bg-primary';
+  document.getElementById('pinManagementSection').style.display = isProduction ? 'none' : '';
+}
+function switchRole() {
+  settingsModal.hide();
+  document.getElementById('pinEntrySection').classList.add('d-none');
+  clearPin();
+  roleModal.show();
+}
+function changePin() {
+  const current = document.getElementById('currentPinInput').value;
+  const newPin = document.getElementById('newPinInput').value;
+  const storedPin = localStorage.getItem('ivm_warehousePin') || DEFAULT_PIN;
+  const msg = document.getElementById('pinChangeMsg');
+  
+  if (current !== storedPin) {
+    msg.textContent = '❌ Current PIN is incorrect';
+    msg.className = 'small mt-2 text-danger';
+    return;
+  }
+  if (!/^\d{4}$/.test(newPin)) {
+    msg.textContent = '❌ New PIN must be exactly 4 digits';
+    msg.className = 'small mt-2 text-danger';
+    return;
+  }
+  localStorage.setItem('ivm_warehousePin', newPin);
+  msg.textContent = '✅ PIN changed successfully';
+  msg.className = 'small mt-2 text-success';
+  document.getElementById('currentPinInput').value = '';
+  document.getElementById('newPinInput').value = '';
 }
 
 // ==================== NETWORK ====================
@@ -619,8 +853,6 @@ function stopScanner() {
 }
 function onScanSuccess(decodedText) {
   clearErrorAlert();
-  
-  // Check if DOCUMENT QR scanned while in active doc
   const docPattern = /^(MRIF|MRR|MRS)\d{6,}$/i;
   if (docPattern.test(decodedText)) {
     playSuccessBeep();
@@ -633,7 +865,6 @@ function onScanSuccess(decodedText) {
     }
     return;
   }
-  
   const item = state.items.find(i => i.inventoryId.toLowerCase() === decodedText.toLowerCase());
   if (!item) {
     playErrorBuzz();
@@ -693,14 +924,11 @@ function startQuickScanner() {
   }).catch(err => showToast('Camera access denied', 'danger'));
 }
 function onQuickScanSuccess(decodedText) {
-  // Stop scanner immediately
   if (state.quickScanner) {
     state.quickScanner.stop().catch(()=>{});
     state.quickScanner = null;
   }
   quickScanModal.hide();
-  
-  // Check if DOCUMENT QR
   const docPattern = /^(MRIF|MRR|MRS)\d{6,}$/i;
   if (docPattern.test(decodedText)) {
     const mod = decodedText.substring(0, 4).toUpperCase();
@@ -712,21 +940,16 @@ function onQuickScanSuccess(decodedText) {
       return;
     }
   }
-  
-  // If document is already loaded, treat as item scan
   if (state.currentDoc && state.items.length > 0) {
     const item = state.items.find(i => i.inventoryId.toLowerCase() === decodedText.toLowerCase());
     if (item) {
       playSuccessBeep();
-      // Ensure active section is visible
       document.getElementById('docPickerSection').classList.add('d-none');
       document.getElementById('activeTransactionSection').classList.remove('d-none');
       openQtyModal(item);
       return;
     }
   }
-  
-  // Otherwise error
   playErrorBuzz();
   showToast('❌ No document loaded. Scan a Document QR first, or select a document from the dropdown.', 'danger');
 }
@@ -1011,10 +1234,7 @@ function showToast(msg, type) {
 
 // ==================== INIT ====================
 document.addEventListener('DOMContentLoaded', () => {
-  if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
-    setTimeout(() => settingsModal.show(), 500);
-  }
-  selectModule('MRIF');
+  initRole();
 });
 </script>
 </body>
