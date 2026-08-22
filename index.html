@@ -12,8 +12,8 @@
     :root { --primary:#0d6efd; --success:#198754; --warning:#ffc107; --danger:#dc3545; --scanner-bg:#1a1a2e; }
     body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; touch-action:manipulation; padding-bottom:20px; }
     .scanner-container { position:relative; width:100%; max-width:400px; margin:0 auto; border-radius:12px; overflow:hidden; background:var(--scanner-bg); }
-    #reader { width:100% !important; border:none !important; }
-    #reader video { border-radius:12px; }
+    #reader, #quickReader { width:100% !important; border:none !important; }
+    #reader video, #quickReader video { border-radius:12px; }
     .scanner-overlay { position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; display:flex; align-items:center; justify-content:center; }
     .scanner-frame { width:220px; height:220px; border:2px solid rgba(255,255,255,0.8); border-radius:12px; position:relative; }
     .scanner-frame::before,.scanner-frame::after { content:''; position:absolute; width:30px; height:30px; border-color:#00ff88; border-style:solid; }
@@ -37,10 +37,9 @@
     .module-btn { font-size:.85rem; padding:.5rem .75rem; }
     .module-btn.active { background:var(--primary); color:#fff; }
     .doc-search { margin-bottom:.5rem; }
-    #requestItemDropdown { max-height:200px; overflow-y:auto; }
-    .dropdown-item { cursor:pointer; }
-    .dropdown-item:hover { background:#e9ecef; }
     .toast-container { z-index:1060; }
+    .quick-scan-btn { font-size:1.1rem; padding:1rem; }
+    .qr-display { border:4px solid #fff; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.15); }
   </style>
 </head>
 <body>
@@ -61,14 +60,28 @@
 
   <!-- Module Buttons -->
   <div class="row g-2 mb-3">
-    <div class="col-3"><button class="btn btn-outline-primary w-100 module-btn" onclick="selectModule('MRR')"><i class="bi bi-box-arrow-in-down"></i><br>Receiving</button></div>
-    <div class="col-3"><button class="btn btn-outline-primary w-100 module-btn active" onclick="selectModule('MRIF')"><i class="bi bi-box-arrow-up"></i><br>Releasing</button></div>
-    <div class="col-3"><button class="btn btn-outline-primary w-100 module-btn" onclick="selectModule('MRS')"><i class="bi bi-arrow-counterclockwise"></i><br>Returns</button></div>
-    <div class="col-3"><button class="btn btn-outline-success w-100 module-btn" onclick="openNewRequest()"><i class="bi bi-plus-lg"></i><br>New Request</button></div>
+    <div class="col-3"><button class="btn btn-outline-primary w-100 module-btn" data-module="MRR" onclick="selectModule('MRR')"><i class="bi bi-box-arrow-in-down"></i><br>Receiving</button></div>
+    <div class="col-3"><button class="btn btn-outline-primary w-100 module-btn active" data-module="MRIF" onclick="selectModule('MRIF')"><i class="bi bi-box-arrow-up"></i><br>Releasing</button></div>
+    <div class="col-3"><button class="btn btn-outline-primary w-100 module-btn" data-module="MRS" onclick="selectModule('MRS')"><i class="bi bi-arrow-counterclockwise"></i><br>Returns</button></div>
+    <div class="col-3"><button class="btn btn-outline-success w-100 module-btn" data-module="REQUEST" onclick="openNewRequest()"><i class="bi bi-plus-lg"></i><br>New Request</button></div>
   </div>
 
   <!-- Document Picker -->
   <div id="docPickerSection">
+    <!-- QUICK SCAN BUTTON -->
+    <div class="card mb-3 border-primary shadow-sm">
+      <div class="card-body text-center py-4">
+        <button class="btn btn-primary quick-scan-btn w-100" onclick="openQuickScan()">
+          <i class="bi bi-qr-code-scan me-2" style="font-size:1.5rem;"></i>
+          <strong>QUICK SCAN QR</strong>
+        </button>
+        <div class="text-muted small mt-2">
+          <i class="bi bi-info-circle me-1"></i>
+          Scan Document QR to auto-load • Scan Item QR to verify
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header bg-light"><strong><i class="bi bi-file-earmark-text me-2"></i>Select Document</strong></div>
       <div class="card-body">
@@ -171,6 +184,31 @@
   </div>
 </div>
 
+<!-- Quick Scan Modal -->
+<div class="modal fade" id="quickScanModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="bi bi-qr-code-scan me-2"></i>Quick Scan</h5>
+        <button type="button" class="btn-close btn-close-white" onclick="closeQuickScan()"></button>
+      </div>
+      <div class="modal-body text-center p-0">
+        <div style="position:relative;background:#1a1a2e;">
+          <div id="quickReader"></div>
+          <div class="scanner-overlay"><div class="scanner-frame"><div class="scan-line"></div></div></div>
+        </div>
+        <div class="p-3">
+          <p class="text-muted mb-1"><i class="bi bi-info-circle me-1"></i>Point camera at any QR code</p>
+          <small class="text-muted">Document QR auto-loads • Item QR verifies</small>
+        </div>
+      </div>
+      <div class="modal-footer justify-content-center">
+        <button class="btn btn-outline-secondary" onclick="closeQuickScan()">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Settings Modal -->
 <div class="modal fade" id="settingsModal" tabindex="-1">
   <div class="modal-dialog">
@@ -257,10 +295,10 @@
           <span class="badge bg-secondary">Ticket: <span id="requestTicketNo"></span></span><br>
           <span class="badge bg-primary mt-1">Doc: <span id="requestDocNo"></span></span>
         </div>
-        <div class="my-3">
-          <img id="requestQrImg" src="" alt="QR Code" style="max-width:280px;width:100%;">
-          <div id="qrFallback" class="d-none alert alert-warning mt-2"></div>
+        <div class="my-3 d-flex justify-content-center">
+          <img id="requestQrImg" src="" alt="QR Code" class="qr-display mx-auto" style="max-width:280px;width:100%;">
         </div>
+        <div id="qrFallback" class="d-none alert alert-warning mt-2"></div>
         <p class="text-muted small">Show this QR code to the warehouse team.</p>
       </div>
       <div class="modal-footer justify-content-center">
@@ -288,11 +326,13 @@ const state = {
   currentDoc: null,
   items: [],
   html5QrCode: null,
+  quickScanner: null,
   currentCamera: 'environment',
   torchOn: false,
   cameras: [],
   requestInventoryList: [],
-  errorTimer: null
+  errorTimer: null,
+  docList: []
 };
 
 const qtyModal = new bootstrap.Modal(document.getElementById('qtyModal'));
@@ -300,6 +340,7 @@ const successModal = new bootstrap.Modal(document.getElementById('successModal')
 const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
 const newRequestModal = new bootstrap.Modal(document.getElementById('newRequestModal'));
 const requestSuccessModal = new bootstrap.Modal(document.getElementById('requestSuccessModal'));
+const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
 
 // ==================== AUDIO ====================
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -408,7 +449,8 @@ async function syncModuleLinks() {
 function selectModule(mod) {
   state.currentModule = mod;
   document.querySelectorAll('.module-btn').forEach(b => b.classList.remove('active'));
-  event.target.closest('.module-btn').classList.add('active');
+  const btn = document.querySelector('.module-btn[data-module="' + mod + '"]');
+  if (btn) btn.classList.add('active');
   document.getElementById('moduleLabel').textContent = mod;
   updateLabels();
   changeDocument();
@@ -559,7 +601,7 @@ function updateSubmitButton(verified, total) {
   }
 }
 
-// ==================== SCANNER ====================
+// ==================== SCANNER (Active Doc) ====================
 function startScanner() {
   if (state.html5QrCode) { state.html5QrCode.stop().catch(()=>{}); }
   state.html5QrCode = new Html5Qrcode('reader');
@@ -577,6 +619,21 @@ function stopScanner() {
 }
 function onScanSuccess(decodedText) {
   clearErrorAlert();
+  
+  // Check if DOCUMENT QR scanned while in active doc
+  const docPattern = /^(MRIF|MRR|MRS)\d{6,}$/i;
+  if (docPattern.test(decodedText)) {
+    playSuccessBeep();
+    if (confirm('📄 Document QR detected: ' + decodedText + '\n\nSwitch to this document?')) {
+      const mod = decodedText.substring(0, 4).toUpperCase();
+      if (['MRIF','MRR','MRS'].includes(mod)) {
+        selectModule(mod);
+        setTimeout(() => onDocSelect(decodedText), 300);
+      }
+    }
+    return;
+  }
+  
   const item = state.items.find(i => i.inventoryId.toLowerCase() === decodedText.toLowerCase());
   if (!item) {
     playErrorBuzz();
@@ -608,6 +665,70 @@ function toggleTorch() {
 function switchCamera() {
   state.currentCamera = state.currentCamera === 'environment' ? 'user' : 'environment';
   startScanner();
+}
+
+// ==================== QUICK SCAN (Standalone) ====================
+function openQuickScan() {
+  quickScanModal.show();
+  setTimeout(startQuickScanner, 300);
+}
+function closeQuickScan() {
+  if (state.quickScanner) {
+    state.quickScanner.stop().catch(()=>{});
+    state.quickScanner = null;
+  }
+  quickScanModal.hide();
+}
+function startQuickScanner() {
+  if (state.quickScanner) { state.quickScanner.stop().catch(()=>{}); }
+  const el = document.getElementById('quickReader');
+  if (!el) return;
+  state.quickScanner = new Html5Qrcode('quickReader');
+  Html5Qrcode.getCameras().then(cameras => {
+    if (cameras.length === 0) { showToast('No cameras found', 'warning'); return; }
+    const camId = cameras.find(c=>c.label.toLowerCase().includes('back'))?.id || cameras[0].id;
+    state.quickScanner.start(camId, { fps:10, qrbox:{width:250,height:250} }, onQuickScanSuccess, ()=>{}).catch(err => {
+      showToast('Quick scan camera error: ' + err, 'danger');
+    });
+  }).catch(err => showToast('Camera access denied', 'danger'));
+}
+function onQuickScanSuccess(decodedText) {
+  // Stop scanner immediately
+  if (state.quickScanner) {
+    state.quickScanner.stop().catch(()=>{});
+    state.quickScanner = null;
+  }
+  quickScanModal.hide();
+  
+  // Check if DOCUMENT QR
+  const docPattern = /^(MRIF|MRR|MRS)\d{6,}$/i;
+  if (docPattern.test(decodedText)) {
+    const mod = decodedText.substring(0, 4).toUpperCase();
+    if (['MRIF','MRR','MRS'].includes(mod)) {
+      playSuccessBeep();
+      showToast('📄 Loading document ' + decodedText + '...', 'success');
+      selectModule(mod);
+      setTimeout(() => onDocSelect(decodedText), 500);
+      return;
+    }
+  }
+  
+  // If document is already loaded, treat as item scan
+  if (state.currentDoc && state.items.length > 0) {
+    const item = state.items.find(i => i.inventoryId.toLowerCase() === decodedText.toLowerCase());
+    if (item) {
+      playSuccessBeep();
+      // Ensure active section is visible
+      document.getElementById('docPickerSection').classList.add('d-none');
+      document.getElementById('activeTransactionSection').classList.remove('d-none');
+      openQtyModal(item);
+      return;
+    }
+  }
+  
+  // Otherwise error
+  playErrorBuzz();
+  showToast('❌ No document loaded. Scan a Document QR first, or select a document from the dropdown.', 'danger');
 }
 
 // ==================== QTY MODAL ====================
@@ -722,7 +843,6 @@ async function onSubmit() {
 }
 
 async function submitTransaction(payload) {
-  // Try POST first
   try {
     const res = await fetch(API_URL, {
       method: 'POST',
@@ -735,7 +855,6 @@ async function submitTransaction(payload) {
     return parseResponse(text);
   } catch(postErr) {
     console.warn('POST failed, trying GET fallback:', postErr);
-    // GET fallback (CORS-safe)
     try {
       const payloadStr = encodeURIComponent(JSON.stringify(payload));
       const url = API_URL + '?action=submitTransaction&payload=' + payloadStr + '&_t=' + Date.now();
@@ -753,7 +872,6 @@ function parseResponse(text) {
   try {
     return JSON.parse(text);
   } catch(e) {
-    // Try to extract JSON from HTML wrapper
     const m = text.match(/\{[\s\S]*\}/);
     if (m) return JSON.parse(m[0]);
     throw new Error('Non-JSON response: ' + text.substring(0,200));
