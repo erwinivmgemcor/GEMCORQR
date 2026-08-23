@@ -64,7 +64,7 @@
 
 <div class="container-fluid mt-3">
 
-  <!-- Production Banner (shown only for Production role) -->
+  <!-- Production Banner -->
   <div id="productionBanner" class="production-banner d-none">
     <i class="bi bi-person-badge" style="font-size:2rem;"></i>
     <h5 class="mt-2 mb-1">Production Mode</h5>
@@ -81,7 +81,6 @@
 
   <!-- Document Picker -->
   <div id="docPickerSection">
-    <!-- QUICK SCAN BUTTON -->
     <div id="quickScanCard" class="card mb-3 border-primary shadow-sm">
       <div class="card-body text-center py-4">
         <button class="btn btn-primary quick-scan-btn w-100" onclick="openQuickScan()">
@@ -112,6 +111,9 @@
       <button class="btn btn-sm btn-outline-secondary" onclick="changeDocument()"><i class="bi bi-arrow-left"></i> Change Document</button>
       <span id="docTitle" class="badge bg-primary"></span>
     </div>
+
+    <!-- Document Status Banner -->
+    <div id="docStatusBanner" class="alert d-none mb-2 py-2 text-center"></div>
 
     <!-- Scanner -->
     <div class="scanner-container mb-3">
@@ -246,8 +248,6 @@
             </div>
           </div>
         </div>
-
-        <!-- PIN Entry (hidden by default) -->
         <div id="pinEntrySection" class="d-none mt-3 text-center">
           <hr>
           <label class="form-label fw-bold">Enter Warehouse PIN</label>
@@ -285,7 +285,6 @@
     <div class="modal-content">
       <div class="modal-header"><h5 class="modal-title"><i class="bi bi-gear me-2"></i>Settings</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
-        <!-- Role Switcher -->
         <div class="card mb-3">
           <div class="card-header bg-light"><strong><i class="bi bi-person-badge me-2"></i>Current Role</strong></div>
           <div class="card-body">
@@ -295,8 +294,6 @@
             </div>
           </div>
         </div>
-
-        <!-- PIN Management (Warehouse only) -->
         <div id="pinManagementSection">
           <div class="card mb-3">
             <div class="card-header bg-light"><strong><i class="bi bi-key me-2"></i>Warehouse PIN</strong></div>
@@ -314,13 +311,11 @@
             </div>
           </div>
         </div>
-
         <div id="syncSection">
           <button class="btn btn-outline-primary w-100 mb-3" onclick="syncModuleLinks()">
             <span id="syncBtnText">🔄 Sync IDs from Master Sheet</span>
           </button>
         </div>
-
         <div id="sheetIdsSection">
           <div class="mb-3">
             <label class="form-label">MRR Sheet URL / ID</label>
@@ -555,16 +550,12 @@ function verifyPin() {
 function applyRoleUI() {
   const role = localStorage.getItem('ivm_userRole');
   const isProduction = (role === 'production');
-  
   document.getElementById('btnMRR').style.display = isProduction ? 'none' : '';
   document.getElementById('btnMRIF').style.display = isProduction ? 'none' : '';
   document.getElementById('btnMRS').style.display = isProduction ? 'none' : '';
-  
   document.getElementById('productionBanner').classList.toggle('d-none', !isProduction);
-  
   document.getElementById('docPickerSection').style.display = isProduction ? 'none' : '';
   document.getElementById('quickScanCard').style.display = isProduction ? 'none' : '';
-  
   if (isProduction) {
     document.getElementById('activeTransactionSection').classList.add('d-none');
   }
@@ -580,7 +571,6 @@ function changePin() {
   const newPin = document.getElementById('newPinInput').value;
   const storedPin = localStorage.getItem('ivm_warehousePin') || DEFAULT_PIN;
   const msg = document.getElementById('pinChangeMsg');
-  
   if (current !== storedPin) {
     msg.textContent = '❌ Current PIN is incorrect';
     msg.className = 'small mt-2 text-danger';
@@ -603,14 +593,11 @@ function openSettings() {
   loadSettingsToUI();
   const role = localStorage.getItem('ivm_userRole');
   const isProduction = (role === 'production');
-  
   document.getElementById('pinManagementSection').style.display = isProduction ? 'none' : '';
   document.getElementById('syncSection').style.display = isProduction ? 'none' : '';
   document.getElementById('sheetIdsSection').style.display = isProduction ? 'none' : '';
-  
   document.getElementById('currentRoleDisplay').textContent = role === 'warehouse' ? 'Warehouse Staff' : 'Production Staff';
   document.getElementById('currentRoleDisplay').className = role === 'warehouse' ? 'badge bg-success' : 'badge bg-primary';
-  
   settingsModal.show();
 }
 function loadSettingsToUI() {
@@ -712,8 +699,23 @@ function populateDocSelect(docs) {
   state.docList = docs;
   docs.forEach(d => {
     const val = typeof d === 'string' ? d : (d.docNo || d.name || d);
+    const status = typeof d === 'object' ? (d.status || 'PENDING') : 'PENDING';
     const opt = document.createElement('option');
-    opt.value = val; opt.textContent = val;
+    opt.value = val;
+    var badge = '';
+    if (status === 'SERVED') badge = ' ✅ SERVED';
+    else if (status === 'PARTIAL') badge = ' 🟡 PARTIAL';
+    else if (status === 'PENDING') badge = ' 🔴 PENDING';
+    opt.textContent = val + badge;
+    if (status === 'SERVED') {
+      opt.style.color = '#198754';
+      opt.style.fontWeight = 'bold';
+    } else if (status === 'PARTIAL') {
+      opt.style.color = '#92400e';
+    } else if (status === 'EMPTY') {
+      opt.style.color = '#6c757d';
+      opt.style.fontStyle = 'italic';
+    }
     sel.appendChild(opt);
   });
 }
@@ -724,15 +726,37 @@ function filterDocs() {
   if (!state.docList) return;
   state.docList.forEach(d => {
     const val = typeof d === 'string' ? d : (d.docNo || d.name || d);
+    const status = typeof d === 'object' ? (d.status || 'PENDING') : 'PENDING';
     if (val.toLowerCase().includes(term)) {
       const opt = document.createElement('option');
-      opt.value = val; opt.textContent = val;
+      opt.value = val;
+      var badge = '';
+      if (status === 'SERVED') badge = ' ✅ SERVED';
+      else if (status === 'PARTIAL') badge = ' 🟡 PARTIAL';
+      else if (status === 'PENDING') badge = ' 🔴 PENDING';
+      opt.textContent = val + badge;
+      if (status === 'SERVED') {
+        opt.style.color = '#198754';
+        opt.style.fontWeight = 'bold';
+      } else if (status === 'PARTIAL') {
+        opt.style.color = '#92400e';
+      }
       sel.appendChild(opt);
     }
   });
 }
 function onDocSelect(docNo) {
   if (!docNo) { hideScannerSection(); return; }
+  const docInfo = state.docList.find(d => {
+    const dVal = typeof d === 'string' ? d : (d.docNo || d.name || d);
+    return dVal === docNo;
+  });
+  if (docInfo && typeof docInfo === 'object' && docInfo.status === 'SERVED') {
+    if (!confirm('⚠️ This document is already FULLY SERVED.\n\nAre you sure you want to open it again?')) {
+      document.getElementById('docSelect').value = '';
+      return;
+    }
+  }
   clearErrorAlert();
   resetDocumentState();
   state.currentDoc = docNo;
@@ -769,14 +793,18 @@ async function fetchDocItems(docNo, docType) {
     let data;
     try { data = JSON.parse(text); } catch(e) { data = []; }
     const items = Array.isArray(data) ? data : (data.items || []);
-    state.items = items.map((it, idx) => ({
-      inventoryId: it.inventoryId || it.code || it.itemCode || '',
-      description: it.description || it.desc || '',
-      qty: Number(it.qty || it.requestedQty || it.expectedQty || 0),
-      issuedQty: Number(it.issuedQty || it.actualQty || 0),
-      rowIndex: it.rowIndex || (idx + 12),
-      verified: false
-    }));
+    state.items = items.map((it, idx) => {
+      const qty = Number(it.qty || it.requestedQty || it.expectedQty || 0);
+      const issued = Number(it.issuedQty || it.actualQty || 0);
+      return {
+        inventoryId: it.inventoryId || it.code || it.itemCode || '',
+        description: it.description || it.desc || '',
+        qty: qty,
+        issuedQty: issued,
+        rowIndex: it.rowIndex || (idx + 12),
+        verified: issued > 0
+      };
+    });
     renderItems();
     startScanner();
   } catch(err) {
@@ -799,6 +827,7 @@ function renderItems() {
   });
   document.getElementById('verifyCount').textContent = verified + '/' + state.items.length + ' Verified';
   updateSubmitButton(verified, state.items.length);
+  showDocStatusBanner();
 }
 function getStatusBadge(item) {
   if (!item.verified) return '<span class="status-badge status-pending">PENDING</span>';
@@ -806,6 +835,25 @@ function getStatusBadge(item) {
     return item.issuedQty >= item.qty ? '<span class="status-badge status-served">COMPLETE</span>' : '<span class="status-badge status-partial">PARTIAL</span>';
   }
   return item.issuedQty >= item.qty ? '<span class="status-badge status-served">SERVED</span>' : '<span class="status-badge status-partial">PARTIAL</span>';
+}
+function showDocStatusBanner() {
+  const banner = document.getElementById('docStatusBanner');
+  if (!banner) return;
+  const total = state.items.length;
+  if (total === 0) { banner.classList.add('d-none'); return; }
+  const allServed = state.items.every(i => i.issuedQty >= i.qty);
+  const anyIssued = state.items.some(i => i.issuedQty > 0);
+  if (allServed) {
+    banner.className = 'alert alert-success mb-2 py-2 text-center';
+    banner.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i><strong>This document is FULLY SERVED.</strong> All items have been issued.';
+    banner.classList.remove('d-none');
+  } else if (anyIssued) {
+    banner.className = 'alert alert-warning mb-2 py-2 text-center';
+    banner.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Partially Processed.</strong> Some items were already issued. Only remaining items can be updated.';
+    banner.classList.remove('d-none');
+  } else {
+    banner.classList.add('d-none');
+  }
 }
 function filterItems() {
   const term = document.getElementById('itemFilter').value.toLowerCase();
@@ -818,6 +866,13 @@ function updateSubmitButton(verified, total) {
   const btn = document.getElementById('submitBtn');
   const txt = document.getElementById('submitBtnText');
   if (total === 0) { btn.disabled = true; txt.textContent = 'No Items'; return; }
+  const allServed = state.items.every(item => item.issuedQty >= item.qty);
+  if (allServed) {
+    btn.disabled = true;
+    btn.className = 'btn btn-secondary w-100 mt-3 py-3';
+    txt.textContent = '✅ Already Fully Served';
+    return;
+  }
   btn.disabled = false;
   if (verified === total) {
     btn.className = 'btn btn-success w-100 mt-3 py-3';
@@ -1017,9 +1072,14 @@ function clearErrorAlert() {
 
 // ==================== SUBMIT ====================
 async function onSubmit() {
-  const verifiedItems = state.items.filter(i => i.verified);
+  const verifiedItems = state.items.filter(i => i.verified && i.issuedQty > 0);
   const total = state.items.length;
   const verified = verifiedItems.length;
+  
+  if (verified === 0) {
+    showToast('❌ No items to submit. Please scan and verify at least one item.', 'danger');
+    return;
+  }
   
   if (verified < total) {
     if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly scanned/entered items will be sent.')) {
@@ -1059,7 +1119,6 @@ async function onSubmit() {
 }
 
 async function submitTransaction(payload) {
-  // STEP 1: Try normal POST first
   try {
     const res = await fetch(API_URL, {
       method: 'POST',
@@ -1074,7 +1133,6 @@ async function submitTransaction(payload) {
     console.warn('Normal POST failed (CORS), trying no-cors...');
   }
 
-  // STEP 2: POST with no-cors (guaranteed to reach GAS, no CORS check)
   try {
     await fetch(API_URL, {
       method: 'POST',
@@ -1088,11 +1146,9 @@ async function submitTransaction(payload) {
     console.log('no-cors POST network error:', e);
   }
 
-  // STEP 3: Wait for GAS to process (3 seconds)
   showToast('⏳ Processing transaction...', 'info');
   await new Promise(r => setTimeout(r, 3000));
 
-  // STEP 4: Verify by fetching updated document items via GET
   try {
     const verifyUrl = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(payload.docNo) + '&docType=' + payload.docType + '&sheetId=' + payload.sheetId + '&_t=' + Date.now();
     const res = await fetch(verifyUrl, { redirect: 'follow' });
