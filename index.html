@@ -3,1417 +3,1301 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>IVM WAREHOUSE QR</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<title>IVM Warehouse QR</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
-:root { --primary:#0d6efd; --success:#198754; --warning:#ffc107; --danger:#dc3545; --scanner-bg:#1a1a2e; }
-body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; touch-action:manipulation; padding-bottom:20px; }
-.scanner-container { position:relative; width:100%; max-width:400px; margin:0 auto; border-radius:12px; overflow:hidden; background:var(--scanner-bg); }
-#reader, #quickReader { width:100% !important; border:none !important; }
-#reader video, #quickReader video { border-radius:12px; }
-.scanner-overlay { position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; display:flex; align-items:center; justify-content:center; }
-.scanner-frame { width:220px; height:220px; border:2px solid rgba(255,255,255,0.8); border-radius:12px; position:relative; }
-.scanner-frame::before,.scanner-frame::after { content:''; position:absolute; width:30px; height:30px; border-color:#00ff88; border-style:solid; }
-.scanner-frame::before { top:-2px; left:-2px; border-width:4px 0 0 4px; }
-.scanner-frame::after { bottom:-2px; right:-2px; border-width:0 4px 4px 0; }
-.scan-line { position:absolute; top:0; left:0; right:0; height:2px; background:#00ff88; box-shadow:0 0 8px #00ff88; animation:scan 2s linear infinite; }
-@keyframes scan { 0%{top:0} 50%{top:100%} 100%{top:0} }
-.status-badge { font-size:.7rem; padding:.25rem .5rem; border-radius:.375rem; font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
-.status-served { background:#d1fae5; color:#065f46; }
-.status-partial { background:#fef3c7; color:#92400e; }
-.status-pending { background:#fee2e2; color:#991b1b; }
-.status-empty { background:#e5e7eb; color:#374151; }
-.item-row { transition:all .2s; border-left:4px solid transparent; }
-.item-row.verified { border-left-color:var(--success); background:#f0fdf4; }
-.item-row:hover { background:#f8f9fa; }
-.cam-controls { position:absolute; top:8px; right:8px; display:flex; gap:6px; z-index:10; }
-.cam-btn { width:36px; height:36px; border-radius:50%; border:none; background:rgba(0,0,0,0.6); color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px; cursor:pointer; }
-.cam-btn.active { background:rgba(255,193,7,0.9); color:#000; }
-.wifi-icon { font-size:1.2rem; }
-.wifi-online { color:var(--success); }
-.wifi-offline { color:var(--danger); }
-.module-btn { font-size:.85rem; padding:.5rem .75rem; }
-.module-btn.active { background:var(--primary); color:#fff; }
-.toast-container { z-index:1060; }
-.quick-scan-btn { font-size:1.1rem; padding:1rem; }
-.qr-display { border:4px solid #fff; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.15); }
-.role-card { cursor:pointer; transition:all .2s; border:2px solid transparent; }
-.role-card:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,0.1); }
-.role-card.selected { border-color:var(--primary); background:#f0f7ff; }
-.pin-dot { width:16px; height:16px; border-radius:50%; border:2px solid #dee2e6; display:inline-block; margin:0 4px; }
-.pin-dot.filled { background:var(--primary); border-color:var(--primary); }
-.production-banner { background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:#fff; border-radius:12px; padding:1rem; margin-bottom:1rem; text-align:center; }
-.doc-card { cursor:pointer; transition:all .15s; border:2px solid #e5e7eb; border-radius:10px; padding:.75rem; background:#fff; }
-.doc-card:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,0.08); border-color:var(--primary); }
-.doc-card.served { border-left:4px solid var(--success); opacity:.85; }
-.doc-card.partial { border-left:4px solid var(--warning); }
-.doc-card.pending { border-left:4px solid var(--danger); }
-.doc-card.empty { border-left:4px solid #9ca3af; opacity:.7; }
-.doc-grid { display:grid; grid-template-columns:1fr; gap:.5rem; max-height:320px; overflow-y:auto; padding-right:4px; }
-@media(min-width:400px){ .doc-grid{ grid-template-columns:1fr 1fr; } }
-.doc-code { font-weight:700; font-size:.9rem; word-break:break-all; color:#1f2937; }
-.doc-meta { font-size:.75rem; color:#6b7280; margin-top:.25rem; }
-.doc-status-wrapper { margin-top:.5rem; }
-.doc-search { margin-bottom:.75rem; }
-.refresh-docs-btn { width:36px; height:36px; border-radius:50%; border:1px solid #dee2e6; background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
-.refresh-docs-btn:hover { background:#f8f9fa; }
-.refresh-docs-btn.spinning i { animation:spin 1s linear infinite; }
-@keyframes spin{ to{ transform:rotate(360deg); } }
-.empty-state { text-align:center; padding:2rem 1rem; color:#6b7280; }
-.empty-state i { font-size:2.5rem; margin-bottom:.5rem; display:block; }
-.debug-info { font-size:.7rem; color:#6b7280; background:#f8f9fa; padding:.375rem .5rem; border-radius:.375rem; margin-bottom:.5rem; word-break:break-all; }
-.skeleton-card { border:2px solid #e5e7eb; border-radius:10px; padding:.75rem; background:#f8f9fa; animation:pulse 1.5s ease-in-out infinite; }
-.skeleton-line { height:14px; background:#e5e7eb; border-radius:4px; margin-bottom:8px; }
-.skeleton-line.short { width:60%; }
-.skeleton-badge { height:20px; width:80px; background:#e5e7eb; border-radius:.375rem; }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --primary: #0d6efd;
+    --primary-dark: #0b5ed7;
+    --success: #198754;
+    --warning: #ffc107;
+    --danger: #dc3545;
+    --info: #0dcaf0;
+    --light: #f8f9fa;
+    --dark: #212529;
+    --gray: #6c757d;
+    --border: #dee2e6;
+    --shadow: 0 2px 8px rgba(0,0,0,0.1);
+    --radius: 12px;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f0f2f5;
+    color: var(--dark);
+    min-height: 100vh;
+    padding-bottom: 80px;
+  }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: white;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: var(--shadow);
+  }
+  .header-title {
+    font-size: 18px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .module-badge {
+    background: rgba(255,255,255,0.2);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .icon-btn {
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: background 0.2s;
+  }
+  .icon-btn:hover { background: rgba(255,255,255,0.3); }
+
+  /* Module Tabs */
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    padding: 12px 16px;
+    background: white;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 4px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--gray);
+  }
+  .tab i { font-size: 18px; }
+  .tab.active {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: white;
+  }
+  .tab:hover:not(.active) { border-color: var(--primary); color: var(--primary); }
+
+  /* Main Content */
+  .container { padding: 16px; max-width: 600px; margin: 0 auto; }
+
+  /* Quick Scan */
+  .scan-card {
+    background: white;
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+    text-align: center;
+  }
+  .scan-btn {
+    width: 100%;
+    padding: 18px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: white;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    box-shadow: 0 4px 12px rgba(13,110,253,0.3);
+  }
+  .scan-btn:active { transform: scale(0.98); }
+  .scan-hint {
+    color: var(--gray);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  /* Document Picker */
+  .picker-card {
+    background: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .picker-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .picker-title {
+    font-size: 16px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .picker-body { padding: 16px; }
+
+  /* Search */
+  .search-box {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .search-input {
+    flex: 1;
+    padding: 12px 16px;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    font-size: 15px;
+    outline: none;
+  }
+  .search-input:focus { border-color: var(--primary); }
+  .btn {
+    padding: 12px 16px;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    background: white;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+  .btn:hover { border-color: var(--primary); color: var(--primary); }
+  .btn-primary {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+  }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-danger { color: var(--danger); border-color: var(--danger); }
+  .btn-danger:hover { background: var(--danger); color: white; }
+  .btn-success { background: var(--success); color: white; border-color: var(--success); }
+
+  /* Debug Info */
+  .debug-bar {
+    background: #e7f1ff;
+    border-left: 4px solid var(--primary);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--primary-dark);
+    margin-bottom: 12px;
+    font-family: monospace;
+    word-break: break-all;
+  }
+
+  /* Document Grid */
+  .doc-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .doc-card {
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: white;
+    position: relative;
+    overflow: hidden;
+  }
+  .doc-card:hover {
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    transform: translateY(-2px);
+  }
+  .doc-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+  }
+  .doc-card.status-pending::before { background: var(--danger); }
+  .doc-card.status-partial::before { background: var(--warning); }
+  .doc-card.status-served::before { background: var(--success); }
+  .doc-card.status-empty::before { background: var(--gray); }
+
+  .doc-id {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--dark);
+    margin-bottom: 6px;
+  }
+  .doc-status {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .status-pending .doc-status { background: #fde8e8; color: var(--danger); }
+  .status-partial .doc-status { background: #fff8e1; color: #b78103; }
+  .status-served .doc-status { background: #e6f4ea; color: var(--success); }
+  .status-empty .doc-status { background: #f0f0f0; color: var(--gray); }
+
+  .doc-requestor {
+    font-size: 12px;
+    color: var(--gray);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .doc-date {
+    font-size: 11px;
+    color: var(--gray);
+    margin-top: 4px;
+  }
+
+  /* Empty State */
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--gray);
+  }
+  .empty-state i { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
+  .empty-state p { font-size: 14px; }
+  .empty-state small { font-size: 12px; opacity: 0.7; }
+
+  /* Skeleton Loading */
+  .skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 8px;
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  .skeleton-card {
+    height: 90px;
+    border-radius: 10px;
+  }
+
+  /* Toast */
+  .toast-container {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 90%;
+    max-width: 400px;
+  }
+  .toast {
+    padding: 14px 18px;
+    border-radius: 10px;
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    animation: slideDown 0.3s ease;
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .toast-error { background: var(--danger); }
+  .toast-success { background: var(--success); }
+  .toast-warning { background: #b78103; }
+  .toast-info { background: var(--primary); }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 60px;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: white;
+    width: 92%;
+    max-width: 500px;
+    max-height: 80vh;
+    border-radius: var(--radius);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: modalUp 0.3s ease;
+  }
+  @keyframes modalUp {
+    from { opacity: 0; transform: translateY(40px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .modal-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .modal-title { font-size: 18px; font-weight: 700; }
+  .modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--gray);
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+  }
+  .modal-close:hover { background: var(--light); }
+  .modal-body {
+    padding: 16px;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .modal-footer {
+    padding: 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+  }
+  .modal-footer .btn { flex: 1; }
+
+  /* Form Elements */
+  .form-group { margin-bottom: 16px; }
+  .form-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--dark);
+  }
+  .form-input {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    font-size: 15px;
+    outline: none;
+  }
+  .form-input:focus { border-color: var(--primary); }
+  .form-hint {
+    font-size: 12px;
+    color: var(--gray);
+    margin-top: 4px;
+  }
+
+  /* Settings Sections */
+  .settings-section {
+    background: var(--light);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .settings-section-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Document Detail */
+  .detail-header {
+    background: white;
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+  }
+  .detail-id {
+    font-size: 22px;
+    font-weight: 800;
+    margin-bottom: 8px;
+  }
+  .detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .detail-meta-item {
+    font-size: 13px;
+    color: var(--gray);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .detail-status-banner {
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .banner-pending { background: #fde8e8; color: var(--danger); }
+  .banner-partial { background: #fff8e1; color: #b78103; }
+  .banner-served { background: #e6f4ea; color: var(--success); }
+
+  /* Item List */
+  .item-list {
+    background: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .item-row {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .item-row:last-child { border-bottom: none; }
+  .item-check {
+    width: 24px;
+    height: 24px;
+    accent-color: var(--success);
+    cursor: pointer;
+  }
+  .item-info { flex: 1; }
+  .item-name { font-size: 15px; font-weight: 600; }
+  .item-qty { font-size: 13px; color: var(--gray); }
+
+  /* Spinner */
+  .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Hidden */
+  .hidden { display: none !important; }
+
+  /* Responsive */
+  @media (max-width: 400px) {
+    .doc-grid { grid-template-columns: 1fr; }
+    .tab { font-size: 11px; padding: 8px 2px; }
+    .tab i { font-size: 16px; }
+  }
 </style>
 <base target="_blank">
 </head>
 <body>
 
-<nav class="navbar navbar-dark bg-primary sticky-top">
-  <div class="container-fluid">
-    <span class="navbar-brand mb-0 h5"><i class="bi bi-box-seam me-2"></i>IVM WAREHOUSE QR</span>
-    <div class="d-flex align-items-center gap-2">
-      <span id="moduleLabel" class="badge bg-light text-dark">MRIF</span>
-      <i id="wifiIcon" class="bi bi-wifi wifi-icon wifi-online"></i>
-      <button id="settingsBtn" class="btn btn-sm btn-outline-light" onclick="openSettings()"><i class="bi bi-gear-fill"></i></button>
-    </div>
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-title">
+    <i class="fas fa-box-open"></i>
+    <span>IVM WAREHOUSE QR</span>
   </div>
-</nav>
-
-<div class="container-fluid mt-3">
-
-  <div id="productionBanner" class="production-banner d-none">
-    <i class="bi bi-person-badge" style="font-size:2rem;"></i>
-    <h5 class="mt-2 mb-1">Production Mode</h5>
-    <small>You can only create new requests.</small>
-  </div>
-
-  <div class="row g-2 mb-3" id="moduleButtonsRow">
-    <div class="col-3" id="btnMRR"><button class="btn btn-outline-primary w-100 module-btn" data-module="MRR" onclick="selectModule('MRR')"><i class="bi bi-box-arrow-in-down"></i><br>Receiving</button></div>
-    <div class="col-3" id="btnMRIF"><button class="btn btn-outline-primary w-100 module-btn active" data-module="MRIF" onclick="selectModule('MRIF')"><i class="bi bi-box-arrow-up"></i><br>Releasing</button></div>
-    <div class="col-3" id="btnMRS"><button class="btn btn-outline-primary w-100 module-btn" data-module="MRS" onclick="selectModule('MRS')"><i class="bi bi-arrow-counterclockwise"></i><br>Returns</button></div>
-    <div class="col-3" id="btnNewRequest"><button class="btn btn-outline-success w-100 module-btn" data-module="REQUEST" onclick="openNewRequest()"><i class="bi bi-plus-lg"></i><br>New Request</button></div>
-  </div>
-
-  <div id="docPickerSection">
-    <div id="quickScanCard" class="card mb-3 border-primary shadow-sm">
-      <div class="card-body text-center py-4">
-        <button class="btn btn-primary quick-scan-btn w-100" onclick="openQuickScan()">
-          <i class="bi bi-qr-code-scan me-2" style="font-size:1.5rem;"></i>
-          <strong>QUICK SCAN QR</strong>
-        </button>
-        <div class="text-muted small mt-2">
-          <i class="bi bi-info-circle me-1"></i>
-          Scan Document QR to auto-load &bull; Scan Item QR to verify
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header bg-light d-flex justify-content-between align-items-center">
-        <strong><i class="bi bi-file-earmark-text me-2"></i>Select Document</strong>
-        <button class="refresh-docs-btn" id="refreshDocsBtn" onclick="fetchPendingDocs()" title="Refresh list">
-          <i class="bi bi-arrow-clockwise"></i>
-        </button>
-      </div>
-      <div class="card-body">
-        <div class="input-group mb-2 doc-search">
-          <span class="input-group-text"><i class="bi bi-search"></i></span>
-          <input type="text" id="docSearch" class="form-control" placeholder="Search document..." oninput="filterDocs()">
-          <button class="btn btn-outline-secondary" onclick="document.getElementById('docSearch').value='';filterDocs()">Clear</button>
-        </div>
-        <div id="docDebugInfo" class="debug-info d-none"></div>
-        <div id="docListContainer" class="doc-grid"></div>
-        <div id="docEmptyState" class="empty-state d-none">
-          <i class="bi bi-inbox"></i>
-          <div>No documents found</div>
-          <small>Check your Sheet ID in Settings</small>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="activeTransactionSection" class="d-none">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-      <button class="btn btn-sm btn-outline-secondary" onclick="changeDocument()"><i class="bi bi-arrow-left"></i> Back to Documents</button>
-      <span id="docTitle" class="badge bg-primary"></span>
-    </div>
-
-    <div id="docStatusBanner" class="alert d-none mb-2 py-2 text-center"></div>
-
-    <div class="scanner-container mb-3">
-      <div id="reader"></div>
-      <div class="scanner-overlay"><div class="scanner-frame"><div class="scan-line"></div></div></div>
-      <div class="cam-controls">
-        <button id="torchBtn" class="cam-btn d-none" onclick="toggleTorch()" title="Flashlight"><i class="bi bi-lightning-charge-fill"></i></button>
-        <button id="switchCamBtn" class="cam-btn" onclick="switchCamera()" title="Switch Camera"><i class="bi bi-arrow-repeat"></i></button>
-      </div>
-    </div>
-
-    <div class="input-group mb-3">
-      <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
-      <input type="text" id="manualInput" class="form-control" placeholder="Or type Inventory ID manually..." onkeypress="if(event.key==='Enter')manualVerify()">
-      <button class="btn btn-primary" onclick="manualVerify()">Verify</button>
-    </div>
-
-    <div id="mismatchAlert" class="alert alert-danger d-none py-2"><i class="bi bi-exclamation-triangle-fill me-2"></i><span id="mismatchText"></span></div>
-    <div id="exceedErrorAlert" class="alert alert-danger d-none py-2"><i class="bi bi-exclamation-triangle-fill me-2"></i><span id="exceedText"></span></div>
-
-    <div class="card">
-      <div class="card-header bg-light d-flex justify-content-between align-items-center">
-        <strong><i class="bi bi-list-check me-2"></i>Item Checklist</strong>
-        <span id="verifyCount" class="badge bg-success">0/0 Verified</span>
-      </div>
-      <div class="card-body p-0">
-        <div class="p-2 border-bottom">
-          <div class="input-group input-group-sm">
-            <span class="input-group-text"><i class="bi bi-search"></i></span>
-            <input type="text" id="itemFilter" class="form-control" placeholder="Filter items by code or description..." oninput="filterItems()">
-            <button class="btn btn-outline-secondary" onclick="document.getElementById('itemFilter').value='';filterItems()">Clear</button>
-          </div>
-        </div>
-        <div class="table-responsive">
-          <table class="table table-sm table-hover mb-0">
-            <thead class="table-light"><tr>
-              <th>Item Code</th>
-              <th id="headerExpected">Req. Qty</th>
-              <th id="headerInput">Issued Qty</th>
-              <th>Status</th>
-            </tr></thead>
-            <tbody id="itemsTable"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <button id="submitBtn" class="btn btn-success w-100 mt-3 py-3" onclick="onSubmit()">
-      <i class="bi bi-check-circle me-2"></i><span id="submitBtnText">Confirm & Submit</span>
+  <div class="header-actions">
+    <span class="module-badge" id="moduleBadge">MRIF</span>
+    <button class="icon-btn" onclick="openSettings()" title="Settings">
+      <i class="fas fa-cog"></i>
     </button>
   </div>
 </div>
 
-<div class="modal fade" id="qtyModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header"><h5 class="modal-title">Enter Quantity</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-      <div class="modal-body">
-        <div class="mb-3">
-          <label class="form-label"><strong>Item:</strong> <span id="modalItemCode"></span></label>
-          <div class="text-muted small" id="modalItemDesc"></div>
-        </div>
-        <div class="mb-3">
-          <label class="form-label" id="modalExpectedLabel">Requested Qty</label>
-          <input type="number" id="modalExpectedQty" class="form-control" readonly>
-        </div>
-        <div class="mb-3">
-          <label class="form-label" id="modalInputLabel">Enter Issued Qty</label>
-          <input type="number" id="modalInputQty" class="form-control" min="0" step="1" oninput="onQtyInput()">
-          <div id="modalHint" class="form-text"></div>
+<!-- Module Tabs -->
+<div class="tabs">
+  <div class="tab" data-module="RECEIVING" onclick="selectModule('RECEIVING')">
+    <i class="fas fa-download"></i>
+    <span>Receiving</span>
+  </div>
+  <div class="tab active" data-module="RELEASING" onclick="selectModule('RELEASING')">
+    <i class="fas fa-upload"></i>
+    <span>Releasing</span>
+  </div>
+  <div class="tab" data-module="RETURNS" onclick="selectModule('RETURNS')">
+    <i class="fas fa-undo"></i>
+    <span>Returns</span>
+  </div>
+  <div class="tab" data-module="NEW_REQUEST" onclick="selectModule('NEW_REQUEST')">
+    <i class="fas fa-plus"></i>
+    <span>New Request</span>
+  </div>
+</div>
+
+<!-- Main Container -->
+<div class="container" id="mainContainer">
+
+  <!-- Quick Scan -->
+  <div class="scan-card">
+    <button class="scan-btn" onclick="startScan()">
+      <i class="fas fa-qrcode"></i>
+      QUICK SCAN QR
+    </button>
+    <div class="scan-hint">
+      <i class="fas fa-info-circle"></i>
+      <span>Scan Document QR to auto-load &bull; Scan Item QR to verify</span>
+    </div>
+  </div>
+
+  <!-- Document Picker -->
+  <div class="picker-card">
+    <div class="picker-header">
+      <div class="picker-title">
+        <i class="fas fa-file-alt"></i>
+        <span>Select Document</span>
+      </div>
+      <button class="icon-btn" style="background: var(--light); color: var(--dark);" onclick="refreshDocs()" title="Refresh">
+        <i class="fas fa-sync-alt" id="refreshIcon"></i>
+      </button>
+    </div>
+    <div class="picker-body">
+      <!-- Search -->
+      <div class="search-box">
+        <i class="fas fa-search" style="position: absolute; left: 28px; top: 50%; transform: translateY(-50%); color: var(--gray); z-index: 1;"></i>
+        <input type="text" class="search-input" id="searchInput" placeholder="Search document..." oninput="filterDocs()" style="padding-left: 40px;">
+        <button class="btn" onclick="clearSearch()">Clear</button>
+      </div>
+
+      <!-- Debug Info -->
+      <div class="debug-bar" id="debugBar">
+        Module: <span id="debugModule">-</span> | Sheet: <span id="debugSheet">-</span> | Docs: <span id="debugCount">-</span>
+      </div>
+
+      <!-- Loading State -->
+      <div id="loadingState">
+        <div class="doc-grid">
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
         </div>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="confirmQty()">Confirm</button>
+
+      <!-- Document Grid -->
+      <div id="docGrid" class="doc-grid hidden"></div>
+
+      <!-- Empty State -->
+      <div id="emptyState" class="empty-state hidden">
+        <i class="fas fa-inbox"></i>
+        <p><strong>No documents found</strong></p>
+        <small>Check your Sheet ID in Settings or verify data exists</small>
+      </div>
+
+      <!-- Error State -->
+      <div id="errorState" class="empty-state hidden">
+        <i class="fas fa-exclamation-triangle" style="color: var(--danger);"></i>
+        <p><strong>Error loading documents</strong></p>
+        <small id="errorMessage">Check console for details</small>
       </div>
     </div>
   </div>
 </div>
 
-<div class="modal fade" id="quickScanModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title"><i class="bi bi-qr-code-scan me-2"></i>Quick Scan</h5>
-        <button type="button" class="btn-close btn-close-white" onclick="closeQuickScan()"></button>
-      </div>
-      <div class="modal-body text-center p-0">
-        <div style="position:relative;background:#1a1a2e;">
-          <div id="quickReader"></div>
-          <div class="scanner-overlay"><div class="scanner-frame"><div class="scan-line"></div></div></div>
-        </div>
-        <div class="p-3">
-          <p class="text-muted mb-1"><i class="bi bi-info-circle me-1"></i>Point camera at any QR code</p>
-          <small class="text-muted">Document QR auto-loads &bull; Item QR verifies</small>
-        </div>
-      </div>
-      <div class="modal-footer justify-content-center">
-        <button class="btn btn-outline-secondary" onclick="closeQuickScan()">Cancel</button>
-      </div>
+<!-- Document Detail View (hidden by default) -->
+<div class="container hidden" id="detailView">
+  <button class="btn" onclick="backToList()" style="margin-bottom: 12px;">
+    <i class="fas fa-arrow-left"></i> Back to List
+  </button>
+
+  <div class="detail-header">
+    <div class="detail-id" id="detailDocId">DOC-001</div>
+    <div class="detail-meta">
+      <div class="detail-meta-item"><i class="fas fa-user"></i> <span id="detailRequestor">-</span></div>
+      <div class="detail-meta-item"><i class="fas fa-calendar"></i> <span id="detailDate">-</span></div>
     </div>
+    <div class="detail-status-banner" id="detailStatusBanner">
+      <i class="fas fa-clock"></i> <span id="detailStatusText">PENDING</span>
+    </div>
+  </div>
+
+  <div class="item-list" id="itemList">
+    <!-- Items populated by JS -->
+  </div>
+
+  <div style="margin-top: 16px; display: flex; gap: 10px;">
+    <button class="btn btn-success" style="flex: 1; padding: 16px; font-size: 16px;" onclick="submitDoc()">
+      <i class="fas fa-check"></i> Submit / Serve
+    </button>
   </div>
 </div>
 
-<div class="modal fade" id="roleModal" tabindex="-1" data-bs-backdrop="static">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title"><i class="bi bi-shield-lock me-2"></i>Select Your Role</h5>
-      </div>
-      <div class="modal-body">
-        <div class="row g-3">
-          <div class="col-12">
-            <div class="card role-card p-3 text-center" onclick="selectRole('production')">
-              <i class="bi bi-person-badge text-primary" style="font-size:2.5rem;"></i>
-              <h5 class="mt-2 mb-1">Production Staff</h5>
-              <small class="text-muted">Create material requests only</small>
-            </div>
-          </div>
-          <div class="col-12">
-            <div class="card role-card p-3 text-center" onclick="showPinEntry()">
-              <i class="bi bi-shield-check text-success" style="font-size:2.5rem;"></i>
-              <h5 class="mt-2 mb-1">Warehouse Staff</h5>
-              <small class="text-muted">Full access to all modules</small>
-            </div>
-          </div>
-        </div>
-        <div id="pinEntrySection" class="d-none mt-3 text-center">
-          <hr>
-          <label class="form-label fw-bold">Enter Warehouse PIN</label>
-          <div class="mb-2">
-            <span id="pinDot1" class="pin-dot"></span>
-            <span id="pinDot2" class="pin-dot"></span>
-            <span id="pinDot3" class="pin-dot"></span>
-            <span id="pinDot4" class="pin-dot"></span>
-          </div>
-          <div class="row g-2 justify-content-center">
-            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(1)">1</button></div>
-            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(2)">2</button></div>
-            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(3)">3</button></div>
-            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(4)">4</button></div>
-            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(5)">5</button></div>
-            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(6)">6</button></div>
-            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(7)">7</button></div>
-            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(8)">8</button></div>
-            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(9)">9</button></div>
-            <div class="col-4"><button class="btn btn-outline-warning w-100" onclick="clearPin()">CLR</button></div>
-            <div class="col-4"><button class="btn btn-outline-secondary w-100" onclick="enterPinDigit(0)">0</button></div>
-            <div class="col-4"><button class="btn btn-outline-danger w-100" onclick="backspacePin()"><i class="bi bi-backspace"></i></button></div>
-          </div>
-          <button class="btn btn-success w-100 mt-2" onclick="verifyPin()">Unlock</button>
-          <div id="pinError" class="text-danger small mt-2 d-none">Incorrect PIN. Try again.</div>
-        </div>
-      </div>
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title"><i class="fas fa-cog"></i> Settings</div>
+      <button class="modal-close" onclick="closeSettings()">&times;</button>
     </div>
-  </div>
-</div>
+    <div class="modal-body">
 
-<div class="modal fade" id="settingsModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header"><h5 class="modal-title"><i class="bi bi-gear me-2"></i>Settings</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-      <div class="modal-body">
-        <div class="card mb-3">
-          <div class="card-header bg-light"><strong><i class="bi bi-person-badge me-2"></i>Current Role</strong></div>
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center">
-              <span id="currentRoleDisplay" class="badge bg-secondary">Unknown</span>
-              <button class="btn btn-sm btn-outline-primary" onclick="switchRole()">Switch Role</button>
-            </div>
-          </div>
-        </div>
-        <div id="pinManagementSection">
-          <div class="card mb-3">
-            <div class="card-header bg-light"><strong><i class="bi bi-key me-2"></i>Warehouse PIN</strong></div>
-            <div class="card-body">
-              <div class="mb-2">
-                <label class="form-label small">Current PIN</label>
-                <input type="password" id="currentPinInput" class="form-control" placeholder="Enter current PIN" maxlength="4">
-              </div>
-              <div class="mb-2">
-                <label class="form-label small">New PIN (4 digits)</label>
-                <input type="password" id="newPinInput" class="form-control" placeholder="Enter new PIN" maxlength="4">
-              </div>
-              <button class="btn btn-sm btn-primary w-100" onclick="changePin()">Change PIN</button>
-              <div id="pinChangeMsg" class="small mt-2"></div>
-            </div>
-          </div>
-        </div>
-        <div id="syncSection">
-          <button class="btn btn-outline-primary w-100 mb-2" onclick="syncModuleLinks()">
-            <span id="syncBtnText">&#128260; Sync IDs from Master Sheet</span>
-          </button>
-        </div>
-        <div class="card mb-3 border-warning">
-          <div class="card-header bg-warning bg-opacity-10"><strong><i class="bi bi-trash me-2"></i>Clear Cache</strong></div>
-          <div class="card-body">
-            <p class="small text-muted mb-2">If documents are not loading or wrong module appears, clear all saved Sheet IDs and re-sync.</p>
-            <button class="btn btn-outline-danger btn-sm w-100" onclick="clearAllCache()">&#128465; Clear All Saved Data</button>
-          </div>
-        </div>
-        <div id="sheetIdsSection">
-          <div class="mb-3">
-            <label class="form-label">MRR Sheet URL / ID</label>
-            <input type="text" id="sheetId_MRR" class="form-control" placeholder="Paste MRR Sheet URL or ID">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">MRIF Sheet URL / ID</label>
-            <input type="text" id="sheetId_MRIF" class="form-control" placeholder="Paste MRIF Sheet URL or ID">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">MRS Sheet URL / ID</label>
-            <input type="text" id="sheetId_MRS" class="form-control" placeholder="Paste MRS Sheet URL or ID">
-          </div>
+      <!-- Role -->
+      <div class="settings-section">
+        <div class="settings-section-title"><i class="fas fa-id-badge"></i> Current Role</div>
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <span class="btn btn-success" style="cursor: default;">Warehouse Staff</span>
+          <button class="btn" onclick="switchRole()">Switch Role</button>
         </div>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+
+      <!-- PIN -->
+      <div class="settings-section">
+        <div class="settings-section-title"><i class="fas fa-key"></i> Warehouse PIN</div>
+        <div class="form-group">
+          <label class="form-label">Current PIN</label>
+          <input type="password" class="form-input" id="currentPin" placeholder="Enter current PIN">
+        </div>
+        <div class="form-group">
+          <label class="form-label">New PIN (4 digits)</label>
+          <input type="password" class="form-input" id="newPin" placeholder="Enter new PIN" maxlength="4">
+        </div>
+        <button class="btn btn-primary" style="width: 100%;" onclick="changePin()">Change PIN</button>
       </div>
+
+      <!-- Sync -->
+      <div class="settings-section">
+        <div class="settings-section-title"><i class="fas fa-sync"></i> Sync from Master Sheet</div>
+        <div class="form-group">
+          <label class="form-label">Master Sheet ID</label>
+          <input type="text" class="form-input" id="masterSheetId" placeholder="Paste Master Sheet ID here">
+          <div class="form-hint">Sheet with module names in Col A and Sheet IDs in Col B</div>
+        </div>
+        <button class="btn btn-primary" style="width: 100%; margin-bottom: 10px;" onclick="syncModuleLinks()" id="syncBtn">
+          <i class="fas fa-sync-alt"></i> Sync IDs from Master Sheet
+        </button>
+      </div>
+
+      <!-- Clear Cache -->
+      <div class="settings-section" style="background: #fff8e1; border: 1px solid #ffc107;">
+        <div class="settings-section-title"><i class="fas fa-trash"></i> Clear Cache</div>
+        <p style="font-size: 13px; color: var(--gray); margin-bottom: 12px;">
+          If documents are not loading or wrong module appears, clear all saved data.
+        </p>
+        <button class="btn btn-danger" style="width: 100%;" onclick="clearAllData()">
+          <i class="fas fa-trash-alt"></i> Clear All Saved Data
+        </button>
+      </div>
+
+      <!-- Sheet IDs -->
+      <div class="settings-section">
+        <div class="settings-section-title"><i class="fas fa-database"></i> Module Sheet IDs</div>
+
+        <div class="form-group">
+          <label class="form-label">MRR Sheet URL / ID</label>
+          <input type="text" class="form-input" id="sheetId_MRR" placeholder="Paste MRR Sheet ID">
+        </div>
+        <div class="form-group">
+          <label class="form-label">MRIF Sheet URL / ID</label>
+          <input type="text" class="form-input" id="sheetId_MRIF" placeholder="Paste MRIF Sheet ID">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Receiving Sheet URL / ID</label>
+          <input type="text" class="form-input" id="sheetId_RECEIVING" placeholder="Paste Receiving Sheet ID">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Returns Sheet URL / ID</label>
+          <input type="text" class="form-input" id="sheetId_RETURNS" placeholder="Paste Returns Sheet ID">
+        </div>
+        <div class="form-group">
+          <label class="form-label">GAS Web App URL</label>
+          <input type="text" class="form-input" id="gasUrl" placeholder="https://script.google.com/macros/s/AKfycbw7tjSHpF8vkIrER7M8ZzIrzQAVsRH43BLlvuWQWMz-bq8f_-GPv4dtBFAYZdnASpo7/exec">
+          <div class="form-hint">Your Google Apps Script Web App URL</div>
+        </div>
+      </div>
+
     </div>
-  </div>
-</div>
-
-<div class="modal fade" id="successModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content text-center">
-      <div class="modal-body py-4">
-        <i class="bi bi-check-circle-fill text-success" style="font-size:4rem;"></i>
-        <h4 class="mt-3">Transaction Submitted!</h4>
-        <p class="text-muted">The document has been updated successfully.</p>
-      </div>
+    <div class="modal-footer">
+      <button class="btn" style="flex: 1;" onclick="closeSettings()">Cancel</button>
+      <button class="btn btn-primary" style="flex: 1;" onclick="saveSettings()">Save Settings</button>
     </div>
-  </div>
-</div>
-
-<div class="modal fade" id="newRequestModal" tabindex="-1">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>New Request</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-      <div class="modal-body">
-        <div class="row g-2 mb-3">
-          <div class="col-6">
-            <label class="form-label">Document Type</label>
-            <select id="reqDocType" class="form-select"><option value="MRIF">MRIF (Releasing)</option><option value="MRS">MRS (Returns)</option></select>
-          </div>
-          <div class="col-6">
-            <label class="form-label">Department</label>
-            <input type="text" id="reqDepartment" class="form-control" placeholder="e.g. Production A">
-          </div>
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Requestor Name</label>
-          <input type="text" id="reqRequestor" class="form-control" placeholder="Full name">
-        </div>
-        <hr>
-        <div id="requestItemsContainer"></div>
-        <button class="btn btn-outline-primary w-100" onclick="addRequestItemRow()"><i class="bi bi-plus-lg"></i> Add Item</button>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-success" onclick="submitNewRequest()">Submit Request</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="modal fade" id="requestSuccessModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content text-center">
-      <div class="modal-body py-4">
-        <i class="bi bi-check-circle-fill text-success" style="font-size:3rem;"></i>
-        <h4 class="mt-3">Request Created!</h4>
-        <div class="my-2">
-          <span class="badge bg-secondary">Ticket: <span id="requestTicketNo"></span></span><br>
-          <span class="badge bg-primary mt-1">Doc: <span id="requestDocNo"></span></span>
-        </div>
-        <div class="my-3 d-flex justify-content-center">
-          <img id="requestQrImg" src="" alt="QR Code" class="qr-display mx-auto" style="max-width:280px;width:100%;">
-        </div>
-        <div id="qrFallback" class="d-none alert alert-warning mt-2"></div>
-        <p class="text-muted small">Show this QR code to the warehouse team.</p>
-      </div>
-      <div class="modal-footer justify-content-center">
-        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Done</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="toast-container position-fixed bottom-0 end-0 p-3">
-  <div id="liveToast" class="toast" role="alert">
-    <div class="toast-header"><strong class="me-auto" id="toastTitle">Notification</strong><button type="button" class="btn-close" data-bs-dismiss="toast"></button></div>
-    <div class="toast-body" id="toastBody"></div>
   </div>
 </div>
 
 <script>
-const API_URL = 'https://script.google.com/macros/s/AKfycbw7tjSHpF8vkIrER7M8ZzIrzQAVsRH43BLlvuWQWMz-bq8f_-GPv4dtBFAYZdnASpo7/exec';
-const DEFAULT_PIN = '0000';
+// ============================================
+// CONFIGURATION
+// ============================================
 
-const state = {
-  currentModule: 'MRIF',
-  currentDoc: null,
-  items: [],
-  html5QrCode: null,
-  quickScanner: null,
-  currentCamera: 'environment',
-  torchOn: false,
-  cameras: [],
-  requestInventoryList: [],
-  errorTimer: null,
-  docList: [],
-  pinBuffer: '',
-  pinAttempts: 0
+// IMPORTANT: Update this after each GAS redeploy!
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbz.../exec';
+
+function getApiUrl() {
+  return localStorage.getItem('gasUrl') || DEFAULT_API_URL;
+}
+
+const MODULE_MAP = {
+  'RECEIVING': { label: 'Receiving', sheetKey: 'sheetId_RECEIVING', badge: 'RCV' },
+  'RELEASING': { label: 'Releasing', sheetKey: 'sheetId_MRIF', badge: 'MRIF' },
+  'RETURNS':   { label: 'Returns',   sheetKey: 'sheetId_RETURNS', badge: 'RET' },
+  'NEW_REQUEST': { label: 'New Request', sheetKey: 'sheetId_MRIF', badge: 'NEW' }
 };
 
-const qtyModal = new bootstrap.Modal(document.getElementById('qtyModal'));
-const successModal = new bootstrap.Modal(document.getElementById('successModal'));
-const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
-const newRequestModal = new bootstrap.Modal(document.getElementById('newRequestModal'));
-const requestSuccessModal = new bootstrap.Modal(document.getElementById('requestSuccessModal'));
-const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
-const roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
+// ============================================
+// STATE
+// ============================================
 
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-function playSuccessBeep() {
-  try {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain); gain.connect(audioCtx.destination);
-    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-    osc.frequency.setValueAtTime(1100, audioCtx.currentTime + 0.1);
-    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-    osc.start(); osc.stop(audioCtx.currentTime + 0.3);
-    if (navigator.vibrate) navigator.vibrate(100);
-  } catch(e) {}
-}
-function playErrorBuzz() {
-  try {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain); gain.connect(audioCtx.destination);
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(200, audioCtx.currentTime);
-    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
-    osc.start(); osc.stop(audioCtx.currentTime + 0.4);
-    if (navigator.vibrate) navigator.vibrate([100,50,100]);
-  } catch(e) {}
+let currentModule = 'RELEASING';
+let allDocs = [];
+let currentDoc = null;
+let isLoading = false;
+
+// ============================================
+// INITIALIZATION
+// ============================================
+
+document.addEventListener('DOMContentLoaded', function() {
+  init();
+});
+
+function init() {
+  // Load saved module
+  const savedModule = localStorage.getItem('currentModule');
+  if (savedModule && MODULE_MAP[savedModule]) {
+    currentModule = savedModule;
+  }
+
+  updateModuleUI();
+  loadDocuments();
 }
 
-function initRole() {
-  const role = localStorage.getItem('ivm_userRole');
-  if (!role) {
-    roleModal.show();
-  } else {
-    applyRoleUI();
-    if (role === 'warehouse') {
-      if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
-        setTimeout(() => settingsModal.show(), 500);
-      }
-      selectModule('MRIF');
-    }
-  }
-}
-function selectRole(role) {
-  if (role === 'production') {
-    localStorage.setItem('ivm_userRole', 'production');
-    roleModal.hide();
-    applyRoleUI();
-    showToast('Production mode activated', 'success');
-  }
-}
-function showPinEntry() {
-  document.getElementById('pinEntrySection').classList.remove('d-none');
-  clearPin();
-}
-function enterPinDigit(d) {
-  if (state.pinBuffer.length < 4) {
-    state.pinBuffer += d;
-    updatePinDots();
-  }
-}
-function backspacePin() {
-  state.pinBuffer = state.pinBuffer.slice(0, -1);
-  updatePinDots();
-}
-function clearPin() {
-  state.pinBuffer = '';
-  updatePinDots();
-  document.getElementById('pinError').classList.add('d-none');
-}
-function updatePinDots() {
-  for (let i = 1; i <= 4; i++) {
-    const dot = document.getElementById('pinDot' + i);
-    if (i <= state.pinBuffer.length) dot.classList.add('filled');
-    else dot.classList.remove('filled');
-  }
-}
-function verifyPin() {
-  const storedPin = localStorage.getItem('ivm_warehousePin') || DEFAULT_PIN;
-  if (state.pinBuffer === storedPin) {
-    localStorage.setItem('ivm_userRole', 'warehouse');
-    state.pinAttempts = 0;
-    roleModal.hide();
-    applyRoleUI();
-    showToast('Warehouse mode unlocked', 'success');
-    if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
-      setTimeout(() => settingsModal.show(), 500);
-    }
-    selectModule('MRIF');
-  } else {
-    state.pinAttempts++;
-    document.getElementById('pinError').classList.remove('d-none');
-    clearPin();
-    playErrorBuzz();
-    if (state.pinAttempts >= 3) {
-      alert('Too many failed attempts. Please contact admin.');
-      state.pinAttempts = 0;
-    }
-  }
-}
-function applyRoleUI() {
-  const role = localStorage.getItem('ivm_userRole');
-  const isProduction = (role === 'production');
-  document.getElementById('btnMRR').style.display = isProduction ? 'none' : '';
-  document.getElementById('btnMRIF').style.display = isProduction ? 'none' : '';
-  document.getElementById('btnMRS').style.display = isProduction ? 'none' : '';
-  document.getElementById('productionBanner').classList.toggle('d-none', !isProduction);
-  document.getElementById('docPickerSection').style.display = isProduction ? 'none' : '';
-  document.getElementById('quickScanCard').style.display = isProduction ? 'none' : '';
-  if (isProduction) {
-    document.getElementById('activeTransactionSection').classList.add('d-none');
-  }
-}
-function switchRole() {
-  settingsModal.hide();
-  document.getElementById('pinEntrySection').classList.add('d-none');
-  clearPin();
-  roleModal.show();
-}
-function changePin() {
-  const current = document.getElementById('currentPinInput').value;
-  const newPin = document.getElementById('newPinInput').value;
-  const storedPin = localStorage.getItem('ivm_warehousePin') || DEFAULT_PIN;
-  const msg = document.getElementById('pinChangeMsg');
-  if (current !== storedPin) {
-    msg.textContent = 'Current PIN is incorrect';
-    msg.className = 'small mt-2 text-danger';
-    return;
-  }
-  if (!/^\d{4}$/.test(newPin)) {
-    msg.textContent = 'New PIN must be exactly 4 digits';
-    msg.className = 'small mt-2 text-danger';
-    return;
-  }
-  localStorage.setItem('ivm_warehousePin', newPin);
-  msg.textContent = 'PIN changed successfully';
-  msg.className = 'small mt-2 text-success';
-  document.getElementById('currentPinInput').value = '';
-  document.getElementById('newPinInput').value = '';
+// ============================================
+// MODULE SWITCHING
+// ============================================
+
+function selectModule(module) {
+  currentModule = module;
+  localStorage.setItem('currentModule', module);
+  updateModuleUI();
+  loadDocuments();
 }
 
-function openSettings() {
-  loadSettingsToUI();
-  const role = localStorage.getItem('ivm_userRole');
-  const isProduction = (role === 'production');
-  document.getElementById('pinManagementSection').style.display = isProduction ? 'none' : '';
-  document.getElementById('syncSection').style.display = isProduction ? 'none' : '';
-  document.getElementById('sheetIdsSection').style.display = isProduction ? 'none' : '';
-  document.getElementById('currentRoleDisplay').textContent = role === 'warehouse' ? 'Warehouse Staff' : 'Production Staff';
-  document.getElementById('currentRoleDisplay').className = role === 'warehouse' ? 'badge bg-success' : 'badge bg-primary';
-  settingsModal.show();
-}
-function loadSettingsToUI() {
-  const mrr = document.getElementById('sheetId_MRR');
-  const mrif = document.getElementById('sheetId_MRIF');
-  const mrs = document.getElementById('sheetId_MRS');
-  if (mrr) mrr.value = localStorage.getItem('sheetId_MRR') || '';
-  if (mrif) mrif.value = localStorage.getItem('sheetId_MRIF') || '';
-  if (mrs) mrs.value = localStorage.getItem('sheetId_MRS') || '';
-}
-function saveSettings() {
-  const mrr = document.getElementById('sheetId_MRR').value.trim();
-  const mrif = document.getElementById('sheetId_MRIF').value.trim();
-  const mrs = document.getElementById('sheetId_MRS').value.trim();
-  if (mrr) localStorage.setItem('sheetId_MRR', extractSheetId(mrr));
-  if (mrif) localStorage.setItem('sheetId_MRIF', extractSheetId(mrif));
-  if (mrs) localStorage.setItem('sheetId_MRS', extractSheetId(mrs));
-  showToast('Settings saved!', 'success');
-  settingsModal.hide();
-  if (state.currentModule) selectModule(state.currentModule);
-}
-function clearAllCache() {
-  if (!confirm('This will clear all saved Sheet IDs and settings.\nYou will need to re-sync or re-enter them.\n\nContinue?')) return;
-  localStorage.removeItem('sheetId_MRR');
-  localStorage.removeItem('sheetId_MRIF');
-  localStorage.removeItem('sheetId_MRS');
-  localStorage.removeItem('ivm_userRole');
-  localStorage.removeItem('ivm_warehousePin');
-  showToast('All data cleared. Reloading...', 'info');
-  setTimeout(() => location.reload(), 1500);
-}
-function extractSheetId(url) {
-  if (!url) return '';
-  if (url.length === 44 && !url.includes('/')) return url;
-  const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-  return match ? match[1] : url;
-}
-function getCleanSheetId() {
-  const key = 'sheetId_' + state.currentModule;
-  const val = localStorage.getItem(key);
-  return val ? extractSheetId(val) : '';
+function updateModuleUI() {
+  // Update tabs
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.module === currentModule);
+  });
+
+  // Update badge
+  const config = MODULE_MAP[currentModule];
+  document.getElementById('moduleBadge').textContent = config ? config.badge : currentModule;
 }
 
-async function syncModuleLinks() {
-  const btn = document.getElementById('syncBtnText');
-  const original = btn.innerHTML;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing...';
-  try {
-    const url = API_URL + '?action=getModuleLinks&_t=' + Date.now();
-    const res = await fetch(url, { redirect: 'follow' });
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
-    if (data && data.success && data.links) {
-      const { MRIF, MRR, MRS } = data.links;
-      if (MRIF) { localStorage.setItem('sheetId_MRIF', MRIF); document.getElementById('sheetId_MRIF').value = MRIF; }
-      if (MRR) { localStorage.setItem('sheetId_MRR', MRR); document.getElementById('sheetId_MRR').value = MRR; }
-      if (MRS) { localStorage.setItem('sheetId_MRS', MRS); document.getElementById('sheetId_MRS').value = MRS; }
-      alert('Module IDs synced!\nMRIF: ' + (MRIF?'OK':'Missing') + '\nMRR: ' + (MRR?'OK':'Missing') + '\nMRS: ' + (MRS?'OK':'Missing'));
-      if (state.currentModule) selectModule(state.currentModule);
-    } else {
-      alert('Sync failed: ' + (data.error || 'No links found'));
-    }
-  } catch(err) {
-    alert('Sync error: ' + err.message);
-  } finally {
-    btn.innerHTML = original;
-  }
-}
+// ============================================
+// FETCH DOCUMENTS
+// ============================================
 
-function selectModule(mod) {
-  state.currentModule = mod;
-  document.querySelectorAll('.module-btn').forEach(b => b.classList.remove('active'));
-  const btn = document.querySelector('.module-btn[data-module="' + mod + '"]');
-  if (btn) btn.classList.add('active');
-  document.getElementById('moduleLabel').textContent = mod;
-  updateLabels();
-  changeDocument();
-  fetchPendingDocs();
-}
-function updateLabels() {
-  const isMRR = state.currentModule === 'MRR';
-  const isMRS = state.currentModule === 'MRS';
-  document.getElementById('headerExpected').textContent = isMRR ? 'REC. QTY' : (isMRS ? 'QTY RETURNED' : 'Req. Qty');
-  document.getElementById('headerInput').textContent = isMRR ? 'ATL QTY' : (isMRS ? 'ATL QTY (Actual)' : 'Issued Qty');
-}
+async function loadDocuments() {
+  const config = MODULE_MAP[currentModule];
+  const sheetId = localStorage.getItem(config.sheetKey);
 
-function showSkeletons() {
-  const container = document.getElementById('docListContainer');
-  container.innerHTML = '';
-  container.classList.remove('d-none');
-  document.getElementById('docEmptyState').classList.add('d-none');
-  for (let i = 0; i < 4; i++) {
-    const div = document.createElement('div');
-    div.className = 'skeleton-card';
-    div.innerHTML = '<div class="skeleton-line"></div><div class="skeleton-line short"></div><div class="skeleton-badge"></div>';
-    container.appendChild(div);
-  }
-}
-
-async function fetchPendingDocs() {
-  const sheetId = getCleanSheetId();
-  const debugEl = document.getElementById('docDebugInfo');
+  // Update debug bar
+  document.getElementById('debugModule').textContent = currentModule;
+  document.getElementById('debugSheet').textContent = sheetId ? sheetId.substring(0, 20) + '...' : 'NOT SET';
+  document.getElementById('debugCount').textContent = '-';
 
   if (!sheetId) {
-    debugEl.textContent = 'Module: ' + state.currentModule + ' | No Sheet ID configured';
-    debugEl.classList.remove('d-none');
-    showToast('No Sheet ID for ' + state.currentModule + '. Go to Settings.', 'warning');
-    renderDocList([]);
+    showError('No Sheet ID configured for ' + currentModule + '. Go to Settings and enter the Sheet ID.');
+    showEmptyState();
     return;
   }
 
-  debugEl.textContent = 'Module: ' + state.currentModule + ' | Sheet: ' + sheetId.substring(0, 12) + '...';
-  debugEl.classList.remove('d-none');
-
-  const refreshBtn = document.getElementById('refreshDocsBtn');
-  refreshBtn.classList.add('spinning');
-  showSkeletons();
+  showLoading();
 
   try {
-    console.log('[fetchPendingDocs] Module:', state.currentModule, 'SheetID:', sheetId);
-    const url = API_URL + '?action=getPendingDocs&docType=' + state.currentModule + '&sheetId=' + sheetId + '&_t=' + Date.now();
-    const res = await fetch(url, { redirect: 'follow' });
-    const text = await res.text();
-    console.log('[fetchPendingDocs] Response:', text.substring(0, 300));
+    const url = getApiUrl() + '?action=getPendingDocs&sheetId=' + encodeURIComponent(sheetId);
+    console.log('[fetchPendingDocs] URL:', url);
 
-    let data;
-    try { data = JSON.parse(text); } catch(e) { 
-      console.error('[fetchPendingDocs] JSON parse error:', e);
-      throw new Error('Invalid JSON from server'); 
+    const response = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow'
+    });
+
+    if (!response.ok) {
+      throw new Error('HTTP ' + response.status + ': ' + response.statusText);
     }
 
-    let docs = [];
-    if (Array.isArray(data)) {
-      docs = data;
-    } else if (data && data.docs && Array.isArray(data.docs)) {
-      docs = data.docs;
-    } else if (data && data.documents && Array.isArray(data.documents)) {
-      docs = data.documents;
-    } else if (data && data.success === false) {
-      throw new Error(data.error || 'Server error');
+    const result = await response.json();
+    console.log('[fetchPendingDocs] Response:', result);
+
+    if (!result.success) {
+      throw new Error(result.error || 'Unknown error from server');
+    }
+
+    if (!Array.isArray(result.data)) {
+      throw new Error('Invalid data format: expected array, got ' + typeof result.data);
+    }
+
+    // Filter out any remaining header-like items (double safety)
+    allDocs = result.data.filter(doc => {
+      if (!doc || !doc.id) return false;
+      const id = doc.id.toString().trim();
+      if (!id) return false;
+      if (id.includes(':')) return false;
+      if (id.length > 50) return false;
+      if (/^(company|branch|trf|reqt|date|status|item|no\.?)$/i.test(id)) return false;
+      return true;
+    });
+
+    document.getElementById('debugCount').textContent = allDocs.length;
+    console.log('[fetchPendingDocs] Filtered to', allDocs.length, 'valid documents');
+
+    if (allDocs.length === 0) {
+      showEmptyState();
     } else {
-      console.warn('[fetchPendingDocs] Unexpected format:', data);
+      renderDocCards(allDocs);
     }
 
-    state.docList = docs;
-    renderDocList(docs);
-
-    if (docs.length === 0) {
-      showToast('No documents found. Check Sheet ID.', 'info');
-    }
-  } catch(err) {
+  } catch (err) {
     console.error('[fetchPendingDocs] Error:', err);
-    showToast('Failed to load: ' + err.message, 'danger');
-    renderDocList([]);
-  } finally {
-    refreshBtn.classList.remove('spinning');
+    showError('Failed to load: ' + err.message);
+    showErrorState(err.message);
   }
 }
 
-function renderDocList(docs) {
-  const container = document.getElementById('docListContainer');
-  const emptyState = document.getElementById('docEmptyState');
-  container.innerHTML = '';
-
-  if (!docs || docs.length === 0) {
-    container.classList.add('d-none');
-    emptyState.classList.remove('d-none');
-    return;
-  }
-
-  container.classList.remove('d-none');
-  emptyState.classList.add('d-none');
-
-  docs.forEach(d => {
-    const docNo = typeof d === 'string' ? d : (d.docNo || d.name || d);
-    const status = typeof d === 'object' ? (d.status || 'PENDING') : 'PENDING';
-
-    const card = document.createElement('div');
-    card.className = 'doc-card ' + status.toLowerCase();
-    card.onclick = () => onDocSelect(docNo, status);
-
-    let statusClass = 'status-pending';
-    let statusIcon = 'bi-circle';
-    let statusText = 'PENDING';
-
-    if (status === 'SERVED') {
-      statusClass = 'status-served';
-      statusIcon = 'bi-check-circle-fill';
-      statusText = 'SERVED';
-    } else if (status === 'PARTIAL') {
-      statusClass = 'status-partial';
-      statusIcon = 'bi-circle-half';
-      statusText = 'PARTIAL';
-    } else if (status === 'EMPTY') {
-      statusClass = 'status-empty';
-      statusIcon = 'bi-dash-circle';
-      statusText = 'EMPTY';
-    }
-
-    card.innerHTML = 
-      '<div class="d-flex justify-content-between align-items-start">' +
-        '<div class="doc-code">' + docNo + '</div>' +
-      '</div>' +
-      '<div class="doc-status-wrapper">' +
-        '<span class="status-badge ' + statusClass + '">' +
-          '<i class="bi ' + statusIcon + ' me-1"></i>' + statusText +
-        '</span>' +
-      '</div>' +
-      '<div class="doc-meta">' +
-        '<i class="bi bi-file-earmark me-1"></i>Tap to open' +
-      '</div>';
-
-    container.appendChild(card);
+function refreshDocs() {
+  const icon = document.getElementById('refreshIcon');
+  icon.style.animation = 'spin 1s linear infinite';
+  loadDocuments().finally(() => {
+    icon.style.animation = '';
   });
+}
+
+// ============================================
+// RENDER DOCUMENTS
+// ============================================
+
+function renderDocCards(docs) {
+  const grid = document.getElementById('docGrid');
+  grid.innerHTML = '';
+
+  docs.forEach(doc => {
+    const card = document.createElement('div');
+    card.className = 'doc-card status-' + (doc.statusCategory || 'pending').toLowerCase();
+    card.onclick = () => openDocDetail(doc);
+
+    const statusText = doc.statusCategory || 'PENDING';
+    const requestor = doc.requestor || 'No requestor';
+    const date = doc.date || '';
+
+    card.innerHTML = `
+      <div class="doc-id">${escapeHtml(doc.id)}</div>
+      <div class="doc-status">${escapeHtml(statusText)}</div>
+      <div class="doc-requestor"><i class="fas fa-user"></i> ${escapeHtml(requestor)}</div>
+      ${date ? `<div class="doc-date"><i class="fas fa-calendar"></i> ${escapeHtml(date)}</div>` : ''}
+    `;
+
+    grid.appendChild(card);
+  });
+
+  showGrid();
 }
 
 function filterDocs() {
-  const term = document.getElementById('docSearch').value.toLowerCase().trim();
-  if (!state.docList) return;
-  const filtered = state.docList.filter(d => {
-    const val = typeof d === 'string' ? d : (d.docNo || d.name || d);
-    return val.toLowerCase().includes(term);
-  });
-  renderDocList(filtered);
-}
-
-function onDocSelect(docNo, status) {
-  if (!docNo) return;
-  if (status === 'SERVED') {
-    if (!confirm('This document is already FULLY SERVED.\n\nAre you sure you want to open it again?')) {
-      return;
-    }
-  }
-  clearErrorAlert();
-  resetDocumentState();
-  state.currentDoc = docNo;
-  document.getElementById('docPickerSection').classList.add('d-none');
-  document.getElementById('activeTransactionSection').classList.remove('d-none');
-  document.getElementById('docTitle').textContent = docNo;
-  fetchDocItems(docNo, state.currentModule);
-}
-
-function changeDocument() {
-  state.currentDoc = null;
-  resetDocumentState();
-  stopScanner();
-  document.getElementById('docPickerSection').classList.remove('d-none');
-  document.getElementById('activeTransactionSection').classList.add('d-none');
-  fetchPendingDocs();
-}
-
-function resetDocumentState() {
-  state.items = [];
-  renderItems();
-  clearErrorAlert();
-}
-
-async function fetchDocItems(docNo, docType) {
-  const sheetId = getCleanSheetId();
-  if (!sheetId) return;
-  try {
-    const url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=' + docType + '&sheetId=' + sheetId + '&_t=' + Date.now();
-    const res = await fetch(url, { redirect: 'follow' });
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch(e) { data = []; }
-    const items = Array.isArray(data) ? data : (data.items || []);
-    state.items = items.map((it, idx) => {
-      const qty = Number(it.qty || it.requestedQty || it.expectedQty || 0);
-      const issued = Number(it.issuedQty || it.actualQty || 0);
-      return {
-        inventoryId: it.inventoryId || it.code || it.itemCode || '',
-        description: it.description || it.desc || '',
-        qty: qty,
-        issuedQty: issued,
-        rowIndex: it.rowIndex || (idx + 12),
-        verified: issued > 0
-      };
-    });
-    renderItems();
-    startScanner();
-  } catch(err) {
-    showToast('Failed to load items', 'danger');
-  }
-}
-
-function renderItems() {
-  const tbody = document.getElementById('itemsTable');
-  tbody.innerHTML = '';
-  let verified = 0;
-  state.items.forEach((item, idx) => {
-    if (item.verified) verified++;
-    const tr = document.createElement('tr');
-    tr.className = 'item-row' + (item.verified ? ' verified' : '');
-    tr.innerHTML = '<td><div class="fw-bold small">' + item.inventoryId + '</div><div class="text-muted small">' + item.description + '</div></td>' +
-      '<td class="text-center">' + item.qty + '</td>' +
-      '<td class="text-center fw-bold">' + (item.verified ? item.issuedQty : '-') + '</td>' +
-      '<td>' + getStatusBadge(item) + '</td>';
-    tbody.appendChild(tr);
-  });
-  document.getElementById('verifyCount').textContent = verified + '/' + state.items.length + ' Verified';
-  updateSubmitButton(verified, state.items.length);
-  showDocStatusBanner();
-}
-
-function getStatusBadge(item) {
-  if (!item.verified) return '<span class="status-badge status-pending"><i class="bi bi-circle me-1"></i>PENDING</span>';
-  if (state.currentModule === 'MRR') {
-    return item.issuedQty >= item.qty ? '<span class="status-badge status-served"><i class="bi bi-check-circle-fill me-1"></i>COMPLETE</span>' : '<span class="status-badge status-partial"><i class="bi bi-circle-half me-1"></i>PARTIAL</span>';
-  }
-  return item.issuedQty >= item.qty ? '<span class="status-badge status-served"><i class="bi bi-check-circle-fill me-1"></i>SERVED</span>' : '<span class="status-badge status-partial"><i class="bi bi-circle-half me-1"></i>PARTIAL</span>';
-}
-
-function showDocStatusBanner() {
-  const banner = document.getElementById('docStatusBanner');
-  if (!banner) return;
-  const total = state.items.length;
-  if (total === 0) { banner.classList.add('d-none'); return; }
-  const allServed = state.items.every(i => i.issuedQty >= i.qty);
-  const anyIssued = state.items.some(i => i.issuedQty > 0);
-  if (allServed) {
-    banner.className = 'alert alert-success mb-2 py-2 text-center';
-    banner.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i><strong>This document is FULLY SERVED.</strong> All items have been issued.';
-    banner.classList.remove('d-none');
-  } else if (anyIssued) {
-    banner.className = 'alert alert-warning mb-2 py-2 text-center';
-    banner.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Partially Processed.</strong> Some items were already issued.';
-    banner.classList.remove('d-none');
-  } else {
-    banner.classList.add('d-none');
-  }
-}
-
-function filterItems() {
-  const term = document.getElementById('itemFilter').value.toLowerCase();
-  document.querySelectorAll('#itemsTable tr').forEach(tr => {
-    const text = tr.textContent.toLowerCase();
-    tr.style.display = text.includes(term) ? '' : 'none';
-  });
-}
-
-function updateSubmitButton(verified, total) {
-  const btn = document.getElementById('submitBtn');
-  const txt = document.getElementById('submitBtnText');
-  if (total === 0) { btn.disabled = true; txt.textContent = 'No Items'; return; }
-  const allServed = state.items.every(item => item.issuedQty >= item.qty);
-  if (allServed) {
-    btn.disabled = true;
-    btn.className = 'btn btn-secondary w-100 mt-3 py-3';
-    txt.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Already Fully Served';
+  const query = document.getElementById('searchInput').value.toLowerCase().trim();
+  if (!query) {
+    renderDocCards(allDocs);
     return;
   }
-  btn.disabled = false;
-  if (verified === total) {
-    btn.className = 'btn btn-success w-100 mt-3 py-3';
-    txt.textContent = 'Confirm & Submit';
+
+  const filtered = allDocs.filter(doc => {
+    const id = (doc.id || '').toLowerCase();
+    const requestor = (doc.requestor || '').toLowerCase();
+    const status = (doc.status || '').toLowerCase();
+    return id.includes(query) || requestor.includes(query) || status.includes(query);
+  });
+
+  if (filtered.length === 0) {
+    showEmptyState();
   } else {
-    btn.className = 'btn btn-warning w-100 mt-3 py-3';
-    txt.textContent = 'Submit Partial (' + verified + '/' + total + ')';
+    renderDocCards(filtered);
   }
 }
 
-function startScanner() {
-  if (state.html5QrCode) { state.html5QrCode.stop().catch(()=>{}); }
-  state.html5QrCode = new Html5Qrcode('reader');
-  Html5Qrcode.getCameras().then(cameras => {
-    state.cameras = cameras;
-    if (cameras.length === 0) { showToast('No cameras found', 'warning'); return; }
-    const camId = state.currentCamera === 'environment' ? cameras.find(c=>c.label.toLowerCase().includes('back'))?.id || cameras[0].id : cameras.find(c=>c.label.toLowerCase().includes('front'))?.id || cameras[0].id;
-    state.html5QrCode.start(camId, { fps:10, qrbox:{width:200,height:200} }, onScanSuccess, ()=>{}).then(()=>{
-      document.getElementById('torchBtn').classList.remove('d-none');
-    }).catch(err => showToast('Camera error: ' + err, 'danger'));
-  }).catch(err => showToast('Camera access denied', 'danger'));
+function clearSearch() {
+  document.getElementById('searchInput').value = '';
+  if (allDocs.length > 0) {
+    renderDocCards(allDocs);
+  } else {
+    showEmptyState();
+  }
 }
-function stopScanner() {
-  if (state.html5QrCode) { state.html5QrCode.stop().catch(()=>{}); state.html5QrCode = null; }
+
+// ============================================
+// DOCUMENT DETAIL
+// ============================================
+
+function openDocDetail(doc) {
+  currentDoc = doc;
+
+  document.getElementById('mainContainer').classList.add('hidden');
+  document.getElementById('detailView').classList.remove('hidden');
+
+  document.getElementById('detailDocId').textContent = doc.id;
+  document.getElementById('detailRequestor').textContent = doc.requestor || '-';
+  document.getElementById('detailDate').textContent = doc.date || '-';
+
+  const status = doc.statusCategory || 'PENDING';
+  const banner = document.getElementById('detailStatusBanner');
+  const statusText = document.getElementById('detailStatusText');
+
+  banner.className = 'detail-status-banner banner-' + status.toLowerCase();
+  statusText.textContent = status;
+
+  // Render items (placeholder - in real app, fetch from GAS)
+  const itemList = document.getElementById('itemList');
+  itemList.innerHTML = '';
+
+  if (doc.items && doc.items.length > 0) {
+    doc.items.forEach((item, idx) => {
+      const row = document.createElement('div');
+      row.className = 'item-row';
+      row.innerHTML = `
+        <input type="checkbox" class="item-check" id="item_${idx}" ${item.verified ? 'checked' : ''}>
+        <div class="item-info">
+          <div class="item-name">${escapeHtml(item.name || 'Unknown Item')}</div>
+          <div class="item-qty">Qty: ${item.qty || 1}</div>
+        </div>
+      `;
+      itemList.appendChild(row);
+    });
+  } else {
+    itemList.innerHTML = `
+      <div class="empty-state" style="padding: 30px;">
+        <i class="fas fa-box-open"></i>
+        <p>No item details available</p>
+        <small>Items may be stored in a different format</small>
+      </div>
+    `;
+  }
 }
-function onScanSuccess(decodedText) {
-  clearErrorAlert();
-  const docPattern = /^(MRIF|MRR|MRS)\d{6,}$/i;
-  if (docPattern.test(decodedText)) {
-    playSuccessBeep();
-    if (confirm('Document QR detected: ' + decodedText + '\n\nSwitch to this document?')) {
-      const mod = decodedText.substring(0, 4).toUpperCase();
-      if (['MRIF','MRR','MRS'].includes(mod)) {
-        selectModule(mod);
-        setTimeout(() => onDocSelect(decodedText, 'PENDING'), 300);
+
+function backToList() {
+  document.getElementById('detailView').classList.add('hidden');
+  document.getElementById('mainContainer').classList.remove('hidden');
+  currentDoc = null;
+}
+
+async function submitDoc() {
+  if (!currentDoc) return;
+
+  const config = MODULE_MAP[currentModule];
+  const sheetId = localStorage.getItem(config.sheetKey);
+
+  try {
+    const response = await fetch(getApiUrl(), {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'submitDocument',
+        sheetId: sheetId,
+        docId: currentDoc.id,
+        status: 'SERVED',
+        servedBy: 'Warehouse Staff'
+      })
+    });
+
+    const result = await response.json();
+    if (result.success) {
+      showToast('Document marked as SERVED', 'success');
+      backToList();
+      loadDocuments();
+    } else {
+      throw new Error(result.error);
+    }
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
+// ============================================
+// QR SCAN (Placeholder)
+// ============================================
+
+function startScan() {
+  showToast('QR Scanner: Use device camera to scan', 'info');
+  // Implement actual QR scanning here (e.g., using html5-qrcode library)
+}
+
+// ============================================
+// SETTINGS
+// ============================================
+
+function openSettings() {
+  // Load current values
+  document.getElementById('sheetId_MRR').value = localStorage.getItem('sheetId_MRR') || '';
+  document.getElementById('sheetId_MRIF').value = localStorage.getItem('sheetId_MRIF') || '';
+  document.getElementById('sheetId_RECEIVING').value = localStorage.getItem('sheetId_RECEIVING') || '';
+  document.getElementById('sheetId_RETURNS').value = localStorage.getItem('sheetId_RETURNS') || '';
+  document.getElementById('gasUrl').value = localStorage.getItem('gasUrl') || DEFAULT_API_URL;
+  document.getElementById('masterSheetId').value = localStorage.getItem('masterSheetId') || '';
+
+  document.getElementById('settingsModal').classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeSettings() {
+  document.getElementById('settingsModal').classList.remove('active');
+  document.body.style.overflow = '';
+}
+
+function saveSettings() {
+  localStorage.setItem('sheetId_MRR', document.getElementById('sheetId_MRR').value.trim());
+  localStorage.setItem('sheetId_MRIF', document.getElementById('sheetId_MRIF').value.trim());
+  localStorage.setItem('sheetId_RECEIVING', document.getElementById('sheetId_RECEIVING').value.trim());
+  localStorage.setItem('sheetId_RETURNS', document.getElementById('sheetId_RETURNS').value.trim());
+  localStorage.setItem('gasUrl', document.getElementById('gasUrl').value.trim());
+  localStorage.setItem('masterSheetId', document.getElementById('masterSheetId').value.trim());
+
+  showToast('Settings saved!', 'success');
+  closeSettings();
+  loadDocuments();
+}
+
+async function syncModuleLinks() {
+  const masterSheetId = document.getElementById('masterSheetId').value.trim();
+  if (!masterSheetId) {
+    showToast('Please enter Master Sheet ID first', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('syncBtn');
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<div class="spinner"></div> Syncing...';
+  btn.disabled = true;
+
+  try {
+    const url = getApiUrl() + '?action=getModuleLinks&masterSheetId=' + encodeURIComponent(masterSheetId);
+    const response = await fetch(url);
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || 'Sync failed');
+    }
+
+    const links = result.data || {};
+    console.log('[syncModuleLinks] Received:', links);
+
+    let savedCount = 0;
+    for (const [key, val] of Object.entries(links)) {
+      const upperKey = key.toUpperCase();
+      if (upperKey === 'MRR') {
+        localStorage.setItem('sheetId_MRR', val);
+        document.getElementById('sheetId_MRR').value = val;
+        savedCount++;
+      } else if (upperKey === 'MRIF') {
+        localStorage.setItem('sheetId_MRIF', val);
+        document.getElementById('sheetId_MRIF').value = val;
+        savedCount++;
+      } else if (upperKey === 'RECEIVING' || upperKey === 'RCV') {
+        localStorage.setItem('sheetId_RECEIVING', val);
+        document.getElementById('sheetId_RECEIVING').value = val;
+        savedCount++;
+      } else if (upperKey === 'RETURNS' || upperKey === 'RET') {
+        localStorage.setItem('sheetId_RETURNS', val);
+        document.getElementById('sheetId_RETURNS').value = val;
+        savedCount++;
       }
     }
-    return;
+
+    showToast('Synced ' + savedCount + ' module(s) successfully!', 'success');
+
+  } catch (err) {
+    console.error('[syncModuleLinks] Error:', err);
+    showToast('Sync failed: ' + err.message, 'error');
+  } finally {
+    btn.innerHTML = originalText;
+    btn.disabled = false;
   }
-  const item = state.items.find(i => i.inventoryId.toLowerCase() === decodedText.toLowerCase());
-  if (!item) {
-    playErrorBuzz();
-    showMismatchAlert(decodedText);
-    return;
-  }
-  playSuccessBeep();
-  openQtyModal(item);
-}
-function manualVerify() {
-  const val = document.getElementById('manualInput').value.trim();
-  if (!val) return;
-  document.getElementById('manualInput').value = '';
-  onScanSuccess(val);
-}
-function toggleTorch() {
-  const video = document.querySelector('#reader video');
-  if (!video || !video.srcObject) return;
-  const track = video.srcObject.getVideoTracks()[0];
-  if (!track) return;
-  const caps = track.getCapabilities();
-  if (!caps.torch) { showToast('Flashlight not supported', 'warning'); return; }
-  state.torchOn = !state.torchOn;
-  track.applyConstraints({ advanced:[{torch:state.torchOn}] }).then(()=>{
-    document.getElementById('torchBtn').classList.toggle('active', state.torchOn);
-    showToast(state.torchOn ? 'Flashlight ON' : 'Flashlight OFF', 'info');
-  }).catch(()=>showToast('Torch failed', 'warning'));
-}
-function switchCamera() {
-  state.currentCamera = state.currentCamera === 'environment' ? 'user' : 'environment';
-  startScanner();
 }
 
-function openQuickScan() {
-  quickScanModal.show();
-  setTimeout(startQuickScanner, 300);
-}
-function closeQuickScan() {
-  if (state.quickScanner) {
-    state.quickScanner.stop().catch(()=>{});
-    state.quickScanner = null;
+function clearAllData() {
+  if (!confirm('Are you sure you want to clear ALL saved data? This cannot be undone.')) {
+    return;
   }
-  quickScanModal.hide();
-}
-function startQuickScanner() {
-  if (state.quickScanner) { state.quickScanner.stop().catch(()=>{}); }
-  const el = document.getElementById('quickReader');
-  if (!el) return;
-  state.quickScanner = new Html5Qrcode('quickReader');
-  Html5Qrcode.getCameras().then(cameras => {
-    if (cameras.length === 0) { showToast('No cameras found', 'warning'); return; }
-    const camId = cameras.find(c=>c.label.toLowerCase().includes('back'))?.id || cameras[0].id;
-    state.quickScanner.start(camId, { fps:10, qrbox:{width:250,height:250} }, onQuickScanSuccess, ()=>{}).catch(err => {
-      showToast('Quick scan camera error: ' + err, 'danger');
-    });
-  }).catch(err => showToast('Camera access denied', 'danger'));
-}
-function onQuickScanSuccess(decodedText) {
-  if (state.quickScanner) {
-    state.quickScanner.stop().catch(()=>{});
-    state.quickScanner = null;
-  }
-  quickScanModal.hide();
-  const docPattern = /^(MRIF|MRR|MRS)\d{6,}$/i;
-  if (docPattern.test(decodedText)) {
-    const mod = decodedText.substring(0, 4).toUpperCase();
-    if (['MRIF','MRR','MRS'].includes(mod)) {
-      playSuccessBeep();
-      showToast('Loading document ' + decodedText + '...', 'success');
-      selectModule(mod);
-      setTimeout(() => onDocSelect(decodedText, 'PENDING'), 500);
-      return;
-    }
-  }
-  if (state.currentDoc && state.items.length > 0) {
-    const item = state.items.find(i => i.inventoryId.toLowerCase() === decodedText.toLowerCase());
-    if (item) {
-      playSuccessBeep();
-      document.getElementById('docPickerSection').classList.add('d-none');
-      document.getElementById('activeTransactionSection').classList.remove('d-none');
-      openQtyModal(item);
-      return;
-    }
-  }
-  playErrorBuzz();
-  showToast('No document loaded. Scan a Document QR first.', 'danger');
+
+  localStorage.removeItem('sheetId_MRR');
+  localStorage.removeItem('sheetId_MRIF');
+  localStorage.removeItem('sheetId_RECEIVING');
+  localStorage.removeItem('sheetId_RETURNS');
+  localStorage.removeItem('gasUrl');
+  localStorage.removeItem('masterSheetId');
+  localStorage.removeItem('currentModule');
+
+  document.getElementById('sheetId_MRR').value = '';
+  document.getElementById('sheetId_MRIF').value = '';
+  document.getElementById('sheetId_RECEIVING').value = '';
+  document.getElementById('sheetId_RETURNS').value = '';
+  document.getElementById('gasUrl').value = DEFAULT_API_URL;
+  document.getElementById('masterSheetId').value = '';
+
+  showToast('All saved data cleared. Reloading...', 'success');
+  setTimeout(() => location.reload(), 1500);
 }
 
-let currentModalItem = null;
-function openQtyModal(item) {
-  currentModalItem = item;
-  const isMRR = state.currentModule === 'MRR';
-  const isMRS = state.currentModule === 'MRS';
-  document.getElementById('modalItemCode').textContent = item.inventoryId;
-  document.getElementById('modalItemDesc').textContent = item.description;
-  document.getElementById('modalExpectedLabel').textContent = isMRR ? 'REC. QTY' : (isMRS ? 'QTY RETURNED' : 'Requested Qty');
-  document.getElementById('modalExpectedQty').value = item.qty;
-  document.getElementById('modalInputLabel').textContent = isMRR ? 'ATL QTY (Received)' : (isMRS ? 'ATL QTY (Actual Returned)' : 'Enter Issued Qty');
-  document.getElementById('modalInputQty').value = item.qty;
-  document.getElementById('modalHint').textContent = isMRR ? 'MRR Mode: You may receive any quantity.' : (isMRS ? 'MRS Mode: Returned qty cannot exceed expected.' : 'MRIF Mode: Issued qty cannot exceed requested.');
-  document.getElementById('modalInputQty').classList.remove('is-invalid');
-  qtyModal.show();
-}
-function onQtyInput() {
-  clearErrorAlert();
-  document.getElementById('modalInputQty').classList.remove('is-invalid');
-}
-function confirmQty() {
-  if (!currentModalItem) return;
-  const input = document.getElementById('modalInputQty');
-  const qtyVal = parseInt(input.value, 10);
-  if (isNaN(qtyVal) || qtyVal < 0) {
-    input.classList.add('is-invalid');
-    playErrorBuzz();
-    return;
-  }
-  const isMRR = state.currentModule === 'MRR';
-  if (!isMRR && qtyVal > currentModalItem.qty) {
-    const max = currentModalItem.qty;
-    const msg = state.currentModule === 'MRS'
-      ? 'Returned Qty cannot exceed Expected Qty (Max: ' + max + ')'
-      : 'Issued Qty cannot exceed Requested Qty (Max: ' + max + ')';
-    showExceedError(msg);
-    input.value = max;
-    input.classList.add('is-invalid');
-    playErrorBuzz();
-    return;
-  }
-  currentModalItem.issuedQty = qtyVal;
-  currentModalItem.verified = true;
-  renderItems();
-  qtyModal.hide();
-  playSuccessBeep();
-}
-function showMismatchAlert(code) {
-  const alert = document.getElementById('mismatchAlert');
-  document.getElementById('mismatchText').textContent = 'Item "' + code + '" not found in this document.';
-  alert.classList.remove('d-none');
-  clearTimeout(state.errorTimer);
-  state.errorTimer = setTimeout(() => clearErrorAlert(), 4000);
-}
-function showExceedError(msg) {
-  const alert = document.getElementById('exceedErrorAlert');
-  document.getElementById('exceedText').textContent = 'Error: ' + msg;
-  alert.classList.remove('d-none');
-  clearTimeout(state.errorTimer);
-  state.errorTimer = setTimeout(() => clearErrorAlert(), 4000);
-}
-function clearErrorAlert() {
-  const a1 = document.getElementById('mismatchAlert');
-  const a2 = document.getElementById('exceedErrorAlert');
-  if (a1) a1.classList.add('d-none');
-  if (a2) a2.classList.add('d-none');
+function switchRole() {
+  showToast('Role switching not implemented yet', 'info');
 }
 
-async function onSubmit() {
-  const verifiedItems = state.items.filter(i => i.verified && i.issuedQty > 0);
-  const total = state.items.length;
-  const verified = verifiedItems.length;
-  if (verified === 0) {
-    showToast('No items to submit. Please scan or verify at least one item.', 'warning');
+function changePin() {
+  const current = document.getElementById('currentPin').value;
+  const newPin = document.getElementById('newPin').value;
+
+  if (!newPin || newPin.length !== 4 || !/^\d{4}$/.test(newPin)) {
+    showToast('PIN must be exactly 4 digits', 'warning');
     return;
   }
-  if (verified < total) {
-    if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly scanned/entered items will be sent.')) {
-      return;
-    }
+
+  const savedPin = localStorage.getItem('warehousePin') || '0000';
+  if (current !== savedPin) {
+    showToast('Current PIN is incorrect', 'error');
+    return;
   }
-  const payload = {
-    docNo: state.currentDoc,
-    docType: state.currentModule,
-    sheetId: getCleanSheetId(),
-    scannedItems: verifiedItems.map(i => ({
-      inventoryId: i.inventoryId,
-      description: i.description,
-      qty: i.qty,
-      issuedQty: i.issuedQty,
-      rowIndex: i.rowIndex,
-      scannedAt: new Date().toISOString()
-    }))
+
+  localStorage.setItem('warehousePin', newPin);
+  showToast('PIN changed successfully!', 'success');
+  document.getElementById('currentPin').value = '';
+  document.getElementById('newPin').value = '';
+}
+
+// ============================================
+// UI STATE HELPERS
+// ============================================
+
+function showLoading() {
+  document.getElementById('loadingState').classList.remove('hidden');
+  document.getElementById('docGrid').classList.add('hidden');
+  document.getElementById('emptyState').classList.add('hidden');
+  document.getElementById('errorState').classList.add('hidden');
+}
+
+function showGrid() {
+  document.getElementById('loadingState').classList.add('hidden');
+  document.getElementById('docGrid').classList.remove('hidden');
+  document.getElementById('emptyState').classList.add('hidden');
+  document.getElementById('errorState').classList.add('hidden');
+}
+
+function showEmptyState() {
+  document.getElementById('loadingState').classList.add('hidden');
+  document.getElementById('docGrid').classList.add('hidden');
+  document.getElementById('emptyState').classList.remove('hidden');
+  document.getElementById('errorState').classList.add('hidden');
+}
+
+function showErrorState(message) {
+  document.getElementById('loadingState').classList.add('hidden');
+  document.getElementById('docGrid').classList.add('hidden');
+  document.getElementById('emptyState').classList.add('hidden');
+  document.getElementById('errorState').classList.remove('hidden');
+  document.getElementById('errorMessage').textContent = message || 'Unknown error';
+}
+
+// ============================================
+// TOAST NOTIFICATIONS
+// ============================================
+
+function showToast(message, type) {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = 'toast toast-' + type;
+
+  const icons = {
+    error: 'fa-exclamation-circle',
+    success: 'fa-check-circle',
+    warning: 'fa-exclamation-triangle',
+    info: 'fa-info-circle'
   };
-  console.log('Submitting:', payload);
-  try {
-    const result = await submitTransaction(payload);
-    console.log('Result:', result);
-    if (result && (result.success === true || result.message)) {
-      successModal.show();
-      setTimeout(() => location.reload(), 2000);
-    } else {
-      showToast('Submission failed: ' + (result.error || 'Unknown error'), 'danger');
-    }
-  } catch(err) {
-    showToast('Error: ' + err.message, 'danger');
-    console.error(err);
-  }
+
+  toast.innerHTML = `<i class="fas ${icons[type] || icons.info}"></i> ${escapeHtml(message)}`;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-20px)';
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
 }
 
-async function submitTransaction(payload) {
-  try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      redirect: 'follow'
-    });
-    const text = await res.text();
-    console.log('POST response:', text.substring(0, 200));
-    return parseResponse(text);
-  } catch (postErr) {
-    console.warn('Normal POST failed (CORS), trying no-cors...');
-  }
-  try {
-    await fetch(API_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      mode: 'no-cors',
-      redirect: 'follow'
-    });
-    console.log('no-cors POST sent');
-  } catch (e) {
-    console.log('no-cors POST network error:', e);
-  }
-  showToast('Processing transaction...', 'info');
-  await new Promise(r => setTimeout(r, 3000));
-  try {
-    const verifyUrl = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(payload.docNo) + '&docType=' + payload.docType + '&sheetId=' + payload.sheetId + '&_t=' + Date.now();
-    const res = await fetch(verifyUrl, { redirect: 'follow' });
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch(e) { data = []; }
-    const items = Array.isArray(data) ? data : (data.items || []);
-    let updatedCount = 0;
-    payload.scannedItems.forEach(sent => {
-      const found = items.find(v => v.rowIndex === sent.rowIndex || v.inventoryId === sent.inventoryId);
-      if (found && Number(found.issuedQty) === Number(sent.issuedQty)) {
-        updatedCount++;
-      }
-    });
-    if (updatedCount === payload.scannedItems.length && payload.scannedItems.length > 0) {
-      return { success: true, message: 'Transaction completed (' + updatedCount + ' items updated)' };
-    } else if (payload.scannedItems.length === 0) {
-      return { success: true, message: 'No items to update' };
-    } else {
-      return await submitViaGet(payload);
-    }
-  } catch (verifyErr) {
-    console.warn('Verify failed, trying GET fallback:', verifyErr);
-    return await submitViaGet(payload);
-  }
+function showError(message) {
+  showToast(message, 'error');
 }
 
-async function submitViaGet(payload) {
-  try {
-    const base64Data = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-    const url = API_URL + '?action=submitTransaction&data=' + encodeURIComponent(base64Data) + '&_t=' + Date.now();
-    const res = await fetch(url, { redirect: 'follow' });
-    const text = await res.text();
-    console.log('GET fallback response:', text.substring(0, 200));
-    return parseResponse(text);
-  } catch (getErr) {
-    throw new Error('All submission methods failed: ' + getErr.message);
-  }
-}
+// ============================================
+// UTILITIES
+// ============================================
 
-function parseResponse(text) {
-  try {
-    return JSON.parse(text);
-  } catch(e) {
-    const m = text.match(/\{[\s\S]*\}/);
-    if (m) return JSON.parse(m[0]);
-    throw new Error('Non-JSON response: ' + text.substring(0,200));
-  }
-}
-
-function openNewRequest() {
-  document.getElementById('requestItemsContainer').innerHTML = '';
-  addRequestItemRow();
-  loadRequestInventory();
-  newRequestModal.show();
-}
-async function loadRequestInventory() {
-  try {
-    const url = API_URL + '?action=getInventoryList&_t=' + Date.now();
-    const res = await fetch(url, { redirect: 'follow' });
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch(e) { data = {}; }
-    const inv = data.inventory || data.items || [];
-    state.requestInventoryList = inv;
-    console.log('Inventory loaded:', inv.length);
-  } catch(err) {
-    console.error('Inventory load error:', err);
-    state.requestInventoryList = [];
-  }
-}
-function addRequestItemRow() {
-  const container = document.getElementById('requestItemsContainer');
-  const idx = container.children.length;
+function escapeHtml(text) {
+  if (!text) return '';
   const div = document.createElement('div');
-  div.className = 'row g-2 mb-2 align-items-end';
-  div.innerHTML = '<div class="col-5"><label class="form-label small">Item</label><input type="text" class="form-control req-item-search" placeholder="Type to search..." oninput="filterRequestItems(this,'+idx+')" onfocus="filterRequestItems(this,'+idx+')"><div class="list-group position-absolute z-3 d-none req-dropdown" style="max-height:150px;overflow-y:auto;" id="reqDropdown'+idx+'"></div><input type="hidden" class="req-item-code" id="reqCode'+idx+'"><input type="hidden" class="req-item-desc" id="reqDesc'+idx+'"></div>' +
-    '<div class="col-3"><label class="form-label small">Qty</label><input type="number" class="form-control req-qty" min="1" value="1"></div>' +
-    '<div class="col-3"><label class="form-label small">Unit</label><input type="text" class="form-control req-unit" value="PCS" readonly></div>' +
-    '<div class="col-1"><button class="btn btn-outline-danger btn-sm" onclick="this.closest(\'.row\').remove()"><i class="bi bi-trash"></i></button></div>';
-  container.appendChild(div);
+  div.textContent = text;
+  return div.innerHTML;
 }
-function filterRequestItems(input, idx) {
-  const term = input.value.toLowerCase();
-  const dropdown = document.getElementById('reqDropdown'+idx);
-  dropdown.innerHTML = '';
-  if (!term) { dropdown.classList.add('d-none'); return; }
-  const matches = state.requestInventoryList.filter(it => {
-    const code = (it.code || it.inventoryId || '').toLowerCase();
-    const desc = (it.description || '').toLowerCase();
-    return code.includes(term) || desc.includes(term);
-  }).slice(0, 10);
-  if (matches.length === 0) {
-    dropdown.innerHTML = '<div class="list-group-item text-muted">No matches</div>';
-  } else {
-    matches.forEach(it => {
-      const code = it.code || it.inventoryId || '';
-      const desc = it.description || '';
-      const el = document.createElement('div');
-      el.className = 'list-group-item list-group-item-action';
-      el.innerHTML = '<div class="fw-bold small">' + code + '</div><div class="small text-muted">' + desc + '</div>';
-      el.onclick = () => {
-        input.value = code + ' - ' + desc;
-        document.getElementById('reqCode'+idx).value = code;
-        document.getElementById('reqDesc'+idx).value = desc;
-        dropdown.classList.add('d-none');
-      };
-      dropdown.appendChild(el);
-    });
-  }
-  dropdown.classList.remove('d-none');
-}
-async function submitNewRequest() {
-  const docType = document.getElementById('reqDocType').value;
-  const requestor = document.getElementById('reqRequestor').value.trim();
-  const department = document.getElementById('reqDepartment').value.trim();
-  if (!requestor) { alert('Enter requestor name'); return; }
-  const items = [];
-  document.querySelectorAll('#requestItemsContainer .row').forEach(row => {
-    const code = row.querySelector('.req-item-code').value;
-    const desc = row.querySelector('.req-item-desc').value;
-    const qty = parseInt(row.querySelector('.req-qty').value, 10);
-    if (code && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty });
-  });
-  if (items.length === 0) { alert('Add at least one item'); return; }
-  const payload = {
-    action: 'createRequest',
-    docType: docType,
-    requestor: requestor,
-    department: department,
-    items: items,
-    timestamp: new Date().toISOString()
-  };
-  try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      redirect: 'follow'
-    });
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
-    if (data && data.success) {
-      newRequestModal.hide();
-      showRequestQr(data.ticketNo || 'N/A', data.docNo || 'N/A');
-    } else {
-      alert('Failed: ' + (data.error || 'Unknown error'));
+
+// Close modal on overlay click
+document.getElementById('settingsModal').addEventListener('click', function(e) {
+  if (e.target === this) closeSettings();
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeSettings();
+    if (!document.getElementById('detailView').classList.contains('hidden')) {
+      backToList();
     }
-  } catch(err) {
-    alert('Error: ' + err.message);
   }
-}
-function showRequestQr(ticketNo, docNo) {
-  document.getElementById('requestTicketNo').textContent = ticketNo;
-  document.getElementById('requestDocNo').textContent = docNo;
-  const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(docNo);
-  const img = document.getElementById('requestQrImg');
-  img.src = qrUrl;
-  img.style.display = 'block';
-  img.onerror = function() {
-    img.style.display = 'none';
-    document.getElementById('qrFallback').classList.remove('d-none');
-    document.getElementById('qrFallback').innerHTML = '<strong>Doc No:</strong> ' + docNo;
-  };
-  requestSuccessModal.show();
-}
-
-function showToast(msg, type) {
-  const toast = document.getElementById('liveToast');
-  document.getElementById('toastTitle').textContent = type === 'danger' ? 'Error' : (type === 'success' ? 'Success' : 'Info');
-  document.getElementById('toastBody').textContent = msg;
-  toast.className = 'toast align-items-center text-white bg-' + type;
-  bootstrap.Toast.getOrCreateInstance(toast).show();
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  initRole();
 });
 </script>
 </body>
