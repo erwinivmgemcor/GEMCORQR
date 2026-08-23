@@ -1107,13 +1107,13 @@ async function onDocSelect(docNo) {
   if (state.isLoading) return;
   state.isLoading = true;
   showLoadingOverlay("Loading document...");
-  if (!docNo) { hideScannerSection(); return; }
+  if (!docNo) { hideLoadingOverlay(); state.isLoading = false; hideScannerSection(); return; }
   clearErrorAlert();
   resetDocumentState();
 
-  // Check document lock
+  // Check document lock (no token needed for read)
   try {
-    const lockUrl = API_URL + '?action=getDocLock&sheetId=' + getCleanSheetId() + '&docNo=' + encodeURIComponent(docNo) + '&token=' + encodeURIComponent(state.sessionToken || '') + '&_t=' + Date.now();
+    const lockUrl = API_URL + '?action=getDocLock&sheetId=' + getCleanSheetId() + '&docNo=' + encodeURIComponent(docNo) + '&_t=' + Date.now();
     const lockRes = await fetch(lockUrl, { redirect: 'follow' });
     const lockText = await lockRes.text();
     let lockData;
@@ -1121,16 +1121,20 @@ async function onDocSelect(docNo) {
     if (lockData.locked) {
       if (!confirm('⚠️ Document ' + docNo + ' is currently being processed by ' + lockData.lockedBy + ' since ' + lockData.lockedAt + '.\n\nForce unlock and continue?')) {
         document.getElementById('docSelect').value = '';
+        hideLoadingOverlay();
+        state.isLoading = false;
         return;
       }
     }
-    // Try to lock
-    const lockReq = API_URL + '?action=lockDocument&sheetId=' + getCleanSheetId() + '&docNo=' + encodeURIComponent(docNo) + '&token=' + encodeURIComponent(state.sessionToken || '') + '&_t=' + Date.now();
-    await fetch(lockReq, { redirect: 'follow' });
-    state.docLocked = true;
-    document.getElementById('lockIndicator').classList.remove('d-none');
+    // Try to lock (requires token - silently skip if no token)
+    if (state.sessionToken) {
+      const lockReq = API_URL + '?action=lockDocument&sheetId=' + getCleanSheetId() + '&docNo=' + encodeURIComponent(docNo) + '&token=' + encodeURIComponent(state.sessionToken) + '&_t=' + Date.now();
+      await fetch(lockReq, { redirect: 'follow' });
+      state.docLocked = true;
+      document.getElementById('lockIndicator').classList.remove('d-none');
+    }
   } catch(e) {
-    // Offline: proceed without lock
+    console.log('Lock check skipped:', e.message);
     state.docLocked = false;
   }
 
@@ -1145,9 +1149,9 @@ async function onDocSelect(docNo) {
 
 async function changeDocument() {
   const docToClear = state.currentDoc;
-  if (state.currentDoc && state.docLocked) {
+  if (state.currentDoc && state.docLocked && state.sessionToken) {
     try {
-      const url = API_URL + '?action=unlockDocument&sheetId=' + getCleanSheetId() + '&docNo=' + encodeURIComponent(state.currentDoc) + '&token=' + encodeURIComponent(state.sessionToken || '') + '&_t=' + Date.now();
+      const url = API_URL + '?action=unlockDocument&sheetId=' + getCleanSheetId() + '&docNo=' + encodeURIComponent(state.currentDoc) + '&token=' + encodeURIComponent(state.sessionToken) + '&_t=' + Date.now();
       await fetch(url, { redirect: 'follow' });
     } catch(e) {}
     state.docLocked = false;
@@ -1176,13 +1180,22 @@ function resetDocumentState() {
 async function fetchDocItems(docNo, docType) {
   const sheetId = getCleanSheetId();
   if (!sheetId) return;
+  console.log('fetchDocItems - docNo:', docNo, 'sheetId:', sheetId);
   try {
-    const url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=' + docType + '&sheetId=' + sheetId + '&token=' + encodeURIComponent(state.sessionToken || '') + '&_t=' + Date.now();
+    const url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=' + docType + '&sheetId=' + sheetId + '&_t=' + Date.now();
+    console.log('Fetching items:', url);
     const res = await fetch(url, { redirect: 'follow' });
     const text = await res.text();
+    console.log('Items response:', text.substring(0, 300));
     let data;
     try { data = JSON.parse(text); } catch(e) { data = []; }
+    if (data && data.error) {
+      console.error('getDocItems error:', data.error);
+      showToast('Error loading items: ' + data.error, 'danger');
+      return;
+    }
     const items = Array.isArray(data) ? data : (data.items || []);
+    console.log('Items loaded:', items.length);
     state.items = items.map((it, idx) => ({
       inventoryId: it.inventoryId || it.code || it.itemCode || '',
       description: it.description || it.desc || '',
@@ -1202,7 +1215,8 @@ async function fetchDocItems(docNo, docType) {
     renderItems();
     startScanner();
   } catch(err) {
-    showToast('Failed to load items', 'danger');
+    showToast('Failed to load items: ' + err.message, 'danger');
+    console.error('fetchDocItems error:', err);
   }
 }
 
