@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>IVM WAREHOUSE QR</title>
+  <title>IVM WAREHOUSE QR v2</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -34,6 +34,8 @@
     .wifi-icon { font-size:1.2rem; }
     .wifi-online { color:var(--success); }
     .wifi-offline { color:var(--danger); }
+    .wifi-syncing { color:var(--warning); animation:pulse 1s infinite; }
+    @keyframes pulse { 0%{opacity:1} 50%{opacity:.5} 100%{opacity:1} }
     .module-btn { font-size:.85rem; padding:.5rem .75rem; }
     .module-btn.active { background:var(--primary); color:#fff; }
     .doc-search { margin-bottom:.5rem; }
@@ -46,15 +48,24 @@
     .pin-dot { width:16px; height:16px; border-radius:50%; border:2px solid #dee2e6; display:inline-block; margin:0 4px; }
     .pin-dot.filled { background:var(--primary); border-color:var(--primary); }
     .production-banner { background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:#fff; border-radius:12px; padding:1rem; margin-bottom:1rem; text-align:center; }
+    .resume-banner { background:linear-gradient(135deg,#198754 0%,#157347 100%); color:#fff; border-radius:12px; padding:1rem; margin-bottom:1rem; text-align:center; cursor:pointer; }
+    .offline-badge { position:absolute; top:8px; left:8px; background:var(--danger); color:#fff; font-size:.7rem; padding:.25rem .5rem; border-radius:20px; font-weight:700; z-index:20; }
+    .bulk-toggle { position:absolute; top:8px; left:8px; z-index:20; }
+    .bulk-toggle .btn { font-size:.75rem; padding:.25rem .5rem; border-radius:20px; }
+    .lock-indicator { font-size:.75rem; padding:.25rem .5rem; border-radius:.375rem; background:#fff3cd; color:#856404; border:1px solid #ffc107; }
+    .request-card { transition:all .2s; cursor:pointer; }
+    .request-card:hover { box-shadow:0 4px 12px rgba(0,0,0,0.1); transform:translateY(-2px); }
   </style>
+<base target="_blank">
 </head>
 <body>
 
 <!-- Navbar -->
 <nav class="navbar navbar-dark bg-primary sticky-top">
   <div class="container-fluid">
-    <span class="navbar-brand mb-0 h5"><i class="bi bi-box-seam me-2"></i>IVM WAREHOUSE QR</span>
+    <span class="navbar-brand mb-0 h5"><i class="bi bi-box-seam me-2"></i>IVM WAREHOUSE QR <small class="ms-1 badge bg-warning text-dark">v2</small></span>
     <div class="d-flex align-items-center gap-2">
+      <span id="offlineBadge" class="badge bg-danger d-none" style="font-size:.7rem;"><i class="bi bi-cloud-arrow-up me-1"></i><span id="offlineCount">0</span></span>
       <span id="moduleLabel" class="badge bg-light text-dark">MRIF</span>
       <i id="wifiIcon" class="bi bi-wifi wifi-icon wifi-online"></i>
       <button id="settingsBtn" class="btn btn-sm btn-outline-light" onclick="openSettings()"><i class="bi bi-gear-fill"></i></button>
@@ -64,11 +75,18 @@
 
 <div class="container-fluid mt-3">
 
-  <!-- Production Banner (shown only for Production role) -->
+  <!-- Resume Banner -->
+  <div id="resumeBanner" class="resume-banner d-none" onclick="resumeDocument()">
+    <i class="bi bi-arrow-clockwise" style="font-size:1.5rem;"></i>
+    <h6 class="mt-1 mb-1">Resume <span id="resumeDocNo"></span></h6>
+    <small id="resumeProgress">0/0 items verified</small>
+  </div>
+
+  <!-- Production Banner -->
   <div id="productionBanner" class="production-banner d-none">
     <i class="bi bi-person-badge" style="font-size:2rem;"></i>
     <h5 class="mt-2 mb-1">Production Mode</h5>
-    <small>You can only create new requests.</small>
+    <small>You can create requests and track status.</small>
   </div>
 
   <!-- Module Buttons -->
@@ -79,9 +97,23 @@
     <div class="col-3" id="btnNewRequest"><button class="btn btn-outline-success w-100 module-btn" data-module="REQUEST" onclick="openNewRequest()"><i class="bi bi-plus-lg"></i><br>New Request</button></div>
   </div>
 
+  <!-- My Requests (Production) -->
+  <div id="myRequestsSection" class="d-none">
+    <div class="card">
+      <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-clock-history me-2"></i>My Requests</strong>
+        <button class="btn btn-sm btn-outline-primary" onclick="refreshMyRequests()"><i class="bi bi-arrow-clockwise"></i></button>
+      </div>
+      <div class="card-body p-0">
+        <div id="myRequestsList" class="p-2">
+          <div class="text-center text-muted py-3">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Document Picker -->
   <div id="docPickerSection">
-    <!-- QUICK SCAN BUTTON -->
     <div id="quickScanCard" class="card mb-3 border-primary shadow-sm">
       <div class="card-body text-center py-4">
         <button class="btn btn-primary quick-scan-btn w-100" onclick="openQuickScan()">
@@ -110,11 +142,20 @@
   <div id="activeTransactionSection" class="d-none">
     <div class="d-flex justify-content-between align-items-center mb-2">
       <button class="btn btn-sm btn-outline-secondary" onclick="changeDocument()"><i class="bi bi-arrow-left"></i> Change Document</button>
-      <span id="docTitle" class="badge bg-primary"></span>
+      <div class="d-flex align-items-center gap-2">
+        <span id="lockIndicator" class="lock-indicator d-none"><i class="bi bi-lock-fill me-1"></i>Locked</span>
+        <span id="docTitle" class="badge bg-primary"></span>
+      </div>
     </div>
 
     <!-- Scanner -->
     <div class="scanner-container mb-3">
+      <div id="offlineScanBadge" class="offline-badge d-none">OFFLINE</div>
+      <div class="bulk-toggle">
+        <button id="bulkToggleBtn" class="btn btn-outline-warning" onclick="toggleBulkMode()">
+          <i class="bi bi-lightning-charge me-1"></i><span id="bulkToggleText">Bulk OFF</span>
+        </button>
+      </div>
       <div id="reader"></div>
       <div class="scanner-overlay"><div class="scanner-frame"><div class="scan-line"></div></div></div>
       <div class="cam-controls">
@@ -197,6 +238,26 @@
   </div>
 </div>
 
+<!-- Discrepancy Modal -->
+<div class="modal fade" id="discrepancyModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-warning text-dark">
+        <h5 class="modal-title"><i class="bi bi-exclamation-diamond me-2"></i>Discrepancy Report</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">Please specify the reason for each unfulfilled or partially fulfilled item. This helps management track warehouse issues.</p>
+        <div id="discrepancyList"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-warning" onclick="submitWithDiscrepancies()">Submit with Report</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Quick Scan Modal -->
 <div class="modal fade" id="quickScanModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
@@ -235,7 +296,7 @@
             <div class="card role-card p-3 text-center" onclick="selectRole('production')">
               <i class="bi bi-person-badge text-primary" style="font-size:2.5rem;"></i>
               <h5 class="mt-2 mb-1">Production Staff</h5>
-              <small class="text-muted">Create material requests only</small>
+              <small class="text-muted">Create material requests and track status</small>
             </div>
           </div>
           <div class="col-12">
@@ -246,8 +307,6 @@
             </div>
           </div>
         </div>
-
-        <!-- PIN Entry (hidden by default) -->
         <div id="pinEntrySection" class="d-none mt-3 text-center">
           <hr>
           <label class="form-label fw-bold">Enter Warehouse PIN</label>
@@ -285,7 +344,6 @@
     <div class="modal-content">
       <div class="modal-header"><h5 class="modal-title"><i class="bi bi-gear me-2"></i>Settings</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
-        <!-- Role Switcher -->
         <div class="card mb-3">
           <div class="card-header bg-light"><strong><i class="bi bi-person-badge me-2"></i>Current Role</strong></div>
           <div class="card-body">
@@ -295,8 +353,6 @@
             </div>
           </div>
         </div>
-
-        <!-- PIN Management (Warehouse only) -->
         <div id="pinManagementSection">
           <div class="card mb-3">
             <div class="card-header bg-light"><strong><i class="bi bi-key me-2"></i>Warehouse PIN</strong></div>
@@ -314,13 +370,11 @@
             </div>
           </div>
         </div>
-
         <div id="syncSection">
           <button class="btn btn-outline-primary w-100 mb-3" onclick="syncModuleLinks()">
             <span id="syncBtnText">🔄 Sync IDs from Master Sheet</span>
           </button>
         </div>
-
         <div id="sheetIdsSection">
           <div class="mb-3">
             <label class="form-label">MRR Sheet URL / ID</label>
@@ -425,6 +479,10 @@
 // ==================== CONFIG ====================
 const API_URL = 'https://script.google.com/macros/s/AKfycbw7tjSHpF8vkIrER7M8ZzIrzQAVsRH43BLlvuWQWMz-bq8f_-GPv4dtBFAYZdnASpo7/exec';
 const DEFAULT_PIN = '0000';
+const DB_NAME = 'IVM_DB_v2';
+const DB_VERSION = 1;
+const STORE_QUEUE = 'offlineQueue';
+const STORE_PROGRESS = 'docProgress';
 
 // ==================== STATE ====================
 const state = {
@@ -440,16 +498,193 @@ const state = {
   errorTimer: null,
   docList: [],
   pinBuffer: '',
-  pinAttempts: 0
+  pinAttempts: 0,
+  bulkMode: false,
+  db: null,
+  sessionToken: null,
+  deviceId: null,
+  docLocked: false,
+  isOnline: true,
+  offlineQueueCount: 0,
+  discrepancies: []
 };
 
 const qtyModal = new bootstrap.Modal(document.getElementById('qtyModal'));
+const discrepancyModal = new bootstrap.Modal(document.getElementById('discrepancyModal'));
 const successModal = new bootstrap.Modal(document.getElementById('successModal'));
 const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
 const newRequestModal = new bootstrap.Modal(document.getElementById('newRequestModal'));
 const requestSuccessModal = new bootstrap.Modal(document.getElementById('requestSuccessModal'));
 const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
 const roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
+
+// ==================== DEVICE ID ====================
+function getDeviceId() {
+  let id = localStorage.getItem('ivm_deviceId');
+  if (!id) {
+    id = 'DEV-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+    localStorage.setItem('ivm_deviceId', id);
+  }
+  state.deviceId = id;
+  return id;
+}
+
+// ==================== INDEXEDDB ====================
+function initDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => { state.db = req.result; resolve(req.result); };
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_QUEUE)) {
+        const q = db.createObjectStore(STORE_QUEUE, { keyPath: 'id', autoIncrement: true });
+        q.createIndex('docNo', 'docNo', { unique: false });
+        q.createIndex('synced', 'synced', { unique: false });
+      }
+      if (!db.objectStoreNames.contains(STORE_PROGRESS)) {
+        db.createObjectStore(STORE_PROGRESS, { keyPath: 'docNo' });
+      }
+    };
+  });
+}
+
+async function queueOfflineItem(item) {
+  if (!state.db) return;
+  const tx = state.db.transaction(STORE_QUEUE, 'readwrite');
+  const store = tx.objectStore(STORE_QUEUE);
+  item.synced = false;
+  item.queuedAt = new Date().toISOString();
+  item.deviceId = state.deviceId;
+  await store.add(item);
+  await updateOfflineBadge();
+  showToast('📴 Item saved offline. Will sync when online.', 'warning');
+}
+
+async function getOfflineQueue() {
+  if (!state.db) return [];
+  return new Promise((resolve, reject) => {
+    const tx = state.db.transaction(STORE_QUEUE, 'readonly');
+    const store = tx.objectStore(STORE_QUEUE);
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result.filter(i => !i.synced));
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function markQueueItemSynced(id) {
+  if (!state.db) return;
+  const tx = state.db.transaction(STORE_QUEUE, 'readwrite');
+  const store = tx.objectStore(STORE_QUEUE);
+  const req = store.get(id);
+  req.onsuccess = () => {
+    const data = req.result;
+    if (data) { data.synced = true; store.put(data); }
+  };
+}
+
+async function clearSyncedQueue() {
+  if (!state.db) return;
+  const tx = state.db.transaction(STORE_QUEUE, 'readwrite');
+  const store = tx.objectStore(STORE_QUEUE);
+  const req = store.openCursor();
+  req.onsuccess = (e) => {
+    const cursor = e.target.result;
+    if (cursor) {
+      if (cursor.value.synced) cursor.delete();
+      cursor.continue();
+    }
+  };
+}
+
+async function updateOfflineBadge() {
+  const queue = await getOfflineQueue();
+  state.offlineQueueCount = queue.length;
+  const badge = document.getElementById('offlineBadge');
+  const count = document.getElementById('offlineCount');
+  if (state.offlineQueueCount > 0) {
+    badge.classList.remove('d-none');
+    count.textContent = state.offlineQueueCount;
+  } else {
+    badge.classList.add('d-none');
+  }
+}
+
+// ==================== DOC PROGRESS ====================
+async function saveDocProgress() {
+  if (!state.db || !state.currentDoc) return;
+  const tx = state.db.transaction(STORE_PROGRESS, 'readwrite');
+  const store = tx.objectStore(STORE_PROGRESS);
+  const data = {
+    docNo: state.currentDoc,
+    module: state.currentModule,
+    items: state.items,
+    savedAt: new Date().toISOString()
+  };
+  store.put(data);
+}
+
+async function loadDocProgress(docNo) {
+  if (!state.db) return null;
+  return new Promise((resolve, reject) => {
+    const tx = state.db.transaction(STORE_PROGRESS, 'readonly');
+    const store = tx.objectStore(STORE_PROGRESS);
+    const req = store.get(docNo);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function clearDocProgress(docNo) {
+  if (!state.db) return;
+  const tx = state.db.transaction(STORE_PROGRESS, 'readwrite');
+  const store = tx.objectStore(STORE_PROGRESS);
+  store.delete(docNo);
+}
+
+async function checkResume() {
+  if (!state.db) return;
+  const tx = state.db.transaction(STORE_PROGRESS, 'readonly');
+  const store = tx.objectStore(STORE_PROGRESS);
+  const req = store.openCursor();
+  req.onsuccess = (e) => {
+    const cursor = e.target.result;
+    if (cursor) {
+      const data = cursor.value;
+      if (data && data.items && data.items.length > 0) {
+        const verified = data.items.filter(i => i.verified).length;
+        const total = data.items.length;
+        if (verified < total) {
+          document.getElementById('resumeDocNo').textContent = data.docNo;
+          document.getElementById('resumeProgress').textContent = verified + '/' + total + ' items verified';
+          document.getElementById('resumeBanner').classList.remove('d-none');
+          document.getElementById('resumeBanner').dataset.docNo = data.docNo;
+          document.getElementById('resumeBanner').dataset.module = data.module;
+        }
+      }
+      cursor.continue();
+    }
+  };
+}
+
+async function resumeDocument() {
+  const banner = document.getElementById('resumeBanner');
+  const docNo = banner.dataset.docNo;
+  const mod = banner.dataset.module;
+  if (!docNo || !mod) return;
+  const data = await loadDocProgress(docNo);
+  if (!data) return;
+  selectModule(mod);
+  state.currentDoc = docNo;
+  state.items = data.items || [];
+  document.getElementById('docPickerSection').classList.add('d-none');
+  document.getElementById('activeTransactionSection').classList.remove('d-none');
+  document.getElementById('docTitle').textContent = docNo;
+  renderItems();
+  startScanner();
+  banner.classList.add('d-none');
+  showToast('Resumed ' + docNo, 'success');
+}
 
 // ==================== AUDIO ====================
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -480,48 +715,92 @@ function playErrorBuzz() {
   } catch(e) {}
 }
 
+// ==================== ONLINE / OFFLINE ====================
+async function checkOnline() {
+  try {
+    const res = await fetch(API_URL + '?action=ping&_t=' + Date.now(), { method: 'GET', redirect: 'follow' });
+    const data = await res.json();
+    return data.success === true;
+  } catch(e) { return false; }
+}
+
+function updateOnlineStatus(online) {
+  state.isOnline = online;
+  const icon = document.getElementById('wifiIcon');
+  if (online) {
+    icon.className = 'bi bi-wifi wifi-icon wifi-online';
+    document.getElementById('offlineScanBadge').classList.add('d-none');
+  } else {
+    icon.className = 'bi bi-wifi-off wifi-icon wifi-offline';
+    document.getElementById('offlineScanBadge').classList.remove('d-none');
+  }
+}
+
+setInterval(async () => {
+  const online = await checkOnline();
+  updateOnlineStatus(online);
+  if (online && state.offlineQueueCount > 0) {
+    syncQueue();
+  }
+}, 30000);
+
 // ==================== ROLE / SECURITY ====================
 function initRole() {
+  getDeviceId();
+  initDB().then(() => {
+    checkResume();
+    updateOfflineBadge();
+  }).catch(() => {});
   const role = localStorage.getItem('ivm_userRole');
   if (!role) {
     roleModal.show();
   } else {
     applyRoleUI();
     if (role === 'warehouse') {
+      state.sessionToken = sessionStorage.getItem('ivm_sessionToken');
       if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
         setTimeout(() => settingsModal.show(), 500);
       }
       selectModule('MRIF');
+    } else {
+      refreshMyRequests();
     }
   }
 }
+
 function selectRole(role) {
   if (role === 'production') {
     localStorage.setItem('ivm_userRole', 'production');
     roleModal.hide();
     applyRoleUI();
+    refreshMyRequests();
     showToast('Production mode activated', 'success');
   }
 }
+
 function showPinEntry() {
   document.getElementById('pinEntrySection').classList.remove('d-none');
   clearPin();
 }
+
 function enterPinDigit(d) {
   if (state.pinBuffer.length < 4) {
     state.pinBuffer += d;
     updatePinDots();
   }
 }
+
 function backspacePin() {
   state.pinBuffer = state.pinBuffer.slice(0, -1);
   updatePinDots();
 }
+
 function clearPin() {
   state.pinBuffer = '';
   updatePinDots();
   document.getElementById('pinError').classList.add('d-none');
 }
+
 function updatePinDots() {
   for (let i = 1; i <= 4; i++) {
     const dot = document.getElementById('pinDot' + i);
@@ -529,19 +808,10 @@ function updatePinDots() {
     else dot.classList.remove('filled');
   }
 }
-function verifyPin() {
+
+async function verifyPin() {
   const storedPin = localStorage.getItem('ivm_warehousePin') || DEFAULT_PIN;
-  if (state.pinBuffer === storedPin) {
-    localStorage.setItem('ivm_userRole', 'warehouse');
-    state.pinAttempts = 0;
-    roleModal.hide();
-    applyRoleUI();
-    showToast('Warehouse mode unlocked', 'success');
-    if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
-      setTimeout(() => settingsModal.show(), 500);
-    }
-    selectModule('MRIF');
-  } else {
+  if (state.pinBuffer !== storedPin) {
     state.pinAttempts++;
     document.getElementById('pinError').classList.remove('d-none');
     clearPin();
@@ -550,37 +820,81 @@ function verifyPin() {
       alert('Too many failed attempts. Please contact admin.');
       state.pinAttempts = 0;
     }
+    return;
+  }
+
+  // Server-side PIN verification for token
+  try {
+    const url = API_URL + '?action=verifyPin&pin=' + encodeURIComponent(state.pinBuffer) + '&deviceId=' + encodeURIComponent(state.deviceId) + '&_t=' + Date.now();
+    const res = await fetch(url, { redirect: 'follow' });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch(e) { data = {}; }
+
+    if (data && data.success && data.token) {
+      localStorage.setItem('ivm_userRole', 'warehouse');
+      sessionStorage.setItem('ivm_sessionToken', data.token);
+      sessionStorage.setItem('ivm_tokenExpiry', data.expiry);
+      state.sessionToken = data.token;
+      state.pinAttempts = 0;
+      roleModal.hide();
+      applyRoleUI();
+      showToast('Warehouse mode unlocked', 'success');
+      if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
+        setTimeout(() => settingsModal.show(), 500);
+      }
+      selectModule('MRIF');
+    } else {
+      document.getElementById('pinError').textContent = data.error || 'Server rejected PIN';
+      document.getElementById('pinError').classList.remove('d-none');
+      clearPin();
+      playErrorBuzz();
+    }
+  } catch(err) {
+    // Fallback: local-only mode if server unreachable
+    localStorage.setItem('ivm_userRole', 'warehouse');
+    state.pinAttempts = 0;
+    roleModal.hide();
+    applyRoleUI();
+    showToast('Warehouse mode (offline)', 'warning');
+    selectModule('MRIF');
   }
 }
+
 function applyRoleUI() {
   const role = localStorage.getItem('ivm_userRole');
   const isProduction = (role === 'production');
-  
+
   document.getElementById('btnMRR').style.display = isProduction ? 'none' : '';
   document.getElementById('btnMRIF').style.display = isProduction ? 'none' : '';
   document.getElementById('btnMRS').style.display = isProduction ? 'none' : '';
-  
+
   document.getElementById('productionBanner').classList.toggle('d-none', !isProduction);
-  
+
   document.getElementById('docPickerSection').style.display = isProduction ? 'none' : '';
   document.getElementById('quickScanCard').style.display = isProduction ? 'none' : '';
-  
+  document.getElementById('myRequestsSection').classList.toggle('d-none', !isProduction);
+
   if (isProduction) {
     document.getElementById('activeTransactionSection').classList.add('d-none');
   }
 }
+
 function switchRole() {
   settingsModal.hide();
   document.getElementById('pinEntrySection').classList.add('d-none');
   clearPin();
+  state.sessionToken = null;
+  sessionStorage.removeItem('ivm_sessionToken');
   roleModal.show();
 }
+
 function changePin() {
   const current = document.getElementById('currentPinInput').value;
   const newPin = document.getElementById('newPinInput').value;
   const storedPin = localStorage.getItem('ivm_warehousePin') || DEFAULT_PIN;
   const msg = document.getElementById('pinChangeMsg');
-  
+
   if (current !== storedPin) {
     msg.textContent = '❌ Current PIN is incorrect';
     msg.className = 'small mt-2 text-danger';
@@ -603,16 +917,17 @@ function openSettings() {
   loadSettingsToUI();
   const role = localStorage.getItem('ivm_userRole');
   const isProduction = (role === 'production');
-  
+
   document.getElementById('pinManagementSection').style.display = isProduction ? 'none' : '';
   document.getElementById('syncSection').style.display = isProduction ? 'none' : '';
   document.getElementById('sheetIdsSection').style.display = isProduction ? 'none' : '';
-  
+
   document.getElementById('currentRoleDisplay').textContent = role === 'warehouse' ? 'Warehouse Staff' : 'Production Staff';
   document.getElementById('currentRoleDisplay').className = role === 'warehouse' ? 'badge bg-success' : 'badge bg-primary';
-  
+
   settingsModal.show();
 }
+
 function loadSettingsToUI() {
   const mrr = document.getElementById('sheetId_MRR');
   const mrif = document.getElementById('sheetId_MRIF');
@@ -621,6 +936,7 @@ function loadSettingsToUI() {
   if (mrif) mrif.value = localStorage.getItem('sheetId_MRIF') || '';
   if (mrs) mrs.value = localStorage.getItem('sheetId_MRS') || '';
 }
+
 function saveSettings() {
   const mrr = document.getElementById('sheetId_MRR').value.trim();
   const mrif = document.getElementById('sheetId_MRIF').value.trim();
@@ -632,12 +948,14 @@ function saveSettings() {
   settingsModal.hide();
   if (state.currentModule) selectModule(state.currentModule);
 }
+
 function extractSheetId(url) {
   if (!url) return '';
   if (url.length === 44 && !url.includes('/')) return url;
   const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
   return match ? match[1] : url;
 }
+
 function getCleanSheetId() {
   const key = 'sheetId_' + state.currentModule;
   const val = localStorage.getItem(key);
@@ -650,7 +968,7 @@ async function syncModuleLinks() {
   const original = btn.innerHTML;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing...';
   try {
-    const url = API_URL + '?action=getModuleLinks&_t=' + Date.now();
+    const url = API_URL + '?action=getModuleLinks&token=' + encodeURIComponent(state.sessionToken || '') + '&_t=' + Date.now();
     const res = await fetch(url, { redirect: 'follow' });
     const text = await res.text();
     let data;
@@ -676,13 +994,14 @@ async function syncModuleLinks() {
 function selectModule(mod) {
   state.currentModule = mod;
   document.querySelectorAll('.module-btn').forEach(b => b.classList.remove('active'));
-  const btn = document.querySelector('.module-btn[data-module="' + mod + '"]');
+  const btn = document.querySelector('.module-btn[data-module="' + mod + '"');
   if (btn) btn.classList.add('active');
   document.getElementById('moduleLabel').textContent = mod;
   updateLabels();
   changeDocument();
   fetchPendingDocs();
 }
+
 function updateLabels() {
   const isMRR = state.currentModule === 'MRR';
   const isMRS = state.currentModule === 'MRS';
@@ -695,17 +1014,23 @@ async function fetchPendingDocs() {
   const sheetId = getCleanSheetId();
   if (!sheetId) { showToast('No Sheet ID configured for ' + state.currentModule, 'warning'); return; }
   try {
-    const url = API_URL + '?action=getPendingDocs&docType=' + state.currentModule + '&sheetId=' + sheetId + '&_t=' + Date.now();
+    const url = API_URL + '?action=getPendingDocs&docType=' + state.currentModule + '&sheetId=' + sheetId + '&token=' + encodeURIComponent(state.sessionToken || '') + '&_t=' + Date.now();
     const res = await fetch(url, { redirect: 'follow' });
     const text = await res.text();
     let data;
     try { data = JSON.parse(text); } catch(e) { data = []; }
+    if (data && data.error && data.error.includes('session')) {
+      showToast('Session expired. Please re-login.', 'danger');
+      switchRole();
+      return;
+    }
     const docs = Array.isArray(data) ? data : (data.docs || data.documents || []);
     populateDocSelect(docs);
   } catch(err) {
     showToast('Failed to load documents', 'danger');
   }
 }
+
 function populateDocSelect(docs) {
   const sel = document.getElementById('docSelect');
   sel.innerHTML = '<option value="">-- Select Document --</option>';
@@ -717,6 +1042,7 @@ function populateDocSelect(docs) {
     sel.appendChild(opt);
   });
 }
+
 function filterDocs() {
   const term = document.getElementById('docSearch').value.toLowerCase();
   const sel = document.getElementById('docSelect');
@@ -731,27 +1057,64 @@ function filterDocs() {
     }
   });
 }
-function onDocSelect(docNo) {
+
+async function onDocSelect(docNo) {
   if (!docNo) { hideScannerSection(); return; }
   clearErrorAlert();
   resetDocumentState();
+
+  // Check document lock
+  try {
+    const lockUrl = API_URL + '?action=getDocLock&sheetId=' + getCleanSheetId() + '&docNo=' + encodeURIComponent(docNo) + '&token=' + encodeURIComponent(state.sessionToken || '') + '&_t=' + Date.now();
+    const lockRes = await fetch(lockUrl, { redirect: 'follow' });
+    const lockText = await lockRes.text();
+    let lockData;
+    try { lockData = JSON.parse(lockText); } catch(e) { lockData = {}; }
+    if (lockData.locked) {
+      if (!confirm('⚠️ Document ' + docNo + ' is currently being processed by ' + lockData.lockedBy + ' since ' + lockData.lockedAt + '.\n\nForce unlock and continue?')) {
+        document.getElementById('docSelect').value = '';
+        return;
+      }
+    }
+    // Try to lock
+    const lockReq = API_URL + '?action=lockDocument&sheetId=' + getCleanSheetId() + '&docNo=' + encodeURIComponent(docNo) + '&token=' + encodeURIComponent(state.sessionToken || '') + '&_t=' + Date.now();
+    await fetch(lockReq, { redirect: 'follow' });
+    state.docLocked = true;
+    document.getElementById('lockIndicator').classList.remove('d-none');
+  } catch(e) {
+    // Offline: proceed without lock
+    state.docLocked = false;
+  }
+
   state.currentDoc = docNo;
   document.getElementById('docPickerSection').classList.add('d-none');
   document.getElementById('activeTransactionSection').classList.remove('d-none');
   document.getElementById('docTitle').textContent = docNo;
   fetchDocItems(docNo, state.currentModule);
 }
-function changeDocument() {
+
+async function changeDocument() {
+  if (state.currentDoc && state.docLocked) {
+    try {
+      const url = API_URL + '?action=unlockDocument&sheetId=' + getCleanSheetId() + '&docNo=' + encodeURIComponent(state.currentDoc) + '&token=' + encodeURIComponent(state.sessionToken || '') + '&_t=' + Date.now();
+      await fetch(url, { redirect: 'follow' });
+    } catch(e) {}
+    state.docLocked = false;
+    document.getElementById('lockIndicator').classList.add('d-none');
+  }
   state.currentDoc = null;
   resetDocumentState();
   stopScanner();
   document.getElementById('docPickerSection').classList.remove('d-none');
   document.getElementById('activeTransactionSection').classList.add('d-none');
   document.getElementById('docSelect').value = '';
+  await clearDocProgress(state.currentDoc);
 }
+
 function hideScannerSection() {
   document.getElementById('activeTransactionSection').classList.add('d-none');
 }
+
 function resetDocumentState() {
   state.items = [];
   renderItems();
@@ -763,7 +1126,7 @@ async function fetchDocItems(docNo, docType) {
   const sheetId = getCleanSheetId();
   if (!sheetId) return;
   try {
-    const url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=' + docType + '&sheetId=' + sheetId + '&_t=' + Date.now();
+    const url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=' + docType + '&sheetId=' + sheetId + '&token=' + encodeURIComponent(state.sessionToken || '') + '&_t=' + Date.now();
     const res = await fetch(url, { redirect: 'follow' });
     const text = await res.text();
     let data;
@@ -777,12 +1140,21 @@ async function fetchDocItems(docNo, docType) {
       rowIndex: it.rowIndex || (idx + 12),
       verified: false
     }));
+
+    // Check for saved progress
+    const saved = await loadDocProgress(docNo);
+    if (saved && saved.items && saved.items.length === state.items.length) {
+      state.items = saved.items;
+      showToast('Restored ' + saved.items.filter(i=>i.verified).length + ' verified items', 'info');
+    }
+
     renderItems();
     startScanner();
   } catch(err) {
     showToast('Failed to load items', 'danger');
   }
 }
+
 function renderItems() {
   const tbody = document.getElementById('itemsTable');
   tbody.innerHTML = '';
@@ -799,7 +1171,9 @@ function renderItems() {
   });
   document.getElementById('verifyCount').textContent = verified + '/' + state.items.length + ' Verified';
   updateSubmitButton(verified, state.items.length);
+  saveDocProgress();
 }
+
 function getStatusBadge(item) {
   if (!item.verified) return '<span class="status-badge status-pending">PENDING</span>';
   if (state.currentModule === 'MRR') {
@@ -807,6 +1181,7 @@ function getStatusBadge(item) {
   }
   return item.issuedQty >= item.qty ? '<span class="status-badge status-served">SERVED</span>' : '<span class="status-badge status-partial">PARTIAL</span>';
 }
+
 function filterItems() {
   const term = document.getElementById('itemFilter').value.toLowerCase();
   document.querySelectorAll('#itemsTable tr').forEach(tr => {
@@ -814,6 +1189,7 @@ function filterItems() {
     tr.style.display = text.includes(term) ? '' : 'none';
   });
 }
+
 function updateSubmitButton(verified, total) {
   const btn = document.getElementById('submitBtn');
   const txt = document.getElementById('submitBtnText');
@@ -825,6 +1201,24 @@ function updateSubmitButton(verified, total) {
   } else {
     btn.className = 'btn btn-warning w-100 mt-3 py-3';
     txt.textContent = 'Submit Partial (' + verified + '/' + total + ')';
+  }
+}
+
+// ==================== BULK MODE ====================
+function toggleBulkMode() {
+  state.bulkMode = !state.bulkMode;
+  const btn = document.getElementById('bulkToggleBtn');
+  const txt = document.getElementById('bulkToggleText');
+  if (state.bulkMode) {
+    btn.classList.remove('btn-outline-warning');
+    btn.classList.add('btn-warning');
+    txt.textContent = 'Bulk ON';
+    showToast('⚡ Bulk Mode ON: Auto-verify full qty', 'warning');
+  } else {
+    btn.classList.remove('btn-warning');
+    btn.classList.add('btn-outline-warning');
+    txt.textContent = 'Bulk OFF';
+    showToast('Bulk Mode OFF', 'info');
   }
 }
 
@@ -841,9 +1235,23 @@ function startScanner() {
     }).catch(err => showToast('Camera error: ' + err, 'danger'));
   }).catch(err => showToast('Camera access denied', 'danger'));
 }
+
 function stopScanner() {
   if (state.html5QrCode) { state.html5QrCode.stop().catch(()=>{}); state.html5QrCode = null; }
 }
+
+function pauseScanner() {
+  if (state.html5QrCode) {
+    try { state.html5QrCode.pause(); } catch(e) {}
+  }
+}
+
+function resumeScanner() {
+  if (state.html5QrCode) {
+    try { state.html5QrCode.resume(); } catch(e) {}
+  }
+}
+
 function onScanSuccess(decodedText) {
   clearErrorAlert();
   const docPattern = /^(MRIF|MRR|MRS)\d{6,}$/i;
@@ -865,14 +1273,26 @@ function onScanSuccess(decodedText) {
     return;
   }
   playSuccessBeep();
+
+  if (state.bulkMode) {
+    // Auto-verify with full requested qty
+    item.issuedQty = item.qty;
+    item.verified = true;
+    renderItems();
+    showToast('✅ ' + item.inventoryId + ' verified (' + item.qty + ')', 'success');
+    return;
+  }
+
   openQtyModal(item);
 }
+
 function manualVerify() {
   const val = document.getElementById('manualInput').value.trim();
   if (!val) return;
   document.getElementById('manualInput').value = '';
   onScanSuccess(val);
 }
+
 function toggleTorch() {
   const video = document.querySelector('#reader video');
   if (!video || !video.srcObject) return;
@@ -886,6 +1306,7 @@ function toggleTorch() {
     showToast(state.torchOn ? 'Flashlight ON' : 'Flashlight OFF', 'info');
   }).catch(()=>showToast('Torch failed', 'warning'));
 }
+
 function switchCamera() {
   state.currentCamera = state.currentCamera === 'environment' ? 'user' : 'environment';
   startScanner();
@@ -896,6 +1317,7 @@ function openQuickScan() {
   quickScanModal.show();
   setTimeout(startQuickScanner, 300);
 }
+
 function closeQuickScan() {
   if (state.quickScanner) {
     state.quickScanner.stop().catch(()=>{});
@@ -903,6 +1325,7 @@ function closeQuickScan() {
   }
   quickScanModal.hide();
 }
+
 function startQuickScanner() {
   if (state.quickScanner) { state.quickScanner.stop().catch(()=>{}); }
   const el = document.getElementById('quickReader');
@@ -916,6 +1339,7 @@ function startQuickScanner() {
     });
   }).catch(err => showToast('Camera access denied', 'danger'));
 }
+
 function onQuickScanSuccess(decodedText) {
   if (state.quickScanner) {
     state.quickScanner.stop().catch(()=>{});
@@ -961,12 +1385,15 @@ function openQtyModal(item) {
   document.getElementById('modalInputQty').value = item.qty;
   document.getElementById('modalHint').textContent = isMRR ? 'MRR Mode: You may receive any quantity.' : (isMRS ? 'MRS Mode: Returned qty cannot exceed expected.' : 'MRIF Mode: Issued qty cannot exceed requested.');
   document.getElementById('modalInputQty').classList.remove('is-invalid');
+  pauseScanner();
   qtyModal.show();
 }
+
 function onQtyInput() {
   clearErrorAlert();
   document.getElementById('modalInputQty').classList.remove('is-invalid');
 }
+
 function confirmQty() {
   if (!currentModalItem) return;
   const input = document.getElementById('modalInputQty');
@@ -992,8 +1419,15 @@ function confirmQty() {
   currentModalItem.verified = true;
   renderItems();
   qtyModal.hide();
+  resumeScanner();
   playSuccessBeep();
 }
+
+// Handle modal hidden to resume scanner
+document.getElementById('qtyModal').addEventListener('hidden.bs.modal', () => {
+  resumeScanner();
+});
+
 function showMismatchAlert(code) {
   const alert = document.getElementById('mismatchAlert');
   document.getElementById('mismatchText').textContent = 'Item "' + code + '" not found in this document.';
@@ -1001,6 +1435,7 @@ function showMismatchAlert(code) {
   clearTimeout(state.errorTimer);
   state.errorTimer = setTimeout(() => clearErrorAlert(), 4000);
 }
+
 function showExceedError(msg) {
   const alert = document.getElementById('exceedErrorAlert');
   document.getElementById('exceedText').textContent = '❌ Error: ' + msg;
@@ -1008,6 +1443,7 @@ function showExceedError(msg) {
   clearTimeout(state.errorTimer);
   state.errorTimer = setTimeout(() => clearErrorAlert(), 4000);
 }
+
 function clearErrorAlert() {
   const a1 = document.getElementById('mismatchAlert');
   const a2 = document.getElementById('exceedErrorAlert');
@@ -1015,22 +1451,91 @@ function clearErrorAlert() {
   if (a2) a2.classList.add('d-none');
 }
 
+// ==================== DISCREPANCY ====================
+function buildDiscrepancyList() {
+  const container = document.getElementById('discrepancyList');
+  container.innerHTML = '';
+  const reasons = ['Not in stock', 'Damaged', 'Wrong item received', 'Insufficient quantity', 'Other'];
+
+  state.items.forEach((item, idx) => {
+    const isUnverified = !item.verified;
+    const isShort = item.verified && item.issuedQty < item.qty;
+    if (!isUnverified && !isShort) return;
+
+    const div = document.createElement('div');
+    div.className = 'card mb-2';
+    div.innerHTML = '<div class="card-body p-2">' +
+      '<div class="fw-bold small">' + item.inventoryId + '</div>' +
+      '<div class="text-muted small">' + item.description + '</div>' +
+      '<div class="mt-2 d-flex align-items-center gap-2">' +
+        '<span class="badge bg-secondary">Req: ' + item.qty + '</span>' +
+        '<span class="badge bg-' + (isUnverified ? 'danger' : 'warning') + '">' + (isUnverified ? 'UNVERIFIED' : 'Short: ' + item.issuedQty) + '</span>' +
+      '</div>' +
+      '<div class="mt-2">' +
+        '<label class="form-label small">Reason:</label>' +
+        '<select class="form-select form-select-sm discrepancy-reason" data-idx="' + idx + '">' +
+          reasons.map(r => '<option value="' + r + '">' + r + '</option>').join('') +
+        '</select>' +
+      '</div>' +
+    '</div>';
+    container.appendChild(div);
+  });
+}
+
+function showDiscrepancyModal() {
+  buildDiscrepancyList();
+  discrepancyModal.show();
+}
+
+async function submitWithDiscrepancies() {
+  const selects = document.querySelectorAll('.discrepancy-reason');
+  const discrepancies = [];
+  selects.forEach(sel => {
+    const idx = parseInt(sel.dataset.idx);
+    const item = state.items[idx];
+    discrepancies.push({
+      inventoryId: item.inventoryId,
+      description: item.description,
+      requestedQty: item.qty,
+      actualQty: item.verified ? item.issuedQty : 0,
+      reason: sel.value
+    });
+  });
+  state.discrepancies = discrepancies;
+  discrepancyModal.hide();
+  await doSubmit();
+}
+
 // ==================== SUBMIT ====================
 async function onSubmit() {
   const verifiedItems = state.items.filter(i => i.verified);
   const total = state.items.length;
   const verified = verifiedItems.length;
-  
+
   if (verified < total) {
     if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly scanned/entered items will be sent.')) {
       return;
     }
   }
-  
+
+  // Check for discrepancies
+  const hasDiscrepancy = state.items.some(i => !i.verified || i.issuedQty < i.qty);
+  if (hasDiscrepancy && state.currentModule !== 'MRR') {
+    showDiscrepancyModal();
+    return;
+  }
+
+  await doSubmit();
+}
+
+async function doSubmit() {
+  const verifiedItems = state.items.filter(i => i.verified);
   const payload = {
     docNo: state.currentDoc,
     docType: state.currentModule,
     sheetId: getCleanSheetId(),
+    token: state.sessionToken,
+    deviceId: state.deviceId,
     scannedItems: verifiedItems.map(i => ({
       inventoryId: i.inventoryId,
       description: i.description,
@@ -1038,15 +1543,30 @@ async function onSubmit() {
       issuedQty: i.issuedQty,
       rowIndex: i.rowIndex,
       scannedAt: new Date().toISOString()
-    }))
+    })),
+    discrepancies: state.discrepancies || []
   };
-  
+
   console.log('Submitting:', payload);
-  
+
+  if (!state.isOnline) {
+    await queueOfflineItem(payload);
+    successModal.show();
+    setTimeout(() => location.reload(), 2000);
+    return;
+  }
+
   try {
     const result = await submitTransaction(payload);
     console.log('Result:', result);
     if (result && (result.success === true || result.message)) {
+      await clearDocProgress(state.currentDoc);
+      if (state.docLocked) {
+        try {
+          const url = API_URL + '?action=unlockDocument&sheetId=' + getCleanSheetId() + '&docNo=' + encodeURIComponent(state.currentDoc) + '&token=' + encodeURIComponent(state.sessionToken || '') + '&_t=' + Date.now();
+          await fetch(url, { redirect: 'follow' });
+        } catch(e) {}
+      }
       successModal.show();
       setTimeout(() => location.reload(), 2000);
     } else {
@@ -1074,7 +1594,7 @@ async function submitTransaction(payload) {
     console.warn('Normal POST failed (CORS), trying no-cors...');
   }
 
-  // STEP 2: POST with no-cors (guaranteed to reach GAS, no CORS check)
+  // STEP 2: POST with no-cors
   try {
     await fetch(API_URL, {
       method: 'POST',
@@ -1088,13 +1608,13 @@ async function submitTransaction(payload) {
     console.log('no-cors POST network error:', e);
   }
 
-  // STEP 3: Wait for GAS to process (3 seconds)
+  // STEP 3: Wait for GAS to process
   showToast('⏳ Processing transaction...', 'info');
   await new Promise(r => setTimeout(r, 3000));
 
-  // STEP 4: Verify by fetching updated document items via GET
+  // STEP 4: Verify by fetching updated document items
   try {
-    const verifyUrl = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(payload.docNo) + '&docType=' + payload.docType + '&sheetId=' + payload.sheetId + '&_t=' + Date.now();
+    const verifyUrl = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(payload.docNo) + '&docType=' + payload.docType + '&sheetId=' + payload.sheetId + '&token=' + encodeURIComponent(state.sessionToken || '') + '&_t=' + Date.now();
     const res = await fetch(verifyUrl, { redirect: 'follow' });
     const text = await res.text();
     let data;
@@ -1125,7 +1645,7 @@ async function submitTransaction(payload) {
 async function submitViaGet(payload) {
   try {
     const base64Data = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-    const url = API_URL + '?action=submitTransaction&data=' + encodeURIComponent(base64Data) + '&_t=' + Date.now();
+    const url = API_URL + '?action=submitTransaction&data=' + encodeURIComponent(base64Data) + '&token=' + encodeURIComponent(state.sessionToken || '') + '&_t=' + Date.now();
     const res = await fetch(url, { redirect: 'follow' });
     const text = await res.text();
     console.log('GET fallback response:', text.substring(0, 200));
@@ -1145,6 +1665,77 @@ function parseResponse(text) {
   }
 }
 
+// ==================== OFFLINE QUEUE SYNC ====================
+async function syncQueue() {
+  const queue = await getOfflineQueue();
+  if (queue.length === 0) return;
+  if (!state.isOnline) return;
+
+  const icon = document.getElementById('wifiIcon');
+  icon.className = 'bi bi-wifi wifi-icon wifi-syncing';
+
+  for (const item of queue) {
+    try {
+      const result = await submitTransaction(item);
+      if (result && result.success) {
+        await markQueueItemSynced(item.id);
+      }
+    } catch(e) {
+      console.log('Sync failed for item', item.id, e);
+    }
+  }
+
+  await clearSyncedQueue();
+  await updateOfflineBadge();
+  icon.className = 'bi bi-wifi wifi-icon wifi-online';
+  showToast('Offline queue synced!', 'success');
+}
+
+// ==================== MY REQUESTS (Production) ====================
+async function refreshMyRequests() {
+  const requestor = document.getElementById('reqRequestor')?.value?.trim() || localStorage.getItem('ivm_requestorName') || '';
+  if (!requestor) {
+    document.getElementById('myRequestsList').innerHTML = '<div class="text-center text-muted py-3">Enter your name in New Request to track</div>';
+    return;
+  }
+  localStorage.setItem('ivm_requestorName', requestor);
+  try {
+    const url = API_URL + '?action=getMyRequests&requestor=' + encodeURIComponent(requestor) + '&_t=' + Date.now();
+    const res = await fetch(url, { redirect: 'follow' });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch(e) { data = {}; }
+    renderMyRequests(data.requests || []);
+  } catch(err) {
+    document.getElementById('myRequestsList').innerHTML = '<div class="text-center text-muted py-3">Failed to load</div>';
+  }
+}
+
+function renderMyRequests(requests) {
+  const container = document.getElementById('myRequestsList');
+  if (!requests || requests.length === 0) {
+    container.innerHTML = '<div class="text-center text-muted py-3">No requests found</div>';
+    return;
+  }
+  container.innerHTML = '';
+  requests.forEach(req => {
+    const statusColor = req.status === 'COMPLETED' ? 'success' : (req.status === 'IN_PROGRESS' ? 'warning' : 'secondary');
+    const div = document.createElement('div');
+    div.className = 'card request-card mb-2';
+    div.innerHTML = '<div class="card-body p-2">' +
+      '<div class="d-flex justify-content-between align-items-start">' +
+        '<div>' +
+          '<div class="fw-bold small">' + req.docNo + '</div>' +
+          '<div class="text-muted small">' + req.ticketNo + '</div>' +
+        '</div>' +
+        '<span class="badge bg-' + statusColor + '">' + req.status + '</span>' +
+      '</div>' +
+      '<div class="small mt-1">' + req.items.length + ' item(s) • ' + req.department + '</div>' +
+    '</div>';
+    container.appendChild(div);
+  });
+}
+
 // ==================== NEW REQUEST ====================
 function openNewRequest() {
   document.getElementById('requestItemsContainer').innerHTML = '';
@@ -1152,6 +1743,7 @@ function openNewRequest() {
   loadRequestInventory();
   newRequestModal.show();
 }
+
 async function loadRequestInventory() {
   try {
     const url = API_URL + '?action=getInventoryList&_t=' + Date.now();
@@ -1167,6 +1759,7 @@ async function loadRequestInventory() {
     state.requestInventoryList = [];
   }
 }
+
 function addRequestItemRow() {
   const container = document.getElementById('requestItemsContainer');
   const idx = container.children.length;
@@ -1178,6 +1771,7 @@ function addRequestItemRow() {
     '<div class="col-1"><button class="btn btn-outline-danger btn-sm" onclick="this.closest(\'.row\').remove()"><i class="bi bi-trash"></i></button></div>';
   container.appendChild(div);
 }
+
 function filterRequestItems(input, idx) {
   const term = input.value.toLowerCase();
   const dropdown = document.getElementById('reqDropdown'+idx);
@@ -1208,12 +1802,14 @@ function filterRequestItems(input, idx) {
   }
   dropdown.classList.remove('d-none');
 }
+
 async function submitNewRequest() {
   const docType = document.getElementById('reqDocType').value;
   const requestor = document.getElementById('reqRequestor').value.trim();
   const department = document.getElementById('reqDepartment').value.trim();
   if (!requestor) { alert('Enter requestor name'); return; }
-  
+  localStorage.setItem('ivm_requestorName', requestor);
+
   const items = [];
   document.querySelectorAll('#requestItemsContainer .row').forEach(row => {
     const code = row.querySelector('.req-item-code').value;
@@ -1222,7 +1818,7 @@ async function submitNewRequest() {
     if (code && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty });
   });
   if (items.length === 0) { alert('Add at least one item'); return; }
-  
+
   const payload = {
     action: 'createRequest',
     docType: docType,
@@ -1231,7 +1827,7 @@ async function submitNewRequest() {
     items: items,
     timestamp: new Date().toISOString()
   };
-  
+
   try {
     const res = await fetch(API_URL, {
       method: 'POST',
@@ -1245,6 +1841,7 @@ async function submitNewRequest() {
     if (data && data.success) {
       newRequestModal.hide();
       showRequestQr(data.ticketNo || 'N/A', data.docNo || 'N/A');
+      refreshMyRequests();
     } else {
       alert('Failed: ' + (data.error || 'Unknown error'));
     }
@@ -1252,6 +1849,7 @@ async function submitNewRequest() {
     alert('Error: ' + err.message);
   }
 }
+
 function showRequestQr(ticketNo, docNo) {
   document.getElementById('requestTicketNo').textContent = ticketNo;
   document.getElementById('requestDocNo').textContent = docNo;
