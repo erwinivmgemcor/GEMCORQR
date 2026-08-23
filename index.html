@@ -65,6 +65,12 @@
     @keyframes spin{ to{ transform:rotate(360deg); } }
     .empty-state { text-align:center; padding:2rem 1rem; color:#6b7280; }
     .empty-state i { font-size:2.5rem; margin-bottom:.5rem; display:block; }
+    .debug-info { font-size:.7rem; color:#6b7280; background:#f8f9fa; padding:.375rem .5rem; border-radius:.375rem; margin-bottom:.5rem; word-break:break-all; }
+    .skeleton-card { border:2px solid #e5e7eb; border-radius:10px; padding:.75rem; background:#f8f9fa; animation:pulse 1.5s ease-in-out infinite; }
+    .skeleton-line { height:14px; background:#e5e7eb; border-radius:4px; margin-bottom:8px; }
+    .skeleton-line.short { width:60%; }
+    .skeleton-badge { height:20px; width:80px; background:#e5e7eb; border-radius:.375rem; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
   </style>
 <base target="_blank">
 </head>
@@ -118,16 +124,17 @@
         </button>
       </div>
       <div class="card-body">
-        <div class="input-group mb-3 doc-search">
+        <div class="input-group mb-2 doc-search">
           <span class="input-group-text"><i class="bi bi-search"></i></span>
           <input type="text" id="docSearch" class="form-control" placeholder="Search document..." oninput="filterDocs()">
           <button class="btn btn-outline-secondary" onclick="document.getElementById('docSearch').value='';filterDocs()">Clear</button>
         </div>
+        <div id="docDebugInfo" class="debug-info d-none"></div>
         <div id="docListContainer" class="doc-grid"></div>
         <div id="docEmptyState" class="empty-state d-none">
           <i class="bi bi-inbox"></i>
           <div>No documents found</div>
-          <small>Pull down or click refresh to reload</small>
+          <small>Check your Sheet ID in Settings</small>
         </div>
       </div>
     </div>
@@ -329,9 +336,16 @@
           </div>
         </div>
         <div id="syncSection">
-          <button class="btn btn-outline-primary w-100 mb-3" onclick="syncModuleLinks()">
+          <button class="btn btn-outline-primary w-100 mb-2" onclick="syncModuleLinks()">
             <span id="syncBtnText">🔄 Sync IDs from Master Sheet</span>
           </button>
+        </div>
+        <div class="card mb-3 border-warning">
+          <div class="card-header bg-warning bg-opacity-10"><strong><i class="bi bi-trash me-2"></i>Clear Cache</strong></div>
+          <div class="card-body">
+            <p class="small text-muted mb-2">If documents are not loading or wrong module appears, clear all saved Sheet IDs and re-sync.</p>
+            <button class="btn btn-outline-danger btn-sm w-100" onclick="clearAllCache()">🗑️ Clear All Saved Data</button>
+          </div>
         </div>
         <div id="sheetIdsSection">
           <div class="mb-3">
@@ -628,6 +642,16 @@ function saveSettings() {
   settingsModal.hide();
   if (state.currentModule) selectModule(state.currentModule);
 }
+function clearAllCache() {
+  if (!confirm('This will clear all saved Sheet IDs and settings.\nYou will need to re-sync or re-enter them.\n\nContinue?')) return;
+  localStorage.removeItem('sheetId_MRR');
+  localStorage.removeItem('sheetId_MRIF');
+  localStorage.removeItem('sheetId_MRS');
+  localStorage.removeItem('ivm_userRole');
+  localStorage.removeItem('ivm_warehousePin');
+  showToast('All data cleared. Reloading...', 'info');
+  setTimeout(() => location.reload(), 1500);
+}
 function extractSheetId(url) {
   if (!url) return '';
   if (url.length === 44 && !url.includes('/')) return url;
@@ -684,22 +708,73 @@ function updateLabels() {
   document.getElementById('headerInput').textContent = isMRR ? 'ATL QTY' : (isMRS ? 'ATL QTY (Actual)' : 'Issued Qty');
 }
 
+function showSkeletons() {
+  const container = document.getElementById('docListContainer');
+  container.innerHTML = '';
+  container.classList.remove('d-none');
+  document.getElementById('docEmptyState').classList.add('d-none');
+  for (let i = 0; i < 4; i++) {
+    const div = document.createElement('div');
+    div.className = 'skeleton-card';
+    div.innerHTML = '<div class="skeleton-line"></div><div class="skeleton-line short"></div><div class="skeleton-badge"></div>';
+    container.appendChild(div);
+  }
+}
+
 async function fetchPendingDocs() {
   const sheetId = getCleanSheetId();
-  if (!sheetId) { showToast('No Sheet ID configured for ' + state.currentModule, 'warning'); return; }
+  const debugEl = document.getElementById('docDebugInfo');
+
+  if (!sheetId) {
+    debugEl.textContent = 'Module: ' + state.currentModule + ' | No Sheet ID configured';
+    debugEl.classList.remove('d-none');
+    showToast('No Sheet ID for ' + state.currentModule + '. Go to Settings > Sync IDs.', 'warning');
+    renderDocList([]);
+    return;
+  }
+
+  debugEl.textContent = 'Module: ' + state.currentModule + ' | Sheet ID: ' + sheetId.substring(0, 12) + '...';
+  debugEl.classList.remove('d-none');
+
   const refreshBtn = document.getElementById('refreshDocsBtn');
   refreshBtn.classList.add('spinning');
+  showSkeletons();
+
   try {
+    console.log('[fetchPendingDocs] Module:', state.currentModule, 'SheetID:', sheetId);
     const url = API_URL + '?action=getPendingDocs&docType=' + state.currentModule + '&sheetId=' + sheetId + '&_t=' + Date.now();
     const res = await fetch(url, { redirect: 'follow' });
     const text = await res.text();
+    console.log('[fetchPendingDocs] Response:', text.substring(0, 300));
+
     let data;
-    try { data = JSON.parse(text); } catch(e) { data = []; }
-    const docs = Array.isArray(data) ? data : (data.docs || data.documents || []);
+    try { data = JSON.parse(text); } catch(e) { 
+      console.error('[fetchPendingDocs] JSON parse error:', e);
+      throw new Error('Invalid JSON from server'); 
+    }
+
+    let docs = [];
+    if (Array.isArray(data)) {
+      docs = data;
+    } else if (data && data.docs && Array.isArray(data.docs)) {
+      docs = data.docs;
+    } else if (data && data.documents && Array.isArray(data.documents)) {
+      docs = data.documents;
+    } else if (data && data.success === false) {
+      throw new Error(data.error || 'Server error');
+    } else {
+      console.warn('[fetchPendingDocs] Unexpected response format:', data);
+    }
+
     state.docList = docs;
     renderDocList(docs);
+
+    if (docs.length === 0) {
+      showToast('No documents found. Check if the Sheet ID is correct.', 'info');
+    }
   } catch(err) {
-    showToast('Failed to load documents: ' + err.message, 'danger');
+    console.error('[fetchPendingDocs] Error:', err);
+    showToast('Failed to load: ' + err.message, 'danger');
     renderDocList([]);
   } finally {
     refreshBtn.classList.remove('spinning');
@@ -710,22 +785,28 @@ function renderDocList(docs) {
   const container = document.getElementById('docListContainer');
   const emptyState = document.getElementById('docEmptyState');
   container.innerHTML = '';
+
   if (!docs || docs.length === 0) {
     container.classList.add('d-none');
     emptyState.classList.remove('d-none');
     return;
   }
+
   container.classList.remove('d-none');
   emptyState.classList.add('d-none');
+
   docs.forEach(d => {
     const docNo = typeof d === 'string' ? d : (d.docNo || d.name || d);
     const status = typeof d === 'object' ? (d.status || 'PENDING') : 'PENDING';
+
     const card = document.createElement('div');
     card.className = 'doc-card ' + status.toLowerCase();
     card.onclick = () => onDocSelect(docNo, status);
+
     let statusClass = 'status-pending';
     let statusIcon = 'bi-circle';
     let statusText = 'PENDING';
+
     if (status === 'SERVED') {
       statusClass = 'status-served';
       statusIcon = 'bi-check-circle-fill';
@@ -739,6 +820,7 @@ function renderDocList(docs) {
       statusIcon = 'bi-dash-circle';
       statusText = 'EMPTY';
     }
+
     card.innerHTML = 
       '<div class="d-flex justify-content-between align-items-start">' +
         '<div class="doc-code">' + docNo + '</div>' +
@@ -751,6 +833,7 @@ function renderDocList(docs) {
       '<div class="doc-meta">' +
         '<i class="bi bi-file-earmark me-1"></i>Tap to open document' +
       '</div>';
+
     container.appendChild(card);
   });
 }
@@ -1094,7 +1177,8 @@ async function onSubmit() {
     return;
   }
   if (verified < total) {
-    if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly scanned/entered items will be sent.')) {
+    if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?
+Only scanned/entered items will be sent.')) {
       return;
     }
   }
@@ -1234,7 +1318,7 @@ function addRequestItemRow() {
   div.innerHTML = '<div class="col-5"><label class="form-label small">Item</label><input type="text" class="form-control req-item-search" placeholder="Type to search..." oninput="filterRequestItems(this,'+idx+')" onfocus="filterRequestItems(this,'+idx+')"><div class="list-group position-absolute z-3 d-none req-dropdown" style="max-height:150px;overflow-y:auto;" id="reqDropdown'+idx+'"></div><input type="hidden" class="req-item-code" id="reqCode'+idx+'"><input type="hidden" class="req-item-desc" id="reqDesc'+idx+'"></div>' +
     '<div class="col-3"><label class="form-label small">Qty</label><input type="number" class="form-control req-qty" min="1" value="1"></div>' +
     '<div class="col-3"><label class="form-label small">Unit</label><input type="text" class="form-control req-unit" value="PCS" readonly></div>' +
-    '<div class="col-1"><button class="btn btn-outline-danger btn-sm" onclick="this.closest(\'.row\').remove()"><i class="bi bi-trash"></i></button></div>';
+    '<div class="col-1"><button class="btn btn-outline-danger btn-sm" onclick="this.closest('.row').remove()"><i class="bi bi-trash"></i></button></div>';
   container.appendChild(div);
 }
 function filterRequestItems(input, idx) {
