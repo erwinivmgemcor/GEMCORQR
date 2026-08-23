@@ -19,7 +19,7 @@
     --gray: #6c757d;
     --border: #dee2e6;
     --shadow: 0 2px 8px rgba(0,0,0,0.1);
-    --radius: 12px;
+    --radius: 10px;
   }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -33,7 +33,7 @@
   .header {
     background: linear-gradient(135deg, var(--primary), var(--primary-dark));
     color: white;
-    padding: 16px;
+    padding: 14px 16px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -43,13 +43,8 @@
     box-shadow: var(--shadow);
   }
   .header-title {
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .header-actions {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -59,7 +54,7 @@
     padding: 4px 12px;
     border-radius: 20px;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
   }
   .icon-btn {
@@ -74,16 +69,15 @@
     align-items: center;
     justify-content: center;
     font-size: 16px;
-    transition: background 0.2s;
   }
-  .icon-btn:hover { background: rgba(255,255,255,0.3); }
+  .icon-btn:active { background: rgba(255,255,255,0.3); }
 
   /* Module Tabs */
   .tabs {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-    padding: 12px 16px;
+    gap: 6px;
+    padding: 10px 12px;
     background: white;
     border-bottom: 1px solid var(--border);
   }
@@ -91,16 +85,16 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
-    padding: 10px 4px;
+    gap: 4px;
+    padding: 10px 2px;
     border: 2px solid var(--border);
     border-radius: var(--radius);
     background: white;
     cursor: pointer;
-    transition: all 0.2s;
-    font-size: 12px;
-    font-weight: 500;
+    font-size: 11px;
+    font-weight: 600;
     color: var(--gray);
+    transition: all 0.15s;
   }
   .tab i { font-size: 18px; }
   .tab.active {
@@ -108,141 +102,126 @@
     background: var(--primary);
     color: white;
   }
-  .tab:hover:not(.active) { border-color: var(--primary); color: var(--primary); }
 
-  /* Main Content */
-  .container { padding: 16px; max-width: 600px; margin: 0 auto; }
+  /* Container */
+  .container { padding: 12px; max-width: 600px; margin: 0 auto; }
 
   /* Quick Scan */
   .scan-card {
     background: white;
     border-radius: var(--radius);
-    padding: 20px;
-    margin-bottom: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
     box-shadow: var(--shadow);
     text-align: center;
   }
   .scan-btn {
     width: 100%;
-    padding: 18px;
+    padding: 16px;
     background: linear-gradient(135deg, var(--primary), var(--primary-dark));
     color: white;
     border: none;
     border-radius: var(--radius);
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 700;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
-    margin-bottom: 10px;
-    box-shadow: 0 4px 12px rgba(13,110,253,0.3);
+    margin-bottom: 8px;
   }
   .scan-btn:active { transform: scale(0.98); }
   .scan-hint {
     color: var(--gray);
-    font-size: 13px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
+    font-size: 12px;
   }
 
-  /* Document Picker */
-  .picker-card {
+  /* Document List */
+  .doc-list-card {
     background: white;
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     overflow: hidden;
   }
-  .picker-header {
-    padding: 16px;
+  .list-header {
+    padding: 14px 16px;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: space-between;
   }
-  .picker-title {
-    font-size: 16px;
+  .list-title {
+    font-size: 15px;
     font-weight: 700;
     display: flex;
     align-items: center;
     gap: 8px;
   }
-  .picker-body { padding: 16px; }
+  .list-body { padding: 0; }
 
   /* Search */
   .search-box {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
     display: flex;
     gap: 8px;
-    margin-bottom: 12px;
   }
   .search-input {
     flex: 1;
-    padding: 12px 16px;
+    padding: 10px 14px;
     border: 2px solid var(--border);
-    border-radius: 10px;
-    font-size: 15px;
+    border-radius: 8px;
+    font-size: 14px;
     outline: none;
   }
   .search-input:focus { border-color: var(--primary); }
   .btn {
-    padding: 12px 16px;
+    padding: 10px 14px;
     border: 2px solid var(--border);
-    border-radius: 10px;
+    border-radius: 8px;
     background: white;
     cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 0.2s;
+    font-size: 13px;
+    font-weight: 600;
   }
-  .btn:hover { border-color: var(--primary); color: var(--primary); }
   .btn-primary {
     background: var(--primary);
     color: white;
     border-color: var(--primary);
   }
-  .btn-primary:hover { background: var(--primary-dark); }
   .btn-danger { color: var(--danger); border-color: var(--danger); }
-  .btn-danger:hover { background: var(--danger); color: white; }
   .btn-success { background: var(--success); color: white; border-color: var(--success); }
 
-  /* Debug Info */
+  /* Debug bar */
   .debug-bar {
+    padding: 8px 16px;
     background: #e7f1ff;
-    border-left: 4px solid var(--primary);
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
     color: var(--primary-dark);
-    margin-bottom: 12px;
     font-family: monospace;
     word-break: break-all;
   }
 
-  /* Document Grid */
-  .doc-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+  /* List Items */
+  .doc-list {
+    list-style: none;
   }
-  .doc-card {
-    border: 2px solid var(--border);
-    border-radius: 10px;
-    padding: 14px;
+  .doc-item {
+    display: flex;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid #f0f0f0;
     cursor: pointer;
-    transition: all 0.2s;
-    background: white;
+    transition: background 0.15s;
     position: relative;
-    overflow: hidden;
   }
-  .doc-card:hover {
-    border-color: var(--primary);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    transform: translateY(-2px);
-  }
-  .doc-card::before {
+  .doc-item:hover { background: #f8f9fa; }
+  .doc-item:last-child { border-bottom: none; }
+
+  /* Color indicator bar on left */
+  .doc-item::before {
     content: '';
     position: absolute;
     left: 0;
@@ -250,81 +229,119 @@
     bottom: 0;
     width: 4px;
   }
-  .doc-card.status-pending::before { background: var(--danger); }
-  .doc-card.status-partial::before { background: var(--warning); }
-  .doc-card.status-served::before { background: var(--success); }
-  .doc-card.status-empty::before { background: var(--gray); }
+  .doc-item.status-pending::before { background: var(--danger); }
+  .doc-item.status-partial::before { background: var(--warning); }
+  .doc-item.status-served::before { background: var(--success); }
+  .doc-item.status-empty::before { background: var(--gray); }
 
+  .status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 12px;
+    flex-shrink: 0;
+  }
+  .status-dot.pending { background: var(--danger); }
+  .status-dot.partial { background: var(--warning); }
+  .status-dot.served { background: var(--success); }
+  .status-dot.empty { background: var(--gray); }
+
+  .doc-info { flex: 1; min-width: 0; }
   .doc-id {
     font-size: 15px;
     font-weight: 700;
     color: var(--dark);
-    margin-bottom: 6px;
-  }
-  .doc-status {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    margin-bottom: 8px;
-  }
-  .status-pending .doc-status { background: #fde8e8; color: var(--danger); }
-  .status-partial .doc-status { background: #fff8e1; color: #b78103; }
-  .status-served .doc-status { background: #e6f4ea; color: var(--success); }
-  .status-empty .doc-status { background: #f0f0f0; color: var(--gray); }
-
-  .doc-requestor {
-    font-size: 12px;
-    color: var(--gray);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .doc-date {
-    font-size: 11px;
+  .doc-sub {
+    font-size: 12px;
     color: var(--gray);
-    margin-top: 4px;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
+  .doc-status-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    margin-left: 8px;
+  }
+  .badge-pending { background: #fde8e8; color: var(--danger); }
+  .badge-partial { background: #fff8e1; color: #b78103; }
+  .badge-served { background: #e6f4ea; color: var(--success); }
+  .badge-empty { background: #f0f0f0; color: var(--gray); }
 
-  /* Empty State */
+  /* Empty / Loading */
   .empty-state {
     text-align: center;
     padding: 40px 20px;
     color: var(--gray);
   }
-  .empty-state i { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
-  .empty-state p { font-size: 14px; }
-  .empty-state small { font-size: 12px; opacity: 0.7; }
-
-  /* Skeleton Loading */
-  .skeleton {
-    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  .empty-state i { font-size: 40px; margin-bottom: 10px; opacity: 0.4; }
+  .skeleton-row {
+    height: 56px;
+    margin: 8px 16px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite;
-    border-radius: 8px;
+    border-radius: 6px;
   }
   @keyframes shimmer {
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
   }
-  .skeleton-card {
-    height: 90px;
-    border-radius: 10px;
+
+  /* Detail View */
+  .detail-view { display: none; }
+  .detail-view.active { display: block; }
+
+  .detail-card {
+    background: white;
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow);
   }
+  .detail-id {
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 10px;
+  }
+  .detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: var(--gray);
+  }
+  .detail-status-banner {
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .banner-pending { background: #fde8e8; color: var(--danger); }
+  .banner-partial { background: #fff8e1; color: #b78103; }
+  .banner-served { background: #e6f4ea; color: var(--success); }
 
   /* Toast */
   .toast-container {
     position: fixed;
-    top: 20px;
+    top: 16px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    width: 90%;
+    width: 92%;
     max-width: 400px;
   }
   .toast {
@@ -333,9 +350,7 @@
     color: white;
     font-size: 14px;
     font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    margin-bottom: 8px;
     box-shadow: 0 4px 16px rgba(0,0,0,0.15);
     animation: slideDown 0.3s ease;
   }
@@ -357,24 +372,18 @@
     display: none;
     align-items: flex-start;
     justify-content: center;
-    padding-top: 60px;
-    backdrop-filter: blur(4px);
+    padding-top: 40px;
   }
   .modal-overlay.active { display: flex; }
   .modal {
     background: white;
     width: 92%;
     max-width: 500px;
-    max-height: 80vh;
+    max-height: 85vh;
     border-radius: var(--radius);
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    animation: modalUp 0.3s ease;
-  }
-  @keyframes modalUp {
-    from { opacity: 0; transform: translateY(40px); }
-    to { opacity: 1; transform: translateY(0); }
   }
   .modal-header {
     padding: 16px;
@@ -383,7 +392,7 @@
     align-items: center;
     justify-content: space-between;
   }
-  .modal-title { font-size: 18px; font-weight: 700; }
+  .modal-title { font-size: 17px; font-weight: 700; }
   .modal-close {
     background: none;
     border: none;
@@ -397,7 +406,6 @@
     justify-content: center;
     border-radius: 50%;
   }
-  .modal-close:hover { background: var(--light); }
   .modal-body {
     padding: 16px;
     overflow-y: auto;
@@ -411,129 +419,38 @@
   }
   .modal-footer .btn { flex: 1; }
 
-  /* Form Elements */
-  .form-group { margin-bottom: 16px; }
-  .form-label {
-    display: block;
-    font-size: 13px;
-    font-weight: 600;
-    margin-bottom: 6px;
-    color: var(--dark);
-  }
+  .form-group { margin-bottom: 14px; }
+  .form-label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; }
   .form-input {
     width: 100%;
-    padding: 12px;
+    padding: 11px;
     border: 2px solid var(--border);
-    border-radius: 10px;
-    font-size: 15px;
+    border-radius: 8px;
+    font-size: 14px;
     outline: none;
   }
   .form-input:focus { border-color: var(--primary); }
-  .form-hint {
-    font-size: 12px;
-    color: var(--gray);
-    margin-top: 4px;
-  }
+  .form-hint { font-size: 12px; color: var(--gray); margin-top: 3px; }
 
-  /* Settings Sections */
   .settings-section {
     background: var(--light);
-    border-radius: 10px;
-    padding: 16px;
-    margin-bottom: 16px;
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 14px;
   }
   .settings-section-title {
-    font-size: 14px;
-    font-weight: 700;
-    margin-bottom: 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  /* Document Detail */
-  .detail-header {
-    background: white;
-    border-radius: var(--radius);
-    padding: 20px;
-    margin-bottom: 16px;
-    box-shadow: var(--shadow);
-  }
-  .detail-id {
-    font-size: 22px;
-    font-weight: 800;
-    margin-bottom: 8px;
-  }
-  .detail-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    margin-bottom: 12px;
-  }
-  .detail-meta-item {
     font-size: 13px;
-    color: var(--gray);
+    font-weight: 700;
+    margin-bottom: 10px;
     display: flex;
     align-items: center;
     gap: 6px;
   }
-  .detail-status-banner {
-    padding: 12px 16px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .banner-pending { background: #fde8e8; color: var(--danger); }
-  .banner-partial { background: #fff8e1; color: #b78103; }
-  .banner-served { background: #e6f4ea; color: var(--success); }
 
-  /* Item List */
-  .item-list {
-    background: white;
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    overflow: hidden;
-  }
-  .item-row {
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .item-row:last-child { border-bottom: none; }
-  .item-check {
-    width: 24px;
-    height: 24px;
-    accent-color: var(--success);
-    cursor: pointer;
-  }
-  .item-info { flex: 1; }
-  .item-name { font-size: 15px; font-weight: 600; }
-  .item-qty { font-size: 13px; color: var(--gray); }
-
-  /* Spinner */
-  .spinner {
-    display: inline-block;
-    width: 16px;
-    height: 16px;
-    border: 2px solid rgba(255,255,255,0.3);
-    border-top-color: white;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* Hidden */
   .hidden { display: none !important; }
 
-  /* Responsive */
   @media (max-width: 400px) {
-    .doc-grid { grid-template-columns: 1fr; }
-    .tab { font-size: 11px; padding: 8px 2px; }
+    .tab { font-size: 10px; padding: 8px 1px; }
     .tab i { font-size: 16px; }
   }
 </style>
@@ -541,16 +458,15 @@
 </head>
 <body>
 
-<!-- Toast Container -->
 <div class="toast-container" id="toastContainer"></div>
 
-<!-- Header -->
+<!-- HEADER -->
 <div class="header">
   <div class="header-title">
     <i class="fas fa-box-open"></i>
     <span>IVM WAREHOUSE QR</span>
   </div>
-  <div class="header-actions">
+  <div style="display:flex;align-items:center;gap:10px;">
     <span class="module-badge" id="moduleBadge">MRIF</span>
     <button class="icon-btn" onclick="openSettings()" title="Settings">
       <i class="fas fa-cog"></i>
@@ -558,124 +474,84 @@
   </div>
 </div>
 
-<!-- Module Tabs -->
+<!-- TABS -->
 <div class="tabs">
   <div class="tab" data-module="RECEIVING" onclick="selectModule('RECEIVING')">
-    <i class="fas fa-download"></i>
-    <span>Receiving</span>
+    <i class="fas fa-download"></i><span>Receiving</span>
   </div>
   <div class="tab active" data-module="RELEASING" onclick="selectModule('RELEASING')">
-    <i class="fas fa-upload"></i>
-    <span>Releasing</span>
+    <i class="fas fa-upload"></i><span>Releasing</span>
   </div>
   <div class="tab" data-module="RETURNS" onclick="selectModule('RETURNS')">
-    <i class="fas fa-undo"></i>
-    <span>Returns</span>
+    <i class="fas fa-undo"></i><span>Returns</span>
   </div>
   <div class="tab" data-module="NEW_REQUEST" onclick="selectModule('NEW_REQUEST')">
-    <i class="fas fa-plus"></i>
-    <span>New Request</span>
+    <i class="fas fa-plus"></i><span>New Request</span>
   </div>
 </div>
 
-<!-- Main Container -->
-<div class="container" id="mainContainer">
-
-  <!-- Quick Scan -->
+<!-- LIST VIEW -->
+<div class="container" id="listView">
   <div class="scan-card">
     <button class="scan-btn" onclick="startScan()">
-      <i class="fas fa-qrcode"></i>
-      QUICK SCAN QR
+      <i class="fas fa-qrcode"></i> QUICK SCAN QR
     </button>
     <div class="scan-hint">
-      <i class="fas fa-info-circle"></i>
-      <span>Scan Document QR to auto-load &bull; Scan Item QR to verify</span>
+      <i class="fas fa-info-circle"></i> Scan Document QR to auto-load
     </div>
   </div>
 
-  <!-- Document Picker -->
-  <div class="picker-card">
-    <div class="picker-header">
-      <div class="picker-title">
-        <i class="fas fa-file-alt"></i>
-        <span>Select Document</span>
-      </div>
-      <button class="icon-btn" style="background: var(--light); color: var(--dark);" onclick="refreshDocs()" title="Refresh">
+  <div class="doc-list-card">
+    <div class="list-header">
+      <div class="list-title"><i class="fas fa-file-alt"></i> Select Document</div>
+      <button class="icon-btn" style="background:var(--light);color:var(--dark);" onclick="refreshDocs()" title="Refresh">
         <i class="fas fa-sync-alt" id="refreshIcon"></i>
       </button>
     </div>
-    <div class="picker-body">
-      <!-- Search -->
-      <div class="search-box">
-        <i class="fas fa-search" style="position: absolute; left: 28px; top: 50%; transform: translateY(-50%); color: var(--gray); z-index: 1;"></i>
-        <input type="text" class="search-input" id="searchInput" placeholder="Search document..." oninput="filterDocs()" style="padding-left: 40px;">
-        <button class="btn" onclick="clearSearch()">Clear</button>
-      </div>
 
-      <!-- Debug Info -->
-      <div class="debug-bar" id="debugBar">
-        Module: <span id="debugModule">-</span> | Sheet: <span id="debugSheet">-</span> | Docs: <span id="debugCount">-</span>
-      </div>
+    <div class="search-box">
+      <input type="text" class="search-input" id="searchInput" placeholder="Search document..." oninput="filterDocs()">
+      <button class="btn" onclick="clearSearch()">Clear</button>
+    </div>
 
-      <!-- Loading State -->
-      <div id="loadingState">
-        <div class="doc-grid">
-          <div class="skeleton skeleton-card"></div>
-          <div class="skeleton skeleton-card"></div>
-          <div class="skeleton skeleton-card"></div>
-          <div class="skeleton skeleton-card"></div>
-        </div>
-      </div>
+    <div class="debug-bar" id="debugBar">
+      Module: <span id="debugModule">-</span> | Sheet: <span id="debugSheet">-</span> | Docs: <span id="debugCount">0</span>
+    </div>
 
-      <!-- Document Grid -->
-      <div id="docGrid" class="doc-grid hidden"></div>
-
-      <!-- Empty State -->
-      <div id="emptyState" class="empty-state hidden">
-        <i class="fas fa-inbox"></i>
-        <p><strong>No documents found</strong></p>
-        <small>Check your Sheet ID in Settings or verify data exists</small>
-      </div>
-
-      <!-- Error State -->
-      <div id="errorState" class="empty-state hidden">
-        <i class="fas fa-exclamation-triangle" style="color: var(--danger);"></i>
-        <p><strong>Error loading documents</strong></p>
-        <small id="errorMessage">Check console for details</small>
-      </div>
+    <div class="list-body" id="listBody">
+      <!-- Populated by JS -->
     </div>
   </div>
 </div>
 
-<!-- Document Detail View (hidden by default) -->
-<div class="container hidden" id="detailView">
-  <button class="btn" onclick="backToList()" style="margin-bottom: 12px;">
+<!-- DETAIL VIEW -->
+<div class="container detail-view" id="detailView">
+  <button class="btn" onclick="backToList()" style="margin-bottom:12px;">
     <i class="fas fa-arrow-left"></i> Back to List
   </button>
 
-  <div class="detail-header">
-    <div class="detail-id" id="detailDocId">DOC-001</div>
+  <div class="detail-card">
+    <div class="detail-id" id="detailDocId">-</div>
     <div class="detail-meta">
-      <div class="detail-meta-item"><i class="fas fa-user"></i> <span id="detailRequestor">-</span></div>
-      <div class="detail-meta-item"><i class="fas fa-calendar"></i> <span id="detailDate">-</span></div>
+      <span><i class="fas fa-user"></i> <span id="detailRequestor">-</span></span>
+      <span><i class="fas fa-calendar"></i> <span id="detailDate">-</span></span>
     </div>
     <div class="detail-status-banner" id="detailStatusBanner">
       <i class="fas fa-clock"></i> <span id="detailStatusText">PENDING</span>
     </div>
   </div>
 
-  <div class="item-list" id="itemList">
-    <!-- Items populated by JS -->
+  <div class="detail-card" id="detailItemsCard">
+    <div style="font-weight:700;margin-bottom:10px;font-size:15px;"><i class="fas fa-list"></i> Items</div>
+    <div id="detailItemsList"></div>
   </div>
 
-  <div style="margin-top: 16px; display: flex; gap: 10px;">
-    <button class="btn btn-success" style="flex: 1; padding: 16px; font-size: 16px;" onclick="submitDoc()">
-      <i class="fas fa-check"></i> Submit / Serve
-    </button>
-  </div>
+  <button class="btn btn-success" style="width:100%;padding:16px;font-size:16px;" onclick="submitDoc()">
+    <i class="fas fa-check"></i> Submit / Serve Document
+  </button>
 </div>
 
-<!-- Settings Modal -->
+<!-- SETTINGS MODAL -->
 <div class="modal-overlay" id="settingsModal">
   <div class="modal">
     <div class="modal-header">
@@ -684,138 +560,91 @@
     </div>
     <div class="modal-body">
 
-      <!-- Role -->
-      <div class="settings-section">
-        <div class="settings-section-title"><i class="fas fa-id-badge"></i> Current Role</div>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <span class="btn btn-success" style="cursor: default;">Warehouse Staff</span>
-          <button class="btn" onclick="switchRole()">Switch Role</button>
-        </div>
-      </div>
-
-      <!-- PIN -->
-      <div class="settings-section">
-        <div class="settings-section-title"><i class="fas fa-key"></i> Warehouse PIN</div>
-        <div class="form-group">
-          <label class="form-label">Current PIN</label>
-          <input type="password" class="form-input" id="currentPin" placeholder="Enter current PIN">
-        </div>
-        <div class="form-group">
-          <label class="form-label">New PIN (4 digits)</label>
-          <input type="password" class="form-input" id="newPin" placeholder="Enter new PIN" maxlength="4">
-        </div>
-        <button class="btn btn-primary" style="width: 100%;" onclick="changePin()">Change PIN</button>
-      </div>
-
-      <!-- Sync -->
       <div class="settings-section">
         <div class="settings-section-title"><i class="fas fa-sync"></i> Sync from Master Sheet</div>
         <div class="form-group">
           <label class="form-label">Master Sheet ID</label>
-          <input type="text" class="form-input" id="masterSheetId" placeholder="Paste Master Sheet ID here">
-          <div class="form-hint">Sheet with module names in Col A and Sheet IDs in Col B</div>
+          <input type="text" class="form-input" id="masterSheetId" placeholder="Paste Master Sheet ID">
+          <div class="form-hint">Sheet with: Col A = Module name, Col B = Sheet ID / URL</div>
         </div>
-        <button class="btn btn-primary" style="width: 100%; margin-bottom: 10px;" onclick="syncModuleLinks()" id="syncBtn">
-          <i class="fas fa-sync-alt"></i> Sync IDs from Master Sheet
+        <button class="btn btn-primary" style="width:100%;" onclick="syncFromMaster()" id="syncBtn">
+          <i class="fas fa-sync-alt"></i> Sync All from Master
         </button>
       </div>
 
-      <!-- Clear Cache -->
-      <div class="settings-section" style="background: #fff8e1; border: 1px solid #ffc107;">
+      <div class="settings-section" style="background:#fff8e1;border:1px solid #ffc107;">
         <div class="settings-section-title"><i class="fas fa-trash"></i> Clear Cache</div>
-        <p style="font-size: 13px; color: var(--gray); margin-bottom: 12px;">
-          If documents are not loading or wrong module appears, clear all saved data.
-        </p>
-        <button class="btn btn-danger" style="width: 100%;" onclick="clearAllData()">
+        <p style="font-size:12px;color:var(--gray);margin-bottom:10px;">Clear all saved data if documents won't load.</p>
+        <button class="btn btn-danger" style="width:100%;" onclick="clearAllData()">
           <i class="fas fa-trash-alt"></i> Clear All Saved Data
         </button>
       </div>
 
-      <!-- Sheet IDs -->
       <div class="settings-section">
-        <div class="settings-section-title"><i class="fas fa-database"></i> Module Sheet IDs</div>
-
+        <div class="settings-section-title"><i class="fas fa-database"></i> Manual Sheet IDs</div>
         <div class="form-group">
-          <label class="form-label">MRR Sheet URL / ID</label>
+          <label class="form-label">MRR Sheet ID</label>
           <input type="text" class="form-input" id="sheetId_MRR" placeholder="Paste MRR Sheet ID">
         </div>
         <div class="form-group">
-          <label class="form-label">MRIF Sheet URL / ID</label>
+          <label class="form-label">MRIF Sheet ID</label>
           <input type="text" class="form-input" id="sheetId_MRIF" placeholder="Paste MRIF Sheet ID">
         </div>
         <div class="form-group">
-          <label class="form-label">Receiving Sheet URL / ID</label>
+          <label class="form-label">Receiving Sheet ID</label>
           <input type="text" class="form-input" id="sheetId_RECEIVING" placeholder="Paste Receiving Sheet ID">
         </div>
         <div class="form-group">
-          <label class="form-label">Returns Sheet URL / ID</label>
+          <label class="form-label">Returns Sheet ID</label>
           <input type="text" class="form-input" id="sheetId_RETURNS" placeholder="Paste Returns Sheet ID">
         </div>
         <div class="form-group">
           <label class="form-label">GAS Web App URL</label>
-          <input type="text" class="form-input" id="gasUrl" placeholder="https://script.google.com/macros/s/AKfycbw7tjSHpF8vkIrER7M8ZzIrzQAVsRH43BLlvuWQWMz-bq8f_-GPv4dtBFAYZdnASpo7/exec">
-          <div class="form-hint">Your Google Apps Script Web App URL</div>
+          <input type="text" class="form-input" id="gasUrl" placeholder="https://script.google.com/macros/s/.../exec">
         </div>
       </div>
 
     </div>
     <div class="modal-footer">
-      <button class="btn" style="flex: 1;" onclick="closeSettings()">Cancel</button>
-      <button class="btn btn-primary" style="flex: 1;" onclick="saveSettings()">Save Settings</button>
+      <button class="btn" style="flex:1;" onclick="closeSettings()">Cancel</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="saveSettings()">Save</button>
     </div>
   </div>
 </div>
 
 <script>
 // ============================================
-// CONFIGURATION
+// CONFIG
 // ============================================
-
-// IMPORTANT: Update this after each GAS redeploy!
-const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbz.../exec';
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbw7tjSHpF8vkIrER7M8ZzIrzQAVsRH43BLlvuWQWMz-bq8f_-GPv4dtBFAYZdnASpo7/exec';
 
 function getApiUrl() {
   return localStorage.getItem('gasUrl') || DEFAULT_API_URL;
 }
 
 const MODULE_MAP = {
-  'RECEIVING': { label: 'Receiving', sheetKey: 'sheetId_RECEIVING', badge: 'RCV' },
-  'RELEASING': { label: 'Releasing', sheetKey: 'sheetId_MRIF', badge: 'MRIF' },
-  'RETURNS':   { label: 'Returns',   sheetKey: 'sheetId_RETURNS', badge: 'RET' },
-  'NEW_REQUEST': { label: 'New Request', sheetKey: 'sheetId_MRIF', badge: 'NEW' }
+  'RECEIVING':   { label: 'Receiving', sheetKey: 'sheetId_RECEIVING', badge: 'RCV' },
+  'RELEASING':   { label: 'Releasing', sheetKey: 'sheetId_MRIF',      badge: 'MRIF' },
+  'RETURNS':     { label: 'Returns',   sheetKey: 'sheetId_RETURNS',   badge: 'RET' },
+  'NEW_REQUEST': { label: 'New Request', sheetKey: 'sheetId_MRIF',      badge: 'NEW' }
 };
 
 // ============================================
 // STATE
 // ============================================
-
 let currentModule = 'RELEASING';
 let allDocs = [];
 let currentDoc = null;
-let isLoading = false;
 
 // ============================================
-// INITIALIZATION
+// INIT
 // ============================================
-
 document.addEventListener('DOMContentLoaded', function() {
-  init();
-});
-
-function init() {
-  // Load saved module
-  const savedModule = localStorage.getItem('currentModule');
-  if (savedModule && MODULE_MAP[savedModule]) {
-    currentModule = savedModule;
-  }
-
+  const saved = localStorage.getItem('currentModule');
+  if (saved && MODULE_MAP[saved]) currentModule = saved;
   updateModuleUI();
   loadDocuments();
-}
-
-// ============================================
-// MODULE SWITCHING
-// ============================================
+});
 
 function selectModule(module) {
   currentModule = module;
@@ -825,216 +654,216 @@ function selectModule(module) {
 }
 
 function updateModuleUI() {
-  // Update tabs
-  document.querySelectorAll('.tab').forEach(tab => {
-    tab.classList.toggle('active', tab.dataset.module === currentModule);
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.module === currentModule);
   });
-
-  // Update badge
-  const config = MODULE_MAP[currentModule];
-  document.getElementById('moduleBadge').textContent = config ? config.badge : currentModule;
+  const cfg = MODULE_MAP[currentModule];
+  document.getElementById('moduleBadge').textContent = cfg ? cfg.badge : currentModule;
 }
 
 // ============================================
-// FETCH DOCUMENTS
+// LOAD DOCUMENTS
 // ============================================
-
 async function loadDocuments() {
-  const config = MODULE_MAP[currentModule];
-  const sheetId = localStorage.getItem(config.sheetKey);
+  const cfg = MODULE_MAP[currentModule];
+  const sheetId = localStorage.getItem(cfg.sheetKey);
 
-  // Update debug bar
   document.getElementById('debugModule').textContent = currentModule;
-  document.getElementById('debugSheet').textContent = sheetId ? sheetId.substring(0, 20) + '...' : 'NOT SET';
-  document.getElementById('debugCount').textContent = '-';
+  document.getElementById('debugSheet').textContent = sheetId ? sheetId.substring(0,18)+'...' : 'NOT SET';
+  document.getElementById('debugCount').textContent = '0';
 
   if (!sheetId) {
-    showError('No Sheet ID configured for ' + currentModule + '. Go to Settings and enter the Sheet ID.');
-    showEmptyState();
+    renderEmpty('No Sheet ID configured. Go to Settings > Sync from Master Sheet.');
     return;
   }
 
-  showLoading();
+  renderLoading();
 
   try {
     const url = getApiUrl() + '?action=getPendingDocs&sheetId=' + encodeURIComponent(sheetId);
-    console.log('[fetchPendingDocs] URL:', url);
+    console.log('[loadDocuments] Fetching:', url);
 
-    const response = await fetch(url, {
-      method: 'GET',
-      redirect: 'follow'
-    });
-
-    if (!response.ok) {
-      throw new Error('HTTP ' + response.status + ': ' + response.statusText);
-    }
+    const response = await fetch(url, { method: 'GET', redirect: 'follow' });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
 
     const result = await response.json();
-    console.log('[fetchPendingDocs] Response:', result);
+    console.log('[loadDocuments] Response:', result);
 
-    if (!result.success) {
-      throw new Error(result.error || 'Unknown error from server');
-    }
+    if (!result.success) throw new Error(result.error || 'Server error');
+    if (!Array.isArray(result.data)) throw new Error('Invalid data format');
 
-    if (!Array.isArray(result.data)) {
-      throw new Error('Invalid data format: expected array, got ' + typeof result.data);
-    }
-
-    // Filter out any remaining header-like items (double safety)
-    allDocs = result.data.filter(doc => {
-      if (!doc || !doc.id) return false;
-      const id = doc.id.toString().trim();
-      if (!id) return false;
-      if (id.includes(':')) return false;
-      if (id.length > 50) return false;
-      if (/^(company|branch|trf|reqt|date|status|item|no\.?)$/i.test(id)) return false;
-      return true;
-    });
-
+    allDocs = result.data;
     document.getElementById('debugCount').textContent = allDocs.length;
-    console.log('[fetchPendingDocs] Filtered to', allDocs.length, 'valid documents');
+    console.log('[loadDocuments] Loaded', allDocs.length, 'documents');
 
     if (allDocs.length === 0) {
-      showEmptyState();
+      renderEmpty('No documents found in this sheet.');
     } else {
-      renderDocCards(allDocs);
+      renderDocList(allDocs);
     }
 
   } catch (err) {
-    console.error('[fetchPendingDocs] Error:', err);
-    showError('Failed to load: ' + err.message);
-    showErrorState(err.message);
+    console.error('[loadDocuments] Error:', err);
+    renderError('Failed to load: ' + err.message);
+    showToast('Error: ' + err.message, 'error');
   }
 }
 
 function refreshDocs() {
   const icon = document.getElementById('refreshIcon');
   icon.style.animation = 'spin 1s linear infinite';
-  loadDocuments().finally(() => {
-    icon.style.animation = '';
-  });
+  loadDocuments().finally(() => { icon.style.animation = ''; });
 }
 
 // ============================================
-// RENDER DOCUMENTS
+// RENDER LIST
 // ============================================
-
-function renderDocCards(docs) {
-  const grid = document.getElementById('docGrid');
-  grid.innerHTML = '';
+function renderDocList(docs) {
+  const body = document.getElementById('listBody');
+  body.innerHTML = '<ul class="doc-list" id="docList"></ul>';
+  const list = document.getElementById('docList');
 
   docs.forEach(doc => {
-    const card = document.createElement('div');
-    card.className = 'doc-card status-' + (doc.statusCategory || 'pending').toLowerCase();
-    card.onclick = () => openDocDetail(doc);
+    const li = document.createElement('li');
+    li.className = 'doc-item status-' + (doc.statusCategory || 'pending').toLowerCase();
+    li.onclick = () => openDocDetail(doc);
 
-    const statusText = doc.statusCategory || 'PENDING';
+    const status = (doc.statusCategory || 'PENDING').toLowerCase();
     const requestor = doc.requestor || 'No requestor';
     const date = doc.date || '';
 
-    card.innerHTML = `
-      <div class="doc-id">${escapeHtml(doc.id)}</div>
-      <div class="doc-status">${escapeHtml(statusText)}</div>
-      <div class="doc-requestor"><i class="fas fa-user"></i> ${escapeHtml(requestor)}</div>
-      ${date ? `<div class="doc-date"><i class="fas fa-calendar"></i> ${escapeHtml(date)}</div>` : ''}
+    li.innerHTML = `
+      <div class="status-dot ${status}"></div>
+      <div class="doc-info">
+        <div class="doc-id">${escapeHtml(doc.id)}</div>
+        <div class="doc-sub">${escapeHtml(requestor)} ${date ? '&bull; ' + escapeHtml(date) : ''}</div>
+      </div>
+      <div class="doc-status-badge badge-${status}">${escapeHtml(doc.statusCategory || 'PENDING')}</div>
     `;
-
-    grid.appendChild(card);
+    list.appendChild(li);
   });
-
-  showGrid();
 }
 
 function filterDocs() {
-  const query = document.getElementById('searchInput').value.toLowerCase().trim();
-  if (!query) {
-    renderDocCards(allDocs);
-    return;
-  }
+  const q = document.getElementById('searchInput').value.toLowerCase().trim();
+  if (!q) { renderDocList(allDocs); return; }
 
-  const filtered = allDocs.filter(doc => {
-    const id = (doc.id || '').toLowerCase();
-    const requestor = (doc.requestor || '').toLowerCase();
-    const status = (doc.status || '').toLowerCase();
-    return id.includes(query) || requestor.includes(query) || status.includes(query);
+  const filtered = allDocs.filter(d => {
+    const id = (d.id || '').toLowerCase();
+    const req = (d.requestor || '').toLowerCase();
+    const st = (d.status || '').toLowerCase();
+    return id.includes(q) || req.includes(q) || st.includes(q);
   });
 
   if (filtered.length === 0) {
-    showEmptyState();
+    renderEmpty('No matching documents.');
   } else {
-    renderDocCards(filtered);
+    renderDocList(filtered);
   }
 }
 
 function clearSearch() {
   document.getElementById('searchInput').value = '';
-  if (allDocs.length > 0) {
-    renderDocCards(allDocs);
-  } else {
-    showEmptyState();
-  }
+  renderDocList(allDocs);
+}
+
+function renderLoading() {
+  document.getElementById('listBody').innerHTML = `
+    <div style="padding:10px 0;">
+      <div class="skeleton-row"></div>
+      <div class="skeleton-row"></div>
+      <div class="skeleton-row"></div>
+      <div class="skeleton-row"></div>
+      <div class="skeleton-row"></div>
+    </div>
+  `;
+}
+
+function renderEmpty(msg) {
+  document.getElementById('listBody').innerHTML = `
+    <div class="empty-state">
+      <i class="fas fa-inbox"></i>
+      <p><strong>${escapeHtml(msg)}</strong></p>
+    </div>
+  `;
+}
+
+function renderError(msg) {
+  document.getElementById('listBody').innerHTML = `
+    <div class="empty-state">
+      <i class="fas fa-exclamation-triangle" style="color:var(--danger);"></i>
+      <p><strong>Error loading documents</strong></p>
+      <p style="font-size:12px;margin-top:6px;">${escapeHtml(msg)}</p>
+    </div>
+  `;
 }
 
 // ============================================
 // DOCUMENT DETAIL
 // ============================================
-
 function openDocDetail(doc) {
   currentDoc = doc;
+  document.getElementById('listView').classList.add('hidden');
+  document.getElementById('detailView').classList.add('active');
 
-  document.getElementById('mainContainer').classList.add('hidden');
-  document.getElementById('detailView').classList.remove('hidden');
-
-  document.getElementById('detailDocId').textContent = doc.id;
+  document.getElementById('detailDocId').textContent = doc.id || '-';
   document.getElementById('detailRequestor').textContent = doc.requestor || '-';
   document.getElementById('detailDate').textContent = doc.date || '-';
 
-  const status = doc.statusCategory || 'PENDING';
+  const status = (doc.statusCategory || 'PENDING').toLowerCase();
   const banner = document.getElementById('detailStatusBanner');
-  const statusText = document.getElementById('detailStatusText');
+  banner.className = 'detail-status-banner banner-' + status;
+  document.getElementById('detailStatusText').textContent = doc.statusCategory || 'PENDING';
 
-  banner.className = 'detail-status-banner banner-' + status.toLowerCase();
-  statusText.textContent = status;
+  // FIX: Handle items safely - doc.items might be a string, not array
+  const itemsList = document.getElementById('detailItemsList');
+  itemsList.innerHTML = '';
 
-  // Render items (placeholder - in real app, fetch from GAS)
-  const itemList = document.getElementById('itemList');
-  itemList.innerHTML = '';
+  let items = doc.items;
 
-  if (doc.items && doc.items.length > 0) {
-    doc.items.forEach((item, idx) => {
-      const row = document.createElement('div');
-      row.className = 'item-row';
-      row.innerHTML = `
-        <input type="checkbox" class="item-check" id="item_${idx}" ${item.verified ? 'checked' : ''}>
-        <div class="item-info">
-          <div class="item-name">${escapeHtml(item.name || 'Unknown Item')}</div>
-          <div class="item-qty">Qty: ${item.qty || 1}</div>
+  // Convert string to array if needed
+  if (typeof items === 'string' && items.trim()) {
+    items = items.split(',').map(s => ({ name: s.trim(), qty: 1, verified: false }));
+  }
+
+  // Ensure it's an array
+  if (!Array.isArray(items)) {
+    items = [];
+  }
+
+  if (items.length === 0) {
+    itemsList.innerHTML = '<p style="color:var(--gray);font-size:13px;"><i class="fas fa-info-circle"></i> No item details available for this document.</p>';
+  } else {
+    items.forEach((item, idx) => {
+      const name = typeof item === 'string' ? item : (item.name || 'Unknown');
+      const qty = typeof item === 'object' ? (item.qty || 1) : 1;
+      const checked = typeof item === 'object' && item.verified ? 'checked' : '';
+
+      const div = document.createElement('div');
+      div.style.cssText = 'display:flex;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0;';
+      div.innerHTML = `
+        <input type="checkbox" style="width:20px;height:20px;margin-right:12px;accent-color:var(--success);" id="chk_${idx}" ${checked}>
+        <div style="flex:1;">
+          <div style="font-weight:600;font-size:14px;">${escapeHtml(name)}</div>
+          <div style="font-size:12px;color:var(--gray);">Qty: ${qty}</div>
         </div>
       `;
-      itemList.appendChild(row);
+      itemsList.appendChild(div);
     });
-  } else {
-    itemList.innerHTML = `
-      <div class="empty-state" style="padding: 30px;">
-        <i class="fas fa-box-open"></i>
-        <p>No item details available</p>
-        <small>Items may be stored in a different format</small>
-      </div>
-    `;
   }
 }
 
 function backToList() {
-  document.getElementById('detailView').classList.add('hidden');
-  document.getElementById('mainContainer').classList.remove('hidden');
+  document.getElementById('detailView').classList.remove('active');
+  document.getElementById('listView').classList.remove('hidden');
   currentDoc = null;
 }
 
 async function submitDoc() {
   if (!currentDoc) return;
 
-  const config = MODULE_MAP[currentModule];
-  const sheetId = localStorage.getItem(config.sheetKey);
+  const cfg = MODULE_MAP[currentModule];
+  const sheetId = localStorage.getItem(cfg.sheetKey);
 
   try {
     const response = await fetch(getApiUrl(), {
@@ -1061,28 +890,20 @@ async function submitDoc() {
   }
 }
 
-// ============================================
-// QR SCAN (Placeholder)
-// ============================================
-
 function startScan() {
-  showToast('QR Scanner: Use device camera to scan', 'info');
-  // Implement actual QR scanning here (e.g., using html5-qrcode library)
+  showToast('QR Scanner: Use camera to scan document QR', 'info');
 }
 
 // ============================================
 // SETTINGS
 // ============================================
-
 function openSettings() {
-  // Load current values
   document.getElementById('sheetId_MRR').value = localStorage.getItem('sheetId_MRR') || '';
   document.getElementById('sheetId_MRIF').value = localStorage.getItem('sheetId_MRIF') || '';
   document.getElementById('sheetId_RECEIVING').value = localStorage.getItem('sheetId_RECEIVING') || '';
   document.getElementById('sheetId_RETURNS').value = localStorage.getItem('sheetId_RETURNS') || '';
   document.getElementById('gasUrl').value = localStorage.getItem('gasUrl') || DEFAULT_API_URL;
   document.getElementById('masterSheetId').value = localStorage.getItem('masterSheetId') || '';
-
   document.getElementById('settingsModal').classList.add('active');
   document.body.style.overflow = 'hidden';
 }
@@ -1099,190 +920,79 @@ function saveSettings() {
   localStorage.setItem('sheetId_RETURNS', document.getElementById('sheetId_RETURNS').value.trim());
   localStorage.setItem('gasUrl', document.getElementById('gasUrl').value.trim());
   localStorage.setItem('masterSheetId', document.getElementById('masterSheetId').value.trim());
-
   showToast('Settings saved!', 'success');
   closeSettings();
   loadDocuments();
 }
 
-async function syncModuleLinks() {
-  const masterSheetId = document.getElementById('masterSheetId').value.trim();
-  if (!masterSheetId) {
-    showToast('Please enter Master Sheet ID first', 'warning');
+async function syncFromMaster() {
+  const masterId = document.getElementById('masterSheetId').value.trim();
+  if (!masterId) {
+    showToast('Enter Master Sheet ID first', 'warning');
     return;
   }
 
   const btn = document.getElementById('syncBtn');
-  const originalText = btn.innerHTML;
-  btn.innerHTML = '<div class="spinner"></div> Syncing...';
+  const orig = btn.innerHTML;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
   btn.disabled = true;
 
   try {
-    const url = getApiUrl() + '?action=getModuleLinks&masterSheetId=' + encodeURIComponent(masterSheetId);
-    const response = await fetch(url);
-    const result = await response.json();
+    const url = getApiUrl() + '?action=getModuleLinks&masterSheetId=' + encodeURIComponent(masterId);
+    const res = await fetch(url);
+    const result = await res.json();
 
-    if (!result.success) {
-      throw new Error(result.error || 'Sync failed');
-    }
+    if (!result.success) throw new Error(result.error || 'Sync failed');
 
     const links = result.data || {};
-    console.log('[syncModuleLinks] Received:', links);
+    console.log('[syncFromMaster] Links:', links);
 
-    let savedCount = 0;
+    let count = 0;
     for (const [key, val] of Object.entries(links)) {
-      const upperKey = key.toUpperCase();
-      if (upperKey === 'MRR') {
-        localStorage.setItem('sheetId_MRR', val);
-        document.getElementById('sheetId_MRR').value = val;
-        savedCount++;
-      } else if (upperKey === 'MRIF') {
-        localStorage.setItem('sheetId_MRIF', val);
-        document.getElementById('sheetId_MRIF').value = val;
-        savedCount++;
-      } else if (upperKey === 'RECEIVING' || upperKey === 'RCV') {
-        localStorage.setItem('sheetId_RECEIVING', val);
-        document.getElementById('sheetId_RECEIVING').value = val;
-        savedCount++;
-      } else if (upperKey === 'RETURNS' || upperKey === 'RET') {
-        localStorage.setItem('sheetId_RETURNS', val);
-        document.getElementById('sheetId_RETURNS').value = val;
-        savedCount++;
-      }
+      const u = key.toUpperCase().trim();
+      if (u === 'MRR') { localStorage.setItem('sheetId_MRR', val); document.getElementById('sheetId_MRR').value = val; count++; }
+      else if (u === 'MRIF') { localStorage.setItem('sheetId_MRIF', val); document.getElementById('sheetId_MRIF').value = val; count++; }
+      else if (u === 'MRS') { localStorage.setItem('sheetId_RETURNS', val); document.getElementById('sheetId_RETURNS').value = val; count++; }
+      else if (u === 'RECEIVING' || u === 'RCV') { localStorage.setItem('sheetId_RECEIVING', val); document.getElementById('sheetId_RECEIVING').value = val; count++; }
+      else if (u === 'GAS WEB APP' || u.includes('GAS')) { localStorage.setItem('gasUrl', val); document.getElementById('gasUrl').value = val; count++; }
     }
 
-    showToast('Synced ' + savedCount + ' module(s) successfully!', 'success');
+    showToast('Synced ' + count + ' entries from master!', 'success');
 
   } catch (err) {
-    console.error('[syncModuleLinks] Error:', err);
+    console.error('[syncFromMaster] Error:', err);
     showToast('Sync failed: ' + err.message, 'error');
   } finally {
-    btn.innerHTML = originalText;
+    btn.innerHTML = orig;
     btn.disabled = false;
   }
 }
 
 function clearAllData() {
-  if (!confirm('Are you sure you want to clear ALL saved data? This cannot be undone.')) {
-    return;
-  }
-
-  localStorage.removeItem('sheetId_MRR');
-  localStorage.removeItem('sheetId_MRIF');
-  localStorage.removeItem('sheetId_RECEIVING');
-  localStorage.removeItem('sheetId_RETURNS');
-  localStorage.removeItem('gasUrl');
-  localStorage.removeItem('masterSheetId');
-  localStorage.removeItem('currentModule');
-
-  document.getElementById('sheetId_MRR').value = '';
-  document.getElementById('sheetId_MRIF').value = '';
-  document.getElementById('sheetId_RECEIVING').value = '';
-  document.getElementById('sheetId_RETURNS').value = '';
-  document.getElementById('gasUrl').value = DEFAULT_API_URL;
-  document.getElementById('masterSheetId').value = '';
-
-  showToast('All saved data cleared. Reloading...', 'success');
-  setTimeout(() => location.reload(), 1500);
-}
-
-function switchRole() {
-  showToast('Role switching not implemented yet', 'info');
-}
-
-function changePin() {
-  const current = document.getElementById('currentPin').value;
-  const newPin = document.getElementById('newPin').value;
-
-  if (!newPin || newPin.length !== 4 || !/^\d{4}$/.test(newPin)) {
-    showToast('PIN must be exactly 4 digits', 'warning');
-    return;
-  }
-
-  const savedPin = localStorage.getItem('warehousePin') || '0000';
-  if (current !== savedPin) {
-    showToast('Current PIN is incorrect', 'error');
-    return;
-  }
-
-  localStorage.setItem('warehousePin', newPin);
-  showToast('PIN changed successfully!', 'success');
-  document.getElementById('currentPin').value = '';
-  document.getElementById('newPin').value = '';
+  if (!confirm('Clear ALL saved data? This cannot be undone.')) return;
+  ['sheetId_MRR','sheetId_MRIF','sheetId_RECEIVING','sheetId_RETURNS','gasUrl','masterSheetId','currentModule'].forEach(k => localStorage.removeItem(k));
+  showToast('All data cleared. Reloading...', 'success');
+  setTimeout(() => location.reload(), 1200);
 }
 
 // ============================================
-// UI STATE HELPERS
+// TOAST
 // ============================================
-
-function showLoading() {
-  document.getElementById('loadingState').classList.remove('hidden');
-  document.getElementById('docGrid').classList.add('hidden');
-  document.getElementById('emptyState').classList.add('hidden');
-  document.getElementById('errorState').classList.add('hidden');
-}
-
-function showGrid() {
-  document.getElementById('loadingState').classList.add('hidden');
-  document.getElementById('docGrid').classList.remove('hidden');
-  document.getElementById('emptyState').classList.add('hidden');
-  document.getElementById('errorState').classList.add('hidden');
-}
-
-function showEmptyState() {
-  document.getElementById('loadingState').classList.add('hidden');
-  document.getElementById('docGrid').classList.add('hidden');
-  document.getElementById('emptyState').classList.remove('hidden');
-  document.getElementById('errorState').classList.add('hidden');
-}
-
-function showErrorState(message) {
-  document.getElementById('loadingState').classList.add('hidden');
-  document.getElementById('docGrid').classList.add('hidden');
-  document.getElementById('emptyState').classList.add('hidden');
-  document.getElementById('errorState').classList.remove('hidden');
-  document.getElementById('errorMessage').textContent = message || 'Unknown error';
-}
-
-// ============================================
-// TOAST NOTIFICATIONS
-// ============================================
-
 function showToast(message, type) {
-  const container = document.getElementById('toastContainer');
-  const toast = document.createElement('div');
-  toast.className = 'toast toast-' + type;
-
-  const icons = {
-    error: 'fa-exclamation-circle',
-    success: 'fa-check-circle',
-    warning: 'fa-exclamation-triangle',
-    info: 'fa-info-circle'
-  };
-
-  toast.innerHTML = `<i class="fas ${icons[type] || icons.info}"></i> ${escapeHtml(message)}`;
-  container.appendChild(toast);
-
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(-20px)';
-    setTimeout(() => toast.remove(), 300);
-  }, 4000);
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = 'toast toast-' + type;
+  const icons = { error: 'fa-exclamation-circle', success: 'fa-check-circle', warning: 'fa-exclamation-triangle', info: 'fa-info-circle' };
+  t.innerHTML = '<i class="fas ' + (icons[type] || icons.info) + '"></i> ' + escapeHtml(message);
+  c.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 4000);
 }
-
-function showError(message) {
-  showToast(message, 'error');
-}
-
-// ============================================
-// UTILITIES
-// ============================================
 
 function escapeHtml(text) {
   if (!text) return '';
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
+  const d = document.createElement('div');
+  d.textContent = text;
+  return d.innerHTML;
 }
 
 // Close modal on overlay click
@@ -1290,13 +1000,11 @@ document.getElementById('settingsModal').addEventListener('click', function(e) {
   if (e.target === this) closeSettings();
 });
 
-// Keyboard shortcuts
+// ESC key
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     closeSettings();
-    if (!document.getElementById('detailView').classList.contains('hidden')) {
-      backToList();
-    }
+    if (document.getElementById('detailView').classList.contains('active')) backToList();
   }
 });
 </script>
