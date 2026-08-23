@@ -1,77 +1,76 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>IVM WAREHOUSE QR</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <style>
-    :root { --primary:#0d6efd; --success:#198754; --warning:#ffc107; --danger:#dc3545; --scanner-bg:#1a1a2e; }
-    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; touch-action:manipulation; padding-bottom:20px; }
-    .scanner-container { position:relative; width:100%; max-width:400px; margin:0 auto; border-radius:12px; overflow:hidden; background:var(--scanner-bg); }
-    #reader, #quickReader { width:100% !important; border:none !important; }
-    #reader video, #quickReader video { border-radius:12px; }
-    .scanner-overlay { position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; display:flex; align-items:center; justify-content:center; }
-    .scanner-frame { width:220px; height:220px; border:2px solid rgba(255,255,255,0.8); border-radius:12px; position:relative; }
-    .scanner-frame::before,.scanner-frame::after { content:''; position:absolute; width:30px; height:30px; border-color:#00ff88; border-style:solid; }
-    .scanner-frame::before { top:-2px; left:-2px; border-width:4px 0 0 4px; }
-    .scanner-frame::after { bottom:-2px; right:-2px; border-width:0 4px 4px 0; }
-    .scan-line { position:absolute; top:0; left:0; right:0; height:2px; background:#00ff88; box-shadow:0 0 8px #00ff88; animation:scan 2s linear infinite; }
-    @keyframes scan { 0%{top:0} 50%{top:100%} 100%{top:0} }
-    .status-badge { font-size:.7rem; padding:.25rem .5rem; border-radius:.375rem; font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
-    .status-served { background:#d1fae5; color:#065f46; }
-    .status-partial { background:#fef3c7; color:#92400e; }
-    .status-pending { background:#fee2e2; color:#991b1b; }
-    .status-empty { background:#e5e7eb; color:#374151; }
-    .item-row { transition:all .2s; border-left:4px solid transparent; }
-    .item-row.verified { border-left-color:var(--success); background:#f0fdf4; }
-    .item-row:hover { background:#f8f9fa; }
-    .cam-controls { position:absolute; top:8px; right:8px; display:flex; gap:6px; z-index:10; }
-    .cam-btn { width:36px; height:36px; border-radius:50%; border:none; background:rgba(0,0,0,0.6); color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px; cursor:pointer; }
-    .cam-btn.active { background:rgba(255,193,7,0.9); color:#000; }
-    .wifi-icon { font-size:1.2rem; }
-    .wifi-online { color:var(--success); }
-    .wifi-offline { color:var(--danger); }
-    .module-btn { font-size:.85rem; padding:.5rem .75rem; }
-    .module-btn.active { background:var(--primary); color:#fff; }
-    .toast-container { z-index:1060; }
-    .quick-scan-btn { font-size:1.1rem; padding:1rem; }
-    .qr-display { border:4px solid #fff; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.15); }
-    .role-card { cursor:pointer; transition:all .2s; border:2px solid transparent; }
-    .role-card:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,0.1); }
-    .role-card.selected { border-color:var(--primary); background:#f0f7ff; }
-    .pin-dot { width:16px; height:16px; border-radius:50%; border:2px solid #dee2e6; display:inline-block; margin:0 4px; }
-    .pin-dot.filled { background:var(--primary); border-color:var(--primary); }
-    .production-banner { background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:#fff; border-radius:12px; padding:1rem; margin-bottom:1rem; text-align:center; }
-    .doc-card { cursor:pointer; transition:all .15s; border:2px solid #e5e7eb; border-radius:10px; padding:.75rem; background:#fff; }
-    .doc-card:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,0.08); border-color:var(--primary); }
-    .doc-card.selected { border-color:var(--primary); background:#f0f7ff; }
-    .doc-card.served { border-left:4px solid var(--success); opacity:.85; }
-    .doc-card.partial { border-left:4px solid var(--warning); }
-    .doc-card.pending { border-left:4px solid var(--danger); }
-    .doc-card.empty { border-left:4px solid #9ca3af; opacity:.7; }
-    .doc-grid { display:grid; grid-template-columns:1fr; gap:.5rem; max-height:320px; overflow-y:auto; padding-right:4px; }
-    @media(min-width:400px){ .doc-grid{ grid-template-columns:1fr 1fr; } }
-    .doc-code { font-weight:700; font-size:.9rem; word-break:break-all; color:#1f2937; }
-    .doc-meta { font-size:.75rem; color:#6b7280; margin-top:.25rem; }
-    .doc-status-wrapper { margin-top:.5rem; }
-    .doc-search { margin-bottom:.75rem; }
-    .refresh-docs-btn { width:36px; height:36px; border-radius:50%; border:1px solid #dee2e6; background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
-    .refresh-docs-btn:hover { background:#f8f9fa; }
-    .refresh-docs-btn.spinning i { animation:spin 1s linear infinite; }
-    @keyframes spin{ to{ transform:rotate(360deg); } }
-    .empty-state { text-align:center; padding:2rem 1rem; color:#6b7280; }
-    .empty-state i { font-size:2.5rem; margin-bottom:.5rem; display:block; }
-    .debug-info { font-size:.7rem; color:#6b7280; background:#f8f9fa; padding:.375rem .5rem; border-radius:.375rem; margin-bottom:.5rem; word-break:break-all; }
-    .skeleton-card { border:2px solid #e5e7eb; border-radius:10px; padding:.75rem; background:#f8f9fa; animation:pulse 1.5s ease-in-out infinite; }
-    .skeleton-line { height:14px; background:#e5e7eb; border-radius:4px; margin-bottom:8px; }
-    .skeleton-line.short { width:60%; }
-    .skeleton-badge { height:20px; width:80px; background:#e5e7eb; border-radius:.375rem; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>IVM WAREHOUSE QR</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root { --primary:#0d6efd; --success:#198754; --warning:#ffc107; --danger:#dc3545; --scanner-bg:#1a1a2e; }
+body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; touch-action:manipulation; padding-bottom:20px; }
+.scanner-container { position:relative; width:100%; max-width:400px; margin:0 auto; border-radius:12px; overflow:hidden; background:var(--scanner-bg); }
+#reader, #quickReader { width:100% !important; border:none !important; }
+#reader video, #quickReader video { border-radius:12px; }
+.scanner-overlay { position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none; display:flex; align-items:center; justify-content:center; }
+.scanner-frame { width:220px; height:220px; border:2px solid rgba(255,255,255,0.8); border-radius:12px; position:relative; }
+.scanner-frame::before,.scanner-frame::after { content:''; position:absolute; width:30px; height:30px; border-color:#00ff88; border-style:solid; }
+.scanner-frame::before { top:-2px; left:-2px; border-width:4px 0 0 4px; }
+.scanner-frame::after { bottom:-2px; right:-2px; border-width:0 4px 4px 0; }
+.scan-line { position:absolute; top:0; left:0; right:0; height:2px; background:#00ff88; box-shadow:0 0 8px #00ff88; animation:scan 2s linear infinite; }
+@keyframes scan { 0%{top:0} 50%{top:100%} 100%{top:0} }
+.status-badge { font-size:.7rem; padding:.25rem .5rem; border-radius:.375rem; font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
+.status-served { background:#d1fae5; color:#065f46; }
+.status-partial { background:#fef3c7; color:#92400e; }
+.status-pending { background:#fee2e2; color:#991b1b; }
+.status-empty { background:#e5e7eb; color:#374151; }
+.item-row { transition:all .2s; border-left:4px solid transparent; }
+.item-row.verified { border-left-color:var(--success); background:#f0fdf4; }
+.item-row:hover { background:#f8f9fa; }
+.cam-controls { position:absolute; top:8px; right:8px; display:flex; gap:6px; z-index:10; }
+.cam-btn { width:36px; height:36px; border-radius:50%; border:none; background:rgba(0,0,0,0.6); color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px; cursor:pointer; }
+.cam-btn.active { background:rgba(255,193,7,0.9); color:#000; }
+.wifi-icon { font-size:1.2rem; }
+.wifi-online { color:var(--success); }
+.wifi-offline { color:var(--danger); }
+.module-btn { font-size:.85rem; padding:.5rem .75rem; }
+.module-btn.active { background:var(--primary); color:#fff; }
+.toast-container { z-index:1060; }
+.quick-scan-btn { font-size:1.1rem; padding:1rem; }
+.qr-display { border:4px solid #fff; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.15); }
+.role-card { cursor:pointer; transition:all .2s; border:2px solid transparent; }
+.role-card:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,0.1); }
+.role-card.selected { border-color:var(--primary); background:#f0f7ff; }
+.pin-dot { width:16px; height:16px; border-radius:50%; border:2px solid #dee2e6; display:inline-block; margin:0 4px; }
+.pin-dot.filled { background:var(--primary); border-color:var(--primary); }
+.production-banner { background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:#fff; border-radius:12px; padding:1rem; margin-bottom:1rem; text-align:center; }
+.doc-card { cursor:pointer; transition:all .15s; border:2px solid #e5e7eb; border-radius:10px; padding:.75rem; background:#fff; }
+.doc-card:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,0.08); border-color:var(--primary); }
+.doc-card.served { border-left:4px solid var(--success); opacity:.85; }
+.doc-card.partial { border-left:4px solid var(--warning); }
+.doc-card.pending { border-left:4px solid var(--danger); }
+.doc-card.empty { border-left:4px solid #9ca3af; opacity:.7; }
+.doc-grid { display:grid; grid-template-columns:1fr; gap:.5rem; max-height:320px; overflow-y:auto; padding-right:4px; }
+@media(min-width:400px){ .doc-grid{ grid-template-columns:1fr 1fr; } }
+.doc-code { font-weight:700; font-size:.9rem; word-break:break-all; color:#1f2937; }
+.doc-meta { font-size:.75rem; color:#6b7280; margin-top:.25rem; }
+.doc-status-wrapper { margin-top:.5rem; }
+.doc-search { margin-bottom:.75rem; }
+.refresh-docs-btn { width:36px; height:36px; border-radius:50%; border:1px solid #dee2e6; background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.refresh-docs-btn:hover { background:#f8f9fa; }
+.refresh-docs-btn.spinning i { animation:spin 1s linear infinite; }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+.empty-state { text-align:center; padding:2rem 1rem; color:#6b7280; }
+.empty-state i { font-size:2.5rem; margin-bottom:.5rem; display:block; }
+.debug-info { font-size:.7rem; color:#6b7280; background:#f8f9fa; padding:.375rem .5rem; border-radius:.375rem; margin-bottom:.5rem; word-break:break-all; }
+.skeleton-card { border:2px solid #e5e7eb; border-radius:10px; padding:.75rem; background:#f8f9fa; animation:pulse 1.5s ease-in-out infinite; }
+.skeleton-line { height:14px; background:#e5e7eb; border-radius:4px; margin-bottom:8px; }
+.skeleton-line.short { width:60%; }
+.skeleton-badge { height:20px; width:80px; background:#e5e7eb; border-radius:.375rem; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+</style>
 <base target="_blank">
 </head>
 <body>
@@ -111,7 +110,7 @@
         </button>
         <div class="text-muted small mt-2">
           <i class="bi bi-info-circle me-1"></i>
-          Scan Document QR to auto-load • Scan Item QR to verify
+          Scan Document QR to auto-load &bull; Scan Item QR to verify
         </div>
       </div>
     </div>
@@ -240,7 +239,7 @@
         </div>
         <div class="p-3">
           <p class="text-muted mb-1"><i class="bi bi-info-circle me-1"></i>Point camera at any QR code</p>
-          <small class="text-muted">Document QR auto-loads • Item QR verifies</small>
+          <small class="text-muted">Document QR auto-loads &bull; Item QR verifies</small>
         </div>
       </div>
       <div class="modal-footer justify-content-center">
@@ -337,14 +336,14 @@
         </div>
         <div id="syncSection">
           <button class="btn btn-outline-primary w-100 mb-2" onclick="syncModuleLinks()">
-            <span id="syncBtnText">🔄 Sync IDs from Master Sheet</span>
+            <span id="syncBtnText">&#128260; Sync IDs from Master Sheet</span>
           </button>
         </div>
         <div class="card mb-3 border-warning">
           <div class="card-header bg-warning bg-opacity-10"><strong><i class="bi bi-trash me-2"></i>Clear Cache</strong></div>
           <div class="card-body">
             <p class="small text-muted mb-2">If documents are not loading or wrong module appears, clear all saved Sheet IDs and re-sync.</p>
-            <button class="btn btn-outline-danger btn-sm w-100" onclick="clearAllCache()">🗑️ Clear All Saved Data</button>
+            <button class="btn btn-outline-danger btn-sm w-100" onclick="clearAllCache()">&#128465; Clear All Saved Data</button>
           </div>
         </div>
         <div id="sheetIdsSection">
@@ -444,7 +443,6 @@
 </div>
 
 <script>
-
 const API_URL = 'https://script.google.com/macros/s/AKfycbz58M6GV1RYtPSODvQFHBwDQCgp4lu5POEGqG1Wxz-EILZ93wAXDQBS88oEpiq8Hzf6/exec';
 const DEFAULT_PIN = '0000';
 
@@ -596,17 +594,17 @@ function changePin() {
   const storedPin = localStorage.getItem('ivm_warehousePin') || DEFAULT_PIN;
   const msg = document.getElementById('pinChangeMsg');
   if (current !== storedPin) {
-    msg.textContent = '❌ Current PIN is incorrect';
+    msg.textContent = 'Current PIN is incorrect';
     msg.className = 'small mt-2 text-danger';
     return;
   }
   if (!/^\d{4}$/.test(newPin)) {
-    msg.textContent = '❌ New PIN must be exactly 4 digits';
+    msg.textContent = 'New PIN must be exactly 4 digits';
     msg.className = 'small mt-2 text-danger';
     return;
   }
   localStorage.setItem('ivm_warehousePin', newPin);
-  msg.textContent = '✅ PIN changed successfully';
+  msg.textContent = 'PIN changed successfully';
   msg.className = 'small mt-2 text-success';
   document.getElementById('currentPinInput').value = '';
   document.getElementById('newPinInput').value = '';
@@ -728,12 +726,12 @@ async function fetchPendingDocs() {
   if (!sheetId) {
     debugEl.textContent = 'Module: ' + state.currentModule + ' | No Sheet ID configured';
     debugEl.classList.remove('d-none');
-    showToast('No Sheet ID for ' + state.currentModule + '. Go to Settings > Sync IDs.', 'warning');
+    showToast('No Sheet ID for ' + state.currentModule + '. Go to Settings.', 'warning');
     renderDocList([]);
     return;
   }
 
-  debugEl.textContent = 'Module: ' + state.currentModule + ' | Sheet ID: ' + sheetId.substring(0, 12) + '...';
+  debugEl.textContent = 'Module: ' + state.currentModule + ' | Sheet: ' + sheetId.substring(0, 12) + '...';
   debugEl.classList.remove('d-none');
 
   const refreshBtn = document.getElementById('refreshDocsBtn');
@@ -763,14 +761,14 @@ async function fetchPendingDocs() {
     } else if (data && data.success === false) {
       throw new Error(data.error || 'Server error');
     } else {
-      console.warn('[fetchPendingDocs] Unexpected response format:', data);
+      console.warn('[fetchPendingDocs] Unexpected format:', data);
     }
 
     state.docList = docs;
     renderDocList(docs);
 
     if (docs.length === 0) {
-      showToast('No documents found. Check if the Sheet ID is correct.', 'info');
+      showToast('No documents found. Check Sheet ID.', 'info');
     }
   } catch(err) {
     console.error('[fetchPendingDocs] Error:', err);
@@ -831,7 +829,7 @@ function renderDocList(docs) {
         '</span>' +
       '</div>' +
       '<div class="doc-meta">' +
-        '<i class="bi bi-file-earmark me-1"></i>Tap to open document' +
+        '<i class="bi bi-file-earmark me-1"></i>Tap to open' +
       '</div>';
 
     container.appendChild(card);
@@ -851,7 +849,7 @@ function filterDocs() {
 function onDocSelect(docNo, status) {
   if (!docNo) return;
   if (status === 'SERVED') {
-    if (!confirm('⚠️ This document is already FULLY SERVED.\n\nAre you sure you want to open it again?')) {
+    if (!confirm('This document is already FULLY SERVED.\n\nAre you sure you want to open it again?')) {
       return;
     }
   }
@@ -948,7 +946,7 @@ function showDocStatusBanner() {
     banner.classList.remove('d-none');
   } else if (anyIssued) {
     banner.className = 'alert alert-warning mb-2 py-2 text-center';
-    banner.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Partially Processed.</strong> Some items were already issued. Only remaining items can be updated.';
+    banner.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Partially Processed.</strong> Some items were already issued.';
     banner.classList.remove('d-none');
   } else {
     banner.classList.add('d-none');
@@ -1004,7 +1002,7 @@ function onScanSuccess(decodedText) {
   const docPattern = /^(MRIF|MRR|MRS)\d{6,}$/i;
   if (docPattern.test(decodedText)) {
     playSuccessBeep();
-    if (confirm('📄 Document QR detected: ' + decodedText + '\n\nSwitch to this document?')) {
+    if (confirm('Document QR detected: ' + decodedText + '\n\nSwitch to this document?')) {
       const mod = decodedText.substring(0, 4).toUpperCase();
       if (['MRIF','MRR','MRS'].includes(mod)) {
         selectModule(mod);
@@ -1081,7 +1079,7 @@ function onQuickScanSuccess(decodedText) {
     const mod = decodedText.substring(0, 4).toUpperCase();
     if (['MRIF','MRR','MRS'].includes(mod)) {
       playSuccessBeep();
-      showToast('📄 Loading document ' + decodedText + '...', 'success');
+      showToast('Loading document ' + decodedText + '...', 'success');
       selectModule(mod);
       setTimeout(() => onDocSelect(decodedText, 'PENDING'), 500);
       return;
@@ -1098,7 +1096,7 @@ function onQuickScanSuccess(decodedText) {
     }
   }
   playErrorBuzz();
-  showToast('❌ No document loaded. Scan a Document QR first, or select a document from the list.', 'danger');
+  showToast('No document loaded. Scan a Document QR first.', 'danger');
 }
 
 let currentModalItem = null;
@@ -1156,7 +1154,7 @@ function showMismatchAlert(code) {
 }
 function showExceedError(msg) {
   const alert = document.getElementById('exceedErrorAlert');
-  document.getElementById('exceedText').textContent = '❌ Error: ' + msg;
+  document.getElementById('exceedText').textContent = 'Error: ' + msg;
   alert.classList.remove('d-none');
   clearTimeout(state.errorTimer);
   state.errorTimer = setTimeout(() => clearErrorAlert(), 4000);
@@ -1177,8 +1175,7 @@ async function onSubmit() {
     return;
   }
   if (verified < total) {
-    if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?
-Only scanned/entered items will be sent.')) {
+    if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly scanned/entered items will be sent.')) {
       return;
     }
   }
@@ -1203,10 +1200,10 @@ Only scanned/entered items will be sent.')) {
       successModal.show();
       setTimeout(() => location.reload(), 2000);
     } else {
-      showToast('❌ ' + (result.error || 'Submission failed'), 'danger');
+      showToast('Submission failed: ' + (result.error || 'Unknown error'), 'danger');
     }
   } catch(err) {
-    showToast('❌ ' + err.message, 'danger');
+    showToast('Error: ' + err.message, 'danger');
     console.error(err);
   }
 }
@@ -1237,7 +1234,7 @@ async function submitTransaction(payload) {
   } catch (e) {
     console.log('no-cors POST network error:', e);
   }
-  showToast('⏳ Processing transaction...', 'info');
+  showToast('Processing transaction...', 'info');
   await new Promise(r => setTimeout(r, 3000));
   try {
     const verifyUrl = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(payload.docNo) + '&docType=' + payload.docType + '&sheetId=' + payload.sheetId + '&_t=' + Date.now();
@@ -1318,7 +1315,7 @@ function addRequestItemRow() {
   div.innerHTML = '<div class="col-5"><label class="form-label small">Item</label><input type="text" class="form-control req-item-search" placeholder="Type to search..." oninput="filterRequestItems(this,'+idx+')" onfocus="filterRequestItems(this,'+idx+')"><div class="list-group position-absolute z-3 d-none req-dropdown" style="max-height:150px;overflow-y:auto;" id="reqDropdown'+idx+'"></div><input type="hidden" class="req-item-code" id="reqCode'+idx+'"><input type="hidden" class="req-item-desc" id="reqDesc'+idx+'"></div>' +
     '<div class="col-3"><label class="form-label small">Qty</label><input type="number" class="form-control req-qty" min="1" value="1"></div>' +
     '<div class="col-3"><label class="form-label small">Unit</label><input type="text" class="form-control req-unit" value="PCS" readonly></div>' +
-    '<div class="col-1"><button class="btn btn-outline-danger btn-sm" onclick="this.closest('.row').remove()"><i class="bi bi-trash"></i></button></div>';
+    '<div class="col-1"><button class="btn btn-outline-danger btn-sm" onclick="this.closest(\'.row\').remove()"><i class="bi bi-trash"></i></button></div>';
   container.appendChild(div);
 }
 function filterRequestItems(input, idx) {
