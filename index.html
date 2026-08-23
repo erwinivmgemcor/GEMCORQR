@@ -666,10 +666,14 @@ async function loadDocProgress(docNo) {
 }
 
 async function clearDocProgress(docNo) {
-  if (!state.db) return;
-  const tx = state.db.transaction(STORE_PROGRESS, 'readwrite');
-  const store = tx.objectStore(STORE_PROGRESS);
-  store.delete(docNo);
+  if (!state.db || !docNo) return;
+  return new Promise((resolve, reject) => {
+    const tx = state.db.transaction(STORE_PROGRESS, 'readwrite');
+    const store = tx.objectStore(STORE_PROGRESS);
+    const req = store.delete(docNo);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
 }
 
 async function checkResume() {
@@ -775,12 +779,14 @@ setInterval(async () => {
 }, 30000);
 
 // ==================== ROLE / SECURITY ====================
-function initRole() {
+async function initRole() {
   getDeviceId();
-  initDB().then(() => {
+  try {
+    await initDB();
     checkResume();
     updateOfflineBadge();
-  }).catch(() => {});
+  } catch(e) { console.log('DB init error:', e); }
+
   const role = localStorage.getItem('ivm_userRole');
   if (!role) {
     roleModal.show();
@@ -791,7 +797,7 @@ function initRole() {
       if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
         setTimeout(() => settingsModal.show(), 500);
       }
-      selectModule('MRIF');
+      await selectModule('MRIF');
     } else {
       refreshMyRequests();
     }
@@ -1138,6 +1144,7 @@ async function onDocSelect(docNo) {
 }
 
 async function changeDocument() {
+  const docToClear = state.currentDoc;
   if (state.currentDoc && state.docLocked) {
     try {
       const url = API_URL + '?action=unlockDocument&sheetId=' + getCleanSheetId() + '&docNo=' + encodeURIComponent(state.currentDoc) + '&token=' + encodeURIComponent(state.sessionToken || '') + '&_t=' + Date.now();
@@ -1152,7 +1159,7 @@ async function changeDocument() {
   document.getElementById('docPickerSection').classList.remove('d-none');
   document.getElementById('activeTransactionSection').classList.add('d-none');
   document.getElementById('docSelect').value = '';
-  await clearDocProgress(state.currentDoc);
+  if (docToClear) await clearDocProgress(docToClear);
 }
 
 function hideScannerSection() {
