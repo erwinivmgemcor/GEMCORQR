@@ -1151,68 +1151,38 @@ async function onSubmit() {
 }
 
 async function submitTransaction(payload) {
+  // Use GET only - POST always fails with CORS on GAS
   try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      redirect: 'follow'
-    });
-    const text = await res.text();
-    return parseResponse(text);
-  } catch (postErr) {
-    console.warn('Normal POST failed, trying no-cors...');
-  }
-  try {
-    await fetch(API_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      mode: 'no-cors',
-      redirect: 'follow'
-    });
-  } catch (e) {}
-  await new Promise(r => setTimeout(r, 3000));
-  try {
-    const verifyUrl = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(payload.docNo) + '&docType=' + payload.docType + '&sheetId=' + payload.sheetId + '&_t=' + Date.now();
-    const res = await fetch(verifyUrl, { redirect: 'follow' });
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch(e) { data = []; }
-    const items = Array.isArray(data) ? data : (data.items || []);
-    let updatedCount = 0;
-    payload.scannedItems.forEach(sent => {
-      const found = items.find(v => v.rowIndex === sent.rowIndex || v.inventoryId === sent.inventoryId);
-      if (found && Number(found.issuedQty) === Number(sent.issuedQty)) updatedCount++;
-    });
-    if (updatedCount === payload.scannedItems.length && payload.scannedItems.length > 0) {
-      return { success: true, message: 'Transaction completed' };
-    }
-    return await submitViaGet(payload);
-  } catch (verifyErr) {
-    return await submitViaGet(payload);
-  }
-}
-
-async function submitViaGet(payload) {
-  try {
-    const base64Data = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+    console.log('[Submit] Encoding payload...', payload);
+    const jsonStr = JSON.stringify(payload);
+    const base64Data = btoa(unescape(encodeURIComponent(jsonStr)));
     const url = API_URL + '?action=submitTransaction&data=' + encodeURIComponent(base64Data) + '&_t=' + Date.now();
+    console.log('[Submit] Fetching:', url.substring(0, 120) + '...');
+
     const res = await fetch(url, { redirect: 'follow' });
+    console.log('[Submit] Response status:', res.status);
     const text = await res.text();
-    return parseResponse(text);
-  } catch (getErr) {
-    throw new Error('All submission methods failed: ' + getErr.message);
+    console.log('[Submit] Response text:', text.substring(0, 200));
+
+    const result = parseResponse(text);
+    console.log('[Submit] Parsed result:', result);
+    return result;
+  } catch (err) {
+    console.error('[Submit] Error:', err);
+    throw new Error('Submission failed: ' + err.message);
   }
 }
 
 function parseResponse(text) {
   try {
-    return JSON.parse(text);
-  } catch(e) {
+    if (!text || text.trim() === '') throw new Error('Empty response');
+    // Try to find JSON object in the response
     const m = text.match(/\{[\s\S]*\}/);
     if (m) return JSON.parse(m[0]);
-    throw new Error('Non-JSON response');
+    return JSON.parse(text);
+  } catch(e) {
+    console.error('Parse error. Raw text:', text.substring(0, 300));
+    throw new Error('Non-JSON response: ' + text.substring(0, 100));
   }
 }
 
