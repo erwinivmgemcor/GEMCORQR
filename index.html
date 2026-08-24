@@ -1133,7 +1133,7 @@ async function onSubmit() {
       scannedAt: new Date().toISOString()
     }))
   };
-  showLoading('Submitting...');
+  showLoading('Submitting (please wait 10s)...');
   try {
     const result = await submitTransaction(payload);
     if (result && (result.success === true || result.message)) {
@@ -1168,8 +1168,8 @@ async function submitTransaction(payload) {
   }
 
   // STEP 2: Wait for GAS to process (3 seconds)
-  console.log('[Submit] Waiting 3s for GAS to process...');
-  await new Promise(r => setTimeout(r, 3000));
+  console.log('[Submit] Waiting 10s for GAS to process...');
+  await new Promise(r => setTimeout(r, 10000));
 
   // STEP 3: Verify by fetching updated document (short GET, no data param)
   try {
