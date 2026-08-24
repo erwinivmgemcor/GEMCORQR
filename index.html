@@ -51,6 +51,7 @@
     .request-card.completed { border-left-color:var(--success); }
   </style>
 <base target="_blank">
+<base target="_blank">
 </head>
 <body>
 
@@ -442,7 +443,10 @@
 
 <script>
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbxpjBvPTscbiCNACiOX9lEF_sLIsWF4bVksoh3V_Lf39BO274dZr5M-9xRxkGYtIoU/exec'; // TODO: Replace this with your new deployment URL
+// =============================================================================
+// IMPORTANT: Replace this URL with your NEW GAS Web App URL after deployment
+// =============================================================================
+const API_URL = 'https://script.google.com/macros/s/AKfycbxpjBvPTscbiCNACiOX9lEF_sLIsWF4bVksoh3V_Lf39BO274dZr5M-9xRxkGYtIoU/exec';
 const DEFAULT_PIN = '0000';
 
 const state = {
@@ -1110,6 +1114,9 @@ function clearErrorAlert() {
   if (a2) a2.classList.add('d-none');
 }
 
+// =============================================================================
+// FIXED: onSubmit + submitTransaction - GET-based, debuggable, reliable
+// =============================================================================
 async function onSubmit() {
   if (state.isLoading) return;
   const verifiedItems = state.items.filter(i => i.verified);
@@ -1133,10 +1140,12 @@ async function onSubmit() {
       scannedAt: new Date().toISOString()
     }))
   };
-  showLoading('Submitting (please wait 10s)...');
+  showLoading('Submitting...');
   try {
     const result = await submitTransaction(payload);
-    if (result && (result.success === true || result.message)) {
+    console.log('[Submit] Final result:', result);
+
+    if (result && result.success === true) {
       clearDocProgress(state.currentDoc);
       successModal.show();
       setTimeout(() => location.reload(), 2000);
@@ -1144,6 +1153,7 @@ async function onSubmit() {
       showToast('Error: ' + (result.error || 'Submission failed'), 'danger');
     }
   } catch(err) {
+    console.error('[Submit] Catch error:', err);
     showToast('Error: ' + err.message, 'danger');
   } finally {
     hideLoading();
@@ -1151,67 +1161,31 @@ async function onSubmit() {
 }
 
 async function submitTransaction(payload) {
-  // STEP 1: Send via POST no-cors (guaranteed to reach GAS, no CORS issues)
-  try {
-    console.log('[Submit] Sending POST no-cors...', payload);
-    await fetch(API_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      mode: 'no-cors',
-      redirect: 'follow'
-    });
-    console.log('[Submit] POST no-cors sent successfully');
-  } catch (postErr) {
-    console.error('[Submit] POST no-cors failed:', postErr);
-    throw new Error('Network error - cannot reach server');
-  }
+  // Build compact items string: CODE,QTY,ROW;CODE,QTY,ROW
+  const itemsStr = payload.scannedItems.map(i => 
+    encodeURIComponent(i.inventoryId) + ',' + i.issuedQty + ',' + i.rowIndex
+  ).join(';');
 
-  // STEP 2: Wait for GAS to process (3 seconds)
-  console.log('[Submit] Waiting 10s for GAS to process...');
-  await new Promise(r => setTimeout(r, 10000));
+  const url = API_URL + '?action=submitTransaction' +
+    '&docNo=' + encodeURIComponent(payload.docNo) +
+    '&docType=' + encodeURIComponent(payload.docType) +
+    '&sheetId=' + encodeURIComponent(payload.sheetId) +
+    '&items=' + itemsStr +
+    '&_t=' + Date.now();
 
-  // STEP 3: Verify by fetching updated document (short GET, no data param)
-  try {
-    const verifyUrl = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(payload.docNo) + '&docType=' + payload.docType + '&sheetId=' + payload.sheetId + '&_t=' + Date.now();
-    console.log('[Submit] Verifying...');
-    const res = await fetch(verifyUrl, { redirect: 'follow' });
-    const text = await res.text();
-    console.log('[Submit] Verify response:', text.substring(0, 200));
+  console.log('[Submit] URL length:', url.length);
+  console.log('[Submit] URL:', url);
 
-    let data;
-    try { data = JSON.parse(text); } catch(e) { data = []; }
-    const items = Array.isArray(data) ? data : (data.items || []);
+  const res = await fetch(url, { redirect: 'follow' });
+  console.log('[Submit] Status:', res.status);
 
-    let updatedCount = 0;
-    payload.scannedItems.forEach(sent => {
-      const found = items.find(v => v.rowIndex === sent.rowIndex || v.inventoryId === sent.inventoryId);
-      if (found && Number(found.issuedQty) === Number(sent.issuedQty)) updatedCount++;
-    });
+  const text = await res.text();
+  console.log('[Submit] Raw response:', text);
 
-    if (updatedCount === payload.scannedItems.length && payload.scannedItems.length > 0) {
-      console.log('[Submit] Verified! All items updated.');
-      return { success: true, message: 'Transaction completed (' + updatedCount + ' items)' };
-    }
-    console.log('[Submit] Verify inconclusive, assuming success');
-    return { success: true, message: 'Transaction sent (verify inconclusive)' };
-  } catch (verifyErr) {
-    console.log('[Submit] Verify failed, assuming success:', verifyErr.message);
-    return { success: true, message: 'Transaction sent (server processed)' };
-  }
-}
+  const result = JSON.parse(text);
+  console.log('[Submit] Parsed:', result);
 
-function parseResponse(text) {
-  try {
-    if (!text || text.trim() === '') throw new Error('Empty response');
-    // Try to find JSON object in the response
-    const m = text.match(/\{[\s\S]*\}/);
-    if (m) return JSON.parse(m[0]);
-    return JSON.parse(text);
-  } catch(e) {
-    console.error('Parse error. Raw text:', text.substring(0, 300));
-    throw new Error('Non-JSON response: ' + text.substring(0, 100));
-  }
+  return result;
 }
 
 function openNewRequest() {
