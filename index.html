@@ -46,11 +46,19 @@
     .pin-dot { width:16px; height:16px; border-radius:50%; border:2px solid #dee2e6; display:inline-block; margin:0 4px; }
     .pin-dot.filled { background:var(--primary); border-color:var(--primary); }
     .production-banner { background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:#fff; border-radius:12px; padding:1rem; margin-bottom:1rem; text-align:center; }
+    #loadingOverlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:9999; display:flex; align-items:center; justify-content:center; flex-direction:column; }
+    .request-card { border-left:4px solid var(--primary); }
+    .request-card.completed { border-left-color:var(--success); }
   </style>
+<base target="_blank">
 </head>
 <body>
 
-<!-- Navbar -->
+<div id="loadingOverlay" class="d-none">
+  <div class="spinner-border text-light" style="width:3rem;height:3rem;"></div>
+  <div class="text-light mt-3 fw-bold" id="loadingText">Loading...</div>
+</div>
+
 <nav class="navbar navbar-dark bg-primary sticky-top">
   <div class="container-fluid">
     <span class="navbar-brand mb-0 h5"><i class="bi bi-box-seam me-2"></i>IVM WAREHOUSE QR</span>
@@ -64,14 +72,12 @@
 
 <div class="container-fluid mt-3">
 
-  <!-- Production Banner (shown only for Production role) -->
   <div id="productionBanner" class="production-banner d-none">
     <i class="bi bi-person-badge" style="font-size:2rem;"></i>
     <h5 class="mt-2 mb-1">Production Mode</h5>
-    <small>You can only create new requests.</small>
+    <small>Create requests and track status</small>
   </div>
 
-  <!-- Module Buttons -->
   <div class="row g-2 mb-3" id="moduleButtonsRow">
     <div class="col-3" id="btnMRR"><button class="btn btn-outline-primary w-100 module-btn" data-module="MRR" onclick="selectModule('MRR')"><i class="bi bi-box-arrow-in-down"></i><br>Receiving</button></div>
     <div class="col-3" id="btnMRIF"><button class="btn btn-outline-primary w-100 module-btn active" data-module="MRIF" onclick="selectModule('MRIF')"><i class="bi bi-box-arrow-up"></i><br>Releasing</button></div>
@@ -79,9 +85,19 @@
     <div class="col-3" id="btnNewRequest"><button class="btn btn-outline-success w-100 module-btn" data-module="REQUEST" onclick="openNewRequest()"><i class="bi bi-plus-lg"></i><br>New Request</button></div>
   </div>
 
-  <!-- Document Picker -->
+  <div id="myRequestsSection" class="d-none">
+    <div class="card mb-3">
+      <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-clock-history me-2"></i>My Requests</strong>
+        <button class="btn btn-sm btn-outline-primary" onclick="loadMyRequests()"><i class="bi bi-arrow-clockwise"></i></button>
+      </div>
+      <div class="card-body p-0">
+        <div id="myRequestsList" class="list-group list-group-flush"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="docPickerSection">
-    <!-- QUICK SCAN BUTTON -->
     <div id="quickScanCard" class="card mb-3 border-primary shadow-sm">
       <div class="card-body text-center py-4">
         <button class="btn btn-primary quick-scan-btn w-100" onclick="openQuickScan()">
@@ -90,7 +106,7 @@
         </button>
         <div class="text-muted small mt-2">
           <i class="bi bi-info-circle me-1"></i>
-          Scan Document QR to auto-load • Scan Item QR to verify
+          Scan Document QR to auto-load &bull; Scan Item QR to verify
         </div>
       </div>
     </div>
@@ -98,7 +114,7 @@
     <div class="card">
       <div class="card-header bg-light"><strong><i class="bi bi-file-earmark-text me-2"></i>Select Document</strong></div>
       <div class="card-body">
-        <input type="text" id="docSearch" class="form-control doc-search" placeholder="🔍 Search document..." oninput="filterDocs()">
+        <input type="text" id="docSearch" class="form-control doc-search" placeholder="Search document..." oninput="filterDocs()">
         <select id="docSelect" class="form-select" onchange="onDocSelect(this.value)">
           <option value="">-- Select Document --</option>
         </select>
@@ -106,14 +122,19 @@
     </div>
   </div>
 
-  <!-- Active Transaction -->
   <div id="activeTransactionSection" class="d-none">
     <div class="d-flex justify-content-between align-items-center mb-2">
       <button class="btn btn-sm btn-outline-secondary" onclick="changeDocument()"><i class="bi bi-arrow-left"></i> Change Document</button>
       <span id="docTitle" class="badge bg-primary"></span>
     </div>
 
-    <!-- Scanner -->
+    <div id="resumeBanner" class="alert alert-info d-none py-2 mb-2">
+      <div class="d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-arrow-counterclockwise me-2"></i>Previous progress found for this document.</span>
+        <button class="btn btn-sm btn-primary" onclick="resumeProgress()">Resume</button>
+      </div>
+    </div>
+
     <div class="scanner-container mb-3">
       <div id="reader"></div>
       <div class="scanner-overlay"><div class="scanner-frame"><div class="scan-line"></div></div></div>
@@ -123,18 +144,15 @@
       </div>
     </div>
 
-    <!-- Manual Input -->
     <div class="input-group mb-3">
       <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
       <input type="text" id="manualInput" class="form-control" placeholder="Or type Inventory ID manually..." onkeypress="if(event.key==='Enter')manualVerify()">
       <button class="btn btn-primary" onclick="manualVerify()">Verify</button>
     </div>
 
-    <!-- Alerts -->
     <div id="mismatchAlert" class="alert alert-danger d-none py-2"><i class="bi bi-exclamation-triangle-fill me-2"></i><span id="mismatchText"></span></div>
     <div id="exceedErrorAlert" class="alert alert-danger d-none py-2"><i class="bi bi-exclamation-triangle-fill me-2"></i><span id="exceedText"></span></div>
 
-    <!-- Item Checklist -->
     <div class="card">
       <div class="card-header bg-light d-flex justify-content-between align-items-center">
         <strong><i class="bi bi-list-check me-2"></i>Item Checklist</strong>
@@ -162,14 +180,12 @@
       </div>
     </div>
 
-    <!-- Submit Button -->
     <button id="submitBtn" class="btn btn-success w-100 mt-3 py-3" onclick="onSubmit()">
       <i class="bi bi-check-circle me-2"></i><span id="submitBtnText">Confirm & Submit</span>
     </button>
   </div>
 </div>
 
-<!-- Qty Modal -->
 <div class="modal fade" id="qtyModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -197,7 +213,6 @@
   </div>
 </div>
 
-<!-- Quick Scan Modal -->
 <div class="modal fade" id="quickScanModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -212,7 +227,7 @@
         </div>
         <div class="p-3">
           <p class="text-muted mb-1"><i class="bi bi-info-circle me-1"></i>Point camera at any QR code</p>
-          <small class="text-muted">Document QR auto-loads • Item QR verifies</small>
+          <small class="text-muted">Document QR auto-loads &bull; Item QR verifies</small>
         </div>
       </div>
       <div class="modal-footer justify-content-center">
@@ -222,7 +237,6 @@
   </div>
 </div>
 
-<!-- ROLE SELECTION MODAL -->
 <div class="modal fade" id="roleModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -235,7 +249,7 @@
             <div class="card role-card p-3 text-center" onclick="selectRole('production')">
               <i class="bi bi-person-badge text-primary" style="font-size:2.5rem;"></i>
               <h5 class="mt-2 mb-1">Production Staff</h5>
-              <small class="text-muted">Create material requests only</small>
+              <small class="text-muted">Create material requests and track status</small>
             </div>
           </div>
           <div class="col-12">
@@ -246,8 +260,6 @@
             </div>
           </div>
         </div>
-
-        <!-- PIN Entry (hidden by default) -->
         <div id="pinEntrySection" class="d-none mt-3 text-center">
           <hr>
           <label class="form-label fw-bold">Enter Warehouse PIN</label>
@@ -279,13 +291,28 @@
   </div>
 </div>
 
-<!-- Settings Modal -->
+<div class="modal fade" id="productionNameModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="bi bi-person me-2"></i>Enter Your Name</h5>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">Enter your full name to track your requests.</p>
+        <input type="text" id="productionNameInput" class="form-control" placeholder="Full Name" onkeypress="if(event.key==='Enter')saveProductionName()">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary w-100" onclick="saveProductionName()">Continue</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="settingsModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header"><h5 class="modal-title"><i class="bi bi-gear me-2"></i>Settings</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
-        <!-- Role Switcher -->
         <div class="card mb-3">
           <div class="card-header bg-light"><strong><i class="bi bi-person-badge me-2"></i>Current Role</strong></div>
           <div class="card-body">
@@ -295,8 +322,6 @@
             </div>
           </div>
         </div>
-
-        <!-- PIN Management (Warehouse only) -->
         <div id="pinManagementSection">
           <div class="card mb-3">
             <div class="card-header bg-light"><strong><i class="bi bi-key me-2"></i>Warehouse PIN</strong></div>
@@ -314,13 +339,11 @@
             </div>
           </div>
         </div>
-
         <div id="syncSection">
           <button class="btn btn-outline-primary w-100 mb-3" onclick="syncModuleLinks()">
-            <span id="syncBtnText">🔄 Sync IDs from Master Sheet</span>
+            <span id="syncBtnText">Sync IDs from Master Sheet</span>
           </button>
         </div>
-
         <div id="sheetIdsSection">
           <div class="mb-3">
             <label class="form-label">MRR Sheet URL / ID</label>
@@ -344,7 +367,6 @@
   </div>
 </div>
 
-<!-- Success Modal -->
 <div class="modal fade" id="successModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content text-center">
@@ -357,7 +379,6 @@
   </div>
 </div>
 
-<!-- New Request Modal -->
 <div class="modal fade" id="newRequestModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -389,7 +410,6 @@
   </div>
 </div>
 
-<!-- Request Success Modal -->
 <div class="modal fade" id="requestSuccessModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content text-center">
@@ -413,7 +433,6 @@
   </div>
 </div>
 
-<!-- Toast -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3">
   <div id="liveToast" class="toast" role="alert">
     <div class="toast-header"><strong class="me-auto" id="toastTitle">Notification</strong><button type="button" class="btn-close" data-bs-dismiss="toast"></button></div>
@@ -422,11 +441,10 @@
 </div>
 
 <script>
-// ==================== CONFIG ====================
+
 const API_URL = 'https://script.google.com/macros/s/AKfycbw7tjSHpF8vkIrER7M8ZzIrzQAVsRH43BLlvuWQWMz-bq8f_-GPv4dtBFAYZdnASpo7/exec';
 const DEFAULT_PIN = '0000';
 
-// ==================== STATE ====================
 const state = {
   currentModule: 'MRIF',
   currentDoc: null,
@@ -440,7 +458,8 @@ const state = {
   errorTimer: null,
   docList: [],
   pinBuffer: '',
-  pinAttempts: 0
+  pinAttempts: 0,
+  isLoading: false
 };
 
 const qtyModal = new bootstrap.Modal(document.getElementById('qtyModal'));
@@ -450,8 +469,18 @@ const newRequestModal = new bootstrap.Modal(document.getElementById('newRequestM
 const requestSuccessModal = new bootstrap.Modal(document.getElementById('requestSuccessModal'));
 const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
 const roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
+const productionNameModal = new bootstrap.Modal(document.getElementById('productionNameModal'));
 
-// ==================== AUDIO ====================
+function showLoading(text) {
+  state.isLoading = true;
+  document.getElementById('loadingText').textContent = text || 'Loading...';
+  document.getElementById('loadingOverlay').classList.remove('d-none');
+}
+function hideLoading() {
+  state.isLoading = false;
+  document.getElementById('loadingOverlay').classList.add('d-none');
+}
+
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 function playSuccessBeep() {
   try {
@@ -480,7 +509,6 @@ function playErrorBuzz() {
   } catch(e) {}
 }
 
-// ==================== ROLE / SECURITY ====================
 function initRole() {
   const role = localStorage.getItem('ivm_userRole');
   if (!role) {
@@ -492,6 +520,8 @@ function initRole() {
         setTimeout(() => settingsModal.show(), 500);
       }
       selectModule('MRIF');
+    } else {
+      checkProductionName();
     }
   }
 }
@@ -501,7 +531,23 @@ function selectRole(role) {
     roleModal.hide();
     applyRoleUI();
     showToast('Production mode activated', 'success');
+    checkProductionName();
   }
+}
+function checkProductionName() {
+  var name = localStorage.getItem('ivm_requestorName');
+  if (!name) {
+    productionNameModal.show();
+  } else {
+    loadMyRequests();
+  }
+}
+function saveProductionName() {
+  var name = document.getElementById('productionNameInput').value.trim();
+  if (!name) { alert('Please enter your name'); return; }
+  localStorage.setItem('ivm_requestorName', name);
+  productionNameModal.hide();
+  loadMyRequests();
 }
 function showPinEntry() {
   document.getElementById('pinEntrySection').classList.remove('d-none');
@@ -555,16 +601,13 @@ function verifyPin() {
 function applyRoleUI() {
   const role = localStorage.getItem('ivm_userRole');
   const isProduction = (role === 'production');
-  
   document.getElementById('btnMRR').style.display = isProduction ? 'none' : '';
   document.getElementById('btnMRIF').style.display = isProduction ? 'none' : '';
   document.getElementById('btnMRS').style.display = isProduction ? 'none' : '';
-  
   document.getElementById('productionBanner').classList.toggle('d-none', !isProduction);
-  
+  document.getElementById('myRequestsSection').classList.toggle('d-none', !isProduction);
   document.getElementById('docPickerSection').style.display = isProduction ? 'none' : '';
   document.getElementById('quickScanCard').style.display = isProduction ? 'none' : '';
-  
   if (isProduction) {
     document.getElementById('activeTransactionSection').classList.add('d-none');
   }
@@ -580,46 +623,38 @@ function changePin() {
   const newPin = document.getElementById('newPinInput').value;
   const storedPin = localStorage.getItem('ivm_warehousePin') || DEFAULT_PIN;
   const msg = document.getElementById('pinChangeMsg');
-  
   if (current !== storedPin) {
-    msg.textContent = '❌ Current PIN is incorrect';
+    msg.textContent = 'Current PIN is incorrect';
     msg.className = 'small mt-2 text-danger';
     return;
   }
   if (!/^\d{4}$/.test(newPin)) {
-    msg.textContent = '❌ New PIN must be exactly 4 digits';
+    msg.textContent = 'New PIN must be exactly 4 digits';
     msg.className = 'small mt-2 text-danger';
     return;
   }
   localStorage.setItem('ivm_warehousePin', newPin);
-  msg.textContent = '✅ PIN changed successfully';
+  msg.textContent = 'PIN changed successfully';
   msg.className = 'small mt-2 text-success';
   document.getElementById('currentPinInput').value = '';
   document.getElementById('newPinInput').value = '';
 }
 
-// ==================== SETTINGS ====================
 function openSettings() {
   loadSettingsToUI();
   const role = localStorage.getItem('ivm_userRole');
   const isProduction = (role === 'production');
-  
   document.getElementById('pinManagementSection').style.display = isProduction ? 'none' : '';
   document.getElementById('syncSection').style.display = isProduction ? 'none' : '';
   document.getElementById('sheetIdsSection').style.display = isProduction ? 'none' : '';
-  
   document.getElementById('currentRoleDisplay').textContent = role === 'warehouse' ? 'Warehouse Staff' : 'Production Staff';
   document.getElementById('currentRoleDisplay').className = role === 'warehouse' ? 'badge bg-success' : 'badge bg-primary';
-  
   settingsModal.show();
 }
 function loadSettingsToUI() {
-  const mrr = document.getElementById('sheetId_MRR');
-  const mrif = document.getElementById('sheetId_MRIF');
-  const mrs = document.getElementById('sheetId_MRS');
-  if (mrr) mrr.value = localStorage.getItem('sheetId_MRR') || '';
-  if (mrif) mrif.value = localStorage.getItem('sheetId_MRIF') || '';
-  if (mrs) mrs.value = localStorage.getItem('sheetId_MRS') || '';
+  document.getElementById('sheetId_MRR').value = localStorage.getItem('sheetId_MRR') || '';
+  document.getElementById('sheetId_MRIF').value = localStorage.getItem('sheetId_MRIF') || '';
+  document.getElementById('sheetId_MRS').value = localStorage.getItem('sheetId_MRS') || '';
 }
 function saveSettings() {
   const mrr = document.getElementById('sheetId_MRR').value.trim();
@@ -644,11 +679,9 @@ function getCleanSheetId() {
   return val ? extractSheetId(val) : '';
 }
 
-// ==================== SYNC ====================
 async function syncModuleLinks() {
-  const btn = document.getElementById('syncBtnText');
-  const original = btn.innerHTML;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing...';
+  if (state.isLoading) return;
+  showLoading('Syncing...');
   try {
     const url = API_URL + '?action=getModuleLinks&_t=' + Date.now();
     const res = await fetch(url, { redirect: 'follow' });
@@ -668,20 +701,25 @@ async function syncModuleLinks() {
   } catch(err) {
     alert('Sync error: ' + err.message);
   } finally {
-    btn.innerHTML = original;
+    hideLoading();
   }
 }
 
-// ==================== MODULE SELECT ====================
-function selectModule(mod) {
-  state.currentModule = mod;
-  document.querySelectorAll('.module-btn').forEach(b => b.classList.remove('active'));
-  const btn = document.querySelector('.module-btn[data-module="' + mod + '"]');
-  if (btn) btn.classList.add('active');
-  document.getElementById('moduleLabel').textContent = mod;
-  updateLabels();
-  changeDocument();
-  fetchPendingDocs();
+async function selectModule(mod) {
+  if (state.isLoading) return;
+  showLoading('Loading ' + mod + '...');
+  try {
+    state.currentModule = mod;
+    document.querySelectorAll('.module-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.querySelector('.module-btn[data-module="' + mod + '"]');
+    if (btn) btn.classList.add('active');
+    document.getElementById('moduleLabel').textContent = mod;
+    updateLabels();
+    changeDocument();
+    await fetchPendingDocs();
+  } finally {
+    hideLoading();
+  }
 }
 function updateLabels() {
   const isMRR = state.currentModule === 'MRR';
@@ -690,16 +728,19 @@ function updateLabels() {
   document.getElementById('headerInput').textContent = isMRR ? 'ATL QTY' : (isMRS ? 'ATL QTY (Actual)' : 'Issued Qty');
 }
 
-// ==================== DOCUMENTS ====================
 async function fetchPendingDocs() {
   const sheetId = getCleanSheetId();
-  if (!sheetId) { showToast('No Sheet ID configured for ' + state.currentModule, 'warning'); return; }
+  if (!sheetId) { showToast('No Sheet ID for ' + state.currentModule, 'warning'); return; }
   try {
     const url = API_URL + '?action=getPendingDocs&docType=' + state.currentModule + '&sheetId=' + sheetId + '&_t=' + Date.now();
     const res = await fetch(url, { redirect: 'follow' });
     const text = await res.text();
     let data;
     try { data = JSON.parse(text); } catch(e) { data = []; }
+    if (data.error) {
+      showToast('Error: ' + data.error, 'danger');
+      return;
+    }
     const docs = Array.isArray(data) ? data : (data.docs || data.documents || []);
     populateDocSelect(docs);
   } catch(err) {
@@ -731,23 +772,35 @@ function filterDocs() {
     }
   });
 }
-function onDocSelect(docNo) {
+async function onDocSelect(docNo) {
+  if (state.isLoading) return;
   if (!docNo) { hideScannerSection(); return; }
-  clearErrorAlert();
-  resetDocumentState();
-  state.currentDoc = docNo;
-  document.getElementById('docPickerSection').classList.add('d-none');
-  document.getElementById('activeTransactionSection').classList.remove('d-none');
-  document.getElementById('docTitle').textContent = docNo;
-  fetchDocItems(docNo, state.currentModule);
+  showLoading('Loading document...');
+  try {
+    clearErrorAlert();
+    resetDocumentState();
+    state.currentDoc = docNo;
+    document.getElementById('docPickerSection').classList.add('d-none');
+    document.getElementById('activeTransactionSection').classList.remove('d-none');
+    document.getElementById('docTitle').textContent = docNo;
+    await fetchDocItems(docNo, state.currentModule);
+    checkForProgress();
+  } finally {
+    hideLoading();
+  }
 }
 function changeDocument() {
+  if (state.currentDoc) {
+    saveDocProgress();
+    clearDocProgress(state.currentDoc);
+  }
   state.currentDoc = null;
   resetDocumentState();
   stopScanner();
   document.getElementById('docPickerSection').classList.remove('d-none');
   document.getElementById('activeTransactionSection').classList.add('d-none');
   document.getElementById('docSelect').value = '';
+  document.getElementById('resumeBanner').classList.add('d-none');
 }
 function hideScannerSection() {
   document.getElementById('activeTransactionSection').classList.add('d-none');
@@ -758,7 +811,44 @@ function resetDocumentState() {
   clearErrorAlert();
 }
 
-// ==================== ITEMS ====================
+function saveDocProgress() {
+  if (state.currentDoc && state.items.length > 0) {
+    var verified = state.items.filter(i => i.verified).length;
+    if (verified > 0) {
+      localStorage.setItem('ivm_progress_' + state.currentDoc, JSON.stringify({
+        module: state.currentModule,
+        items: state.items,
+        savedAt: new Date().toISOString()
+      }));
+    }
+  }
+}
+function clearDocProgress(docNo) {
+  if (docNo) localStorage.removeItem('ivm_progress_' + docNo);
+}
+function checkForProgress() {
+  if (!state.currentDoc) return;
+  var saved = localStorage.getItem('ivm_progress_' + state.currentDoc);
+  if (saved) {
+    document.getElementById('resumeBanner').classList.remove('d-none');
+  }
+}
+function resumeProgress() {
+  if (!state.currentDoc) return;
+  var saved = localStorage.getItem('ivm_progress_' + state.currentDoc);
+  if (saved) {
+    try {
+      var data = JSON.parse(saved);
+      if (data.module === state.currentModule && data.items) {
+        state.items = data.items;
+        renderItems();
+        showToast('Progress restored', 'success');
+      }
+    } catch(e) {}
+  }
+  document.getElementById('resumeBanner').classList.add('d-none');
+}
+
 async function fetchDocItems(docNo, docType) {
   const sheetId = getCleanSheetId();
   if (!sheetId) return;
@@ -768,13 +858,17 @@ async function fetchDocItems(docNo, docType) {
     const text = await res.text();
     let data;
     try { data = JSON.parse(text); } catch(e) { data = []; }
+    if (data.error) {
+      showToast('Error: ' + data.error, 'danger');
+      return;
+    }
     const items = Array.isArray(data) ? data : (data.items || []);
     state.items = items.map((it, idx) => ({
       inventoryId: it.inventoryId || it.code || it.itemCode || '',
       description: it.description || it.desc || '',
       qty: Number(it.qty || it.requestedQty || it.expectedQty || 0),
       issuedQty: Number(it.issuedQty || it.actualQty || 0),
-      rowIndex: it.rowIndex || (idx + 12),
+      rowIndex: it.rowIndex || (idx + 13),
       verified: false
     }));
     renderItems();
@@ -828,7 +922,6 @@ function updateSubmitButton(verified, total) {
   }
 }
 
-// ==================== SCANNER (Active Doc) ====================
 function startScanner() {
   if (state.html5QrCode) { state.html5QrCode.stop().catch(()=>{}); }
   state.html5QrCode = new Html5Qrcode('reader');
@@ -849,7 +942,7 @@ function onScanSuccess(decodedText) {
   const docPattern = /^(MRIF|MRR|MRS)\d{6,}$/i;
   if (docPattern.test(decodedText)) {
     playSuccessBeep();
-    if (confirm('📄 Document QR detected: ' + decodedText + '\n\nSwitch to this document?')) {
+    if (confirm('Document QR detected: ' + decodedText + '\n\nSwitch to this document?')) {
       const mod = decodedText.substring(0, 4).toUpperCase();
       if (['MRIF','MRR','MRS'].includes(mod)) {
         selectModule(mod);
@@ -868,6 +961,7 @@ function onScanSuccess(decodedText) {
   openQtyModal(item);
 }
 function manualVerify() {
+  if (state.isLoading) return;
   const val = document.getElementById('manualInput').value.trim();
   if (!val) return;
   document.getElementById('manualInput').value = '';
@@ -891,8 +985,8 @@ function switchCamera() {
   startScanner();
 }
 
-// ==================== QUICK SCAN (Standalone) ====================
 function openQuickScan() {
+  if (state.isLoading) return;
   quickScanModal.show();
   setTimeout(startQuickScanner, 300);
 }
@@ -927,7 +1021,7 @@ function onQuickScanSuccess(decodedText) {
     const mod = decodedText.substring(0, 4).toUpperCase();
     if (['MRIF','MRR','MRS'].includes(mod)) {
       playSuccessBeep();
-      showToast('📄 Loading document ' + decodedText + '...', 'success');
+      showToast('Loading document ' + decodedText + '...', 'success');
       selectModule(mod);
       setTimeout(() => onDocSelect(decodedText), 500);
       return;
@@ -944,10 +1038,9 @@ function onQuickScanSuccess(decodedText) {
     }
   }
   playErrorBuzz();
-  showToast('❌ No document loaded. Scan a Document QR first, or select a document from the dropdown.', 'danger');
+  showToast('No document loaded. Scan a Document QR first.', 'danger');
 }
 
-// ==================== QTY MODAL ====================
 let currentModalItem = null;
 function openQtyModal(item) {
   currentModalItem = item;
@@ -968,6 +1061,7 @@ function onQtyInput() {
   document.getElementById('modalInputQty').classList.remove('is-invalid');
 }
 function confirmQty() {
+  if (state.isLoading) return;
   if (!currentModalItem) return;
   const input = document.getElementById('modalInputQty');
   const qtyVal = parseInt(input.value, 10);
@@ -990,6 +1084,7 @@ function confirmQty() {
   }
   currentModalItem.issuedQty = qtyVal;
   currentModalItem.verified = true;
+  saveDocProgress();
   renderItems();
   qtyModal.hide();
   playSuccessBeep();
@@ -1003,7 +1098,7 @@ function showMismatchAlert(code) {
 }
 function showExceedError(msg) {
   const alert = document.getElementById('exceedErrorAlert');
-  document.getElementById('exceedText').textContent = '❌ Error: ' + msg;
+  document.getElementById('exceedText').textContent = 'Error: ' + msg;
   alert.classList.remove('d-none');
   clearTimeout(state.errorTimer);
   state.errorTimer = setTimeout(() => clearErrorAlert(), 4000);
@@ -1015,18 +1110,16 @@ function clearErrorAlert() {
   if (a2) a2.classList.add('d-none');
 }
 
-// ==================== SUBMIT ====================
 async function onSubmit() {
+  if (state.isLoading) return;
   const verifiedItems = state.items.filter(i => i.verified);
   const total = state.items.length;
   const verified = verifiedItems.length;
-  
   if (verified < total) {
     if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly scanned/entered items will be sent.')) {
       return;
     }
   }
-  
   const payload = {
     docNo: state.currentDoc,
     docType: state.currentModule,
@@ -1040,26 +1133,24 @@ async function onSubmit() {
       scannedAt: new Date().toISOString()
     }))
   };
-  
-  console.log('Submitting:', payload);
-  
+  showLoading('Submitting...');
   try {
     const result = await submitTransaction(payload);
-    console.log('Result:', result);
     if (result && (result.success === true || result.message)) {
+      clearDocProgress(state.currentDoc);
       successModal.show();
       setTimeout(() => location.reload(), 2000);
     } else {
-      showToast('❌ ' + (result.error || 'Submission failed'), 'danger');
+      showToast('Error: ' + (result.error || 'Submission failed'), 'danger');
     }
   } catch(err) {
-    showToast('❌ ' + err.message, 'danger');
-    console.error(err);
+    showToast('Error: ' + err.message, 'danger');
+  } finally {
+    hideLoading();
   }
 }
 
 async function submitTransaction(payload) {
-  // STEP 1: Try normal POST first
   try {
     const res = await fetch(API_URL, {
       method: 'POST',
@@ -1068,13 +1159,10 @@ async function submitTransaction(payload) {
       redirect: 'follow'
     });
     const text = await res.text();
-    console.log('POST response:', text.substring(0, 200));
     return parseResponse(text);
   } catch (postErr) {
-    console.warn('Normal POST failed (CORS), trying no-cors...');
+    console.warn('Normal POST failed, trying no-cors...');
   }
-
-  // STEP 2: POST with no-cors (guaranteed to reach GAS, no CORS check)
   try {
     await fetch(API_URL, {
       method: 'POST',
@@ -1083,16 +1171,8 @@ async function submitTransaction(payload) {
       mode: 'no-cors',
       redirect: 'follow'
     });
-    console.log('no-cors POST sent');
-  } catch (e) {
-    console.log('no-cors POST network error:', e);
-  }
-
-  // STEP 3: Wait for GAS to process (3 seconds)
-  showToast('⏳ Processing transaction...', 'info');
+  } catch (e) {}
   await new Promise(r => setTimeout(r, 3000));
-
-  // STEP 4: Verify by fetching updated document items via GET
   try {
     const verifyUrl = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(payload.docNo) + '&docType=' + payload.docType + '&sheetId=' + payload.sheetId + '&_t=' + Date.now();
     const res = await fetch(verifyUrl, { redirect: 'follow' });
@@ -1100,24 +1180,16 @@ async function submitTransaction(payload) {
     let data;
     try { data = JSON.parse(text); } catch(e) { data = []; }
     const items = Array.isArray(data) ? data : (data.items || []);
-
     let updatedCount = 0;
     payload.scannedItems.forEach(sent => {
       const found = items.find(v => v.rowIndex === sent.rowIndex || v.inventoryId === sent.inventoryId);
-      if (found && Number(found.issuedQty) === Number(sent.issuedQty)) {
-        updatedCount++;
-      }
+      if (found && Number(found.issuedQty) === Number(sent.issuedQty)) updatedCount++;
     });
-
     if (updatedCount === payload.scannedItems.length && payload.scannedItems.length > 0) {
-      return { success: true, message: 'Transaction completed (' + updatedCount + ' items updated)' };
-    } else if (payload.scannedItems.length === 0) {
-      return { success: true, message: 'No items to update' };
-    } else {
-      return await submitViaGet(payload);
+      return { success: true, message: 'Transaction completed' };
     }
+    return await submitViaGet(payload);
   } catch (verifyErr) {
-    console.warn('Verify failed, trying GET fallback:', verifyErr);
     return await submitViaGet(payload);
   }
 }
@@ -1128,7 +1200,6 @@ async function submitViaGet(payload) {
     const url = API_URL + '?action=submitTransaction&data=' + encodeURIComponent(base64Data) + '&_t=' + Date.now();
     const res = await fetch(url, { redirect: 'follow' });
     const text = await res.text();
-    console.log('GET fallback response:', text.substring(0, 200));
     return parseResponse(text);
   } catch (getErr) {
     throw new Error('All submission methods failed: ' + getErr.message);
@@ -1141,12 +1212,12 @@ function parseResponse(text) {
   } catch(e) {
     const m = text.match(/\{[\s\S]*\}/);
     if (m) return JSON.parse(m[0]);
-    throw new Error('Non-JSON response: ' + text.substring(0,200));
+    throw new Error('Non-JSON response');
   }
 }
 
-// ==================== NEW REQUEST ====================
 function openNewRequest() {
+  if (state.isLoading) return;
   document.getElementById('requestItemsContainer').innerHTML = '';
   addRequestItemRow();
   loadRequestInventory();
@@ -1161,9 +1232,7 @@ async function loadRequestInventory() {
     try { data = JSON.parse(text); } catch(e) { data = {}; }
     const inv = data.inventory || data.items || [];
     state.requestInventoryList = inv;
-    console.log('Inventory loaded:', inv.length);
   } catch(err) {
-    console.error('Inventory load error:', err);
     state.requestInventoryList = [];
   }
 }
@@ -1209,11 +1278,11 @@ function filterRequestItems(input, idx) {
   dropdown.classList.remove('d-none');
 }
 async function submitNewRequest() {
+  if (state.isLoading) return;
   const docType = document.getElementById('reqDocType').value;
   const requestor = document.getElementById('reqRequestor').value.trim();
   const department = document.getElementById('reqDepartment').value.trim();
   if (!requestor) { alert('Enter requestor name'); return; }
-  
   const items = [];
   document.querySelectorAll('#requestItemsContainer .row').forEach(row => {
     const code = row.querySelector('.req-item-code').value;
@@ -1222,17 +1291,16 @@ async function submitNewRequest() {
     if (code && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty });
   });
   if (items.length === 0) { alert('Add at least one item'); return; }
-  
-  const payload = {
-    action: 'createRequest',
-    docType: docType,
-    requestor: requestor,
-    department: department,
-    items: items,
-    timestamp: new Date().toISOString()
-  };
-  
+  showLoading('Creating request...');
   try {
+    const payload = {
+      action: 'createRequest',
+      docType: docType,
+      requestor: requestor,
+      department: department,
+      items: items,
+      timestamp: new Date().toISOString()
+    };
     const res = await fetch(API_URL, {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -1243,13 +1311,17 @@ async function submitNewRequest() {
     let data;
     try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
     if (data && data.success) {
+      localStorage.setItem('ivm_requestorName', requestor);
       newRequestModal.hide();
       showRequestQr(data.ticketNo || 'N/A', data.docNo || 'N/A');
+      loadMyRequests();
     } else {
       alert('Failed: ' + (data.error || 'Unknown error'));
     }
   } catch(err) {
     alert('Error: ' + err.message);
+  } finally {
+    hideLoading();
   }
 }
 function showRequestQr(ticketNo, docNo) {
@@ -1267,7 +1339,47 @@ function showRequestQr(ticketNo, docNo) {
   requestSuccessModal.show();
 }
 
-// ==================== TOAST ====================
+async function loadMyRequests() {
+  var requestor = localStorage.getItem('ivm_requestorName');
+  if (!requestor) return;
+  showLoading('Loading requests...');
+  try {
+    var url = API_URL + '?action=getMyRequests&requestor=' + encodeURIComponent(requestor) + '&_t=' + Date.now();
+    var res = await fetch(url);
+    var data = await res.json();
+    if (data.success && data.requests) {
+      renderMyRequests(data.requests);
+    }
+  } catch(e) { console.error(e); }
+  finally { hideLoading(); }
+}
+
+function renderMyRequests(requests) {
+  var container = document.getElementById('myRequestsList');
+  container.innerHTML = '';
+  if (requests.length === 0) {
+    container.innerHTML = '<div class="list-group-item text-muted text-center">No requests found</div>';
+    return;
+  }
+  requests.forEach(function(req) {
+    var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
+    var isCompleted = (req.status === 'COMPLETED');
+    var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + '">' +
+      '<div class="d-flex justify-content-between align-items-start">' +
+        '<div>' +
+          '<div class="fw-bold">' + (req.docNo || '') + '</div>' +
+          '<div class="small text-muted">' + (req.ticketNo || '') + '</div>' +
+          '<div class="small"><i class="bi bi-person me-1"></i>' + (req.requestor || '') + '</div>' +
+          '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
+        '</div>' +
+        '<span class="badge bg-' + (isCompleted ? 'success' : 'warning') + '">' + (req.status || 'PENDING') + '</span>' +
+      '</div>' +
+      '<div class="small mt-1">' + (req.itemCode || '') + ' x' + (req.qty || 0) + ' &bull; ' + (req.department || '') + '</div>' +
+    '</div>';
+    container.innerHTML += html;
+  });
+}
+
 function showToast(msg, type) {
   const toast = document.getElementById('liveToast');
   document.getElementById('toastTitle').textContent = type === 'danger' ? 'Error' : (type === 'success' ? 'Success' : 'Info');
@@ -1276,7 +1388,6 @@ function showToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toast).show();
 }
 
-// ==================== INIT ====================
 document.addEventListener('DOMContentLoaded', () => {
   initRole();
 });
