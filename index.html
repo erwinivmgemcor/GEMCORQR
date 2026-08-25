@@ -1291,7 +1291,74 @@ dropdown.appendChild(el);
 }
 dropdown.classList.remove('d-none');
 }
+// =============================================================================
+// SOF Data & Requestor List
+// =============================================================================
+async function loadRequestorList() {
+  try {
+    const url = API_URL + '?action=getRequestorList&_t=' + Date.now();
+    const res = await fetch(url, { redirect: 'follow' });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch(e) { data = {}; }
+
+    const sel = document.getElementById('reqRequestor');
+    sel.innerHTML = '<option value="">-- Select Requestor --</option>';
+
+    if (data.success && data.requestors) {
+      state.requestorList = data.requestors;
+      data.requestors.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.name;
+        opt.textContent = r.name;
+        opt.dataset.department = r.department;
+        sel.appendChild(opt);
+      });
+    }
+  } catch(err) {
+    console.error('Failed to load requestor list:', err);
+  }
+}
+
+function onRequestorChange() {
+  const sel = document.getElementById('reqRequestor');
+  const selected = sel.options[sel.selectedIndex];
+  const dept = selected ? selected.dataset.department : '';
+  document.getElementById('reqDepartment').value = dept || '';
+}
+
+async function lookupSofData() {
+  const joNo = document.getElementById('reqJoNo').value.trim();
+  if (!joNo) return;
+
+  showLoading('Looking up JO No....');
+  try {
+    const url = API_URL + '?action=getSofData&joNo=' + encodeURIComponent(joNo) + '&_t=' + Date.now();
+    const res = await fetch(url, { redirect: 'follow' });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch(e) { data = {}; }
+
+    if (data.success) {
+      document.getElementById('reqGemSoNo').value = data.gemSoNo || '';
+      document.getElementById('reqClientName').value = data.clientName || '';
+      document.getElementById('reqProject').value = data.project || '';
+      showToast('JO No. found! Auto-filled SO data.', 'success');
+    } else {
+      document.getElementById('reqGemSoNo').value = '';
+      document.getElementById('reqClientName').value = '';
+      document.getElementById('reqProject').value = '';
+      showToast('JO No. not found in SOF Monitoring. You can still submit.', 'warning');
+    }
+  } catch(err) {
+    showToast('SOF lookup failed: ' + err.message, 'danger');
+  } finally {
+    hideLoading();
+  }
+}
+
 async function submitNewRequest() {
+
 if (state.isLoading) return;
 const docType = document.getElementById('reqDocType').value;
 const requestor = document.getElementById('reqRequestor').value.trim();
