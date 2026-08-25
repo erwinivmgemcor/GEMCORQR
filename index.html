@@ -361,7 +361,6 @@ Scan Document QR to auto-load &bull; Scan Item QR to verify
 </div>
 </div>
 
-<!-- TEST CONNECTION SECTION -->
 <div class="card border-warning">
 <div class="card-header bg-warning text-dark"><strong><i class="bi bi-bug me-2"></i>Debug: Test Connection</strong></div>
 <div class="card-body">
@@ -392,25 +391,57 @@ Scan Document QR to auto-load &bull; Scan Item QR to verify
 </div>
 </div>
 
+<!-- NEW REQUEST MODAL -->
 <div class="modal fade" id="newRequestModal" tabindex="-1">
 <div class="modal-dialog modal-lg modal-dialog-scrollable">
 <div class="modal-content">
 <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>New Request</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
 <div class="modal-body">
+
+<!-- Row 1: Document Type + JO No. -->
 <div class="row g-2 mb-3">
 <div class="col-6">
 <label class="form-label">Document Type</label>
 <select id="reqDocType" class="form-select"><option value="MRIF">MRIF (Releasing)</option><option value="MRS">MRS (Returns)</option></select>
 </div>
 <div class="col-6">
+<label class="form-label">JO No. <small class="text-muted">(Type then tab/click out)</small></label>
+<input type="text" id="reqJoNo" class="form-control" placeholder="Enter JO No." onblur="lookupSofData()">
+</div>
+</div>
+
+<!-- Row 2: Requestor + Department -->
+<div class="row g-2 mb-3">
+<div class="col-6">
+<label class="form-label">Requestor</label>
+<select id="reqRequestor" class="form-select" onchange="onRequestorChange()">
+<option value="">-- Select Requestor --</option>
+</select>
+</div>
+<div class="col-6">
 <label class="form-label">Department</label>
-<input type="text" id="reqDepartment" class="form-control" placeholder="e.g. Production A">
+<input type="text" id="reqDepartment" class="form-control" placeholder="Auto-filled from Requestor List" readonly>
 </div>
 </div>
+
+<!-- Row 3: GEM SO No. + CLIENT NAME -->
+<div class="row g-2 mb-3">
+<div class="col-6">
+<label class="form-label">GEM SO No.</label>
+<input type="text" id="reqGemSoNo" class="form-control" placeholder="Auto-filled from SOF Monitoring" readonly>
+</div>
+<div class="col-6">
+<label class="form-label">CLIENT NAME</label>
+<input type="text" id="reqClientName" class="form-control" placeholder="Auto-filled from SOF Monitoring" readonly>
+</div>
+</div>
+
+<!-- Row 4: PROJECT -->
 <div class="mb-3">
-<label class="form-label">Requestor Name</label>
-<input type="text" id="reqRequestor" class="form-control" placeholder="Full name">
+<label class="form-label">PROJECT</label>
+<input type="text" id="reqProject" class="form-control" placeholder="Auto-filled from SOF Monitoring" readonly>
 </div>
+
 <hr>
 <div id="requestItemsContainer"></div>
 <button class="btn btn-outline-primary w-100" onclick="addRequestItemRow()"><i class="bi bi-plus-lg"></i> Add Item</button>
@@ -454,10 +485,6 @@ Scan Document QR to auto-load &bull; Scan Item QR to verify
 </div>
 
 <script>
-
-// =============================================================================
-// CRITICAL: Replace this with your NEW GAS Web App URL after deployment
-// =============================================================================
 const API_URL = 'https://script.google.com/macros/s/AKfycbwHPYCs4N07JU9OHZ0MlLvsBtED3aKusEOSsNRZS-KRNVmSh8oLJs8Ts5RNwkjatBtu/exec';
 const DEFAULT_PIN = '0000';
 
@@ -471,6 +498,7 @@ currentCamera: 'environment',
 torchOn: false,
 cameras: [],
 requestInventoryList: [],
+requestorList: [],
 errorTimer: null,
 docList: [],
 pinBuffer: '',
@@ -525,27 +553,20 @@ if (navigator.vibrate) navigator.vibrate([100,50,100]);
 } catch(e) {}
 }
 
-// =============================================================================
-// DEBUG: Test Connection to GAS
-// =============================================================================
 async function testConnection() {
 const resultDiv = document.getElementById('testResult');
 resultDiv.classList.remove('d-none');
 resultDiv.textContent = 'Testing...';
-
 try {
 const url = API_URL + '?action=ping&_t=' + Date.now();
 console.log('[Test] URL:', url);
 resultDiv.textContent += '\nURL: ' + url.substring(0, 80) + '...';
-
 const res = await fetch(url, { redirect: 'follow' });
 console.log('[Test] Status:', res.status);
 resultDiv.textContent += '\nHTTP Status: ' + res.status;
-
 const text = await res.text();
 console.log('[Test] Response:', text);
 resultDiv.textContent += '\nRaw Response: ' + text.substring(0, 200);
-
 try {
 const data = JSON.parse(text);
 resultDiv.textContent += '\nParsed: ' + JSON.stringify(data, null, 2);
@@ -1166,9 +1187,6 @@ if (a1) a1.classList.add('d-none');
 if (a2) a2.classList.add('d-none');
 }
 
-// =============================================================================
-// FIXED SUBMIT: GET-based with compact format
-// =============================================================================
 async function onSubmit() {
 if (state.isLoading) return;
 const verifiedItems = state.items.filter(i => i.verified);
@@ -1203,40 +1221,103 @@ hideLoading();
 }
 
 async function submitTransaction(verifiedItems) {
-// Build compact items string: CODE,QTY,ROW;CODE,QTY,ROW
 const itemsStr = verifiedItems.map(i => 
 encodeURIComponent(i.inventoryId) + ',' + i.issuedQty + ',' + i.rowIndex
 ).join(';');
-
 const url = API_URL + '?action=submitTransaction' +
 '&docNo=' + encodeURIComponent(state.currentDoc) +
 '&docType=' + encodeURIComponent(state.currentModule) +
 '&sheetId=' + encodeURIComponent(getCleanSheetId()) +
 '&items=' + itemsStr +
 '&_t=' + Date.now();
-
 console.log('[Submit] URL length:', url.length);
 console.log('[Submit] URL:', url);
-
 const res = await fetch(url, { redirect: 'follow' });
 console.log('[Submit] HTTP Status:', res.status);
-
 const text = await res.text();
 console.log('[Submit] Raw response:', text);
-
 const result = JSON.parse(text);
 console.log('[Submit] Parsed:', result);
-
 return result;
 }
 
+// =============================================================================
+// NEW REQUEST FUNCTIONS - WITH JO No. + SOF AUTO-FILL + REQUESTOR DROPDOWN
+// =============================================================================
 function openNewRequest() {
 if (state.isLoading) return;
+// Reset all form fields
+document.getElementById('reqJoNo').value = '';
+document.getElementById('reqGemSoNo').value = '';
+document.getElementById('reqClientName').value = '';
+document.getElementById('reqProject').value = '';
+document.getElementById('reqDepartment').value = '';
 document.getElementById('requestItemsContainer').innerHTML = '';
 addRequestItemRow();
 loadRequestInventory();
+loadRequestorList();
 newRequestModal.show();
 }
+
+async function loadRequestorList() {
+try {
+const url = API_URL + '?action=getRequestorList&_t=' + Date.now();
+const res = await fetch(url, { redirect: 'follow' });
+const text = await res.text();
+let data;
+try { data = JSON.parse(text); } catch(e) { data = {}; }
+const sel = document.getElementById('reqRequestor');
+sel.innerHTML = '<option value="">-- Select Requestor --</option>';
+if (data.success && data.requestors) {
+state.requestorList = data.requestors;
+data.requestors.forEach(r => {
+const opt = document.createElement('option');
+opt.value = r.name;
+opt.textContent = r.name;
+opt.dataset.department = r.department;
+sel.appendChild(opt);
+});
+}
+} catch(err) {
+console.error('Failed to load requestor list:', err);
+}
+}
+
+function onRequestorChange() {
+const sel = document.getElementById('reqRequestor');
+const selected = sel.options[sel.selectedIndex];
+const dept = selected ? selected.dataset.department : '';
+document.getElementById('reqDepartment').value = dept || '';
+}
+
+async function lookupSofData() {
+const joNo = document.getElementById('reqJoNo').value.trim();
+if (!joNo) return;
+showLoading('Looking up JO No....');
+try {
+const url = API_URL + '?action=getSofData&joNo=' + encodeURIComponent(joNo) + '&_t=' + Date.now();
+const res = await fetch(url, { redirect: 'follow' });
+const text = await res.text();
+let data;
+try { data = JSON.parse(text); } catch(e) { data = {}; }
+if (data.success) {
+document.getElementById('reqGemSoNo').value = data.gemSoNo || '';
+document.getElementById('reqClientName').value = data.clientName || '';
+document.getElementById('reqProject').value = data.project || '';
+showToast('JO No. found! Auto-filled SO data.', 'success');
+} else {
+document.getElementById('reqGemSoNo').value = '';
+document.getElementById('reqClientName').value = '';
+document.getElementById('reqProject').value = '';
+showToast('JO No. not found in SOF Monitoring. You can still submit.', 'warning');
+}
+} catch(err) {
+showToast('SOF lookup failed: ' + err.message, 'danger');
+} finally {
+hideLoading();
+}
+}
+
 async function loadRequestInventory() {
 try {
 const url = API_URL + '?action=getInventoryList&_t=' + Date.now();
@@ -1250,6 +1331,7 @@ state.requestInventoryList = inv;
 state.requestInventoryList = [];
 }
 }
+
 function addRequestItemRow() {
 const container = document.getElementById('requestItemsContainer');
 const idx = container.children.length;
@@ -1261,6 +1343,7 @@ div.innerHTML = '<div class="col-5"><label class="form-label small">Item</label>
 '<div class="col-1"><button class="btn btn-outline-danger btn-sm" onclick="this.closest(\'.row\').remove()"><i class="bi bi-trash"></i></button></div>';
 container.appendChild(div);
 }
+
 function filterRequestItems(input, idx) {
 const term = input.value.toLowerCase();
 const dropdown = document.getElementById('reqDropdown'+idx);
@@ -1291,79 +1374,17 @@ dropdown.appendChild(el);
 }
 dropdown.classList.remove('d-none');
 }
-// =============================================================================
-// SOF Data & Requestor List
-// =============================================================================
-async function loadRequestorList() {
-  try {
-    const url = API_URL + '?action=getRequestorList&_t=' + Date.now();
-    const res = await fetch(url, { redirect: 'follow' });
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch(e) { data = {}; }
-
-    const sel = document.getElementById('reqRequestor');
-    sel.innerHTML = '<option value="">-- Select Requestor --</option>';
-
-    if (data.success && data.requestors) {
-      state.requestorList = data.requestors;
-      data.requestors.forEach(r => {
-        const opt = document.createElement('option');
-        opt.value = r.name;
-        opt.textContent = r.name;
-        opt.dataset.department = r.department;
-        sel.appendChild(opt);
-      });
-    }
-  } catch(err) {
-    console.error('Failed to load requestor list:', err);
-  }
-}
-
-function onRequestorChange() {
-  const sel = document.getElementById('reqRequestor');
-  const selected = sel.options[sel.selectedIndex];
-  const dept = selected ? selected.dataset.department : '';
-  document.getElementById('reqDepartment').value = dept || '';
-}
-
-async function lookupSofData() {
-  const joNo = document.getElementById('reqJoNo').value.trim();
-  if (!joNo) return;
-
-  showLoading('Looking up JO No....');
-  try {
-    const url = API_URL + '?action=getSofData&joNo=' + encodeURIComponent(joNo) + '&_t=' + Date.now();
-    const res = await fetch(url, { redirect: 'follow' });
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch(e) { data = {}; }
-
-    if (data.success) {
-      document.getElementById('reqGemSoNo').value = data.gemSoNo || '';
-      document.getElementById('reqClientName').value = data.clientName || '';
-      document.getElementById('reqProject').value = data.project || '';
-      showToast('JO No. found! Auto-filled SO data.', 'success');
-    } else {
-      document.getElementById('reqGemSoNo').value = '';
-      document.getElementById('reqClientName').value = '';
-      document.getElementById('reqProject').value = '';
-      showToast('JO No. not found in SOF Monitoring. You can still submit.', 'warning');
-    }
-  } catch(err) {
-    showToast('SOF lookup failed: ' + err.message, 'danger');
-  } finally {
-    hideLoading();
-  }
-}
 
 async function submitNewRequest() {
-
 if (state.isLoading) return;
 const docType = document.getElementById('reqDocType').value;
 const requestor = document.getElementById('reqRequestor').value.trim();
 const department = document.getElementById('reqDepartment').value.trim();
-if (!requestor) { alert('Enter requestor name'); return; }
+const joNo = document.getElementById('reqJoNo').value.trim();
+const gemSoNo = document.getElementById('reqGemSoNo').value.trim();
+const clientName = document.getElementById('reqClientName').value.trim();
+const project = document.getElementById('reqProject').value.trim();
+if (!requestor) { alert('Select a requestor'); return; }
 const items = [];
 document.querySelectorAll('#requestItemsContainer .row').forEach(row => {
 const code = row.querySelector('.req-item-code').value;
@@ -1379,6 +1400,10 @@ action: 'createRequest',
 docType: docType,
 requestor: requestor,
 department: department,
+joNo: joNo,
+gemSoNo: gemSoNo,
+clientName: clientName,
+project: project,
 items: items,
 timestamp: new Date().toISOString()
 };
@@ -1405,6 +1430,7 @@ alert('Error: ' + err.message);
 hideLoading();
 }
 }
+
 function showRequestQr(ticketNo, docNo) {
 document.getElementById('requestTicketNo').textContent = ticketNo;
 document.getElementById('requestDocNo').textContent = docNo;
