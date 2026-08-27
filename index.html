@@ -53,6 +53,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;t
 </style>
 <base target="_blank">
 <base target="_blank">
+<base target="_blank">
 </head>
 <body>
 
@@ -108,7 +109,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;t
 </button>
 <div class="text-muted small mt-2">
 <i class="bi bi-info-circle me-1"></i>
-Scan Document QR to auto-load &bull; Scan Item QR to verify
+Scan Document QR to auto-load &bull; PO QR creates MRR &bull; Item QR verifies
 </div>
 </div>
 </div>
@@ -229,11 +230,84 @@ Scan Document QR to auto-load &bull; Scan Item QR to verify
 </div>
 <div class="p-3">
 <p class="text-muted mb-1"><i class="bi bi-info-circle me-1"></i>Point camera at any QR code</p>
-<small class="text-muted">Document QR auto-loads &bull; Item QR verifies</small>
+<small class="text-muted">Document QR auto-loads &bull; PO QR creates MRR &bull; Item QR verifies</small>
 </div>
 </div>
 <div class="modal-footer justify-content-center">
 <button class="btn btn-outline-secondary" onclick="closeQuickScan()">Cancel</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- PO SCAN MODAL (MRR) -->
+<div class="modal fade" id="poScanModal" tabindex="-1">
+<div class="modal-dialog modal-dialog-centered">
+<div class="modal-content">
+<div class="modal-header bg-success text-white">
+<h5 class="modal-title"><i class="bi bi-upc-scan me-2"></i>Scan PO QR</h5>
+<button type="button" class="btn-close btn-close-white" onclick="closePoScanModal()"></button>
+</div>
+<div class="modal-body">
+<div class="text-center mb-3">
+<i class="bi bi-box-seam text-success" style="font-size:2.5rem"></i>
+<h6 class="mt-2">Enter Purchase Order Number</h6>
+<p class="text-muted small">Type the PO number from the QR code</p>
+</div>
+<div class="input-group input-group-lg mb-3">
+<span class="input-group-text"><i class="bi bi-hash"></i></span>
+<input type="text" id="poNumberInput" class="form-control" placeholder="e.g. 16820" onkeypress="if(event.key==='Enter')lookupPoItems()">
+<button class="btn btn-success" onclick="lookupPoItems()"><i class="bi bi-search"></i> Look Up</button>
+</div>
+<div id="poScanError" class="alert alert-danger d-none py-2">
+<i class="bi bi-exclamation-triangle-fill me-2"></i><span id="poScanErrorText"></span>
+</div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="closePoScanModal()">Cancel</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- PO ITEMS SELECTION MODAL (MRR) -->
+<div class="modal fade" id="poItemsModal" tabindex="-1">
+<div class="modal-dialog modal-lg modal-dialog-scrollable">
+<div class="modal-content">
+<div class="modal-header bg-success text-white">
+<h5 class="modal-title"><i class="bi bi-clipboard-check me-2"></i>Select Arrived Items</h5>
+<button type="button" class="btn-close btn-close-white" onclick="closePoItemsModal()"></button>
+</div>
+<div class="modal-body">
+<div id="poInfoDisplay" class="card bg-light mb-3">
+<div class="card-body py-2">
+<div class="row g-2">
+<div class="col-6"><div class="small text-muted">PO Number</div><div class="fw-bold" id="poDisplayNo">-</div></div>
+<div class="col-6"><div class="small text-muted">PRF No.</div><div class="fw-bold" id="poDisplayPrf">-</div></div>
+<div class="col-12"><div class="small text-muted">Client / Vendor</div><div class="fw-bold" id="poDisplayClient">-</div></div>
+</div>
+</div>
+</div>
+<div class="d-flex justify-content-between align-items-center mb-2">
+<small class="text-muted"><i class="bi bi-info-circle me-1"></i>Check items that arrived</small>
+<button class="btn btn-sm btn-outline-primary" onclick="selectAllPoItems(true)">All</button>
+</div>
+<div id="poItemsList" style="max-height:350px;overflow-y:auto;"></div>
+<hr>
+<div class="row g-2">
+<div class="col-12">
+<label class="form-label small">D.R. No. / S.I. No. / A.R. No.</label>
+<input type="text" id="mrrDrNo" class="form-control" placeholder="Enter document reference">
+</div>
+<div class="col-12">
+<label class="form-label small">Receiving Date</label>
+<input type="date" id="mrrReceivingDate" class="form-control">
+</div>
+</div>
+</div>
+<div class="modal-footer">
+<button class="btn btn-secondary" onclick="closePoItemsModal()">Cancel</button>
+<button class="btn btn-success" onclick="createMrrFromPo()"><i class="bi bi-check-circle me-1"></i>Create MRR</button>
 </div>
 </div>
 </div>
@@ -499,6 +573,12 @@ torchOn: false,
 cameras: [],
 requestInventoryList: [],
 requestorList: [],
+poItemsData: [],
+currentPoNo: '',
+currentPoPrf: '',
+currentPoClient: '',
+poScanModal: null,
+poItemsModal: null,
 errorTimer: null,
 docList: [],
 pinBuffer: '',
@@ -514,6 +594,8 @@ const requestSuccessModal = new bootstrap.Modal(document.getElementById('request
 const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
 const roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
 const productionNameModal = new bootstrap.Modal(document.getElementById('productionNameModal'));
+state.poScanModal = new bootstrap.Modal(document.getElementById('poScanModal'));
+state.poItemsModal = new bootstrap.Modal(document.getElementById('poItemsModal'));
 
 function showLoading(text) {
 state.isLoading = true;
@@ -689,6 +771,7 @@ if (isProduction) {
 document.getElementById('activeTransactionSection').classList.add('d-none');
 }
 }
+
 function switchRole() {
 settingsModal.hide();
 document.getElementById('pinEntrySection').classList.add('d-none');
@@ -1087,12 +1170,14 @@ showToast('Quick scan camera error: ' + err, 'danger');
 });
 }).catch(err => showToast('Camera access denied', 'danger'));
 }
-function onQuickScanSuccess(decodedText) {
+async function onQuickScanSuccess(decodedText) {
 if (state.quickScanner) {
 state.quickScanner.stop().catch(()=>{});
 state.quickScanner = null;
 }
 quickScanModal.hide();
+
+// 1. Document QR pattern
 const docPattern = /^(MRIF|MRR|MRS)\d{6,}$/i;
 if (docPattern.test(decodedText)) {
 const mod = decodedText.substring(0, 4).toUpperCase();
@@ -1104,6 +1189,21 @@ setTimeout(() => onDocSelect(decodedText), 500);
 return;
 }
 }
+
+// 2. Try as PO Number (for MRR creation)
+const poResult = await lookupPoFromScan(decodedText);
+if (poResult && poResult.success) {
+playSuccessBeep();
+state.currentPoNo = decodedText;
+state.currentPoPrf = poResult.prfNo || '';
+state.currentPoClient = poResult.client || '';
+state.poItemsData = poResult.items;
+renderPoItems();
+state.poItemsModal.show();
+return;
+}
+
+// 3. Item QR (existing document)
 if (state.currentDoc && state.items.length > 0) {
 const item = state.items.find(i => i.inventoryId.toLowerCase() === decodedText.toLowerCase());
 if (item) {
@@ -1114,8 +1214,22 @@ openQtyModal(item);
 return;
 }
 }
+
 playErrorBuzz();
-showToast('No document loaded. Scan a Document QR first.', 'danger');
+showToast('Not recognized: ' + decodedText + '. Scan a Document QR, PO QR, or Item QR.', 'danger');
+}
+
+async function lookupPoFromScan(poNo) {
+try {
+const url = API_URL + '?action=getPoItems&poNo=' + encodeURIComponent(poNo) + '&_t=' + Date.now();
+const res = await fetch(url, { redirect: 'follow' });
+const text = await res.text();
+let data;
+try { data = JSON.parse(text); } catch(e) { return null; }
+return (data && data.success) ? data : null;
+} catch(err) {
+return null;
+}
 }
 
 let currentModalItem = null;
@@ -1495,8 +1609,109 @@ toast.className = 'toast align-items-center text-white bg-' + type;
 bootstrap.Toast.getOrCreateInstance(toast).show();
 }
 
+function renderPoItems() {
+document.getElementById('poDisplayNo').textContent = state.currentPoNo;
+document.getElementById('poDisplayPrf').textContent = state.currentPoPrf || '-';
+document.getElementById('poDisplayClient').textContent = state.currentPoClient || '-';
+const list = document.getElementById('poItemsList');
+list.innerHTML = state.poItemsData.map((item, idx) => `
+<div class="card mb-2 po-item-card" id="po-card-${idx}">
+<div class="card-body py-2 px-3">
+<div class="d-flex align-items-center gap-2">
+<div class="form-check m-0">
+<input class="form-check-input po-check" type="checkbox" id="po-check-${idx}" checked onchange="togglePoCard(${idx})">
+</div>
+<div class="flex-grow-1" style="min-width:0">
+<div class="fw-bold small text-truncate">${item.inventoryId || item.itemCode || ''}</div>
+<div class="text-muted small text-truncate">${item.description || ''}</div>
+<div class="d-flex gap-2 mt-1">
+<small class="text-muted">PO Qty: <strong>${item.qty || 0}</strong></small>
+<small class="text-muted">Unit: <strong>${item.unit || 'PCS'}</strong></small>
+</div>
+</div>
+<div style="min-width:90px">
+<label class="form-label mb-0 small">ATL Qty</label>
+<input type="number" class="form-control form-control-sm" id="po-atl-${idx}" value="${item.qty || 0}" min="0" style="width:80px">
+</div>
+</div>
+</div>
+</div>
+`).join('');
+}
+function togglePoCard(idx) {
+const checked = document.getElementById('po-check-' + idx).checked;
+const card = document.getElementById('po-card-' + idx);
+if (checked) {
+card.classList.remove('opacity-50');
+} else {
+card.classList.add('opacity-50');
+}
+}
+function selectAllPoItems(select) {
+state.poItemsData.forEach((_, idx) => {
+document.getElementById('po-check-' + idx).checked = select;
+togglePoCard(idx);
+});
+}
+
+async function createMrrFromPo() {
+const selected = [];
+state.poItemsData.forEach((item, idx) => {
+if (document.getElementById('po-check-' + idx).checked) {
+const atlQty = parseFloat(document.getElementById('po-atl-' + idx).value) || 0;
+selected.push({
+inventoryId: item.inventoryId || item.itemCode || '',
+description: item.description || '',
+qty: item.qty || 0,
+unit: item.unit || 'PCS',
+atlQty: atlQty
+});
+}
+});
+if (selected.length === 0) {
+showToast('Please select at least one item', 'warning');
+return;
+}
+const drNo = document.getElementById('mrrDrNo').value.trim();
+const receivingDate = document.getElementById('mrrReceivingDate').value;
+showLoading('Creating MRR...');
+try {
+const payload = {
+action: 'createMrrRequest',
+poNo: state.currentPoNo,
+prfNo: state.currentPoPrf,
+client: state.currentPoClient,
+drNo: drNo,
+receivingDate: receivingDate,
+items: selected
+};
+const res = await fetch(API_URL, {
+method: 'POST',
+body: JSON.stringify(payload),
+headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+redirect: 'follow'
+});
+const text = await res.text();
+let data;
+try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+if (data && data.success) {
+closePoItemsModal();
+showToast('MRR created: ' + data.docNo, 'success');
+await fetchPendingDocs();
+} else {
+showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
+}
+} catch(err) {
+showToast('Error: ' + err.message, 'danger');
+} finally {
+hideLoading();
+}
+}
+
 document.addEventListener('DOMContentLoaded', () => {
 initRole();
+// Set default receiving date for MRR
+document.getElementById('mrrReceivingDate').valueAsDate = new Date();
 });
 </script>
 </body>
