@@ -1255,7 +1255,7 @@ state.poItemsData = poResult.items;
 renderPoItems();
 state.poItemsModal.show();
 } else {
-showToast(poResult.error || 'No items found for PO: ' + poNo, 'warning');
+showToast((poResult && poResult.error) || 'No items found for PO: ' + poNo, 'warning');
 }
 } catch(err) {
 showToast('Error: ' + err.message, 'danger');
