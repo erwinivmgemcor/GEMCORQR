@@ -103,10 +103,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;t
 <div id="docPickerSection">
 <div id="quickScanCard" class="card mb-3 border-primary shadow-sm">
 <div class="card-body text-center py-4">
-<button class="btn btn-primary quick-scan-btn w-100" onclick="openQuickScan()">
+<button class="btn btn-primary quick-scan-btn w-100 mb-2" onclick="openQuickScan()">
 <i class="bi bi-qr-code-scan me-2" style="font-size:1.5rem"></i>
 <strong>QUICK SCAN QR</strong>
 </button>
+<div class="text-muted small mb-2">— or —</div>
+<div class="input-group">
+<span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+<input type="text" id="manualPoInput" class="form-control" placeholder="Type PO # manually..." onkeypress="if(event.key==='Enter')manualPoLookup()">
+<button class="btn btn-outline-success" onclick="manualPoLookup()"><i class="bi bi-search"></i></button>
+</div>
 <div class="text-muted small mt-2">
 <i class="bi bi-info-circle me-1"></i>
 Scan Document QR to auto-load &bull; PO QR creates MRR &bull; Item QR verifies
@@ -306,7 +312,7 @@ Scan Document QR to auto-load &bull; PO QR creates MRR &bull; Item QR verifies
 </div>
 </div>
 <div class="modal-footer">
-<button class="btn btn-secondary" onclick="closePoItemsModal()">Cancel</button>
+<button class="btn btn-secondary" onclick="state.poItemsModal.hide()">Cancel</button>
 <button class="btn btn-success" onclick="createMrrFromPo()"><i class="bi bi-check-circle me-1"></i>Create MRR</button>
 </div>
 </div>
@@ -1232,6 +1238,63 @@ return null;
 }
 }
 
+async function manualPoLookup() {
+const poNo = document.getElementById('manualPoInput').value.trim();
+if (!poNo) { showToast('Please enter a PO number', 'warning'); return; }
+document.getElementById('manualPoInput').value = '';
+showLoading('Looking up PO...');
+try {
+const poResult = await lookupPoFromScan(poNo);
+if (poResult && poResult.success) {
+playSuccessBeep();
+state.currentPoNo = poNo;
+state.currentPoPrf = poResult.prfNo || '';
+state.currentPoClient = poResult.client || '';
+state.poItemsData = poResult.items;
+renderPoItems();
+state.poItemsModal.show();
+} else {
+showToast(poResult.error || 'No items found for PO: ' + poNo, 'warning');
+}
+} catch(err) {
+showToast('Error: ' + err.message, 'danger');
+} finally {
+hideLoading();
+}
+}
+
+function closePoItemsModal() {
+state.poItemsModal.hide();
+}
+
+async function manualPoLookup() {
+const poNo = document.getElementById('manualPoInput').value.trim();
+if (!poNo) {
+showToast('Please enter a PO number', 'warning');
+return;
+}
+showLoading('Looking up PO...');
+try {
+const poResult = await lookupPoFromScan(poNo);
+if (poResult && poResult.success) {
+playSuccessBeep();
+state.currentPoNo = poNo;
+state.currentPoPrf = poResult.prfNo || '';
+state.currentPoClient = poResult.client || '';
+state.poItemsData = poResult.items;
+renderPoItems();
+state.poItemsModal.show();
+document.getElementById('manualPoInput').value = '';
+} else {
+showToast('No items found for PO: ' + poNo, 'warning');
+}
+} catch(err) {
+showToast('Error: ' + err.message, 'danger');
+} finally {
+hideLoading();
+}
+}
+
 let currentModalItem = null;
 function openQtyModal(item) {
 currentModalItem = item;
@@ -1652,6 +1715,10 @@ state.poItemsData.forEach((_, idx) => {
 document.getElementById('po-check-' + idx).checked = select;
 togglePoCard(idx);
 });
+}
+
+function closePoItemsModal() {
+if (state.poItemsModal) state.poItemsModal.hide();
 }
 
 async function createMrrFromPo() {
