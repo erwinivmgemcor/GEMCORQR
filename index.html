@@ -55,6 +55,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;t
 <base target="_blank">
 <base target="_blank">
 <base target="_blank">
+<base target="_blank">
 </head>
 <body>
 
@@ -584,6 +585,7 @@ poItemsData: [],
 currentPoNo: '',
 currentPoPrf: '',
 currentPoClient: '',
+currentPoSupplier: '',
 poScanModal: null,
 poItemsModal: null,
 errorTimer: null,
@@ -1204,6 +1206,7 @@ playSuccessBeep();
 state.currentPoNo = decodedText;
 state.currentPoPrf = poResult.prfNo || '';
 state.currentPoClient = poResult.client || '';
+state.currentPoSupplier = poResult.supplier || poResult.client || '';
 state.poItemsData = poResult.items;
 renderPoItems();
 state.poItemsModal.show();
@@ -1251,6 +1254,7 @@ playSuccessBeep();
 state.currentPoNo = poNo;
 state.currentPoPrf = poResult.prfNo || '';
 state.currentPoClient = poResult.client || '';
+state.currentPoSupplier = poResult.supplier || poResult.client || '';
 state.poItemsData = poResult.items;
 renderPoItems();
 state.poItemsModal.show();
@@ -1650,7 +1654,7 @@ bootstrap.Toast.getOrCreateInstance(toast).show();
 function renderPoItems() {
 document.getElementById('poDisplayNo').textContent = state.currentPoNo;
 document.getElementById('poDisplayPrf').textContent = state.currentPoPrf || '-';
-document.getElementById('poDisplayClient').textContent = state.currentPoClient || '-';
+document.getElementById('poDisplayClient').textContent = state.currentPoSupplier || state.currentPoClient || '-';
 const list = document.getElementById('poItemsList');
 list.innerHTML = state.poItemsData.map((item, idx) => `
 <div class="card mb-2 po-item-card" id="po-card-${idx}">
@@ -1723,6 +1727,7 @@ action: 'createMrrRequest',
 poNo: state.currentPoNo,
 prfNo: state.currentPoPrf,
 client: state.currentPoClient,
+supplier: state.currentPoSupplier,
 drNo: drNo,
 receivingDate: receivingDate,
 items: selected
