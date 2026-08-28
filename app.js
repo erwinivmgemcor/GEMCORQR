@@ -168,6 +168,8 @@ var name = document.getElementById('productionNameInput').value.trim();
 if (!name) { alert('Please enter your name'); return; }
 localStorage.setItem('ivm_requestorName', name);
 productionNameModal.hide();
+// Reset status tracking for new user
+localStorage.removeItem('ivm_requestStatuses');
 loadMyRequests();
 }
 function showPinEntry() {
@@ -231,6 +233,13 @@ document.getElementById('docPickerSection').style.display = isProduction ? 'none
 document.getElementById('quickScanCard').style.display = isProduction ? 'none' : '';
 if (isProduction) {
 document.getElementById('activeTransactionSection').classList.add('d-none');
+// Auto-refresh my requests every 30 seconds for live status updates
+if (window._requestsInterval) clearInterval(window._requestsInterval);
+window._requestsInterval = setInterval(function() {
+if (!state.isLoading) loadMyRequests();
+}, 30000);
+} else {
+if (window._requestsInterval) clearInterval(window._requestsInterval);
 }
 }
 
@@ -1074,6 +1083,10 @@ if (data && data.success) {
 localStorage.setItem('ivm_requestorName', requestor);
 newRequestModal.hide();
 showRequestQr(data.ticketNo || 'N/A', data.docNo || 'N/A');
+// Reset status tracking so new request shows as PENDING
+var statuses = JSON.parse(localStorage.getItem('ivm_requestStatuses') || '{}');
+statuses[data.docNo] = 'PENDING';
+localStorage.setItem('ivm_requestStatuses', JSON.stringify(statuses));
 loadMyRequests();
 } else {
 alert('Failed: ' + (data.error || 'Unknown error'));
@@ -1114,7 +1127,49 @@ var url = API_URL + '?action=getMyRequests&requestor=' + encodeURIComponent(requ
 var res = await fetch(url);
 var data = await res.json();
 if (data.success && data.requests) {
+// Sort by timestamp descending (newest first)
+data.requests.sort(function(a, b) {
+return new Date(b.timestamp) - new Date(a.timestamp);
+});
+
+// Check for status changes (for notifications)
+var prevStatuses = {};
+try {
+prevStatuses = JSON.parse(localStorage.getItem('ivm_requestStatuses') || '{}');
+} catch(e) {}
+
+var newStatuses = {};
+var hasNewReady = false;
+var readyCount = 0;
+
+data.requests.forEach(function(req) {
+var docNo = req.docNo || '';
+var status = req.status || 'PENDING';
+newStatuses[docNo] = status;
+if (prevStatuses[docNo] === 'PENDING' && status !== 'PENDING') {
+hasNewReady = true;
+}
+if (status !== 'PENDING') {
+readyCount++;
+}
+});
+
+localStorage.setItem('ivm_requestStatuses', JSON.stringify(newStatuses));
+
+// Update notification badge
+var badge = document.getElementById('myRequestsBadge');
+if (badge) {
+badge.textContent = readyCount;
+badge.classList.toggle('d-none', readyCount === 0);
+}
+
 renderMyRequests(data.requests);
+
+// Show notification toast if any request became ready
+if (hasNewReady) {
+playSuccessBeep();
+showToast('Your request has been processed by the warehouse!', 'success');
+}
 }
 } catch(e) { console.error(e); }
 finally { hideLoading(); }
@@ -1129,18 +1184,22 @@ return;
 }
 requests.forEach(function(req) {
 var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
-var isCompleted = (req.status === 'COMPLETED');
+var status = req.status || 'PENDING';
+var isCompleted = (status === 'COMPLETED');
+var isPartial = (status === 'PARTIAL');
+var badgeClass = isCompleted ? 'success' : (isPartial ? 'info' : 'warning');
+var statusText = isCompleted ? 'COMPLETED' : (isPartial ? 'PARTIAL' : 'PENDING');
+var icon = isCompleted ? 'bi-check-circle-fill' : (isPartial ? 'bi-hourglass-split' : 'bi-clock');
+
 var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + '">' +
 '<div class="d-flex justify-content-between align-items-start">' +
 '<div>' +
-'<div class="fw-bold">' + (req.docNo || '') + '</div>' +
-'<div class="small text-muted">' + (req.ticketNo || '') + '</div>' +
-'<div class="small"><i class="bi bi-person me-1"></i>' + (req.requestor || '') + '</div>' +
+'<div class="fw-bold">' + (req.docNo || '') + ' <span class="badge bg-secondary">' + (req.type || '') + '</span></div>' +
 '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
 '</div>' +
-'<span class="badge bg-' + (isCompleted ? 'success' : 'warning') + '">' + (req.status || 'PENDING') + '</span>' +
+'<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + statusText + '</span>' +
 '</div>' +
-'<div class="small mt-1">' + (req.itemCode || '') + ' x' + (req.qty || 0) + ' &bull; ' + (req.department || '') + '</div>' +
+'<div class="small mt-1"><i class="bi bi-box me-1"></i>' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
 '</div>';
 container.innerHTML += html;
 });
