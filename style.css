@@ -46,3 +46,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;t
 .request-card{border-left:4px solid var(--primary)}
 .request-card.completed{border-left-color:var(--success)}
 .test-result{font-family:monospace;font-size:.8rem;white-space:pre-wrap;max-height:200px;overflow-y:auto;background:#f8f9fa;padding:.5rem;border-radius:4px}
+
+/* Notification badge pulse animation */
+#myRequestsBadge:not(.d-none) {
+  animation: badgePulse 2s infinite;
+}
+@keyframes badgePulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
