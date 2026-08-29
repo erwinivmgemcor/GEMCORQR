@@ -27,7 +27,7 @@
 <div class="container-fluid">
 <span class="navbar-brand mb-0 h5"><i class="bi bi-box-seam me-2"></i>IVM WAREHOUSE QR</span>
 <div class="d-flex align-items-center gap-2">
-<span id="moduleLabel" class="badge bg-light text-dark">MRIF</span>
+<span id="moduleLabel" class="badge bg-light text-dark">MRIF</span><button class="btn btn-sm btn-outline-light position-relative ms-2 d-none" id="whNotifBtn" onclick="openWhNotifications()"><i class="bi bi-bell-fill"></i><span id="whNotifBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none">0</span></button>
 <i id="wifiIcon" class="bi bi-wifi wifi-icon wifi-online"></i>
 <button id="settingsBtn" class="btn btn-sm btn-outline-light" onclick="openSettings()"><i class="bi bi-gear-fill"></i></button>
 </div>
@@ -62,7 +62,7 @@
 </div>
 
 <div id="docPickerSection">
-<div id="quickScanCard" class="card mb-3 border-primary shadow-sm">
+<div class="card mb-3 d-none" id="whNotificationsCard"><div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center"><strong><i class="bi bi-bell-fill me-2"></i>Pending Requests <span id="whNotifCount" class="badge bg-danger">0</span></strong><button class="btn btn-sm btn-outline-dark" onclick="loadWarehouseNotifications()"><i class="bi bi-arrow-clockwise"></i></button></div><div class="card-body p-0"><div class="list-group list-group-flush" id="whNotificationsList"><div class="list-group-item text-muted text-center py-3">No pending requests</div></div></div></div><div id="quickScanCard" class="card mb-3 border-primary shadow-sm">
 <div class="card-body text-center py-4">
 <button class="btn btn-primary quick-scan-btn w-100 mb-2" onclick="openQuickScan()">
 <i class="bi bi-qr-code-scan me-2" style="font-size:1.5rem"></i>
@@ -495,6 +495,24 @@ Scan Document QR to auto-load &bull; PO QR creates MRR &bull; Item QR verifies
 </div>
 </div>
 
+<div class="modal fade" id="whNotifModal" tabindex="-1">
+<div class="modal-dialog modal-dialog-centered">
+<div class="modal-content">
+<div class="modal-header bg-warning text-dark">
+<h5 class="modal-title"><i class="bi bi-bell-fill me-2"></i>Pending Requests</h5>
+<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<div class="modal-body p-0">
+<div class="list-group list-group-flush" id="whNotifModalList">
+<div class="list-group-item text-muted text-center py-3">No pending requests</div>
+</div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+</div>
+</div>
+</div>
+</div>
 <div class="modal fade" id="requestSuccessModal" tabindex="-1">
 <div class="modal-dialog modal-dialog-centered">
 <div class="modal-content text-center">
