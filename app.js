@@ -43,7 +43,9 @@ const successModal = new bootstrap.Modal(document.getElementById('successModal')
 const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
 const newRequestModal = new bootstrap.Modal(document.getElementById('newRequestModal'));
 const requestSuccessModal = new bootstrap.Modal(document.getElementById('requestSuccessModal'));
-var whNotifModal = document.getElementById('whNotifModal') ? new bootstrap.Modal(document.getElementById('whNotifModal')) : null;
+  if (document.getElementById('whNotifModal')) {
+    whNotifModal = new bootstrap.Modal(document.getElementById('whNotifModal'));
+  }
 const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
 const roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
 const productionNameModal = new bootstrap.Modal(document.getElementById('productionNameModal'));
@@ -1442,11 +1444,12 @@ return;
 }
 requests.slice(0, 5).forEach(function(req) {
 var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
-var html = '<div class="list-group-item wh-notif-item py-2" onclick="processRequestFromNotification('' + 
-(req.docNo || '') + '', '' + (req.type || 'MRIF') + '')">' +
+var docNo = req.docNo || '';
+var type = req.type || 'MRIF';
+var html = '<div class="list-group-item wh-notif-item py-2" data-docno="' + docNo + '" data-type="' + type + '">' +
 '<div class="d-flex justify-content-between align-items-start">' +
 '<div>' +
-'<div class="doc-no">' + (req.docNo || '') + ' <span class="badge bg-secondary">' + (req.type || '') + '</span></div>' +
+'<div class="doc-no">' + docNo + ' <span class="badge bg-secondary">' + type + '</span></div>' +
 '<div class="requestor"><i class="bi bi-person me-1"></i>' + (req.requestor || 'Unknown') + '</div>' +
 '<div class="timestamp"><i class="bi bi-clock me-1"></i>' + dateStr + '</div>' +
 '</div>' +
@@ -1455,6 +1458,14 @@ var html = '<div class="list-group-item wh-notif-item py-2" onclick="processRequ
 '<div class="small mt-1 text-muted">' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
 '</div>';
 container.innerHTML += html;
+});
+// Add click handlers after rendering
+container.querySelectorAll('.wh-notif-item').forEach(function(el) {
+el.addEventListener('click', function() {
+var dn = this.getAttribute('data-docno');
+var dt = this.getAttribute('data-type');
+processRequestFromNotification(dn, dt);
+});
 });
 if (requests.length > 5) {
 container.innerHTML += '<div class="list-group-item text-center text-muted small py-2">+' + (requests.length - 5) + ' more pending requests</div>';
@@ -1471,11 +1482,12 @@ return;
 }
 requests.forEach(function(req) {
 var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
-var html = '<div class="list-group-item wh-notif-item py-3" onclick="processRequestFromNotification('' + 
-(req.docNo || '') + '', '' + (req.type || 'MRIF') + ''); whNotifModal.hide();">' +
+var docNo = req.docNo || '';
+var type = req.type || 'MRIF';
+var html = '<div class="list-group-item wh-notif-item py-3" data-docno="' + docNo + '" data-type="' + type + '">' +
 '<div class="d-flex justify-content-between align-items-start">' +
 '<div>' +
-'<div class="doc-no">' + (req.docNo || '') + ' <span class="badge bg-secondary">' + (req.type || '') + '</span></div>' +
+'<div class="doc-no">' + docNo + ' <span class="badge bg-secondary">' + type + '</span></div>' +
 '<div class="requestor"><i class="bi bi-person me-1"></i>' + (req.requestor || 'Unknown') + '</div>' +
 '<div class="timestamp"><i class="bi bi-clock me-1"></i>' + dateStr + '</div>' +
 '</div>' +
@@ -1485,14 +1497,23 @@ var html = '<div class="list-group-item wh-notif-item py-3" onclick="processRequ
 '</div>';
 container.innerHTML += html;
 });
+// Add click handlers after rendering
+container.querySelectorAll('.wh-notif-item').forEach(function(el) {
+el.addEventListener('click', function() {
+var dn = this.getAttribute('data-docno');
+var dt = this.getAttribute('data-type');
+if (whNotifModal) whNotifModal.hide();
+processRequestFromNotification(dn, dt);
+});
+});
 }
 
 function openWhNotifications() {
-if (!whNotifModal && document.getElementById('whNotifModal')) {
+if (typeof whNotifModal === 'undefined') {
 whNotifModal = new bootstrap.Modal(document.getElementById('whNotifModal'));
 }
 loadWarehouseNotifications();
-if (whNotifModal) whNotifModal.show();
+whNotifModal.show();
 }
 
 async function processRequestFromNotification(docNo, docType) {
