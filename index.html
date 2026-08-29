@@ -93,6 +93,16 @@ Scan Document QR to auto-load &bull; PO QR creates MRR &bull; Item QR verifies
 </div>
 </div>
 
+<!-- MRIF LIST BUTTON (shows when MRIF module active) -->
+<div id="mrifListCard" class="card mb-3 border-warning d-none">
+<div class="card-body text-center py-3">
+<button class="btn btn-warning w-100" onclick="openMrifList()">
+<i class="bi bi-printer me-2"></i><strong>See All MRIF / List of MRIF</strong>
+</button>
+<small class="text-muted d-block mt-1">View and print MRIF documents</small>
+</div>
+</div>
+
 <div id="activeTransactionSection" class="d-none">
 <div class="d-flex justify-content-between align-items-center mb-2">
 <button class="btn btn-sm btn-outline-secondary" onclick="changeDocument()"><i class="bi bi-arrow-left"></i> Change Document</button>
@@ -509,7 +519,6 @@ Scan Document QR to auto-load &bull; PO QR creates MRR &bull; Item QR verifies
 </div>
 </div>
 <div class="modal-footer">
-<button type="button" class="btn btn-outline-danger" onclick="clearWhNotifications()">Clear All</button>
 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
 </div>
 </div>
@@ -544,6 +553,48 @@ Scan Document QR to auto-load &bull; PO QR creates MRR &bull; Item QR verifies
 <div class="toast-body" id="toastBody"></div>
 </div>
 </div>
+
+<!-- MRIF LIST MODAL -->
+<div class="modal fade" id="mrifListModal" tabindex="-1">
+<div class="modal-dialog modal-dialog-scrollable">
+<div class="modal-content">
+<div class="modal-header bg-warning text-dark">
+<h5 class="modal-title"><i class="bi bi-list-ul me-2"></i>List of MRIF Documents</h5>
+<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<div class="modal-body p-0">
+<div id="mrifListContainer" class="list-group list-group-flush">
+<div class="list-group-item text-center py-3 text-muted">Loading...</div>
+</div>
+</div>
+<div class="modal-footer">
+<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- MRIF PRINT PREVIEW MODAL -->
+<div class="modal fade" id="mrifPrintModal" tabindex="-1" data-bs-backdrop="static">
+<div class="modal-dialog modal-lg modal-dialog-scrollable">
+<div class="modal-content">
+<div class="modal-header d-print-none">
+<h5 class="modal-title"><i class="bi bi-eye me-2"></i>MRIF Print Preview</h5>
+<button type="button" class="btn-close" onclick="closeMrifPrint()"></button>
+</div>
+<div class="modal-body p-0">
+<div id="mrifPrintContent" class="mrif-print-sheet">
+<!-- Content injected by JS -->
+</div>
+</div>
+<div class="modal-footer d-print-none">
+<button type="button" class="btn btn-secondary" onclick="closeMrifPrint()">Close</button>
+<button type="button" class="btn btn-primary" onclick="printMrif()"><i class="bi bi-printer me-2"></i>Print</button>
+</div>
+</div>
+</div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>
