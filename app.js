@@ -1,14 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    IVM WAREHOUSE QR — APPLICATION LOGIC
-   ═══════════════════════════════════════════════════════════════════════════
-   Extracted from original index.html. All 80 functions preserved exactly.
-   Section comments added for navigation only. No logic was changed.
    ═══════════════════════════════════════════════════════════════════════════ */
-
-
-// ==========================================================================
-// CONFIG & STATE
-// ==========================================================================
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
 const DEFAULT_PIN = '0000';
@@ -43,19 +35,12 @@ const successModal = new bootstrap.Modal(document.getElementById('successModal')
 const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
 const newRequestModal = new bootstrap.Modal(document.getElementById('newRequestModal'));
 const requestSuccessModal = new bootstrap.Modal(document.getElementById('requestSuccessModal'));
-  if (document.getElementById('whNotifModal')) {
-    whNotifModal = new bootstrap.Modal(document.getElementById('whNotifModal'));
-  }
+var whNotifModal = document.getElementById('whNotifModal') ? new bootstrap.Modal(document.getElementById('whNotifModal')) : null;
 const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
 const roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
 const productionNameModal = new bootstrap.Modal(document.getElementById('productionNameModal'));
 state.poScanModal = new bootstrap.Modal(document.getElementById('poScanModal'));
 state.poItemsModal = new bootstrap.Modal(document.getElementById('poItemsModal'));
-
-
-// ==========================================================================
-// UTILITIES — Loading, Audio, Toast
-// ==========================================================================
 
 function showLoading(text) {
 state.isLoading = true;
@@ -128,11 +113,6 @@ resultDiv.textContent += '\nMake sure you deployed the NEW Master.gs and updated
 }
 }
 
-
-// ==========================================================================
-// AUTH & ROLE — PIN, Role Selection, Production Name
-// ==========================================================================
-
 function initRole() {
 const role = localStorage.getItem('ivm_userRole');
 if (!role) {
@@ -171,7 +151,6 @@ var name = document.getElementById('productionNameInput').value.trim();
 if (!name) { alert('Please enter your name'); return; }
 localStorage.setItem('ivm_requestorName', name);
 productionNameModal.hide();
-// Reset status tracking for new user
 localStorage.removeItem('ivm_requestStatuses');
 loadMyRequests();
 }
@@ -234,8 +213,8 @@ document.getElementById('productionBanner').classList.toggle('d-none', !isProduc
 document.getElementById('myRequestsSection').classList.toggle('d-none', !isProduction);
 document.getElementById('docPickerSection').style.display = isProduction ? 'none' : '';
 document.getElementById('quickScanCard').style.display = isProduction ? 'none' : '';
-document.getElementById('whNotificationsCard').classList.toggle('d-none', isProduction);
-document.getElementById('whNotifBtn').classList.toggle('d-none', isProduction);
+const whBtn = document.getElementById('whNotifBtn');
+if (whBtn) whBtn.classList.toggle('d-none', isProduction);
 if (isProduction) {
 document.getElementById('activeTransactionSection').classList.add('d-none');
 if (window._requestsInterval) clearInterval(window._requestsInterval);
@@ -280,11 +259,6 @@ msg.className = 'small mt-2 text-success';
 document.getElementById('currentPinInput').value = '';
 document.getElementById('newPinInput').value = '';
 }
-
-
-// ==========================================================================
-// SETTINGS — Sheet IDs, PIN Management, Sync, Test Connection
-// ==========================================================================
 
 function openSettings() {
 loadSettingsToUI();
@@ -367,11 +341,6 @@ await fetchPendingDocs();
 hideLoading();
 }
 }
-
-// ==========================================================================
-// MODULE & DOCUMENT — Select Module, Fetch Docs, Progress Save/Restore
-// ==========================================================================
-
 function updateLabels() {
 const isMRR = state.currentModule === 'MRR';
 const isMRS = state.currentModule === 'MRS';
@@ -528,11 +497,6 @@ startScanner();
 showToast('Failed to load items', 'danger');
 }
 }
-
-// ==========================================================================
-// ITEM RENDERING — Render Items, Status Badges, Filter, Submit Button
-// ==========================================================================
-
 function renderItems() {
 const tbody = document.getElementById('itemsTable');
 tbody.innerHTML = '';
@@ -577,11 +541,6 @@ btn.className = 'btn btn-warning w-100 mt-3 py-3';
 txt.textContent = 'Submit Partial (' + verified + '/' + total + ')';
 }
 }
-
-
-// ==========================================================================
-// QR SCANNER — Camera, Torch, Switch, Scan Success
-// ==========================================================================
 
 function startScanner() {
 if (state.html5QrCode) { state.html5QrCode.stop().catch(()=>{}); }
@@ -645,11 +604,6 @@ function switchCamera() {
 state.currentCamera = state.currentCamera === 'environment' ? 'user' : 'environment';
 startScanner();
 }
-
-
-// ==========================================================================
-// QUICK SCAN — Universal QR Detection Modal
-// ==========================================================================
 
 function openQuickScan() {
 if (state.isLoading) return;
@@ -765,11 +719,6 @@ hideLoading();
 }
 }
 
-// ==========================================================================
-// PO → MRR WORKFLOW — PO Lookup, PO Items Selection, MRR Creation
-// ==========================================================================
-
-
 function closePoItemsModal() {
 state.poItemsModal.hide();
 }
@@ -777,11 +726,6 @@ state.poItemsModal.hide();
 
 
 let currentModalItem = null;
-
-// ==========================================================================
-// QTY MODAL — Enter Quantity, Validation, Error Alerts
-// ==========================================================================
-
 function openQtyModal(item) {
 currentModalItem = item;
 const isMRR = state.currentModule === 'MRR';
@@ -845,11 +789,6 @@ state.errorTimer = setTimeout(() => clearErrorAlert(), 4000);
 }
 function clearErrorAlert() {
 const a1 = document.getElementById('mismatchAlert');
-
-// ==========================================================================
-// SUBMIT — Transaction Submission to GAS
-// ==========================================================================
-
 const a2 = document.getElementById('exceedErrorAlert');
 if (a1) a1.classList.add('d-none');
 if (a2) a2.classList.add('d-none');
@@ -874,34 +813,28 @@ try {
 const result = await submitTransaction(verifiedItems);
 console.log('[Submit] Result:', result);
 if (result && result.success === true) {
-// ─── UPDATE DOCLINKS STATUS ───
 try {
 var allComplete = true;
 var anyProcessed = false;
 state.items.forEach(function(it) {
-if (!it.verified) {
-allComplete = false;
-} else {
-anyProcessed = true;
-if (it.issuedQty < it.qty) allComplete = false;
-}
+if (!it.verified) { allComplete = false; }
+else { anyProcessed = true; if (it.issuedQty < it.qty) allComplete = false; }
 });
 var newStatus = allComplete && anyProcessed ? 'COMPLETED' : (anyProcessed ? 'PARTIAL' : 'PENDING');
 var statusUrl = API_URL + '?action=updateDocStatus&docNo=' + encodeURIComponent(state.currentDoc) + '&status=' + newStatus + '&_t=' + Date.now();
-console.log('[Submit] Updating DOCLINKS status:', newStatus, 'URL:', statusUrl);
+console.log('[Submit] Updating DOCLINKS status:', newStatus);
 var statusRes = await fetch(statusUrl, { redirect: 'follow' });
 var statusData = await statusRes.json();
-console.log('[Submit] DOCLINKS update response:', statusData);
+console.log('[Submit] DOCLINKS update:', statusData);
 if (statusData && statusData.success) {
-showToast('Request status updated to ' + newStatus + ' for production notification', 'success');
+showToast('Request status updated to ' + newStatus, 'success');
 } else {
-showToast('Warning: Could not update request status. Production may not see the update. Error: ' + (statusData.error || 'Unknown'), 'warning');
+showToast('Warning: Could not update status. Error: ' + (statusData.error || 'Unknown'), 'warning');
 }
 } catch(statusErr) {
 console.error('[Submit] DOCLINKS update error:', statusErr);
-showToast('Warning: Status update failed. Production will not be notified. Please check GAS deployment.', 'danger');
+showToast('Warning: Status update failed', 'danger');
 }
-
 clearDocProgress(state.currentDoc);
 successModal.show();
 setTimeout(() => location.reload(), 2000);
@@ -940,11 +873,6 @@ return result;
 // =============================================================================
 // NEW REQUEST FUNCTIONS - WITH JO No. + SOF AUTO-FILL + REQUESTOR DROPDOWN
 // =============================================================================
-
-// ==========================================================================
-// NEW REQUEST — Production: Create MRIF/MRS, SOF Lookup, Item Search
-// ==========================================================================
-
 function openNewRequest() {
 if (state.isLoading) return;
 // Reset all form fields
@@ -1121,7 +1049,6 @@ if (data && data.success) {
 localStorage.setItem('ivm_requestorName', requestor);
 newRequestModal.hide();
 showRequestQr(data.ticketNo || 'N/A', data.docNo || 'N/A');
-// Reset status tracking so new request shows as PENDING
 var statuses = JSON.parse(localStorage.getItem('ivm_requestStatuses') || '{}');
 statuses[data.docNo] = 'PENDING';
 localStorage.setItem('ivm_requestStatuses', JSON.stringify(statuses));
@@ -1135,11 +1062,6 @@ alert('Error: ' + err.message);
 hideLoading();
 }
 }
-
-
-// ==========================================================================
-// MY REQUESTS — Production: List & Render User Requests
-// ==========================================================================
 
 function showRequestQr(ticketNo, docNo) {
 document.getElementById('requestTicketNo').textContent = ticketNo;
@@ -1166,57 +1088,37 @@ console.log('[loadMyRequests] Fetching:', url);
 var res = await fetch(url);
 var data = await res.json();
 console.log('[loadMyRequests] Response:', data);
-
 if (data.success && data.requests) {
-// Sort by timestamp descending (newest first)
 data.requests.sort(function(a, b) {
 var ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
 var tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
 return tb - ta;
 });
-
-// Check for status changes (for notifications)
 var prevStatuses = {};
-try {
-prevStatuses = JSON.parse(localStorage.getItem('ivm_requestStatuses') || '{}');
-} catch(e) {}
-
+try { prevStatuses = JSON.parse(localStorage.getItem('ivm_requestStatuses') || '{}'); } catch(e) {}
 console.log('[loadMyRequests] Previous statuses:', prevStatuses);
-
 var newStatuses = {};
 var hasNewReady = false;
 var readyCount = 0;
-
 data.requests.forEach(function(req) {
 var docNo = req.docNo || '';
 var status = req.status || 'PENDING';
 newStatuses[docNo] = status;
-console.log('[loadMyRequests] Request:', docNo, 'Status:', status, 'Previous:', prevStatuses[docNo]);
-// Detect any status change from previous check
 var prevStatus = prevStatuses[docNo] || 'PENDING';
 if (prevStatus === 'PENDING' && (status === 'PARTIAL' || status === 'COMPLETED')) {
 hasNewReady = true;
-console.log('[loadMyRequests] STATUS CHANGE DETECTED:', docNo, prevStatus, '→', status);
+console.log('[loadMyRequests] STATUS CHANGE DETECTED:', docNo, prevStatus, '->', status);
 }
-// Count non-pending requests for badge
-if (status !== 'PENDING') {
-readyCount++;
-}
+if (status !== 'PENDING') readyCount++;
 });
-
 localStorage.setItem('ivm_requestStatuses', JSON.stringify(newStatuses));
-
-// Update notification badge
 var badge = document.getElementById('myRequestsBadge');
 if (badge) {
 badge.textContent = readyCount;
 badge.classList.toggle('d-none', readyCount === 0);
 console.log('[loadMyRequests] Badge count:', readyCount);
 }
-
 renderMyRequests(data.requests);
-
-// Show notification toast if any request became ready
 if (hasNewReady) {
 playSuccessBeep();
 showToast('Your request has been processed by the warehouse!', 'success');
@@ -1246,7 +1148,6 @@ var isPartial = (status === 'PARTIAL');
 var badgeClass = isCompleted ? 'success' : (isPartial ? 'info' : 'warning');
 var statusText = isCompleted ? 'COMPLETED' : (isPartial ? 'PARTIAL' : 'PENDING');
 var icon = isCompleted ? 'bi-check-circle-fill' : (isPartial ? 'bi-hourglass-split' : 'bi-clock');
-
 var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + '">' +
 '<div class="d-flex justify-content-between align-items-start">' +
 '<div>' +
@@ -1261,11 +1162,6 @@ container.innerHTML += html;
 });
 }
 
-
-// ==========================================================================
-// TOAST NOTIFICATIONS
-// ==========================================================================
-
 function showToast(msg, type) {
 const toast = document.getElementById('liveToast');
 document.getElementById('toastTitle').textContent = type === 'danger' ? 'Error' : (type === 'success' ? 'Success' : 'Info');
@@ -1273,11 +1169,6 @@ document.getElementById('toastBody').textContent = msg;
 toast.className = 'toast align-items-center text-white bg-' + type;
 bootstrap.Toast.getOrCreateInstance(toast).show();
 }
-
-
-// ==========================================================================
-// PO ITEMS RENDER — PO Items Modal UI Helpers
-// ==========================================================================
 
 function renderPoItems() {
 document.getElementById('poDisplayNo').textContent = state.currentPoNo;
@@ -1384,8 +1275,9 @@ hideLoading();
 }
 
 
+
 // ============================================================================
-// WAREHOUSE NOTIFICATIONS — Show pending requests from production
+// WAREHOUSE NOTIFICATIONS
 // ============================================================================
 
 async function loadWarehouseNotifications() {
@@ -1395,25 +1287,28 @@ var url = API_URL + '?action=getPendingRequests&_t=' + Date.now();
 var res = await fetch(url);
 var data = await res.json();
 console.log('[WH Notifications] Response:', data);
-
 if (data.success && data.requests) {
-// Sort by timestamp (newest first)
-data.requests.sort(function(a, b) {
-return new Date(b.timestamp) - new Date(a.timestamp);
+// Filter: TODAY only + MRIF only
+var today = new Date();
+var todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+var filtered = data.requests.filter(function(req) {
+var reqDate = new Date(req.timestamp);
+var reqStr = reqDate.getFullYear() + '-' + String(reqDate.getMonth()+1).padStart(2,'0') + '-' + String(reqDate.getDate()).padStart(2,'0');
+var type = (req.type || '').toUpperCase();
+return reqStr === todayStr && type === 'MRIF';
 });
+filtered.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
+console.log('[WH Notifications] Today MRIF count:', filtered.length);
 
-// Track previous count for notification sound
 var prevCount = parseInt(localStorage.getItem('ivm_whNotifCount') || '0');
-var newCount = data.requests.length;
+var newCount = filtered.length;
 localStorage.setItem('ivm_whNotifCount', newCount);
 
-// Show toast if new request arrived
 if (newCount > prevCount && prevCount > 0) {
 playSuccessBeep();
-showToast('New request received from production!', 'warning');
+showToast('New MRIF request received today!', 'warning');
 }
 
-// Update badge
 var badge = document.getElementById('whNotifBadge');
 var btn = document.getElementById('whNotifBtn');
 if (badge && btn) {
@@ -1422,12 +1317,7 @@ badge.classList.toggle('d-none', newCount === 0);
 btn.classList.toggle('d-none', false);
 }
 
-// Update card count
-var countEl = document.getElementById('whNotifCount');
-if (countEl) countEl.textContent = newCount;
-
-renderWarehouseNotifications(data.requests);
-renderWhNotifModal(data.requests);
+renderWhNotifModal(filtered);
 }
 } catch(e) {
 console.error('[WH Notifications] Error:', e);
@@ -1459,12 +1349,9 @@ var html = '<div class="list-group-item wh-notif-item py-2" data-docno="' + docN
 '</div>';
 container.innerHTML += html;
 });
-// Add click handlers after rendering
 container.querySelectorAll('.wh-notif-item').forEach(function(el) {
 el.addEventListener('click', function() {
-var dn = this.getAttribute('data-docno');
-var dt = this.getAttribute('data-type');
-processRequestFromNotification(dn, dt);
+processRequestFromNotification(this.getAttribute('data-docno'), this.getAttribute('data-type'));
 });
 });
 if (requests.length > 5) {
@@ -1497,33 +1384,27 @@ var html = '<div class="list-group-item wh-notif-item py-3" data-docno="' + docN
 '</div>';
 container.innerHTML += html;
 });
-// Add click handlers after rendering
 container.querySelectorAll('.wh-notif-item').forEach(function(el) {
 el.addEventListener('click', function() {
-var dn = this.getAttribute('data-docno');
-var dt = this.getAttribute('data-type');
 if (whNotifModal) whNotifModal.hide();
-processRequestFromNotification(dn, dt);
+processRequestFromNotification(this.getAttribute('data-docno'), this.getAttribute('data-type'));
 });
 });
 }
 
 function openWhNotifications() {
-if (typeof whNotifModal === 'undefined') {
+if (!whNotifModal && document.getElementById('whNotifModal')) {
 whNotifModal = new bootstrap.Modal(document.getElementById('whNotifModal'));
 }
 loadWarehouseNotifications();
-whNotifModal.show();
+if (whNotifModal) whNotifModal.show();
 }
 
 async function processRequestFromNotification(docNo, docType) {
-console.log('[WH] Processing request from notification:', docNo, docType);
-// Select the module
+console.log('[WH] Processing request:', docNo, docType);
 state.currentModule = docType;
 updateLabels();
-// Fetch pending docs for this module
 await fetchPendingDocs();
-// Select the document
 var select = document.getElementById('docSelect');
 if (select) {
 for (var i = 0; i < select.options.length; i++) {
@@ -1535,7 +1416,6 @@ return;
 }
 }
 }
-// If not found in dropdown, try direct load
 showToast('Document not in current list. Refreshing...', 'warning');
 await fetchPendingDocs();
 setTimeout(function() {
@@ -1554,11 +1434,6 @@ showToast('Could not find ' + docNo + '. It may have been processed.', 'danger')
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-
-// ==========================================================================
-// ENTRY POINT — DOMContentLoaded
-// ==========================================================================
-
 initRole();
 // Set default receiving date for MRR
 document.getElementById('mrrReceivingDate').valueAsDate = new Date();
