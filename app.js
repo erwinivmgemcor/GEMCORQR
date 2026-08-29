@@ -251,10 +251,6 @@ if (!state.isLoading) loadWarehouseNotifications();
 }, 10000);
 loadWarehouseNotifications();
 }
-}, 10000);
-} else {
-if (window._requestsInterval) clearInterval(window._requestsInterval);
-}
 }
 
 function switchRole() {
