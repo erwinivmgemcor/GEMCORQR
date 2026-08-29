@@ -1621,14 +1621,11 @@ itemsHtml += '<tr>' +
 '</tr>';
 });
 
-// Fill remaining rows (30 total data rows to match Google Sheets template)
-var totalRows = Math.max(30, items.length);
-for (var i = items.length; i < totalRows; i++) {
+// Add 1 empty row after data for spacing
 itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
-}
 
-// "no further entries" row
-itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left" style="font-size:7pt;text-align:center;">******************** no further entries below this line ********************</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
+// "no further entries" row — merged across all columns, centered
+itemsHtml += '<tr><td class="td-nofurther" colspan="8">******************** no further entries below this line ********************</td></tr>';
 
 var mrifQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
