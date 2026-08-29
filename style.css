@@ -176,6 +176,15 @@ body {
   text-align: center;
 }
 
+/* No further entries row */
+.mrif-items td.td-nofurther {
+  text-align: center;
+  font-size: 7pt;
+  font-weight: bold;
+  padding: 4px;
+  border: 1px solid #000;
+}
+
 /* Signatures */
 .mrif-sigs {
   display: flex;
