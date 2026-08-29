@@ -43,6 +43,9 @@ const successModal = new bootstrap.Modal(document.getElementById('successModal')
 const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
 const newRequestModal = new bootstrap.Modal(document.getElementById('newRequestModal'));
 const requestSuccessModal = new bootstrap.Modal(document.getElementById('requestSuccessModal'));
+  if (document.getElementById('whNotifModal')) {
+    whNotifModal = new bootstrap.Modal(document.getElementById('whNotifModal'));
+  }
 const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
 const roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
 const productionNameModal = new bootstrap.Modal(document.getElementById('productionNameModal'));
@@ -231,12 +234,23 @@ document.getElementById('productionBanner').classList.toggle('d-none', !isProduc
 document.getElementById('myRequestsSection').classList.toggle('d-none', !isProduction);
 document.getElementById('docPickerSection').style.display = isProduction ? 'none' : '';
 document.getElementById('quickScanCard').style.display = isProduction ? 'none' : '';
+document.getElementById('whNotificationsCard').classList.toggle('d-none', isProduction);
+document.getElementById('whNotifBtn').classList.toggle('d-none', isProduction);
 if (isProduction) {
 document.getElementById('activeTransactionSection').classList.add('d-none');
-// Auto-refresh my requests every 30 seconds for live status updates
 if (window._requestsInterval) clearInterval(window._requestsInterval);
 window._requestsInterval = setInterval(function() {
 if (!state.isLoading) loadMyRequests();
+}, 10000);
+if (window._whInterval) clearInterval(window._whInterval);
+} else {
+if (window._requestsInterval) clearInterval(window._requestsInterval);
+if (window._whInterval) clearInterval(window._whInterval);
+window._whInterval = setInterval(function() {
+if (!state.isLoading) loadWarehouseNotifications();
+}, 10000);
+loadWarehouseNotifications();
+}
 }, 10000);
 } else {
 if (window._requestsInterval) clearInterval(window._requestsInterval);
@@ -1371,6 +1385,157 @@ showToast('Error: ' + err.message, 'danger');
 } finally {
 hideLoading();
 }
+}
+
+
+// ============================================================================
+// WAREHOUSE NOTIFICATIONS — Show pending requests from production
+// ============================================================================
+
+async function loadWarehouseNotifications() {
+if (localStorage.getItem('ivm_userRole') === 'production') return;
+try {
+var url = API_URL + '?action=getPendingRequests&_t=' + Date.now();
+var res = await fetch(url);
+var data = await res.json();
+console.log('[WH Notifications] Response:', data);
+
+if (data.success && data.requests) {
+// Sort by timestamp (newest first)
+data.requests.sort(function(a, b) {
+return new Date(b.timestamp) - new Date(a.timestamp);
+});
+
+// Track previous count for notification sound
+var prevCount = parseInt(localStorage.getItem('ivm_whNotifCount') || '0');
+var newCount = data.requests.length;
+localStorage.setItem('ivm_whNotifCount', newCount);
+
+// Show toast if new request arrived
+if (newCount > prevCount && prevCount > 0) {
+playSuccessBeep();
+showToast('New request received from production!', 'warning');
+}
+
+// Update badge
+var badge = document.getElementById('whNotifBadge');
+var btn = document.getElementById('whNotifBtn');
+if (badge && btn) {
+badge.textContent = newCount;
+badge.classList.toggle('d-none', newCount === 0);
+btn.classList.toggle('d-none', false);
+}
+
+// Update card count
+var countEl = document.getElementById('whNotifCount');
+if (countEl) countEl.textContent = newCount;
+
+renderWarehouseNotifications(data.requests);
+renderWhNotifModal(data.requests);
+}
+} catch(e) {
+console.error('[WH Notifications] Error:', e);
+}
+}
+
+function renderWarehouseNotifications(requests) {
+var container = document.getElementById('whNotificationsList');
+if (!container) return;
+container.innerHTML = '';
+if (requests.length === 0) {
+container.innerHTML = '<div class="list-group-item text-muted text-center py-3">No pending requests</div>';
+return;
+}
+requests.slice(0, 5).forEach(function(req) {
+var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
+var html = '<div class="list-group-item wh-notif-item py-2" onclick="processRequestFromNotification('' + 
+(req.docNo || '') + '', '' + (req.type || 'MRIF') + '')">' +
+'<div class="d-flex justify-content-between align-items-start">' +
+'<div>' +
+'<div class="doc-no">' + (req.docNo || '') + ' <span class="badge bg-secondary">' + (req.type || '') + '</span></div>' +
+'<div class="requestor"><i class="bi bi-person me-1"></i>' + (req.requestor || 'Unknown') + '</div>' +
+'<div class="timestamp"><i class="bi bi-clock me-1"></i>' + dateStr + '</div>' +
+'</div>' +
+'<span class="badge bg-warning text-dark">PENDING</span>' +
+'</div>' +
+'<div class="small mt-1 text-muted">' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
+'</div>';
+container.innerHTML += html;
+});
+if (requests.length > 5) {
+container.innerHTML += '<div class="list-group-item text-center text-muted small py-2">+' + (requests.length - 5) + ' more pending requests</div>';
+}
+}
+
+function renderWhNotifModal(requests) {
+var container = document.getElementById('whNotifModalList');
+if (!container) return;
+container.innerHTML = '';
+if (requests.length === 0) {
+container.innerHTML = '<div class="list-group-item text-muted text-center py-3">No pending requests</div>';
+return;
+}
+requests.forEach(function(req) {
+var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
+var html = '<div class="list-group-item wh-notif-item py-3" onclick="processRequestFromNotification('' + 
+(req.docNo || '') + '', '' + (req.type || 'MRIF') + ''); whNotifModal.hide();">' +
+'<div class="d-flex justify-content-between align-items-start">' +
+'<div>' +
+'<div class="doc-no">' + (req.docNo || '') + ' <span class="badge bg-secondary">' + (req.type || '') + '</span></div>' +
+'<div class="requestor"><i class="bi bi-person me-1"></i>' + (req.requestor || 'Unknown') + '</div>' +
+'<div class="timestamp"><i class="bi bi-clock me-1"></i>' + dateStr + '</div>' +
+'</div>' +
+'<span class="badge bg-warning text-dark">PENDING</span>' +
+'</div>' +
+'<div class="small mt-1 text-muted">' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
+'</div>';
+container.innerHTML += html;
+});
+}
+
+function openWhNotifications() {
+if (typeof whNotifModal === 'undefined') {
+whNotifModal = new bootstrap.Modal(document.getElementById('whNotifModal'));
+}
+loadWarehouseNotifications();
+whNotifModal.show();
+}
+
+async function processRequestFromNotification(docNo, docType) {
+console.log('[WH] Processing request from notification:', docNo, docType);
+// Select the module
+state.currentModule = docType;
+updateLabels();
+// Fetch pending docs for this module
+await fetchPendingDocs();
+// Select the document
+var select = document.getElementById('docSelect');
+if (select) {
+for (var i = 0; i < select.options.length; i++) {
+if (select.options[i].value === docNo) {
+select.selectedIndex = i;
+onDocSelect();
+showToast('Loading ' + docNo + '...', 'info');
+return;
+}
+}
+}
+// If not found in dropdown, try direct load
+showToast('Document not in current list. Refreshing...', 'warning');
+await fetchPendingDocs();
+setTimeout(function() {
+var select2 = document.getElementById('docSelect');
+if (select2) {
+for (var i = 0; i < select2.options.length; i++) {
+if (select2.options[i].value === docNo) {
+select2.selectedIndex = i;
+onDocSelect();
+return;
+}
+}
+}
+showToast('Could not find ' + docNo + '. It may have been processed.', 'danger');
+}, 1000);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
