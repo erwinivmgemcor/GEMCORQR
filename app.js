@@ -1595,52 +1595,93 @@ items.forEach(function(it, idx) {
 var code = it.itemCode || it.inventoryId || '';
 var desc = it.description || '';
 var qty = it.expectedQty || it.qty || 0;
-var unit = it.unit || 'PCS';
+var issued = it.actualQty || it.issuedQty || 0;
+var unit = it.unit || 'PIECE';
 var remarks = it.remarks || '';
+var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
 itemsHtml += '<tr>' +
 '<td>' + (idx + 1) + '</td>' +
 '<td>' + code + '</td>' +
+'<td><img src="' + qrUrl + '" style="width:40px;height:40px;display:block;margin:0 auto;" alt=""></td>' +
 '<td style="text-align:left">' + desc + '</td>' +
 '<td>' + qty + '</td>' +
+'<td>' + issued + '</td>' +
 '<td>' + unit + '</td>' +
 '<td>' + remarks + '</td>' +
 '</tr>';
 });
 
-// Add empty rows to fill up to at least 10 rows for print aesthetics
-for (var i = items.length; i < 10; i++) {
-itemsHtml += '<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>';
+// Fill remaining rows to maintain table height
+for (var i = items.length; i < 8; i++) {
+itemsHtml += '<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>';
 }
+
+// Add the "no further entries" row
+itemsHtml += '<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td style="text-align:center;font-size:8pt;">******************** no further entries below this line ********************</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>';
 
 var html = '<div class="mrif-print-sheet">' +
 '<div class="mrif-print-header">' +
-'<div><img src="gemcor-logo.png" alt="GEMCOR" class="mrif-print-logo"></div>' +
-'<div class="mrif-print-docno"><span class="label">MRIF No.:&nbsp;</span><span class="value">' + docNo + '</span></div>' +
+'<div class="mrif-logo-area"><img src="gemcor-logo.png" alt="GEMCOR" class="mrif-print-logo"></div>' +
+'<div class="mrif-docno-area">' +
+'<div><span class="mrif-label">MRIF No.:</span><span class="mrif-docno-box">' + docNo + '</span></div>' +
 '</div>' +
-'<div class="mrif-print-title">Materials Request and Issuance Form</div>' +
-'<div class="mrif-print-info">' +
-'<div class="mrif-print-info-row"><span class="label">REQUESTOR:</span><span class="value">' + requestor + '</span></div>' +
-'<div class="mrif-print-info-row"><span class="label">GEM SO No.:</span><span class="value">' + gemSo + '</span></div>' +
-'<div class="mrif-print-info-row"><span class="label">DEPARTMENT/SECTION:</span><span class="value">' + department + '</span></div>' +
-'<div class="mrif-print-info-row"><span class="label">JO No.:</span><span class="value">' + joNo + '</span></div>' +
-'<div class="mrif-print-info-row"><span class="label">DATE:</span><span class="value">' + date + '</span></div>' +
-'<div class="mrif-print-info-row"><span class="label">CLIENT NAME:</span><span class="value">' + client + '</span></div>' +
-'<div style="grid-column: 1 / -1;" class="mrif-print-info-row"><span class="label">PROJECT:</span><span class="value">' + project + '</span></div>' +
 '</div>' +
-'<table class="mrif-print-table">' +
-'<thead><tr><th>ITEM NO.</th><th>ITEM CODE</th><th>ITEM DESCRIPTION</th><th>QUANTITY</th><th>UNIT</th><th>REMARKS</th></tr></thead>' +
+'<div class="mrif-print-title">MATERIALS REQUEST AND ISSUANCE FORM</div>' +
+'<table class="mrif-info-table">' +
+'<tr>' +
+'<td class="mrif-info-label">REQUESTOR:</td>' +
+'<td class="mrif-info-value">' + requestor + '</td>' +
+'<td class="mrif-info-label">GEM SO No.:</td>' +
+'<td class="mrif-info-value-blue">' + gemSo + '</td>' +
+'<td class="mrif-info-label">JO No.:</td>' +
+'<td class="mrif-info-value-blue">' + joNo + '</td>' +
+'</tr>' +
+'<tr>' +
+'<td class="mrif-info-label">DEPARTMENT/SECTION:</td>' +
+'<td class="mrif-info-value">' + department + '</td>' +
+'<td class="mrif-info-label">CLIENT NAME:</td>' +
+'<td class="mrif-info-value" colspan="3">' + client + '</td>' +
+'</tr>' +
+'<tr>' +
+'<td class="mrif-info-label">DATE:</td>' +
+'<td class="mrif-info-value-blue">' + date + '</td>' +
+'<td class="mrif-info-label">PROJECT:</td>' +
+'<td class="mrif-info-value" colspan="3">' + project + '</td>' +
+'</tr>' +
+'</table>' +
+'<table class="mrif-items-table">' +
+'<thead>' +
+'<tr>' +
+'<th>ITEM NO.</th>' +
+'<th>ITEM CODE</th>' +
+'<th>QR IMG</th>' +
+'<th>ITEM DESCRIPTION</th>' +
+'<th>QUANTITY</th>' +
+'<th>ISSUED QTY</th>' +
+'<th>UNIT</th>' +
+'<th>REMARKS</th>' +
+'</tr>' +
+'</thead>' +
 '<tbody>' + itemsHtml + '</tbody>' +
 '</table>' +
-'<div class="mrif-print-signatures">' +
-'<div><div class="mrif-print-sign-line">ANGEL / JOMAR / RICHEL / ERWIN / MARCEL</div><div class="mrif-print-sign-label">Issued By</div></div>' +
-'<div><div class="mrif-print-sign-line">&nbsp;</div><div class="mrif-print-sign-label">Checked By</div></div>' +
-'<div><div class="mrif-print-sign-line">&nbsp;</div><div class="mrif-print-sign-label">Received By / Date</div></div>' +
+'<div class="mrif-signatures">' +
+'<div class="mrif-sign-block">' +
+'<div class="mrif-sign-line">ANGEL / JOMAR / RICHEL / ERWIN / MARCEL</div>' +
+'<div class="mrif-sign-label">ISSUED BY</div>' +
+'</div>' +
+'<div class="mrif-sign-block">' +
+'<div class="mrif-sign-line">&nbsp;</div>' +
+'<div class="mrif-sign-label">CHECKED BY</div>' +
+'</div>' +
+'<div class="mrif-sign-block">' +
+'<div class="mrif-sign-line">&nbsp;</div>' +
+'<div class="mrif-sign-label">RECEIVED BY/DATE</div>' +
+'</div>' +
 '</div>' +
 '</div>';
 
 container.innerHTML = html;
 }
-
 function printMrif() {
 window.print();
 }
