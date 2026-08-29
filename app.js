@@ -899,7 +899,6 @@ showToast('Submit error: ' + err.message, 'danger');
 hideLoading();
 }
 }
-}
 
 async function submitTransaction(verifiedItems) {
 const itemsStr = verifiedItems.map(i => 
