@@ -1614,7 +1614,7 @@ itemsHtml += '<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><t
 
 var html = '<div class="mrif-print-sheet">' +
 '<div class="mrif-print-header">' +
-'<div><img src="gemcor-logo.png" alt="GEMCOR Logo" class="mrif-print-logo" onerror="this.style.display='none';this.nextElementSibling.style.display='block'" style="display:none"><div style="font-size:18pt;font-weight:bold;color:#0066cc;display:none">GEMCOR</div></div>' +
+'<div><img src="gemcor-logo.png" alt="GEMCOR" class="mrif-print-logo"></div>' +
 '<div class="mrif-print-docno"><span class="label">MRIF No.:&nbsp;</span><span class="value">' + docNo + '</span></div>' +
 '</div>' +
 '<div class="mrif-print-title">Materials Request and Issuance Form</div>' +
