@@ -220,14 +220,14 @@ document.getElementById('activeTransactionSection').classList.add('d-none');
 if (window._requestsInterval) clearInterval(window._requestsInterval);
 window._requestsInterval = setInterval(function() {
 if (!state.isLoading) loadMyRequests();
-}, 10000);
+}, 30000);
 if (window._whInterval) clearInterval(window._whInterval);
 } else {
 if (window._requestsInterval) clearInterval(window._requestsInterval);
 if (window._whInterval) clearInterval(window._whInterval);
 window._whInterval = setInterval(function() {
 if (!state.isLoading) loadWarehouseNotifications();
-}, 10000);
+}, 30000);
 loadWarehouseNotifications();
 }
 }
@@ -1304,14 +1304,19 @@ var res = await fetch(url);
 var data = await res.json();
 console.log('[WH Notifications] Response:', data);
 if (data.success && data.requests) {
-// Filter: TODAY only + MRIF only
 var today = new Date();
 var todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+var currentMrifId = localStorage.getItem('sheetId_MRIF') || '';
 var filtered = data.requests.filter(function(req) {
 var reqDate = new Date(req.timestamp);
 var reqStr = reqDate.getFullYear() + '-' + String(reqDate.getMonth()+1).padStart(2,'0') + '-' + String(reqDate.getDate()).padStart(2,'0');
 var type = (req.type || '').toUpperCase();
-return reqStr === todayStr && type === 'MRIF';
+if (reqStr !== todayStr || type !== 'MRIF') return false;
+if (currentMrifId && req.url) {
+var reqUrl = String(req.url || '');
+if (reqUrl.indexOf(currentMrifId) === -1) return false;
+}
+return true;
 });
 filtered.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
 console.log('[WH Notifications] Today MRIF count:', filtered.length);
@@ -1332,8 +1337,6 @@ badge.textContent = newCount;
 badge.classList.toggle('d-none', newCount === 0);
 btn.classList.toggle('d-none', false);
 }
-
-renderWhNotifModal(filtered);
 }
 } catch(e) {
 console.error('[WH Notifications] Error:', e);
@@ -1412,8 +1415,44 @@ function openWhNotifications() {
 if (!whNotifModal && document.getElementById('whNotifModal')) {
 whNotifModal = new bootstrap.Modal(document.getElementById('whNotifModal'));
 }
-loadWarehouseNotifications();
 if (whNotifModal) whNotifModal.show();
+loadAndRenderWhModal();
+}
+
+async function loadAndRenderWhModal() {
+var container = document.getElementById('whNotifModalList');
+if (container) {
+container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading...</div></div>';
+}
+try {
+var url = API_URL + '?action=getPendingRequests&_t=' + Date.now();
+var res = await fetch(url);
+var data = await res.json();
+console.log('[WH Modal] Response:', data);
+if (data.success && data.requests) {
+var today = new Date();
+var todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+var currentMrifId = localStorage.getItem('sheetId_MRIF') || '';
+var filtered = data.requests.filter(function(req) {
+var reqDate = new Date(req.timestamp);
+var reqStr = reqDate.getFullYear() + '-' + String(reqDate.getMonth()+1).padStart(2,'0') + '-' + String(reqDate.getDate()).padStart(2,'0');
+var type = (req.type || '').toUpperCase();
+if (reqStr !== todayStr || type !== 'MRIF') return false;
+if (currentMrifId && req.url) {
+var reqUrl = String(req.url || '');
+if (reqUrl.indexOf(currentMrifId) === -1) return false;
+}
+return true;
+});
+filtered.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
+renderWhNotifModal(filtered);
+} else {
+renderWhNotifModal([]);
+}
+} catch(e) {
+console.error('[WH Modal] Error:', e);
+renderWhNotifModal([]);
+}
 }
 
 async function processRequestFromNotification(docNo, docType) {
@@ -1426,7 +1465,7 @@ if (select) {
 for (var i = 0; i < select.options.length; i++) {
 if (select.options[i].value === docNo) {
 select.selectedIndex = i;
-onDocSelect();
+onDocSelect(docNo);
 showToast('Loading ' + docNo + '...', 'info');
 return;
 }
@@ -1440,13 +1479,21 @@ if (select2) {
 for (var i = 0; i < select2.options.length; i++) {
 if (select2.options[i].value === docNo) {
 select2.selectedIndex = i;
-onDocSelect();
+onDocSelect(docNo);
 return;
 }
 }
 }
 showToast('Could not find ' + docNo + '. It may have been processed.', 'danger');
 }, 1000);
+}
+
+function clearWhNotifications() {
+if (!confirm('Clear all warehouse notifications? This will reset the badge count.')) return;
+localStorage.setItem('ivm_whNotifCount', '0');
+var badge = document.getElementById('whNotifBadge');
+if (badge) badge.classList.add('d-none');
+showToast('Notifications cleared', 'info');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
