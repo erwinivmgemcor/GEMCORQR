@@ -855,8 +855,7 @@ showToast('No items verified. Scan or enter items first.', 'warning');
 return;
 }
 if (verified < total) {
-if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?
-Only scanned/entered items will be sent.')) {
+if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly scanned/entered items will be sent.')) {
 return;
 }
 }
