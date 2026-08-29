@@ -43,9 +43,7 @@ const successModal = new bootstrap.Modal(document.getElementById('successModal')
 const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
 const newRequestModal = new bootstrap.Modal(document.getElementById('newRequestModal'));
 const requestSuccessModal = new bootstrap.Modal(document.getElementById('requestSuccessModal'));
-  if (document.getElementById('whNotifModal')) {
-    whNotifModal = new bootstrap.Modal(document.getElementById('whNotifModal'));
-  }
+var whNotifModal = document.getElementById('whNotifModal') ? new bootstrap.Modal(document.getElementById('whNotifModal')) : null;
 const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
 const roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
 const productionNameModal = new bootstrap.Modal(document.getElementById('productionNameModal'));
@@ -1490,11 +1488,11 @@ container.innerHTML += html;
 }
 
 function openWhNotifications() {
-if (typeof whNotifModal === 'undefined') {
+if (!whNotifModal && document.getElementById('whNotifModal')) {
 whNotifModal = new bootstrap.Modal(document.getElementById('whNotifModal'));
 }
 loadWarehouseNotifications();
-whNotifModal.show();
+if (whNotifModal) whNotifModal.show();
 }
 
 async function processRequestFromNotification(docNo, docType) {
