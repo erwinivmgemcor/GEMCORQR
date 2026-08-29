@@ -855,7 +855,8 @@ showToast('No items verified. Scan or enter items first.', 'warning');
 return;
 }
 if (verified < total) {
-if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly scanned/entered items will be sent.')) {
+if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?
+Only scanned/entered items will be sent.')) {
 return;
 }
 }
@@ -864,6 +865,28 @@ try {
 const result = await submitTransaction(verifiedItems);
 console.log('[Submit] Result:', result);
 if (result && result.success === true) {
+// ─── UPDATE DOCLINKS STATUS ───
+try {
+var allComplete = true;
+var anyProcessed = false;
+state.items.forEach(function(it) {
+if (!it.verified) {
+allComplete = false;
+} else {
+anyProcessed = true;
+if (it.issuedQty < it.qty) allComplete = false;
+}
+});
+var newStatus = allComplete && anyProcessed ? 'COMPLETED' : (anyProcessed ? 'PARTIAL' : 'PENDING');
+var statusUrl = API_URL + '?action=updateDocStatus&docNo=' + encodeURIComponent(state.currentDoc) + '&status=' + newStatus + '&_t=' + Date.now();
+console.log('[Submit] Updating DOCLINKS status:', newStatus);
+var statusRes = await fetch(statusUrl, { redirect: 'follow' });
+var statusData = await statusRes.json();
+console.log('[Submit] DOCLINKS update:', statusData);
+} catch(statusErr) {
+console.error('[Submit] DOCLINKS update error:', statusErr);
+}
+
 clearDocProgress(state.currentDoc);
 successModal.show();
 setTimeout(() => location.reload(), 2000);
@@ -875,6 +898,7 @@ console.error('[Submit] Error:', err);
 showToast('Submit error: ' + err.message, 'danger');
 } finally {
 hideLoading();
+}
 }
 }
 
@@ -1154,10 +1178,13 @@ var docNo = req.docNo || '';
 var status = req.status || 'PENDING';
 newStatuses[docNo] = status;
 console.log('[loadMyRequests] Request:', docNo, 'Status:', status, 'Previous:', prevStatuses[docNo]);
-if (prevStatuses[docNo] === 'PENDING' && status !== 'PENDING') {
+// Detect any status change from previous check
+var prevStatus = prevStatuses[docNo] || 'PENDING';
+if (prevStatus === 'PENDING' && (status === 'PARTIAL' || status === 'COMPLETED')) {
 hasNewReady = true;
-console.log('[loadMyRequests] STATUS CHANGE DETECTED:', docNo, '→', status);
+console.log('[loadMyRequests] STATUS CHANGE DETECTED:', docNo, prevStatus, '→', status);
 }
+// Count non-pending requests for badge
 if (status !== 'PENDING') {
 readyCount++;
 }
