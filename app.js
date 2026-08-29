@@ -992,7 +992,7 @@ div.className = 'row g-2 mb-2 align-items-end';
 div.innerHTML = '<div class="col-5"><label class="form-label small">Item</label><input type="text" class="form-control req-item-search" placeholder="Type to search..." oninput="filterRequestItems(this,'+idx+')" onfocus="filterRequestItems(this,'+idx+')"><div class="list-group position-absolute z-3 d-none req-dropdown" style="max-height:150px;overflow-y:auto;" id="reqDropdown'+idx+'"></div><input type="hidden" class="req-item-code" id="reqCode'+idx+'"><input type="hidden" class="req-item-desc" id="reqDesc'+idx+'"></div>' +
 '<div class="col-3"><label class="form-label small">Qty</label><input type="number" class="form-control req-qty" min="1" value="1"></div>' +
 '<div class="col-3"><label class="form-label small">Unit</label><input type="text" class="form-control req-unit" value="PCS" readonly></div>' +
-'<div class="col-1"><button class="btn btn-outline-danger btn-sm" onclick="this.closest('.row').remove()"><i class="bi bi-trash"></i></button></div>';
+'<div class="col-1"><button class="btn btn-outline-danger btn-sm" onclick="this.closest(\'.row\').remove()"><i class="bi bi-trash"></i></button></div>';
 container.appendChild(div);
 }
 
@@ -1621,8 +1621,8 @@ itemsHtml += '<tr>' +
 '</tr>';
 });
 
-// Fill remaining rows (8 total data rows + 1 empty + 1 "no further entries")
-var totalRows = 10;
+// Fill remaining rows (minimum 10 data rows for print aesthetics)
+var totalRows = Math.max(10, items.length);
 for (var i = items.length; i < totalRows; i++) {
 itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
 }
@@ -1630,64 +1630,65 @@ itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;<
 // "no further entries" row
 itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left" style="font-size:7pt;text-align:center;">******************** no further entries below this line ********************</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
 
-var html = '<div class="mrif-print-sheet">' +
-'<div class="mrif-header">' +
-'<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display='none'"></div>' +
-'<div class="mrif-docno"><span class="mrif-dn-label">MRIF No.:</span><span class="mrif-dn-box">' + docNo + '</span></div>' +
-'</div>' +
-'<div class="mrif-title">MATERIALS REQUEST AND ISSUANCE FORM</div>' +
-'<table class="mrif-meta">' +
-'<tr>' +
-'<td class="meta-label">REQUESTOR:</td>' +
-'<td class="meta-value">' + requestor + '</td>' +
-'<td class="meta-label">GEM SO No.:</td>' +
-'<td class="meta-blue">' + gemSo + '</td>' +
-'<td class="meta-label">JO No.:</td>' +
-'<td class="meta-blue">' + joNo + '</td>' +
-'</tr>' +
-'<tr>' +
-'<td class="meta-label">DEPARTMENT/SECTION:</td>' +
-'<td class="meta-value">' + department + '</td>' +
-'<td class="meta-label">CLIENT NAME:</td>' +
-'<td class="meta-value" colspan="3">' + client + '</td>' +
-'</tr>' +
-'<tr>' +
-'<td class="meta-label">DATE:</td>' +
-'<td class="meta-blue">' + dateStr + '</td>' +
-'<td class="meta-label">PROJECT:</td>' +
-'<td class="meta-value" colspan="3">' + project + '</td>' +
-'</tr>' +
-'</table>' +
-'<table class="mrif-items">' +
-'<thead>' +
-'<tr>' +
-'<th style="width:5%">ITEM<br>NO.</th>' +
-'<th style="width:14%">ITEM<br>CODE</th>' +
-'<th style="width:7%">QR<br>IMG</th>' +
-'<th style="width:34%">ITEM DESCRIPTION</th>' +
-'<th style="width:9%">QUANTITY</th>' +
-'<th style="width:9%">ISSUED<br>QTY</th>' +
-'<th style="width:7%">UNIT</th>' +
-'<th style="width:15%">REMARKS</th>' +
-'</tr>' +
-'</thead>' +
-'<tbody>' + itemsHtml + '</tbody>' +
-'</table>' +
-'<div class="mrif-sigs">' +
-'<div class="mrif-sig">' +
-'<div class="mrif-sig-line">ANGEL / JOMAR / RICHEL / ERWIN / MARCEL</div>' +
-'<div class="mrif-sig-label">ISSUED BY</div>' +
-'</div>' +
-'<div class="mrif-sig">' +
-'<div class="mrif-sig-line">&nbsp;</div>' +
-'<div class="mrif-sig-label">CHECKED BY</div>' +
-'</div>' +
-'<div class="mrif-sig">' +
-'<div class="mrif-sig-line">&nbsp;</div>' +
-'<div class="mrif-sig-label">RECEIVED BY/DATE</div>' +
-'</div>' +
-'</div>' +
-'</div>';
+// Use template literal to avoid quote escaping hell
+var html = `<div class="mrif-print-sheet">
+<div class="mrif-header">
+<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>
+<div class="mrif-docno"><span class="mrif-dn-label">MRIF No.:</span><span class="mrif-dn-box">${docNo}</span></div>
+</div>
+<div class="mrif-title">MATERIALS REQUEST AND ISSUANCE FORM</div>
+<table class="mrif-meta">
+<tr>
+<td class="meta-label">REQUESTOR:</td>
+<td class="meta-value">${requestor}</td>
+<td class="meta-label">GEM SO No.:</td>
+<td class="meta-blue">${gemSo}</td>
+<td class="meta-label">JO No.:</td>
+<td class="meta-blue">${joNo}</td>
+</tr>
+<tr>
+<td class="meta-label">DEPARTMENT/SECTION:</td>
+<td class="meta-value">${department}</td>
+<td class="meta-label">CLIENT NAME:</td>
+<td class="meta-value" colspan="3">${client}</td>
+</tr>
+<tr>
+<td class="meta-label">DATE:</td>
+<td class="meta-blue">${dateStr}</td>
+<td class="meta-label">PROJECT:</td>
+<td class="meta-value" colspan="3">${project}</td>
+</tr>
+</table>
+<table class="mrif-items">
+<thead>
+<tr>
+<th style="width:5%">ITEM<br>NO.</th>
+<th style="width:14%">ITEM<br>CODE</th>
+<th style="width:7%">QR<br>IMG</th>
+<th style="width:34%">ITEM DESCRIPTION</th>
+<th style="width:9%">QUANTITY</th>
+<th style="width:9%">ISSUED<br>QTY</th>
+<th style="width:7%">UNIT</th>
+<th style="width:15%">REMARKS</th>
+</tr>
+</thead>
+<tbody>${itemsHtml}</tbody>
+</table>
+<div class="mrif-sigs">
+<div class="mrif-sig">
+<div class="mrif-sig-line">ANGEL / JOMAR / RICHEL / ERWIN / MARCEL</div>
+<div class="mrif-sig-label">ISSUED BY</div>
+</div>
+<div class="mrif-sig">
+<div class="mrif-sig-line">&nbsp;</div>
+<div class="mrif-sig-label">CHECKED BY</div>
+</div>
+<div class="mrif-sig">
+<div class="mrif-sig-line">&nbsp;</div>
+<div class="mrif-sig-label">RECEIVED BY/DATE</div>
+</div>
+</div>
+</div>`;
 
 container.innerHTML = html;
 }
