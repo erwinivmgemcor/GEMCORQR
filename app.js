@@ -1124,12 +1124,17 @@ if (!requestor) return;
 showLoading('Loading requests...');
 try {
 var url = API_URL + '?action=getMyRequests&requestor=' + encodeURIComponent(requestor) + '&_t=' + Date.now();
+console.log('[loadMyRequests] Fetching:', url);
 var res = await fetch(url);
 var data = await res.json();
+console.log('[loadMyRequests] Response:', data);
+
 if (data.success && data.requests) {
 // Sort by timestamp descending (newest first)
 data.requests.sort(function(a, b) {
-return new Date(b.timestamp) - new Date(a.timestamp);
+var ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+var tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+return tb - ta;
 });
 
 // Check for status changes (for notifications)
@@ -1137,6 +1142,8 @@ var prevStatuses = {};
 try {
 prevStatuses = JSON.parse(localStorage.getItem('ivm_requestStatuses') || '{}');
 } catch(e) {}
+
+console.log('[loadMyRequests] Previous statuses:', prevStatuses);
 
 var newStatuses = {};
 var hasNewReady = false;
@@ -1146,8 +1153,10 @@ data.requests.forEach(function(req) {
 var docNo = req.docNo || '';
 var status = req.status || 'PENDING';
 newStatuses[docNo] = status;
+console.log('[loadMyRequests] Request:', docNo, 'Status:', status, 'Previous:', prevStatuses[docNo]);
 if (prevStatuses[docNo] === 'PENDING' && status !== 'PENDING') {
 hasNewReady = true;
+console.log('[loadMyRequests] STATUS CHANGE DETECTED:', docNo, '→', status);
 }
 if (status !== 'PENDING') {
 readyCount++;
@@ -1161,6 +1170,7 @@ var badge = document.getElementById('myRequestsBadge');
 if (badge) {
 badge.textContent = readyCount;
 badge.classList.toggle('d-none', readyCount === 0);
+console.log('[loadMyRequests] Badge count:', readyCount);
 }
 
 renderMyRequests(data.requests);
@@ -1169,9 +1179,14 @@ renderMyRequests(data.requests);
 if (hasNewReady) {
 playSuccessBeep();
 showToast('Your request has been processed by the warehouse!', 'success');
+console.log('[loadMyRequests] Toast notification shown!');
 }
+} else {
+console.log('[loadMyRequests] No requests or error:', data.error);
 }
-} catch(e) { console.error(e); }
+} catch(e) {
+console.error('[loadMyRequests] Error:', e);
+}
 finally { hideLoading(); }
 }
 
