@@ -1584,11 +1584,21 @@ if (!container) return;
 
 var requestor = info.Requestor || info.requestor || '';
 var department = info.Department || info.department || '';
-var date = info.Date || info.date || '';
+var dateRaw = info.Date || info.date || '';
 var gemSo = info['GEM SO No.'] || info.gemSoNo || info.gemSo || '';
 var joNo = info['JO No.'] || info.joNo || '';
 var client = info['Client Name'] || info.clientName || info.client || '';
 var project = info.Project || info.project || '';
+
+// Format date nicely
+var dateStr = dateRaw;
+try {
+var d = new Date(dateRaw);
+if (!isNaN(d.getTime())) {
+var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+dateStr = months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+}
+} catch(e) {}
 
 var itemsHtml = '';
 items.forEach(function(it, idx) {
@@ -1600,82 +1610,81 @@ var unit = it.unit || 'PIECE';
 var remarks = it.remarks || '';
 var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
 itemsHtml += '<tr>' +
-'<td>' + (idx + 1) + '</td>' +
-'<td>' + code + '</td>' +
-'<td><img src="' + qrUrl + '" style="width:40px;height:40px;display:block;margin:0 auto;" alt=""></td>' +
-'<td style="text-align:left">' + desc + '</td>' +
-'<td>' + qty + '</td>' +
-'<td>' + issued + '</td>' +
-'<td>' + unit + '</td>' +
-'<td>' + remarks + '</td>' +
+'<td class="td-center">' + (idx + 1) + '</td>' +
+'<td class="td-center">' + code + '</td>' +
+'<td class="td-center"><img src="' + qrUrl + '" style="width:32px;height:32px;display:block;margin:0 auto;" alt=""></td>' +
+'<td class="td-left">' + desc + '</td>' +
+'<td class="td-center">' + qty + '</td>' +
+'<td class="td-center">' + issued + '</td>' +
+'<td class="td-center">' + unit + '</td>' +
+'<td class="td-center">' + remarks + '</td>' +
 '</tr>';
 });
 
-// Fill remaining rows to maintain table height
-for (var i = items.length; i < 8; i++) {
-itemsHtml += '<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>';
+// Fill remaining rows (8 total data rows + 1 empty + 1 "no further entries")
+var totalRows = 10;
+for (var i = items.length; i < totalRows; i++) {
+itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
 }
 
-// Add the "no further entries" row
-itemsHtml += '<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td style="text-align:center;font-size:8pt;">******************** no further entries below this line ********************</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>';
+// "no further entries" row
+itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left" style="font-size:7pt;text-align:center;">******************** no further entries below this line ********************</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
 
 var html = '<div class="mrif-print-sheet">' +
-'<div class="mrif-print-header">' +
-'<div class="mrif-logo-area"><img src="gemcor-logo.png" alt="GEMCOR" class="mrif-print-logo"></div>' +
-'<div class="mrif-docno-area">' +
-'<div><span class="mrif-label">MRIF No.:</span><span class="mrif-docno-box">' + docNo + '</span></div>' +
+'<div class="mrif-header">' +
+'<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display='none'"></div>' +
+'<div class="mrif-docno"><span class="mrif-dn-label">MRIF No.:</span><span class="mrif-dn-box">' + docNo + '</span></div>' +
 '</div>' +
-'</div>' +
-'<div class="mrif-print-title">MATERIALS REQUEST AND ISSUANCE FORM</div>' +
-'<table class="mrif-info-table">' +
+'<div class="mrif-title">MATERIALS REQUEST AND ISSUANCE FORM</div>' +
+'<table class="mrif-meta">' +
 '<tr>' +
-'<td class="mrif-info-label">REQUESTOR:</td>' +
-'<td class="mrif-info-value">' + requestor + '</td>' +
-'<td class="mrif-info-label">GEM SO No.:</td>' +
-'<td class="mrif-info-value-blue">' + gemSo + '</td>' +
-'<td class="mrif-info-label">JO No.:</td>' +
-'<td class="mrif-info-value-blue">' + joNo + '</td>' +
+'<td class="meta-label">REQUESTOR:</td>' +
+'<td class="meta-value">' + requestor + '</td>' +
+'<td class="meta-label">GEM SO No.:</td>' +
+'<td class="meta-blue">' + gemSo + '</td>' +
+'<td class="meta-label">JO No.:</td>' +
+'<td class="meta-blue">' + joNo + '</td>' +
 '</tr>' +
 '<tr>' +
-'<td class="mrif-info-label">DEPARTMENT/SECTION:</td>' +
-'<td class="mrif-info-value">' + department + '</td>' +
-'<td class="mrif-info-label">CLIENT NAME:</td>' +
-'<td class="mrif-info-value" colspan="3">' + client + '</td>' +
+'<td class="meta-label">DEPARTMENT/SECTION:</td>' +
+'<td class="meta-value">' + department + '</td>' +
+'<td class="meta-label">CLIENT NAME:</td>' +
+'<td class="meta-value" colspan="3">' + client + '</td>' +
 '</tr>' +
 '<tr>' +
-'<td class="mrif-info-label">DATE:</td>' +
-'<td class="mrif-info-value-blue">' + date + '</td>' +
-'<td class="mrif-info-label">PROJECT:</td>' +
-'<td class="mrif-info-value" colspan="3">' + project + '</td>' +
+'<td class="meta-label">DATE:</td>' +
+'<td class="meta-blue">' + dateStr + '</td>' +
+'<td class="meta-label">PROJECT:</td>' +
+'<td class="meta-value" colspan="3">' + project + '</td>' +
 '</tr>' +
 '</table>' +
-'<table class="mrif-items-table">' +
+'<table class="mrif-items">' +
 '<thead>' +
 '<tr>' +
-'<th>ITEM NO.</th>' +
-'<th>ITEM CODE</th>' +
-'<th>QR IMG</th>' +
-'<th>ITEM DESCRIPTION</th>' +
-'<th>QUANTITY</th>' +
-'<th>ISSUED QTY</th>' +
-'<th>UNIT</th>' +
-'<th>REMARKS</th>' +
+'<th style="width:5%">ITEM<br>NO.</th>' +
+'<th style="width:14%">ITEM<br>CODE</th>' +
+'<th style="width:7%">QR<br>IMG</th>' +
+'<th style="width:34%">ITEM DESCRIPTION</th>' +
+'<th style="width:9%">QUANTITY</th>' +
+'<th style="width:9%">ISSUED<br>QTY</th>' +
+'<th style="width:7%">UNIT</th>' +
+'<th style="width:15%">REMARKS</th>' +
 '</tr>' +
 '</thead>' +
 '<tbody>' + itemsHtml + '</tbody>' +
 '</table>' +
-'<div class="mrif-signatures">' +
-'<div class="mrif-sign-block">' +
-'<div class="mrif-sign-line">ANGEL / JOMAR / RICHEL / ERWIN / MARCEL</div>' +
-'<div class="mrif-sign-label">ISSUED BY</div>' +
+'<div class="mrif-sigs">' +
+'<div class="mrif-sig">' +
+'<div class="mrif-sig-line">ANGEL / JOMAR / RICHEL / ERWIN / MARCEL</div>' +
+'<div class="mrif-sig-label">ISSUED BY</div>' +
 '</div>' +
-'<div class="mrif-sign-block">' +
-'<div class="mrif-sign-line">&nbsp;</div>' +
-'<div class="mrif-sign-label">CHECKED BY</div>' +
+'<div class="mrif-sig">' +
+'<div class="mrif-sig-line">&nbsp;</div>' +
+'<div class="mrif-sig-label">CHECKED BY</div>' +
 '</div>' +
-'<div class="mrif-sign-block">' +
-'<div class="mrif-sign-line">&nbsp;</div>' +
-'<div class="mrif-sign-label">RECEIVED BY/DATE</div>' +
+'<div class="mrif-sig">' +
+'<div class="mrif-sig-line">&nbsp;</div>' +
+'<div class="mrif-sig-label">RECEIVED BY/DATE</div>' +
 '</div>' +
 '</div>' +
 '</div>';
