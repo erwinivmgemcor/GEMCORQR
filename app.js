@@ -237,7 +237,7 @@ document.getElementById('activeTransactionSection').classList.add('d-none');
 if (window._requestsInterval) clearInterval(window._requestsInterval);
 window._requestsInterval = setInterval(function() {
 if (!state.isLoading) loadMyRequests();
-}, 30000);
+}, 10000);
 } else {
 if (window._requestsInterval) clearInterval(window._requestsInterval);
 }
@@ -878,12 +878,18 @@ if (it.issuedQty < it.qty) allComplete = false;
 });
 var newStatus = allComplete && anyProcessed ? 'COMPLETED' : (anyProcessed ? 'PARTIAL' : 'PENDING');
 var statusUrl = API_URL + '?action=updateDocStatus&docNo=' + encodeURIComponent(state.currentDoc) + '&status=' + newStatus + '&_t=' + Date.now();
-console.log('[Submit] Updating DOCLINKS status:', newStatus);
+console.log('[Submit] Updating DOCLINKS status:', newStatus, 'URL:', statusUrl);
 var statusRes = await fetch(statusUrl, { redirect: 'follow' });
 var statusData = await statusRes.json();
-console.log('[Submit] DOCLINKS update:', statusData);
+console.log('[Submit] DOCLINKS update response:', statusData);
+if (statusData && statusData.success) {
+showToast('Request status updated to ' + newStatus + ' for production notification', 'success');
+} else {
+showToast('Warning: Could not update request status. Production may not see the update. Error: ' + (statusData.error || 'Unknown'), 'warning');
+}
 } catch(statusErr) {
 console.error('[Submit] DOCLINKS update error:', statusErr);
+showToast('Warning: Status update failed. Production will not be notified. Please check GAS deployment.', 'danger');
 }
 
 clearDocProgress(state.currentDoc);
