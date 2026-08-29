@@ -36,6 +36,8 @@ const settingsModal = new bootstrap.Modal(document.getElementById('settingsModal
 const newRequestModal = new bootstrap.Modal(document.getElementById('newRequestModal'));
 const requestSuccessModal = new bootstrap.Modal(document.getElementById('requestSuccessModal'));
 var whNotifModal = document.getElementById('whNotifModal') ? new bootstrap.Modal(document.getElementById('whNotifModal')) : null;
+var mrifListModal = document.getElementById('mrifListModal') ? new bootstrap.Modal(document.getElementById('mrifListModal')) : null;
+var mrifPrintModal = document.getElementById('mrifPrintModal') ? new bootstrap.Modal(document.getElementById('mrifPrintModal')) : null;
 const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
 const roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
 const productionNameModal = new bootstrap.Modal(document.getElementById('productionNameModal'));
@@ -353,6 +355,11 @@ document.getElementById('moduleLabel').textContent = mod;
 updateLabels();
 changeDocument();
 await fetchPendingDocs();
+// Show/hide MRIF List button
+var mrifCard = document.getElementById('mrifListCard');
+if (mrifCard) {
+mrifCard.classList.toggle('d-none', mod !== 'MRIF');
+}
 } finally {
 hideLoading();
 }
@@ -1494,6 +1501,152 @@ localStorage.setItem('ivm_whNotifCount', '0');
 var badge = document.getElementById('whNotifBadge');
 if (badge) badge.classList.add('d-none');
 showToast('Notifications cleared', 'info');
+}
+
+
+// ============================================================================
+// MRIF PRINT PREVIEW — List & Print
+// ============================================================================
+
+async function openMrifList() {
+if (state.isLoading) return;
+if (mrifListModal) mrifListModal.show();
+var container = document.getElementById('mrifListContainer');
+if (container) {
+container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRIF documents...</div></div>';
+}
+try {
+var sheetId = getCleanSheetId();
+if (!sheetId) {
+if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">No MRIF Sheet ID configured. Please sync or enter Sheet ID in Settings.</div>';
+return;
+}
+var url = API_URL + '?action=getPendingDocs&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
+var res = await fetch(url, { redirect: 'follow' });
+var text = await res.text();
+var data;
+try { data = JSON.parse(text); } catch(e) { data = {}; }
+var docs = Array.isArray(data) ? data : (data.documents || data.docs || []);
+renderMrifList(docs);
+} catch(err) {
+if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error loading documents: ' + err.message + '</div>';
+}
+}
+
+function renderMrifList(docs) {
+var container = document.getElementById('mrifListContainer');
+if (!container) return;
+container.innerHTML = '';
+if (!docs || docs.length === 0) {
+container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No MRIF documents found</div>';
+return;
+}
+docs.forEach(function(d) {
+var docNo = typeof d === 'string' ? d : (d.docNo || d.name || d);
+var el = document.createElement('div');
+el.className = 'list-group-item mrif-list-item d-flex justify-content-between align-items-center';
+el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + docNo + '</strong></div>' +
+'<button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>View / Print</button>';
+el.addEventListener('click', function() { openMrifPrint(docNo); });
+container.appendChild(el);
+});
+}
+
+async function openMrifPrint(docNo) {
+if (state.isLoading) return;
+showLoading('Loading ' + docNo + '...');
+try {
+var sheetId = getCleanSheetId();
+var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
+var res = await fetch(url, { redirect: 'follow' });
+var text = await res.text();
+var data;
+try { data = JSON.parse(text); } catch(e) { data = {}; }
+if (data.error) {
+showToast('Error: ' + data.error, 'danger');
+return;
+}
+renderMrifPrint(docNo, data.info || {}, data.items || []);
+if (mrifListModal) mrifListModal.hide();
+setTimeout(function() {
+if (mrifPrintModal) mrifPrintModal.show();
+}, 300);
+} catch(err) {
+showToast('Failed to load document: ' + err.message, 'danger');
+} finally {
+hideLoading();
+}
+}
+
+function renderMrifPrint(docNo, info, items) {
+var container = document.getElementById('mrifPrintContent');
+if (!container) return;
+
+var requestor = info.Requestor || info.requestor || '';
+var department = info.Department || info.department || '';
+var date = info.Date || info.date || '';
+var gemSo = info['GEM SO No.'] || info.gemSoNo || info.gemSo || '';
+var joNo = info['JO No.'] || info.joNo || '';
+var client = info['Client Name'] || info.clientName || info.client || '';
+var project = info.Project || info.project || '';
+
+var itemsHtml = '';
+items.forEach(function(it, idx) {
+var code = it.itemCode || it.inventoryId || '';
+var desc = it.description || '';
+var qty = it.expectedQty || it.qty || 0;
+var unit = it.unit || 'PCS';
+var remarks = it.remarks || '';
+itemsHtml += '<tr>' +
+'<td>' + (idx + 1) + '</td>' +
+'<td>' + code + '</td>' +
+'<td style="text-align:left">' + desc + '</td>' +
+'<td>' + qty + '</td>' +
+'<td>' + unit + '</td>' +
+'<td>' + remarks + '</td>' +
+'</tr>';
+});
+
+// Add empty rows to fill up to at least 10 rows for print aesthetics
+for (var i = items.length; i < 10; i++) {
+itemsHtml += '<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>';
+}
+
+var html = '<div class="mrif-print-sheet">' +
+'<div class="mrif-print-header">' +
+'<div><img src="gemcor-logo.png" alt="GEMCOR Logo" class="mrif-print-logo" onerror="this.style.display='none';this.nextElementSibling.style.display='block'" style="display:none"><div style="font-size:18pt;font-weight:bold;color:#0066cc;display:none">GEMCOR</div></div>' +
+'<div class="mrif-print-docno"><span class="label">MRIF No.:&nbsp;</span><span class="value">' + docNo + '</span></div>' +
+'</div>' +
+'<div class="mrif-print-title">Materials Request and Issuance Form</div>' +
+'<div class="mrif-print-info">' +
+'<div class="mrif-print-info-row"><span class="label">REQUESTOR:</span><span class="value">' + requestor + '</span></div>' +
+'<div class="mrif-print-info-row"><span class="label">GEM SO No.:</span><span class="value">' + gemSo + '</span></div>' +
+'<div class="mrif-print-info-row"><span class="label">DEPARTMENT/SECTION:</span><span class="value">' + department + '</span></div>' +
+'<div class="mrif-print-info-row"><span class="label">JO No.:</span><span class="value">' + joNo + '</span></div>' +
+'<div class="mrif-print-info-row"><span class="label">DATE:</span><span class="value">' + date + '</span></div>' +
+'<div class="mrif-print-info-row"><span class="label">CLIENT NAME:</span><span class="value">' + client + '</span></div>' +
+'<div style="grid-column: 1 / -1;" class="mrif-print-info-row"><span class="label">PROJECT:</span><span class="value">' + project + '</span></div>' +
+'</div>' +
+'<table class="mrif-print-table">' +
+'<thead><tr><th>ITEM NO.</th><th>ITEM CODE</th><th>ITEM DESCRIPTION</th><th>QUANTITY</th><th>UNIT</th><th>REMARKS</th></tr></thead>' +
+'<tbody>' + itemsHtml + '</tbody>' +
+'</table>' +
+'<div class="mrif-print-signatures">' +
+'<div><div class="mrif-print-sign-line">ANGEL / JOMAR / RICHEL / ERWIN / MARCEL</div><div class="mrif-print-sign-label">Issued By</div></div>' +
+'<div><div class="mrif-print-sign-line">&nbsp;</div><div class="mrif-print-sign-label">Checked By</div></div>' +
+'<div><div class="mrif-print-sign-line">&nbsp;</div><div class="mrif-print-sign-label">Received By / Date</div></div>' +
+'</div>' +
+'</div>';
+
+container.innerHTML = html;
+}
+
+function printMrif() {
+window.print();
+}
+
+function closeMrifPrint() {
+if (mrifPrintModal) mrifPrintModal.hide();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
