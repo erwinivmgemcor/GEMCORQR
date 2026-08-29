@@ -220,14 +220,14 @@ document.getElementById('activeTransactionSection').classList.add('d-none');
 if (window._requestsInterval) clearInterval(window._requestsInterval);
 window._requestsInterval = setInterval(function() {
 if (!state.isLoading) loadMyRequests();
-}, 30000);
+}, 10000);
 if (window._whInterval) clearInterval(window._whInterval);
 } else {
 if (window._requestsInterval) clearInterval(window._requestsInterval);
 if (window._whInterval) clearInterval(window._whInterval);
 window._whInterval = setInterval(function() {
 if (!state.isLoading) loadWarehouseNotifications();
-}, 30000);
+}, 10000);
 loadWarehouseNotifications();
 }
 }
@@ -304,22 +304,38 @@ if (state.isLoading) return;
 showLoading('Syncing...');
 try {
 const url = API_URL + '?action=getModuleLinks&_t=' + Date.now();
+console.log('[Sync] URL:', url);
 const res = await fetch(url, { redirect: 'follow' });
+console.log('[Sync] HTTP Status:', res.status);
 const text = await res.text();
+console.log('[Sync] Raw response:', text.substring(0, 500));
 let data;
-try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+try {
+data = JSON.parse(text);
+} catch(e) {
+console.error('[Sync] JSON parse failed. Raw response:', text);
+alert('Sync error: Invalid response from server.\n\nThe server did not return valid JSON.\nCheck the browser console (F12) for details.\n\nFirst 200 chars of response:\n' + text.substring(0, 200));
+throw new Error('Invalid response');
+}
+console.log('[Sync] Parsed:', data);
 if (data && data.success && data.links) {
-const { MRIF, MRR, MRS } = data.links;
-if (MRIF) { localStorage.setItem('sheetId_MRIF', MRIF); document.getElementById('sheetId_MRIF').value = MRIF; }
-if (MRR) { localStorage.setItem('sheetId_MRR', MRR); document.getElementById('sheetId_MRR').value = MRR; }
-if (MRS) { localStorage.setItem('sheetId_MRS', MRS); document.getElementById('sheetId_MRS').value = MRS; }
+const links = data.links;
+const MRIF = links.MRIF || links.mrif || '';
+const MRR = links.MRR || links.mrr || '';
+const MRS = links.MRS || links.mrs || '';
+if (MRIF) { localStorage.setItem('sheetId_MRIF', extractSheetId(MRIF)); document.getElementById('sheetId_MRIF').value = extractSheetId(MRIF); }
+if (MRR) { localStorage.setItem('sheetId_MRR', extractSheetId(MRR)); document.getElementById('sheetId_MRR').value = extractSheetId(MRR); }
+if (MRS) { localStorage.setItem('sheetId_MRS', extractSheetId(MRS)); document.getElementById('sheetId_MRS').value = extractSheetId(MRS); }
 alert('Module IDs synced!\nMRIF: ' + (MRIF?'OK':'Missing') + '\nMRR: ' + (MRR?'OK':'Missing') + '\nMRS: ' + (MRS?'OK':'Missing'));
 if (state.currentModule) selectModule(state.currentModule);
 } else {
-alert('Sync failed: ' + (data.error || 'No links found'));
+alert('Sync failed: ' + (data.error || 'No links found') + '\n\nResponse: ' + JSON.stringify(data).substring(0, 200));
 }
 } catch(err) {
+console.error('[Sync] Error:', err);
+if (err.message !== 'Invalid response') {
 alert('Sync error: ' + err.message);
+}
 } finally {
 hideLoading();
 }
@@ -1316,6 +1332,8 @@ badge.textContent = newCount;
 badge.classList.toggle('d-none', newCount === 0);
 btn.classList.toggle('d-none', false);
 }
+
+renderWhNotifModal(filtered);
 }
 } catch(e) {
 console.error('[WH Notifications] Error:', e);
@@ -1394,38 +1412,8 @@ function openWhNotifications() {
 if (!whNotifModal && document.getElementById('whNotifModal')) {
 whNotifModal = new bootstrap.Modal(document.getElementById('whNotifModal'));
 }
+loadWarehouseNotifications();
 if (whNotifModal) whNotifModal.show();
-loadAndRenderWhModal();
-}
-
-async function loadAndRenderWhModal() {
-var container = document.getElementById('whNotifModalList');
-if (container) {
-container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading...</div></div>';
-}
-try {
-var url = API_URL + '?action=getPendingRequests&_t=' + Date.now();
-var res = await fetch(url);
-var data = await res.json();
-console.log('[WH Modal] Response:', data);
-if (data.success && data.requests) {
-var today = new Date();
-var todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
-var filtered = data.requests.filter(function(req) {
-var reqDate = new Date(req.timestamp);
-var reqStr = reqDate.getFullYear() + '-' + String(reqDate.getMonth()+1).padStart(2,'0') + '-' + String(reqDate.getDate()).padStart(2,'0');
-var type = (req.type || '').toUpperCase();
-return reqStr === todayStr && type === 'MRIF';
-});
-filtered.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
-renderWhNotifModal(filtered);
-} else {
-renderWhNotifModal([]);
-}
-} catch(e) {
-console.error('[WH Modal] Error:', e);
-renderWhNotifModal([]);
-}
 }
 
 async function processRequestFromNotification(docNo, docType) {
@@ -1438,7 +1426,7 @@ if (select) {
 for (var i = 0; i < select.options.length; i++) {
 if (select.options[i].value === docNo) {
 select.selectedIndex = i;
-onDocSelect(docNo);
+onDocSelect();
 showToast('Loading ' + docNo + '...', 'info');
 return;
 }
@@ -1452,7 +1440,7 @@ if (select2) {
 for (var i = 0; i < select2.options.length; i++) {
 if (select2.options[i].value === docNo) {
 select2.selectedIndex = i;
-onDocSelect(docNo);
+onDocSelect();
 return;
 }
 }
