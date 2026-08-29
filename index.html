@@ -62,7 +62,7 @@
 </div>
 
 <div id="docPickerSection">
-<div class="card mb-3 d-none" id="whNotificationsCard"><div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center"><strong><i class="bi bi-bell-fill me-2"></i>Pending Requests <span id="whNotifCount" class="badge bg-danger">0</span></strong><button class="btn btn-sm btn-outline-dark" onclick="loadWarehouseNotifications()"><i class="bi bi-arrow-clockwise"></i></button></div><div class="card-body p-0"><div class="list-group list-group-flush" id="whNotificationsList"><div class="list-group-item text-muted text-center py-3">No pending requests</div></div></div></div><div id="quickScanCard" class="card mb-3 border-primary shadow-sm">
+<div id="quickScanCard" class="card mb-3 border-primary shadow-sm">
 <div class="card-body text-center py-4">
 <button class="btn btn-primary quick-scan-btn w-100 mb-2" onclick="openQuickScan()">
 <i class="bi bi-qr-code-scan me-2" style="font-size:1.5rem"></i>
@@ -499,7 +499,7 @@ Scan Document QR to auto-load &bull; PO QR creates MRR &bull; Item QR verifies
 <div class="modal-dialog modal-dialog-centered">
 <div class="modal-content">
 <div class="modal-header bg-warning text-dark">
-<h5 class="modal-title"><i class="bi bi-bell-fill me-2"></i>Pending Requests</h5>
+<h5 class="modal-title"><i class="bi bi-bell-fill me-2"></i>Today's MRIF Requests</h5>
 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
 </div>
 <div class="modal-body p-0">
