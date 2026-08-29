@@ -1,7 +1,12 @@
-/* Prevent modal-open from adding padding-right to body */
+/* ═══════════════════════════════════════════════════════════════════════════
+   IVM WAREHOUSE QR — BASE APP STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Body & Layout */
 body {
   padding-right: 0 !important;
   overflow-x: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .modal-open {
@@ -9,11 +14,7 @@ body {
   overflow: hidden;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   MRIF PRINT STYLES — Exact match to Google Sheets layout
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-/* Loading Overlay — fixed position, no layout shift */
+/* Loading Overlay */
 #loadingOverlay {
   position: fixed !important;
   top: 0 !important;
@@ -31,6 +32,306 @@ body {
 #loadingOverlay.d-none {
   display: none !important;
 }
+
+/* Production Banner */
+.production-banner {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+/* Module Buttons */
+.module-btn {
+  font-size: 0.75rem;
+  padding: 8px 4px;
+}
+
+.module-btn.active {
+  background-color: #0d6efd;
+  color: #fff;
+  border-color: #0d6efd;
+}
+
+/* Role Cards */
+.role-card {
+  cursor: pointer;
+  border: 2px solid #dee2e6;
+  transition: all 0.2s;
+}
+
+.role-card:hover {
+  border-color: #0d6efd;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* PIN Dots — THIS IS THE FIX */
+.pin-dot {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid #6c757d;
+  margin: 0 4px;
+  background: transparent;
+  transition: background 0.2s;
+}
+
+.pin-dot.filled {
+  background: #0d6efd;
+  border-color: #0d6efd;
+}
+
+/* Scanner */
+.scanner-container {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #1a1a2e;
+}
+
+#reader {
+  width: 100% !important;
+  min-height: 250px;
+}
+
+#reader video {
+  width: 100% !important;
+  height: auto !important;
+}
+
+.scanner-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.scanner-frame {
+  width: 200px;
+  height: 200px;
+  border: 2px solid rgba(255,255,255,0.5);
+  border-radius: 12px;
+  position: relative;
+}
+
+.scanner-frame::before,
+.scanner-frame::after {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-color: #0d6efd;
+  border-style: solid;
+}
+
+.scanner-frame::before {
+  top: -2px;
+  left: -2px;
+  border-width: 3px 0 0 3px;
+}
+
+.scanner-frame::after {
+  bottom: -2px;
+  right: -2px;
+  border-width: 0 3px 3px 0;
+}
+
+.scan-line {
+  position: absolute;
+  width: 100%;
+  height: 2px;
+  background: #0d6efd;
+  top: 0;
+  animation: scan 2s linear infinite;
+  box-shadow: 0 0 4px #0d6efd;
+}
+
+@keyframes scan {
+  0% { top: 0; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+.cam-controls {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+  z-index: 10;
+}
+
+.cam-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+
+.cam-btn.active {
+  background: #ffc107;
+  color: #000;
+}
+
+/* Quick Scan */
+.quick-scan-btn {
+  font-size: 1.1rem;
+  padding: 16px;
+}
+
+/* Document Search */
+.doc-search {
+  margin-bottom: 8px;
+}
+
+/* Item Table */
+.item-row {
+  transition: background 0.2s;
+}
+
+.item-row.verified {
+  background: #d1e7dd !important;
+}
+
+/* Status Badges */
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-pending {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-served {
+  background: #d1e7dd;
+  color: #0f5132;
+}
+
+.status-partial {
+  background: #cfe2ff;
+  color: #084298;
+}
+
+/* Request Cards */
+.request-card {
+  border-left: 4px solid #ffc107;
+  padding: 12px;
+}
+
+.request-card.completed {
+  border-left-color: #198754;
+  opacity: 0.85;
+}
+
+/* Warehouse Notification Items */
+.wh-notif-item {
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.wh-notif-item:hover {
+  background: #fff3cd;
+}
+
+.wh-notif-item .doc-no {
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+.wh-notif-item .requestor {
+  font-size: 0.8rem;
+  color: #6c757d;
+}
+
+.wh-notif-item .timestamp {
+  font-size: 0.75rem;
+  color: #adb5bd;
+}
+
+/* QR Display */
+.qr-display {
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  padding: 8px;
+  background: #fff;
+}
+
+/* PO Items */
+.po-item-card {
+  transition: opacity 0.2s;
+}
+
+.po-item-card.opacity-50 {
+  opacity: 0.5;
+}
+
+/* Test Result */
+.test-result {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 12px;
+  font-family: monospace;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* WiFi Icon */
+.wifi-icon {
+  font-size: 1.2rem;
+}
+
+.wifi-online {
+  color: #198754;
+}
+
+.wifi-offline {
+  color: #dc3545;
+}
+
+/* MRIF List */
+.mrif-list-item {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.mrif-list-item:hover {
+  background-color: #fff3cd;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MRIF PRINT STYLES — Exact match to Google Sheets layout
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 .mrif-print-sheet {
   background: #fff;
@@ -176,7 +477,6 @@ body {
   text-align: center;
 }
 
-/* No further entries row */
 .mrif-items td.td-nofurther {
   text-align: center;
   font-size: 7pt;
@@ -285,13 +585,4 @@ body {
   .mrif-items tr {
     page-break-inside: avoid;
   }
-}
-
-/* MRIF List item styles */
-.mrif-list-item {
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-.mrif-list-item:hover {
-  background-color: #fff3cd;
 }
