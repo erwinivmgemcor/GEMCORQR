@@ -568,54 +568,243 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <div class="row g-2 mb-3">
-          <div class="col-6">
-            <label class="form-label">Document Type</label>
-            <select id="reqDocType" class="form-select">
-              <option value="MRIF">MRIF (Releasing)</option>
-              <option value="MRS">MRS (Returns)</option>
-            </select>
+
+        <!-- Step Progress Bar -->
+        <div class="wizard-steps mb-4">
+          <div class="wizard-step active" data-step="1">
+            <div class="step-number">1</div>
+            <div class="step-label">Type</div>
           </div>
-          <div class="col-6">
-            <label class="form-label">JO No. <small class="text-muted">(Type then tab/click out)</small></label>
-            <input type="text" id="reqJoNo" class="form-control" placeholder="Enter JO No." onblur="lookupSofData()">
+          <div class="wizard-step" data-step="2">
+            <div class="step-number">2</div>
+            <div class="step-label">JO No.</div>
           </div>
-        </div>
-        <div class="row g-2 mb-3">
-          <div class="col-6">
-            <label class="form-label">Requestor</label>
-            <select id="reqRequestor" class="form-select" onchange="onRequestorChange()">
-              <option value="">-- Select Requestor --</option>
-            </select>
+          <div class="wizard-step" data-step="3">
+            <div class="step-number">3</div>
+            <div class="step-label">Requestor</div>
           </div>
-          <div class="col-6">
-            <label class="form-label">Department</label>
-            <input type="text" id="reqDepartment" class="form-control" placeholder="Auto-filled from Requestor List" readonly>
+          <div class="wizard-step" data-step="4">
+            <div class="step-number">4</div>
+            <div class="step-label">Review</div>
           </div>
-        </div>
-        <div class="row g-2 mb-3">
-          <div class="col-6">
-            <label class="form-label">GEM SO No.</label>
-            <input type="text" id="reqGemSoNo" class="form-control" placeholder="Auto-filled from SOF Monitoring" readonly>
+          <div class="wizard-step" data-step="5">
+            <div class="step-number">5</div>
+            <div class="step-label">Items</div>
           </div>
-          <div class="col-6">
-            <label class="form-label">CLIENT NAME</label>
-            <input type="text" id="reqClientName" class="form-control" placeholder="Auto-filled from SOF Monitoring" readonly>
+          <div class="wizard-step" data-step="6">
+            <div class="step-number">6</div>
+            <div class="step-label">Submit</div>
           </div>
         </div>
-        <div class="mb-3">
-          <label class="form-label">PROJECT</label>
-          <input type="text" id="reqProject" class="form-control" placeholder="Auto-filled from SOF Monitoring" readonly>
+
+        <!-- Hidden fields to store data -->
+        <input type="hidden" id="reqDocType">
+        <input type="hidden" id="reqJoNo">
+        <input type="hidden" id="reqRequestor">
+        <input type="hidden" id="reqDepartment">
+        <input type="hidden" id="reqGemSoNo">
+        <input type="hidden" id="reqClientName">
+        <input type="hidden" id="reqProject">
+
+        <!-- STEP 1: Document Type -->
+        <div class="wizard-panel active" id="step1">
+          <div class="text-center mb-4">
+            <div class="step-icon"><i class="bi bi-file-earmark-text"></i></div>
+            <h5 class="mb-1">Select Document Type</h5>
+            <p class="text-muted small">Choose what kind of request you want to create</p>
+          </div>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <div class="doc-type-card" onclick="selectDocType('MRIF')" id="docTypeMRIF">
+                <div class="doc-type-icon"><i class="bi bi-box-arrow-up"></i></div>
+                <div class="doc-type-title">MRIF</div>
+                <div class="doc-type-desc">Materials Request and Issuance Form<br><small>For releasing items from warehouse</small></div>
+              </div>
+            </div>
+            <div class="col-12 col-md-6">
+              <div class="doc-type-card" onclick="selectDocType('MRS')" id="docTypeMRS">
+                <div class="doc-type-icon"><i class="bi bi-arrow-counterclockwise"></i></div>
+                <div class="doc-type-title">MRS</div>
+                <div class="doc-type-desc">Materials Return Slip<br><small>For returning items to warehouse</small></div>
+              </div>
+            </div>
+          </div>
+          <div class="wizard-nav mt-4">
+            <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button class="btn btn-primary" id="btnStep1Next" onclick="goToStep(2)" disabled>Next <i class="bi bi-arrow-right"></i></button>
+          </div>
         </div>
-        <hr>
-        <div id="requestItemsContainer"></div>
-        <button class="btn btn-outline-primary w-100" onclick="addRequestItemRow()">
-          <i class="bi bi-plus-lg"></i> Add Item
-        </button>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-success" onclick="submitNewRequest()">Submit Request</button>
+
+        <!-- STEP 2: JO Number -->
+        <div class="wizard-panel" id="step2">
+          <div class="text-center mb-4">
+            <div class="step-icon"><i class="bi bi-hash"></i></div>
+            <h5 class="mb-1">Enter JO Number</h5>
+            <p class="text-muted small">Type the Job Order number. The system will auto-fill SO data.</p>
+          </div>
+          <div class="card bg-light mb-3">
+            <div class="card-body">
+              <label class="form-label fw-bold">JO No.</label>
+              <div class="input-group input-group-lg">
+                <span class="input-group-text"><i class="bi bi-hash"></i></span>
+                <input type="text" id="step2JoNo" class="form-control form-control-lg" placeholder="e.g. 12851" oninput="onJoNoInput()">
+              </div>
+              <div id="joNoStatus" class="mt-2 small"></div>
+            </div>
+          </div>
+          <div class="alert alert-info">
+            <i class="bi bi-info-circle me-2"></i>
+            <strong>Tip:</strong> After typing the JO No., click <strong>"Next"</strong> and the system will automatically look up the SOF data (GEM SO No., Client Name, Project).
+          </div>
+          <div class="wizard-nav mt-4">
+            <button class="btn btn-outline-secondary" onclick="goToStep(1)"><i class="bi bi-arrow-left"></i> Back</button>
+            <button class="btn btn-primary" id="btnStep2Next" onclick="doStep2Next()">Next <i class="bi bi-arrow-right"></i></button>
+          </div>
+        </div>
+
+        <!-- STEP 3: Requestor -->
+        <div class="wizard-panel" id="step3">
+          <div class="text-center mb-4">
+            <div class="step-icon"><i class="bi bi-person"></i></div>
+            <h5 class="mb-1">Select Requestor</h5>
+            <p class="text-muted small">Choose who is requesting these materials.</p>
+          </div>
+          <div class="card bg-light mb-3">
+            <div class="card-body">
+              <label class="form-label fw-bold">Requestor Name</label>
+              <select id="step3Requestor" class="form-select form-select-lg" onchange="onStep3RequestorChange()">
+                <option value="">-- Select Requestor --</option>
+              </select>
+              <div class="mt-3">
+                <label class="form-label fw-bold">Department / Section</label>
+                <input type="text" id="step3Department" class="form-control" placeholder="Auto-filled" readonly>
+              </div>
+            </div>
+          </div>
+          <div class="wizard-nav mt-4">
+            <button class="btn btn-outline-secondary" onclick="goToStep(2)"><i class="bi bi-arrow-left"></i> Back</button>
+            <button class="btn btn-primary" id="btnStep3Next" onclick="goToStep(4)" disabled>Next <i class="bi bi-arrow-right"></i></button>
+          </div>
+        </div>
+
+        <!-- STEP 4: Review Auto-filled Data -->
+        <div class="wizard-panel" id="step4">
+          <div class="text-center mb-4">
+            <div class="step-icon"><i class="bi bi-clipboard-check"></i></div>
+            <h5 class="mb-1">Review Auto-filled Data</h5>
+            <p class="text-muted small">Please check if the information below is correct.</p>
+          </div>
+          <div class="review-card">
+            <div class="review-row">
+              <div class="review-label"><i class="bi bi-file-earmark-text me-1"></i>Document Type</div>
+              <div class="review-value" id="reviewDocType">-</div>
+            </div>
+            <div class="review-row">
+              <div class="review-label"><i class="bi bi-hash me-1"></i>JO No.</div>
+              <div class="review-value" id="reviewJoNo">-</div>
+            </div>
+            <div class="review-row">
+              <div class="review-label"><i class="bi bi-upc-scan me-1"></i>GEM SO No.</div>
+              <div class="review-value" id="reviewGemSoNo">-</div>
+            </div>
+            <div class="review-row">
+              <div class="review-label"><i class="bi bi-building me-1"></i>Client Name</div>
+              <div class="review-value" id="reviewClientName">-</div>
+            </div>
+            <div class="review-row">
+              <div class="review-label"><i class="bi bi-folder me-1"></i>Project</div>
+              <div class="review-value" id="reviewProject">-</div>
+            </div>
+            <div class="review-row">
+              <div class="review-label"><i class="bi bi-person me-1"></i>Requestor</div>
+              <div class="review-value" id="reviewRequestor">-</div>
+            </div>
+            <div class="review-row">
+              <div class="review-label"><i class="bi bi-people me-1"></i>Department</div>
+              <div class="review-value" id="reviewDepartment">-</div>
+            </div>
+          </div>
+          <div class="alert alert-warning mt-3">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            If any data is wrong, click <strong>"Back"</strong> to correct it.
+          </div>
+          <div class="wizard-nav mt-4">
+            <button class="btn btn-outline-secondary" onclick="goToStep(3)"><i class="bi bi-arrow-left"></i> Back</button>
+            <button class="btn btn-primary" onclick="goToStep(5)">Next <i class="bi bi-arrow-right"></i></button>
+          </div>
+        </div>
+
+        <!-- STEP 5: Add Items -->
+        <div class="wizard-panel" id="step5">
+          <div class="text-center mb-4">
+            <div class="step-icon"><i class="bi bi-box-seam"></i></div>
+            <h5 class="mb-1">Add Items</h5>
+            <p class="text-muted small">Search and add the materials you need.</p>
+          </div>
+          <div id="step5ItemsContainer"></div>
+          <button class="btn btn-outline-primary w-100 mt-2" onclick="addStep5ItemRow()">
+            <i class="bi bi-plus-lg"></i> Add Another Item
+          </button>
+          <div class="wizard-nav mt-4">
+            <button class="btn btn-outline-secondary" onclick="goToStep(4)"><i class="bi bi-arrow-left"></i> Back</button>
+            <button class="btn btn-primary" id="btnStep5Next" onclick="goToStep(6)" disabled>Next <i class="bi bi-arrow-right"></i></button>
+          </div>
+        </div>
+
+        <!-- STEP 6: Review & Submit -->
+        <div class="wizard-panel" id="step6">
+          <div class="text-center mb-4">
+            <div class="step-icon"><i class="bi bi-check-circle"></i></div>
+            <h5 class="mb-1">Review & Submit</h5>
+            <p class="text-muted small">Double-check everything before submitting.</p>
+          </div>
+          <div class="review-card mb-3">
+            <div class="review-row">
+              <div class="review-label">Document Type</div>
+              <div class="review-value" id="finalDocType">-</div>
+            </div>
+            <div class="review-row">
+              <div class="review-label">JO No.</div>
+              <div class="review-value" id="finalJoNo">-</div>
+            </div>
+            <div class="review-row">
+              <div class="review-label">Requestor</div>
+              <div class="review-value" id="finalRequestor">-</div>
+            </div>
+            <div class="review-row">
+              <div class="review-label">Department</div>
+              <div class="review-value" id="finalDepartment">-</div>
+            </div>
+            <div class="review-row">
+              <div class="review-label">GEM SO No.</div>
+              <div class="review-value" id="finalGemSoNo">-</div>
+            </div>
+            <div class="review-row">
+              <div class="review-label">Client Name</div>
+              <div class="review-value" id="finalClientName">-</div>
+            </div>
+            <div class="review-row">
+              <div class="review-label">Project</div>
+              <div class="review-value" id="finalProject">-</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><strong>Items</strong></div>
+            <div class="card-body p-0">
+              <table class="table table-sm mb-0">
+                <thead><tr><th>#</th><th>Item Code</th><th>Description</th><th>Qty</th><th>Unit</th></tr></thead>
+                <tbody id="finalItemsTable"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="wizard-nav mt-4">
+            <button class="btn btn-outline-secondary" onclick="goToStep(5)"><i class="bi bi-arrow-left"></i> Back</button>
+            <button class="btn btn-success btn-lg" onclick="submitNewRequest()">
+              <i class="bi bi-check-circle me-2"></i>Submit Request
+            </button>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
