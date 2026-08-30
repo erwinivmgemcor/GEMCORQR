@@ -1085,6 +1085,298 @@ a:hover {
   }
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   WIZARD / STEP-BY-STEP FORM STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Step Progress Bar */
+.wizard-steps {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  padding: 0 10px;
+}
+
+.wizard-steps::before {
+  content: '';
+  position: absolute;
+  top: 15px;
+  left: 30px;
+  right: 30px;
+  height: 3px;
+  background: var(--border-color);
+  z-index: 0;
+}
+
+.wizard-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+  z-index: 1;
+  cursor: default;
+}
+
+.wizard-step .step-number {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-body);
+  border: 2px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  transition: all 0.3s ease;
+}
+
+.wizard-step.active .step-number {
+  background: var(--gemcor-blue);
+  border-color: var(--gemcor-blue);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(30, 58, 95, 0.15);
+}
+
+.wizard-step.completed .step-number {
+  background: var(--gemcor-green);
+  border-color: var(--gemcor-green);
+  color: #fff;
+}
+
+.wizard-step .step-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.wizard-step.active .step-label {
+  color: var(--gemcor-blue);
+}
+
+.wizard-step.completed .step-label {
+  color: var(--gemcor-green);
+}
+
+/* Wizard Panels */
+.wizard-panel {
+  display: none;
+  animation: fadeIn 0.3s ease;
+}
+
+.wizard-panel.active {
+  display: block;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Step Icon */
+.step-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--gemcor-blue-lighter) 0%, #dbeafe 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto var(--space-3);
+}
+
+.step-icon i {
+  font-size: 1.75rem;
+  color: var(--gemcor-blue);
+}
+
+/* Document Type Cards */
+.doc-type-card {
+  background: var(--bg-surface);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  height: 100%;
+}
+
+.doc-type-card:hover {
+  border-color: var(--gemcor-blue-light);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+
+.doc-type-card.selected {
+  border-color: var(--gemcor-blue);
+  background: var(--gemcor-blue-lighter);
+  box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
+}
+
+.doc-type-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--gemcor-blue) 0%, var(--gemcor-blue-light) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto var(--space-3);
+}
+
+.doc-type-icon i {
+  font-size: 1.5rem;
+  color: #fff;
+}
+
+.doc-type-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--space-1);
+}
+
+.doc-type-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* Review Card */
+.review-card {
+  background: var(--bg-body);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.review-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.review-row:last-child {
+  border-bottom: none;
+}
+
+.review-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.review-label i {
+  color: var(--gemcor-blue);
+}
+
+.review-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: right;
+}
+
+/* Wizard Navigation */
+.wizard-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-light);
+}
+
+.wizard-nav .btn {
+  min-width: 120px;
+}
+
+.wizard-nav .btn-primary,
+.wizard-nav .btn-success {
+  padding: 0.75rem 1.5rem;
+}
+
+/* Step 5 Item Rows */
+.step5-item-row {
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+  transition: all 0.2s;
+}
+
+.step5-item-row:hover {
+  border-color: var(--gemcor-blue-light);
+}
+
+.step5-item-row .row {
+  align-items: flex-end;
+}
+
+/* JO No. Status */
+#joNoStatus {
+  min-height: 20px;
+}
+
+#joNoStatus .text-success {
+  color: var(--gemcor-green) !important;
+  font-weight: 600;
+}
+
+#joNoStatus .text-danger {
+  color: #ef4444 !important;
+  font-weight: 600;
+}
+
+/* Responsive Wizard */
+@media (max-width: 576px) {
+  .wizard-steps {
+    padding: 0;
+  }
+
+  .wizard-step .step-label {
+    font-size: 0.55rem;
+  }
+
+  .wizard-step .step-number {
+    width: 28px;
+    height: 28px;
+    font-size: 0.7rem;
+  }
+
+  .wizard-steps::before {
+    left: 20px;
+    right: 20px;
+  }
+
+  .doc-type-card {
+    padding: var(--space-4);
+  }
+
+  .review-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+  }
+
+  .review-value {
+    text-align: left;
+  }
+}
+
 /* ─── PRINT STYLES (MRIF) ─── */
 .mrif-print-sheet {
   background: #fff;
