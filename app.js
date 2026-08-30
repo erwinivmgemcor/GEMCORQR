@@ -901,17 +901,275 @@ return result;
 // =============================================================================
 function openNewRequest() {
 if (state.isLoading) return;
-// Reset all form fields
-document.getElementById('reqJoNo').value = '';
-document.getElementById('reqGemSoNo').value = '';
-document.getElementById('reqClientName').value = '';
-document.getElementById('reqProject').value = '';
-document.getElementById('reqDepartment').value = '';
-document.getElementById('requestItemsContainer').innerHTML = '';
-addRequestItemRow();
+resetWizard();
 loadRequestInventory();
 loadRequestorList();
 newRequestModal.show();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WIZARD FUNCTIONS — Step-by-step New Request
+// ═══════════════════════════════════════════════════════════════════════════
+
+function resetWizard() {
+  // Reset hidden fields
+  document.getElementById('reqDocType').value = '';
+  document.getElementById('reqJoNo').value = '';
+  document.getElementById('reqRequestor').value = '';
+  document.getElementById('reqDepartment').value = '';
+  document.getElementById('reqGemSoNo').value = '';
+  document.getElementById('reqClientName').value = '';
+  document.getElementById('reqProject').value = '';
+
+  // Reset step 1
+  document.querySelectorAll('.doc-type-card').forEach(function(c) { c.classList.remove('selected'); });
+  document.getElementById('btnStep1Next').disabled = true;
+
+  // Reset step 2
+  document.getElementById('step2JoNo').value = '';
+  document.getElementById('joNoStatus').innerHTML = '';
+
+  // Reset step 3
+  document.getElementById('step3Requestor').value = '';
+  document.getElementById('step3Department').value = '';
+  document.getElementById('btnStep3Next').disabled = true;
+
+  // Reset step 5
+  document.getElementById('step5ItemsContainer').innerHTML = '';
+  addStep5ItemRow();
+  document.getElementById('btnStep5Next').disabled = true;
+
+  // Go to step 1
+  goToStep(1);
+}
+
+function goToStep(step) {
+  // Update step indicators
+  document.querySelectorAll('.wizard-step').forEach(function(el) {
+    var s = parseInt(el.getAttribute('data-step'));
+    el.classList.remove('active', 'completed');
+    if (s === step) {
+      el.classList.add('active');
+    } else if (s < step) {
+      el.classList.add('completed');
+    }
+  });
+
+  // Show/hide panels
+  document.querySelectorAll('.wizard-panel').forEach(function(el) {
+    el.classList.remove('active');
+  });
+  var panel = document.getElementById('step' + step);
+  if (panel) panel.classList.add('active');
+
+  // If step 4, populate review data
+  if (step === 4) {
+    populateReviewData();
+  }
+
+  // If step 6, populate final review
+  if (step === 6) {
+    populateFinalReview();
+  }
+}
+
+function selectDocType(type) {
+  document.getElementById('reqDocType').value = type;
+  document.querySelectorAll('.doc-type-card').forEach(function(c) { c.classList.remove('selected'); });
+  document.getElementById('docType' + type).classList.add('selected');
+  document.getElementById('btnStep1Next').disabled = false;
+}
+
+function onJoNoInput() {
+  var val = document.getElementById('step2JoNo').value.trim();
+  var status = document.getElementById('joNoStatus');
+  if (val.length > 0) {
+    status.innerHTML = '<span class="text-muted"><i class="bi bi-info-circle"></i> Click <strong>Next</strong> to look up SOF data</span>';
+  } else {
+    status.innerHTML = '';
+  }
+}
+
+async function doStep2Next() {
+  var joNo = document.getElementById('step2JoNo').value.trim();
+  if (!joNo) {
+    document.getElementById('joNoStatus').innerHTML = '<span class="text-danger"><i class="bi bi-exclamation-circle"></i> Please enter a JO No.</span>';
+    return;
+  }
+
+  document.getElementById('joNoStatus').innerHTML = '<span class="text-primary"><i class="bi bi-arrow-repeat spin"></i> Looking up SOF data...</span>';
+
+  // Set the hidden field
+  document.getElementById('reqJoNo').value = joNo;
+
+  // Call the lookup
+  await lookupSofDataWizard();
+
+  goToStep(3);
+}
+
+async function lookupSofDataWizard() {
+  var joNo = document.getElementById('reqJoNo').value.trim();
+  if (!joNo) return;
+
+  showLoading('Looking up JO No....');
+  try {
+    var url = API_URL + '?action=getSofData&joNo=' + encodeURIComponent(joNo) + '&_t=' + Date.now();
+    var res = await fetch(url, { redirect: 'follow' });
+    var text = await res.text();
+    var data;
+    try { data = JSON.parse(text); } catch(e) { data = {}; }
+
+    if (data.success) {
+      document.getElementById('reqGemSoNo').value = data.gemSoNo || '';
+      document.getElementById('reqClientName').value = data.clientName || '';
+      document.getElementById('reqProject').value = data.project || '';
+      document.getElementById('joNoStatus').innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> JO No. found! SO data auto-filled.</span>';
+      showToast('JO No. found! Auto-filled SO data.', 'success');
+    } else {
+      document.getElementById('reqGemSoNo').value = '';
+      document.getElementById('reqClientName').value = '';
+      document.getElementById('reqProject').value = '';
+      document.getElementById('joNoStatus').innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> JO No. not found. You can still proceed.</span>';
+      showToast('JO No. not found in SOF Monitoring. You can still submit.', 'warning');
+    }
+  } catch(err) {
+    document.getElementById('joNoStatus').innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> Lookup failed.</span>';
+    showToast('SOF lookup failed: ' + err.message, 'danger');
+  } finally {
+    hideLoading();
+  }
+}
+
+function onStep3RequestorChange() {
+  var sel = document.getElementById('step3Requestor');
+  var selected = sel.options[sel.selectedIndex];
+  var name = sel.value;
+  var dept = selected ? selected.dataset.department : '';
+
+  document.getElementById('reqRequestor').value = name;
+  document.getElementById('reqDepartment').value = dept || '';
+  document.getElementById('step3Department').value = dept || '';
+
+  document.getElementById('btnStep3Next').disabled = !name;
+}
+
+function populateReviewData() {
+  var docType = document.getElementById('reqDocType').value;
+  var joNo = document.getElementById('reqJoNo').value;
+  var requestor = document.getElementById('reqRequestor').value;
+  var dept = document.getElementById('reqDepartment').value;
+  var gemSo = document.getElementById('reqGemSoNo').value;
+  var client = document.getElementById('reqClientName').value;
+  var project = document.getElementById('reqProject').value;
+
+  document.getElementById('reviewDocType').textContent = docType || '-';
+  document.getElementById('reviewJoNo').textContent = joNo || '-';
+  document.getElementById('reviewGemSoNo').textContent = gemSo || '-';
+  document.getElementById('reviewClientName').textContent = client || '-';
+  document.getElementById('reviewProject').textContent = project || '-';
+  document.getElementById('reviewRequestor').textContent = requestor || '-';
+  document.getElementById('reviewDepartment').textContent = dept || '-';
+}
+
+function addStep5ItemRow() {
+  var container = document.getElementById('step5ItemsContainer');
+  var idx = container.children.length;
+  var div = document.createElement('div');
+  div.className = 'step5-item-row';
+  div.innerHTML = '<div class="row g-2 align-items-end">' +
+    '<div class="col-12 col-md-5">' +
+      '<label class="form-label small">Item</label>' +
+      '<input type="text" class="form-control req-item-search" placeholder="Type to search..." oninput="filterStep5Items(this,' + idx + ')" onfocus="filterStep5Items(this,' + idx + ')">' +
+      '<div class="list-group position-absolute z-3 d-none req-dropdown" style="max-height:150px;overflow-y:auto;width:90%;" id="step5Dropdown' + idx + '"></div>' +
+      '<input type="hidden" class="req-item-code" id="step5Code' + idx + '">' +
+      '<input type="hidden" class="req-item-desc" id="step5Desc' + idx + '">' +
+    '</div>' +
+    '<div class="col-4 col-md-2">' +
+      '<label class="form-label small">Qty</label>' +
+      '<input type="number" class="form-control req-qty" min="1" value="1">' +
+    '</div>' +
+    '<div class="col-4 col-md-2">' +
+      '<label class="form-label small">Unit</label>' +
+      '<input type="text" class="form-control req-unit" value="PCS" readonly>' +
+    '</div>' +
+    '<div class="col-4 col-md-3">' +
+      '<button class="btn btn-outline-danger btn-sm w-100" onclick="this.closest(\'.step5-item-row\').remove(); checkStep5Items();">' +
+        '<i class="bi bi-trash"></i> Remove' +
+      '</button>' +
+    '</div>' +
+  '</div>';
+  container.appendChild(div);
+  checkStep5Items();
+}
+
+function filterStep5Items(input, idx) {
+  var term = input.value.toLowerCase();
+  var dropdown = document.getElementById('step5Dropdown' + idx);
+  dropdown.innerHTML = '';
+  if (!term) { dropdown.classList.add('d-none'); return; }
+
+  var matches = state.requestInventoryList.filter(function(it) {
+    var code = (it.code || it.inventoryId || '').toLowerCase();
+    var desc = (it.description || '').toLowerCase();
+    return code.includes(term) || desc.includes(term);
+  }).slice(0, 10);
+
+  if (matches.length === 0) {
+    dropdown.innerHTML = '<div class="list-group-item text-muted">No matches</div>';
+  } else {
+    matches.forEach(function(it) {
+      var code = it.code || it.inventoryId || '';
+      var desc = it.description || '';
+      var el = document.createElement('div');
+      el.className = 'list-group-item list-group-item-action';
+      el.innerHTML = '<div class="fw-bold small">' + code + '</div><div class="small text-muted">' + desc + '</div>';
+      el.onclick = function() {
+        input.value = code + ' - ' + desc;
+        document.getElementById('step5Code' + idx).value = code;
+        document.getElementById('step5Desc' + idx).value = desc;
+        dropdown.classList.add('d-none');
+        checkStep5Items();
+      };
+      dropdown.appendChild(el);
+    });
+  }
+  dropdown.classList.remove('d-none');
+}
+
+function checkStep5Items() {
+  var hasItems = false;
+  document.querySelectorAll('#step5ItemsContainer .step5-item-row').forEach(function(row) {
+    var code = row.querySelector('.req-item-code').value;
+    if (code) hasItems = true;
+  });
+  document.getElementById('btnStep5Next').disabled = !hasItems;
+}
+
+function populateFinalReview() {
+  document.getElementById('finalDocType').textContent = document.getElementById('reqDocType').value || '-';
+  document.getElementById('finalJoNo').textContent = document.getElementById('reqJoNo').value || '-';
+  document.getElementById('finalRequestor').textContent = document.getElementById('reqRequestor').value || '-';
+  document.getElementById('finalDepartment').textContent = document.getElementById('reqDepartment').value || '-';
+  document.getElementById('finalGemSoNo').textContent = document.getElementById('reqGemSoNo').value || '-';
+  document.getElementById('finalClientName').textContent = document.getElementById('reqClientName').value || '-';
+  document.getElementById('finalProject').textContent = document.getElementById('reqProject').value || '-';
+
+  // Populate items table
+  var tbody = document.getElementById('finalItemsTable');
+  tbody.innerHTML = '';
+  var rows = document.querySelectorAll('#step5ItemsContainer .step5-item-row');
+  var count = 0;
+  rows.forEach(function(row, i) {
+    var code = row.querySelector('.req-item-code').value;
+    var desc = row.querySelector('.req-item-desc').value;
+    var qty = row.querySelector('.req-qty').value;
+    var unit = row.querySelector('.req-unit').value;
+    if (code) {
+      count++;
+      tbody.innerHTML += '<tr><td>' + count + '</td><td>' + code + '</td><td>' + desc + '</td><td>' + qty + '</td><td>' + unit + '</td></tr>';
+    }
+  });
 }
 
 async function loadRequestorList() {
@@ -921,16 +1179,29 @@ const res = await fetch(url, { redirect: 'follow' });
 const text = await res.text();
 let data;
 try { data = JSON.parse(text); } catch(e) { data = {}; }
+
+// Populate old dropdown (for compatibility)
 const sel = document.getElementById('reqRequestor');
 sel.innerHTML = '<option value="">-- Select Requestor --</option>';
+
+// Populate wizard step 3 dropdown
+const sel3 = document.getElementById('step3Requestor');
+sel3.innerHTML = '<option value="">-- Select Requestor --</option>';
+
 if (data.success && data.requestors) {
 state.requestorList = data.requestors;
 data.requestors.forEach(r => {
-const opt = document.createElement('option');
+var opt = document.createElement('option');
 opt.value = r.name;
 opt.textContent = r.name;
 opt.dataset.department = r.department;
 sel.appendChild(opt);
+
+var opt3 = document.createElement('option');
+opt3.value = r.name;
+opt3.textContent = r.name;
+opt3.dataset.department = r.department;
+sel3.appendChild(opt3);
 });
 }
 } catch(err) {
@@ -1040,13 +1311,29 @@ const gemSoNo = document.getElementById('reqGemSoNo').value.trim();
 const clientName = document.getElementById('reqClientName').value.trim();
 const project = document.getElementById('reqProject').value.trim();
 if (!requestor) { alert('Select a requestor'); return; }
+
+// Collect items from wizard step 5
 const items = [];
-document.querySelectorAll('#requestItemsContainer .row').forEach(row => {
+document.querySelectorAll('#step5ItemsContainer .step5-item-row').forEach(function(row) {
 const code = row.querySelector('.req-item-code').value;
 const desc = row.querySelector('.req-item-desc').value;
 const qty = parseInt(row.querySelector('.req-qty').value, 10);
 if (code && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty });
 });
+
+// Fallback: also check old container for backward compatibility
+document.querySelectorAll('#requestItemsContainer .row').forEach(function(row) {
+const code = row.querySelector('.req-item-code');
+const desc = row.querySelector('.req-item-desc');
+const qty = row.querySelector('.req-qty');
+if (code && desc && qty) {
+var c = code.value;
+var d = desc.value;
+var q = parseInt(qty.value, 10);
+if (c && q > 0) items.push({ inventoryId: c, description: d, qty: q });
+}
+});
+
 if (items.length === 0) { alert('Add at least one item'); return; }
 showLoading('Creating request...');
 try {
