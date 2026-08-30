@@ -1609,8 +1609,8 @@ hideLoading();
 
 async function updateWarehouseKPIs() {
 try {
-var sheetId = getCleanSheetId();
-if (!sheetId) return;
+// FIX: Use module-specific sheet ID, fallback to empty (backend will use MASTER_SHEET_ID)
+var sheetId = getCleanSheetId() || '';
 var url = API_URL + '?action=getPendingDocs&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
 var res = await fetch(url, { redirect: 'follow' });
 var text = await res.text();
@@ -1651,7 +1651,7 @@ var prevCount = parseInt(localStorage.getItem('ivm_whNotifCount') || '0');
 var newCount = filtered.length;
 localStorage.setItem('ivm_whNotifCount', newCount);
 
-// FIX: Show toast even on first notification (prevCount >= 0 instead of > 0)
+// FIX: Show toast even on first notification
 if (newCount > prevCount) {
 var diff = newCount - prevCount;
 playSuccessBeep();
@@ -1666,7 +1666,19 @@ badge.classList.toggle('d-none', newCount === 0);
 btn.classList.toggle('d-none', false);
 }
 
-// FIX: Also render to hidden container for quick access
+// FIX: Update dashboard KPIs for warehouse mode
+var kpiActive = document.getElementById('kpiActiveDocs');
+var kpiPending = document.getElementById('kpiPending');
+var kpiNotif = document.getElementById('kpiNotifications');
+var kpiCompleted = document.getElementById('kpiCompleted');
+if (kpiPending) kpiPending.textContent = newCount;
+if (kpiNotif) kpiNotif.textContent = newCount;
+// Active docs: update from separate call
+updateWarehouseKPIs();
+// Completed: we don't have this data from getPendingRequests, show 0 or keep existing
+if (kpiCompleted) kpiCompleted.textContent = '0';
+
+// Also render to modal list
 renderWarehouseNotifications(filtered);
 }
 } catch(e) {
