@@ -212,6 +212,7 @@ document.getElementById('btnMRR').style.display = isProduction ? 'none' : '';
 document.getElementById('btnMRIF').style.display = isProduction ? 'none' : '';
 document.getElementById('btnMRS').style.display = isProduction ? 'none' : '';
 document.getElementById('productionBanner').classList.toggle('d-none', !isProduction);
+document.getElementById('warehouseDashboard').classList.toggle('d-none', isProduction);
 document.getElementById('myRequestsSection').classList.toggle('d-none', !isProduction);
 document.getElementById('docPickerSection').style.display = isProduction ? 'none' : '';
 document.getElementById('quickScanCard').style.display = isProduction ? 'none' : '';
@@ -219,12 +220,14 @@ const whBtn = document.getElementById('whNotifBtn');
 if (whBtn) whBtn.classList.toggle('d-none', isProduction);
 if (isProduction) {
 document.getElementById('activeTransactionSection').classList.add('d-none');
+document.getElementById('warehouseDashboard').classList.add('d-none');
 if (window._requestsInterval) clearInterval(window._requestsInterval);
 window._requestsInterval = setInterval(function() {
 if (!state.isLoading) loadMyRequests();
 }, 30000);
 if (window._whInterval) clearInterval(window._whInterval);
 } else {
+document.getElementById('warehouseDashboard').classList.remove('d-none');
 if (window._requestsInterval) clearInterval(window._requestsInterval);
 if (window._whInterval) clearInterval(window._whInterval);
 window._whInterval = setInterval(function() {
