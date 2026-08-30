@@ -234,6 +234,7 @@ window._whInterval = setInterval(function() {
 if (!state.isLoading) loadWarehouseNotifications();
 }, 30000);
 loadWarehouseNotifications();
+updateWarehouseKPIs();
 }
 }
 
@@ -1413,6 +1414,7 @@ console.log('[loadMyRequests] Previous statuses:', prevStatuses);
 var newStatuses = {};
 var hasNewReady = false;
 var readyCount = 0;
+var pendingCount = 0;
 data.requests.forEach(function(req) {
 var docNo = req.docNo || '';
 var status = req.status || 'PENDING';
@@ -1423,6 +1425,7 @@ hasNewReady = true;
 console.log('[loadMyRequests] STATUS CHANGE DETECTED:', docNo, prevStatus, '->', status);
 }
 if (status !== 'PENDING') readyCount++;
+else pendingCount++;
 });
 localStorage.setItem('ivm_requestStatuses', JSON.stringify(newStatuses));
 var badge = document.getElementById('myRequestsBadge');
@@ -1432,6 +1435,13 @@ badge.classList.toggle('d-none', readyCount === 0);
 console.log('[loadMyRequests] Badge count:', readyCount);
 }
 renderMyRequests(data.requests);
+// FIX: Update Production KPIs
+var kpiActive = document.getElementById('kpiActiveDocs');
+var kpiPending = document.getElementById('kpiPending');
+var kpiCompleted = document.getElementById('kpiCompleted');
+if (kpiActive) kpiActive.textContent = data.requests.length;
+if (kpiPending) kpiPending.textContent = pendingCount;
+if (kpiCompleted) kpiCompleted.textContent = readyCount;
 if (hasNewReady) {
 playSuccessBeep();
 showToast('Your request has been processed by the warehouse!', 'success');
@@ -1439,9 +1449,13 @@ console.log('[loadMyRequests] Toast notification shown!');
 }
 } else {
 console.log('[loadMyRequests] No requests or error:', data.error);
+// FIX: Show error to user instead of silent fail
+document.getElementById('myRequestsList').innerHTML = '<div class="list-group-item text-muted text-center py-3">' + (data.error ? 'Error: ' + data.error : 'No requests found') + '</div>';
 }
 } catch(e) {
 console.error('[loadMyRequests] Error:', e);
+// FIX: Show error to user
+document.getElementById('myRequestsList').innerHTML = '<div class="list-group-item text-danger text-center py-3">Failed to load requests. Check your connection.</div>';
 }
 finally { hideLoading(); }
 }
@@ -1593,6 +1607,21 @@ hideLoading();
 // WAREHOUSE NOTIFICATIONS
 // ============================================================================
 
+async function updateWarehouseKPIs() {
+try {
+var sheetId = getCleanSheetId();
+if (!sheetId) return;
+var url = API_URL + '?action=getPendingDocs&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
+var res = await fetch(url, { redirect: 'follow' });
+var text = await res.text();
+var data;
+try { data = JSON.parse(text); } catch(e) { data = {}; }
+var docs = Array.isArray(data) ? data : (data.documents || data.docs || []);
+var kpiActive = document.getElementById('kpiActiveDocs');
+if (kpiActive) kpiActive.textContent = docs.length;
+} catch(e) { console.error('[KPI] Error:', e); }
+}
+
 async function loadWarehouseNotifications() {
 if (localStorage.getItem('ivm_userRole') === 'production') return;
 try {
@@ -1601,14 +1630,14 @@ var res = await fetch(url);
 var data = await res.json();
 console.log('[WH Notifications] Response:', data);
 if (data.success && data.requests) {
+// FIX: Show last 7 days instead of just today, and include MRIF + MRS
 var today = new Date();
-var todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+var sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
 var currentMrifId = localStorage.getItem('sheetId_MRIF') || '';
 var filtered = data.requests.filter(function(req) {
 var reqDate = new Date(req.timestamp);
-var reqStr = reqDate.getFullYear() + '-' + String(reqDate.getMonth()+1).padStart(2,'0') + '-' + String(reqDate.getDate()).padStart(2,'0');
 var type = (req.type || '').toUpperCase();
-if (reqStr !== todayStr || type !== 'MRIF') return false;
+if (reqDate < sevenDaysAgo || (type !== 'MRIF' && type !== 'MRS')) return false;
 if (currentMrifId && req.url) {
 var reqUrl = String(req.url || '');
 if (reqUrl.indexOf(currentMrifId) === -1) return false;
@@ -1616,15 +1645,17 @@ if (reqUrl.indexOf(currentMrifId) === -1) return false;
 return true;
 });
 filtered.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
-console.log('[WH Notifications] Today MRIF count:', filtered.length);
+console.log('[WH Notifications] Filtered count:', filtered.length);
 
 var prevCount = parseInt(localStorage.getItem('ivm_whNotifCount') || '0');
 var newCount = filtered.length;
 localStorage.setItem('ivm_whNotifCount', newCount);
 
-if (newCount > prevCount && prevCount > 0) {
+// FIX: Show toast even on first notification (prevCount >= 0 instead of > 0)
+if (newCount > prevCount) {
+var diff = newCount - prevCount;
 playSuccessBeep();
-showToast('New MRIF request received today!', 'warning');
+showToast(diff + ' new request(s) received!', 'warning');
 }
 
 var badge = document.getElementById('whNotifBadge');
@@ -1634,6 +1665,9 @@ badge.textContent = newCount;
 badge.classList.toggle('d-none', newCount === 0);
 btn.classList.toggle('d-none', false);
 }
+
+// FIX: Also render to hidden container for quick access
+renderWarehouseNotifications(filtered);
 }
 } catch(e) {
 console.error('[WH Notifications] Error:', e);
