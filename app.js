@@ -38,6 +38,7 @@ const requestSuccessModal = new bootstrap.Modal(document.getElementById('request
 var whNotifModal = document.getElementById('whNotifModal') ? new bootstrap.Modal(document.getElementById('whNotifModal')) : null;
 var mrifListModal = document.getElementById('mrifListModal') ? new bootstrap.Modal(document.getElementById('mrifListModal')) : null;
 var mrifPrintModal = document.getElementById('mrifPrintModal') ? new bootstrap.Modal(document.getElementById('mrifPrintModal')) : null;
+var pendingMrifModal = document.getElementById('pendingMrifModal') ? new bootstrap.Modal(document.getElementById('pendingMrifModal')) : null;
 const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
 const roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
 const productionNameModal = new bootstrap.Modal(document.getElementById('productionNameModal'));
@@ -1851,6 +1852,57 @@ showToast('Notifications cleared', 'info');
 // ============================================================================
 // MRIF PRINT PREVIEW — List & Print
 // ============================================================================
+
+async function openPendingMrifList() {
+if (state.isLoading) return;
+if (pendingMrifModal) pendingMrifModal.show();
+var container = document.getElementById('pendingMrifListContainer');
+if (container) {
+container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading pending MRIFs...</div></div>';
+}
+try {
+var sheetId = getCleanSheetId() || '';
+var url = API_URL + '?action=getPendingDocCount&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
+var res = await fetch(url, { redirect: 'follow' });
+var text = await res.text();
+var data;
+try { data = JSON.parse(text); } catch(e) { data = {}; }
+if (data.success && data.documents) {
+renderPendingMrifList(data.documents);
+} else {
+if (container) container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No pending MRIFs found</div>';
+}
+} catch(err) {
+if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + err.message + '</div>';
+}
+}
+
+function renderPendingMrifList(docs) {
+var container = document.getElementById('pendingMrifListContainer');
+if (!container) return;
+container.innerHTML = '';
+if (!docs || docs.length === 0) {
+container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No pending MRIFs</div>';
+return;
+}
+docs.forEach(function(d) {
+var docNo = typeof d === 'string' ? d : (d.docNo || d.name || '');
+var el = document.createElement('div');
+el.className = 'list-group-item pending-mrif-item';
+el.innerHTML = '<div class="d-flex justify-content-between align-items-center">' +
+'<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + docNo + '</strong></div>' +
+'<button class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-in-right me-1"></i>Process</button>' +
+'</div>' +
+'<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i>Has items awaiting release</div>';
+el.querySelector('button').addEventListener('click', function(e) {
+e.stopPropagation();
+if (pendingMrifModal) pendingMrifModal.hide();
+selectModule('MRIF');
+setTimeout(function() { onDocSelect(docNo); }, 300);
+});
+container.appendChild(el);
+});
+}
 
 async function openMrifList() {
 if (state.isLoading) return;
