@@ -1609,16 +1609,33 @@ hideLoading();
 
 async function updateWarehouseKPIs() {
 try {
-// FIX: Use module-specific sheet ID, fallback to empty (backend will use MASTER_SHEET_ID)
+// FIX: Use new getPendingDocCount to count only docs with PENDING items
 var sheetId = getCleanSheetId() || '';
-var url = API_URL + '?action=getPendingDocs&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
+var url = API_URL + '?action=getPendingDocCount&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
 var res = await fetch(url, { redirect: 'follow' });
 var text = await res.text();
 var data;
 try { data = JSON.parse(text); } catch(e) { data = {}; }
-var docs = Array.isArray(data) ? data : (data.documents || data.docs || []);
+// NEW: Backend returns pendingCount, completedCount, totalCount
+var pendingCount = data.pendingCount || 0;
+var completedCount = data.completedCount || 0;
+var totalCount = data.totalCount || 0;
+
 var kpiActive = document.getElementById('kpiActiveDocs');
-if (kpiActive) kpiActive.textContent = docs.length;
+var kpiPending = document.getElementById('kpiPending');
+var kpiNotif = document.getElementById('kpiNotifications');
+var kpiCompleted = document.getElementById('kpiCompleted');
+
+// Active Docs = total MRIF docs
+if (kpiActive) kpiActive.textContent = totalCount;
+// Pending = docs with at least one PENDING item
+if (kpiPending) kpiPending.textContent = pendingCount;
+// Notifications = same as pending (docs needing attention)
+if (kpiNotif) kpiNotif.textContent = pendingCount;
+// Completed = fully processed docs (no pending items)
+if (kpiCompleted) kpiCompleted.textContent = completedCount;
+
+console.log('[KPI] Total:', totalCount, 'Pending:', pendingCount, 'Completed:', completedCount);
 } catch(e) { console.error('[KPI] Error:', e); }
 }
 
@@ -1666,17 +1683,8 @@ badge.classList.toggle('d-none', newCount === 0);
 btn.classList.toggle('d-none', false);
 }
 
-// FIX: Update dashboard KPIs for warehouse mode
-var kpiActive = document.getElementById('kpiActiveDocs');
-var kpiPending = document.getElementById('kpiPending');
-var kpiNotif = document.getElementById('kpiNotifications');
-var kpiCompleted = document.getElementById('kpiCompleted');
-if (kpiPending) kpiPending.textContent = newCount;
-if (kpiNotif) kpiNotif.textContent = newCount;
-// Active docs: update from separate call
+// FIX: Update ALL dashboard KPIs from single source of truth
 updateWarehouseKPIs();
-// Completed: we don't have this data from getPendingRequests, show 0 or keep existing
-if (kpiCompleted) kpiCompleted.textContent = '0';
 
 // Also render to modal list
 renderWarehouseNotifications(filtered);
