@@ -305,27 +305,55 @@ body {
 .status-completed { background: #d1fae5; color: #065f46; }
 .status-served { background: #d1fae5; color: #065f46; }
 
+/* ─── Navbar / Header ─── */
+.navbar.navbar-dark {
+  background: var(--gemcor-blue) !important;
+}
+
+.navbar.navbar-dark .navbar-brand {
+  color: #fff !important;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.navbar.navbar-dark .navbar-brand i {
+  color: var(--gemcor-green-light);
+  margin-right: 6px;
+}
+
+.navbar.navbar-dark .btn {
+  color: #fff !important;
+}
+
+.navbar.navbar-dark .badge {
+  background: rgba(255,255,255,0.2) !important;
+  color: #fff !important;
+}
+
 /* ─── PIN Dots ─── */
 .pin-dots {
   display: flex;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   margin: 16px 0;
 }
 
 .pin-dot {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  border: 2px solid var(--gemcor-gray);
+  border: 2.5px solid var(--gemcor-gray);
   background: transparent;
-  transition: var(--gemcor-transition);
+  transition: all 0.2s ease;
+  display: inline-block;
+  flex-shrink: 0;
 }
 
 .pin-dot.filled {
   background: var(--gemcor-blue);
   border-color: var(--gemcor-blue);
-  box-shadow: 0 0 8px rgba(30,58,95,0.3);
+  box-shadow: 0 0 10px rgba(30,58,95,0.4);
+  transform: scale(1.1);
 }
 
 /* ─── Scanner ─── */
