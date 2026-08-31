@@ -483,9 +483,18 @@ body {
 .wizard-step .step-label {
   font-size: 0.7rem;
   font-weight: 600;
-  color: var(--gemcor-gray);
+  color: #1e3a5f !important;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.wizard-step.active .step-label {
+  color: var(--gemcor-blue) !important;
+  font-weight: 700;
+}
+
+.wizard-step.completed .step-label {
+  color: var(--gemcor-green) !important;
 }
 
 .wizard-panel {
@@ -495,6 +504,58 @@ body {
 
 .wizard-panel.active {
   display: block;
+}
+
+/* ─── Document Type Cards (MRIF / MRS) ─── */
+.doc-type-card {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  padding: 20px;
+  background: #fff;
+}
+
+.doc-type-card:hover {
+  border-color: var(--gemcor-blue);
+  background: #f0f4f8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(30,58,95,0.12);
+}
+
+.doc-type-card.selected {
+  border-color: var(--gemcor-blue);
+  background: #e8f0fe;
+  box-shadow: 0 0 0 3px rgba(30,58,95,0.1);
+}
+
+.doc-type-card .doc-type-icon {
+  font-size: 2rem;
+  margin-bottom: 8px;
+  color: var(--gemcor-blue);
+  transition: transform 0.2s ease;
+}
+
+.doc-type-card:hover .doc-type-icon {
+  transform: scale(1.1);
+}
+
+.doc-type-card .doc-type-title {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--gemcor-dark);
+  margin-bottom: 4px;
+}
+
+.doc-type-card .doc-type-subtitle {
+  font-size: 0.85rem;
+  color: var(--gemcor-gray);
+}
+
+.doc-type-card .doc-type-desc {
+  font-size: 0.8rem;
+  color: var(--gemcor-gray);
+  margin-top: 4px;
 }
 
 @keyframes fadeIn {
