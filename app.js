@@ -1612,6 +1612,198 @@ hideLoading();
 
 
 // ============================================================================
+// MANUAL MRR CREATION (No PO required)
+// ============================================================================
+var manualMrrModal = null;
+var manualMrrItems = [];
+
+function openManualMrrModal() {
+  if (!manualMrrModal) {
+    manualMrrModal = new bootstrap.Modal(document.getElementById('manualMrrModal'));
+  }
+  // Reset form
+  document.getElementById('manualMrrPoNo').value = '';
+  document.getElementById('manualMrrDrNo').value = '';
+  document.getElementById('manualMrrVendor').value = '';
+  document.getElementById('manualMrrSite').value = 'GEMCOR CATMON';
+  document.getElementById('manualMrrPreparedBy').value = '';
+  manualMrrItems = [];
+  renderManualMrrItems();
+  updateManualMrrSubmitButton();
+  manualMrrModal.show();
+}
+
+function addManualMrrItem() {
+  manualMrrItems.push({
+    inventoryId: '',
+    description: '',
+    qty: 1,
+    atlQty: 0,
+    unit: 'PCS'
+  });
+  renderManualMrrItems();
+  updateManualMrrSubmitButton();
+  // Focus on the new item's code field
+  setTimeout(function() {
+    var inputs = document.querySelectorAll('.manual-mrr-code');
+    if (inputs.length > 0) {
+      inputs[inputs.length - 1].focus();
+    }
+  }, 100);
+}
+
+function removeManualMrrItem(index) {
+  manualMrrItems.splice(index, 1);
+  renderManualMrrItems();
+  updateManualMrrSubmitButton();
+}
+
+function updateManualMrrItem(index, field, value) {
+  if (manualMrrItems[index]) {
+    manualMrrItems[index][field] = value;
+  }
+  updateManualMrrSubmitButton();
+}
+
+function renderManualMrrItems() {
+  var tbody = document.getElementById('manualMrrItemsBody');
+  var emptyState = document.getElementById('manualMrrEmptyState');
+  if (!tbody) return;
+
+  if (manualMrrItems.length === 0) {
+    tbody.innerHTML = '';
+    if (emptyState) emptyState.style.display = 'block';
+    return;
+  }
+
+  if (emptyState) emptyState.style.display = 'none';
+
+  var html = '';
+  for (var i = 0; i < manualMrrItems.length; i++) {
+    var it = manualMrrItems[i];
+    html += '<tr>' +
+      '<td class="align-middle text-center">' + (i + 1) + '</td>' +
+      '<td><input type="text" class="form-control form-control-sm manual-mrr-code" ' +
+        'value="' + (it.inventoryId || '') + '" ' +
+        'onchange="updateManualMrrItem(' + i + ', 'inventoryId', this.value)" ' +
+        'placeholder="Item code"></td>' +
+      '<td><input type="text" class="form-control form-control-sm" ' +
+        'value="' + (it.description || '') + '" ' +
+        'onchange="updateManualMrrItem(' + i + ', 'description', this.value)" ' +
+        'placeholder="Description"></td>' +
+      '<td><input type="number" class="form-control form-control-sm text-center" ' +
+        'value="' + (it.qty || 0) + '" ' +
+        'onchange="updateManualMrrItem(' + i + ', 'qty', parseFloat(this.value)||0)" ' +
+        'min="0" step="0.01"></td>' +
+      '<td><input type="number" class="form-control form-control-sm text-center" ' +
+        'value="' + (it.atlQty || 0) + '" ' +
+        'onchange="updateManualMrrItem(' + i + ', 'atlQty', parseFloat(this.value)||0)" ' +
+        'min="0" step="0.01"></td>' +
+      '<td><input type="text" class="form-control form-control-sm text-center" ' +
+        'value="' + (it.unit || 'PCS') + '" ' +
+        'onchange="updateManualMrrItem(' + i + ', 'unit', this.value)" ' +
+        'placeholder="Unit"></td>' +
+      '<td class="align-middle text-center">' +
+        '<button class="btn btn-sm btn-outline-danger" onclick="removeManualMrrItem(' + i + ')" title="Remove">' +
+          '<i class="bi bi-trash"></i>' +
+        '</button>' +
+      '</td>' +
+      '</tr>';
+  }
+  tbody.innerHTML = html;
+}
+
+function updateManualMrrSubmitButton() {
+  var btn = document.getElementById('btnSubmitManualMrr');
+  if (!btn) return;
+
+  var drNo = document.getElementById('manualMrrDrNo').value.trim();
+  var vendor = document.getElementById('manualMrrVendor').value.trim();
+  var site = document.getElementById('manualMrrSite').value.trim();
+
+  var hasValidItems = false;
+  for (var i = 0; i < manualMrrItems.length; i++) {
+    var it = manualMrrItems[i];
+    if (it.inventoryId && it.inventoryId.trim() && it.description && it.description.trim() && it.qty > 0) {
+      hasValidItems = true;
+      break;
+    }
+  }
+
+  btn.disabled = !(drNo && vendor && site && hasValidItems);
+}
+
+async function submitManualMrr() {
+  var poNo = document.getElementById('manualMrrPoNo').value.trim();
+  var drNo = document.getElementById('manualMrrDrNo').value.trim();
+  var vendor = document.getElementById('manualMrrVendor').value.trim();
+  var site = document.getElementById('manualMrrSite').value.trim();
+  var receivingDate = document.getElementById('manualMrrDate').value;
+  var preparedBy = document.getElementById('manualMrrPreparedBy').value.trim();
+
+  // Filter only valid items
+  var items = [];
+  for (var i = 0; i < manualMrrItems.length; i++) {
+    var it = manualMrrItems[i];
+    if (it.inventoryId && it.inventoryId.trim() && it.description && it.description.trim() && it.qty > 0) {
+      items.push({
+        inventoryId: it.inventoryId.trim(),
+        description: it.description.trim(),
+        qty: it.qty,
+        atlQty: it.atlQty || 0,
+        unit: it.unit || 'PCS'
+      });
+    }
+  }
+
+  if (items.length === 0) {
+    showToast('Please add at least one valid item', 'warning');
+    return;
+  }
+
+  showLoading('Creating Manual MRR...');
+  try {
+    var payload = {
+      action: 'createMrrRequest',
+      poNo: poNo || 'N/A',
+      prfNo: '',
+      client: vendor,
+      supplier: vendor,
+      drNo: drNo,
+      receivingDate: receivingDate,
+      receivingSite: site,
+      preparedBy: preparedBy,
+      items: items,
+      isManual: true
+    };
+
+    var res = await fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      redirect: 'follow'
+    });
+
+    var text = await res.text();
+    var data;
+    try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+
+    if (data && data.success) {
+      if (manualMrrModal) manualMrrModal.hide();
+      showToast('Manual MRR created: ' + data.docNo, 'success');
+      await fetchPendingDocs();
+      await updateWarehouseKPIs();
+    } else {
+      showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
+    }
+  } catch(err) {
+    showToast('Error: ' + err.message, 'danger');
+  } finally {
+    hideLoading();
+  }
+}
+
+// ============================================================================
 // WAREHOUSE NOTIFICATIONS
 // ============================================================================
 
