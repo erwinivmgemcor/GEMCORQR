@@ -1685,23 +1685,23 @@ function renderManualMrrItems() {
       '<td class="align-middle text-center">' + (i + 1) + '</td>' +
       '<td><input type="text" class="form-control form-control-sm manual-mrr-code" ' +
         'value="' + (it.inventoryId || '') + '" ' +
-        'onchange="updateManualMrrItem(' + i + ', 'inventoryId', this.value)" ' +
+        'onchange="updateManualMrrItem(' + i + ', \'inventoryId\', this.value)" ' +
         'placeholder="Item code"></td>' +
       '<td><input type="text" class="form-control form-control-sm" ' +
         'value="' + (it.description || '') + '" ' +
-        'onchange="updateManualMrrItem(' + i + ', 'description', this.value)" ' +
+        'onchange="updateManualMrrItem(' + i + ', \'description\', this.value)" ' +
         'placeholder="Description"></td>' +
       '<td><input type="number" class="form-control form-control-sm text-center" ' +
         'value="' + (it.qty || 0) + '" ' +
-        'onchange="updateManualMrrItem(' + i + ', 'qty', parseFloat(this.value)||0)" ' +
+        'onchange="updateManualMrrItem(' + i + ', \'qty\', parseFloat(this.value)||0)" ' +
         'min="0" step="0.01"></td>' +
       '<td><input type="number" class="form-control form-control-sm text-center" ' +
         'value="' + (it.atlQty || 0) + '" ' +
-        'onchange="updateManualMrrItem(' + i + ', 'atlQty', parseFloat(this.value)||0)" ' +
+        'onchange="updateManualMrrItem(' + i + ', \'atlQty\', parseFloat(this.value)||0)" ' +
         'min="0" step="0.01"></td>' +
       '<td><input type="text" class="form-control form-control-sm text-center" ' +
         'value="' + (it.unit || 'PCS') + '" ' +
-        'onchange="updateManualMrrItem(' + i + ', 'unit', this.value)" ' +
+        'onchange="updateManualMrrItem(' + i + ', \'unit\', this.value)" ' +
         'placeholder="Unit"></td>' +
       '<td class="align-middle text-center">' +
         '<button class="btn btn-sm btn-outline-danger" onclick="removeManualMrrItem(' + i + ')" title="Remove">' +
