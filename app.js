@@ -2153,7 +2153,20 @@ container.innerHTML = html;
 }
 
 function printMrr() {
-window.print();
+// FIX: Copy print content to hidden container for proper isolated printing
+var previewContent = document.getElementById('mrrPrintContent');
+var printOnly = document.getElementById('mrrPrintOnly');
+if (previewContent && printOnly) {
+  printOnly.innerHTML = previewContent.innerHTML;
+}
+// Small delay to ensure DOM update before printing
+setTimeout(function() {
+  window.print();
+  // Clear after print
+  setTimeout(function() {
+    if (printOnly) printOnly.innerHTML = '';
+  }, 1000);
+}, 100);
 }
 
 function closeMrrPrint() {
