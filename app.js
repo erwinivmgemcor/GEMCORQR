@@ -1977,9 +1977,13 @@ var res = await fetch(url, { redirect: 'follow' });
 var text = await res.text();
 var data;
 try { data = JSON.parse(text); } catch(e) { data = {}; }
+console.log('[openMrrPrint] Response:', data);
 if (data.error) {
 showToast('Error: ' + data.error, 'danger');
 return;
+}
+if (!data.items || data.items.length === 0) {
+console.warn('[openMrrPrint] No items found for ' + docNo, data.debug);
 }
 renderMrrPrint(docNo, data.info || {}, data.items || []);
 if (mrrListModal) mrrListModal.hide();
@@ -1996,6 +2000,8 @@ hideLoading();
 function renderMrrPrint(docNo, info, items) {
 var container = document.getElementById('mrrPrintContent');
 if (!container) return;
+
+console.log('[renderMrrPrint] Items count:', items ? items.length : 0, 'Items:', items);
 
 // Extract info with fallbacks
 var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
@@ -2034,12 +2040,13 @@ var recDateStr = formatDate(receivingDate);
 var itemsHtml = '';
 if (items && items.length > 0) {
   items.forEach(function(it, idx) {
-    var code = it.itemCode || it.inventoryId || '';
-    var desc = it.description || '';
-    var recQty = it.expectedQty || it.qty || 0;
-    var atlQty = it.actualQty || it.issuedQty || 0;
-    var unit = it.unit || 'PIECE';
-    var remarks = it.remarks || '';
+    // Handle any property name variations
+    var code = it.itemCode || it.inventoryId || it.code || it.id || '';
+    var desc = it.description || it.desc || it.itemDescription || '';
+    var recQty = it.recQty || it.expectedQty || it.qty || it.quantity || 0;
+    var atlQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
+    var unit = it.unit || it.uom || 'PIECE';
+    var remarks = it.remarks || it.status || it.note || '';
     var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
     itemsHtml += '<tr>' +
       '<td class="td-center" style="width:5%">' + (idx + 1) + '</td>' +
