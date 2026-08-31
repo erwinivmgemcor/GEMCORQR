@@ -431,38 +431,75 @@ body {
 }
 
 /* ─── Wizard ─── */
+.wizard-steps {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
 .wizard-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  opacity: 0.4;
+  transition: var(--gemcor-transition);
+}
+
+.wizard-step.active {
+  opacity: 1;
+}
+
+.wizard-step.completed {
+  opacity: 0.7;
+}
+
+.wizard-step .step-number {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--gemcor-border);
+  color: var(--gemcor-gray);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  transition: var(--gemcor-transition);
+}
+
+.wizard-step.active .step-number {
+  background: var(--gemcor-blue);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(30,58,95,0.15);
+}
+
+.wizard-step.completed .step-number {
+  background: var(--gemcor-green);
+  color: #fff;
+}
+
+.wizard-step .step-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--gemcor-gray);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.wizard-panel {
   display: none;
   animation: fadeIn 0.3s ease;
 }
 
-.wizard-step.active {
+.wizard-panel.active {
   display: block;
 }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-.wizard-progress {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 20px;
-}
-
-.wizard-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--gemcor-border);
-  transition: var(--gemcor-transition);
-}
-
-.wizard-dot.active {
-  background: var(--gemcor-blue);
-  transform: scale(1.2);
 }
 
 /* ─── Production Banner ─── */
@@ -1020,55 +1057,9 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MRR PRINT MEDIA — PROPER ISOLATED PRINTING
+   MRR PRINT MEDIA — IFRAME PRINTING (reliable, no Bootstrap interference)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 @media print {
   @page { size: letter portrait; margin: 0.25in; }
-
-  /* Hide everything on the page */
-  body > * { display: none !important; }
-
-  /* Show only the print container */
-  #mrrPrintOnly {
-    display: block !important;
-    position: static;
-    width: 100%;
-    margin: 0;
-    padding: 0;
-  }
-
-  #mrrPrintOnly * {
-    visibility: visible !important;
-    display: initial;
-  }
-
-  /* Reset any modal/bootstrap interference */
-  #mrrPrintOnly .mrr-print-sheet {
-    width: 100%;
-    padding: 0.15in;
-    margin: 0;
-    box-shadow: none;
-    page-break-after: avoid;
-    font-size: 9pt;
-  }
-
-  #mrrPrintOnly .mrr-logo img { height: 42px; }
-  #mrrPrintOnly .mrr-doc-qr img { width: 70px; height: 70px; }
-  #mrrPrintOnly .mrr-title { font-size: 11pt; margin: 6px 0 10px 0; }
-  #mrrPrintOnly .mrr-meta-table { margin-bottom: 10px; }
-  #mrrPrintOnly .mrr-meta-label { font-size: 7.5pt; }
-  #mrrPrintOnly .mrr-meta-value { font-size: 8pt; padding: 3px 5px; }
-  #mrrPrintOnly .mrr-meta-label-right { font-size: 7.5pt; }
-  #mrrPrintOnly .mrr-meta-value-right { font-size: 8pt; padding: 3px 5px; }
-  #mrrPrintOnly .mrr-items { font-size: 8pt; }
-  #mrrPrintOnly .mrr-items th { font-size: 7.5pt; }
-  #mrrPrintOnly .mrr-checkboxes { font-size: 7pt; }
-  #mrrPrintOnly .mrr-cb-title { font-size: 7pt; }
-  #mrrPrintOnly .mrr-cb-item { font-size: 7pt; }
-  #mrrPrintOnly .mrr-sigs { gap: 40px; margin-top: 18px; }
-  #mrrPrintOnly .mrr-sig { width: 28%; }
-  #mrrPrintOnly .mrr-sig-name { font-size: 9pt; }
-  #mrrPrintOnly .mrr-sig-line { height: 16px; }
-  #mrrPrintOnly .mrr-sig-label { font-size: 8pt; }
 }
