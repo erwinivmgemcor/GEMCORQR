@@ -39,6 +39,8 @@ var whNotifModal = document.getElementById('whNotifModal') ? new bootstrap.Modal
 var mrifListModal = document.getElementById('mrifListModal') ? new bootstrap.Modal(document.getElementById('mrifListModal')) : null;
 var mrifPrintModal = document.getElementById('mrifPrintModal') ? new bootstrap.Modal(document.getElementById('mrifPrintModal')) : null;
 var pendingMrifModal = document.getElementById('pendingMrifModal') ? new bootstrap.Modal(document.getElementById('pendingMrifModal')) : null;
+var mrrListModal = document.getElementById('mrrListModal') ? new bootstrap.Modal(document.getElementById('mrrListModal')) : null;
+var mrrPrintModal = document.getElementById('mrrPrintModal') ? new bootstrap.Modal(document.getElementById('mrrPrintModal')) : null;
 const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
 const roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
 const productionNameModal = new bootstrap.Modal(document.getElementById('productionNameModal'));
@@ -364,6 +366,11 @@ await fetchPendingDocs();
 var mrifCard = document.getElementById('mrifListCard');
 if (mrifCard) {
 mrifCard.classList.toggle('d-none', mod !== 'MRIF');
+}
+// Show/hide MRR List button
+var mrrCard = document.getElementById('mrrListCard');
+if (mrrCard) {
+mrrCard.classList.toggle('d-none', mod !== 'MRR');
 }
 } finally {
 hideLoading();
@@ -1894,14 +1901,235 @@ el.innerHTML = '<div class="d-flex justify-content-between align-items-center">'
 '<button class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-in-right me-1"></i>Process</button>' +
 '</div>' +
 '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i>Has items awaiting release</div>';
-el.querySelector('button').addEventListener('click', function(e) {
+el.querySelector('button').addEventListener('click', async function(e) {
 e.stopPropagation();
 if (pendingMrifModal) pendingMrifModal.hide();
-selectModule('MRIF');
-setTimeout(function() { onDocSelect(docNo); }, 300);
+// FIX: Properly await selectModule to finish before loading document
+showToast('Loading ' + docNo + '...', 'info');
+try {
+  await selectModule('MRIF');
+  // Now safe to load document
+  await onDocSelect(docNo);
+} catch(err) {
+  console.error('[Pending MRIF] Error loading doc:', err);
+  showToast('Failed to load ' + docNo + '. Try again.', 'danger');
+}
 });
 container.appendChild(el);
 });
+}
+
+// ============================================================================
+// MRR PRINT PREVIEW — List & Print
+// ============================================================================
+
+async function openMrrList() {
+if (state.isLoading) return;
+if (mrrListModal) mrrListModal.show();
+var container = document.getElementById('mrrListContainer');
+if (container) {
+container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRR documents...</div></div>';
+}
+try {
+var sheetId = getCleanSheetId();
+if (!sheetId) {
+if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">No MRR Sheet ID configured. Please sync or enter Sheet ID in Settings.</div>';
+return;
+}
+var url = API_URL + '?action=getPendingDocs&docType=MRR&sheetId=' + sheetId + '&_t=' + Date.now();
+var res = await fetch(url, { redirect: 'follow' });
+var text = await res.text();
+var data;
+try { data = JSON.parse(text); } catch(e) { data = {}; }
+var docs = Array.isArray(data) ? data : (data.documents || data.docs || []);
+renderMrrList(docs);
+} catch(err) {
+if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error loading documents: ' + err.message + '</div>';
+}
+}
+
+function renderMrrList(docs) {
+var container = document.getElementById('mrrListContainer');
+if (!container) return;
+container.innerHTML = '';
+if (!docs || docs.length === 0) {
+container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No MRR documents found</div>';
+return;
+}
+docs.forEach(function(d) {
+var docNo = typeof d === 'string' ? d : (d.docNo || d.name || d);
+var el = document.createElement('div');
+el.className = 'list-group-item mrif-list-item d-flex justify-content-between align-items-center';
+el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-success"></i><strong>' + docNo + '</strong></div>' +
+'<button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>View / Print</button>';
+el.addEventListener('click', function() { openMrrPrint(docNo); });
+container.appendChild(el);
+});
+}
+
+async function openMrrPrint(docNo) {
+if (state.isLoading) return;
+showLoading('Loading ' + docNo + '...');
+try {
+var sheetId = getCleanSheetId();
+var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRR&sheetId=' + sheetId + '&_t=' + Date.now();
+var res = await fetch(url, { redirect: 'follow' });
+var text = await res.text();
+var data;
+try { data = JSON.parse(text); } catch(e) { data = {}; }
+if (data.error) {
+showToast('Error: ' + data.error, 'danger');
+return;
+}
+renderMrrPrint(docNo, data.info || {}, data.items || []);
+if (mrrListModal) mrrListModal.hide();
+setTimeout(function() {
+if (mrrPrintModal) mrrPrintModal.show();
+}, 300);
+} catch(err) {
+showToast('Failed to load document: ' + err.message, 'danger');
+} finally {
+hideLoading();
+}
+}
+
+function renderMrrPrint(docNo, info, items) {
+var container = document.getElementById('mrrPrintContent');
+if (!container) return;
+
+var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
+var vendor = info['Vendor/Client'] || info.vendor || info.client || '';
+var datePrepared = info['Date Prepared'] || info.datePrepared || '';
+var poNo = info['PO No.'] || info.poNo || '';
+var drNo = info['DR No.'] || info.drNo || info.dr || '';
+var receivingDate = info['Receiving Date'] || info.receivingDate || '';
+
+// Format date nicely
+var dateStr = datePrepared;
+try {
+var d = new Date(datePrepared);
+if (!isNaN(d.getTime())) {
+var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+dateStr = months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+}
+} catch(e) {}
+
+var itemsHtml = '';
+items.forEach(function(it, idx) {
+var code = it.itemCode || it.inventoryId || '';
+var desc = it.description || '';
+var recQty = it.expectedQty || it.qty || 0;
+var atlQty = it.actualQty || it.issuedQty || 0;
+var unit = it.unit || 'PIECE';
+var remarks = it.remarks || '';
+var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
+itemsHtml += '<tr>' +
+'<td class="td-center">' + (idx + 1) + '</td>' +
+'<td class="td-center">' + code + '</td>' +
+'<td class="td-center"><img src="' + qrUrl + '" style="width:32px;height:32px;display:block;margin:0 auto;" alt=""></td>' +
+'<td class="td-left">' + desc + '</td>' +
+'<td class="td-center">' + recQty + '</td>' +
+'<td class="td-center">' + atlQty + '</td>' +
+'<td class="td-center">' + unit + '</td>' +
+'<td class="td-center">' + remarks + '</td>' +
+'</tr>';
+});
+
+// Add 1 empty row after data for spacing
+itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
+
+// "no further entries" row — merged across all columns, centered
+itemsHtml += '<tr><td class="td-nofurther" colspan="8">******************** no further entries below this line ********************</td></tr>';
+
+var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
+
+var html = `<div class="mrr-print-sheet">
+<div class="mrr-header">
+<div class="mrr-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>
+<div class="mrr-docno">
+<div><span class="mrr-dn-label">Receipt No.:</span><span class="mrr-dn-box">${docNo}</span></div>
+<div class="mrr-doc-qr"><img src="${mrrQrUrl}" alt="MRR QR" style="width:90px;height:90px;margin-top:4px;"></div>
+</div>
+</div>
+<div class="mrr-title">MATERIALS RECEIVING REPORT</div>
+<table class="mrr-meta">
+<tr>
+<td class="meta-label-left">RECEIVING SITE:</td>
+<td class="meta-value-left" colspan="2">${receivingSite}</td>
+<td class="meta-label-right">PURCHASE ORDER / S.O. No.:</td>
+<td class="meta-value-right">${poNo}</td>
+</tr>
+<tr>
+<td class="meta-label-left">VENDOR / PROJECT SITE / CLIENT:</td>
+<td class="meta-value-left" colspan="2">${vendor}</td>
+<td class="meta-label-right">D.R. No. / S.I. No. / A.R. No.:</td>
+<td class="meta-value-right">${drNo}</td>
+</tr>
+<tr>
+<td class="meta-label-left">DATE PREPARED:</td>
+<td class="meta-value-left" colspan="2">${dateStr}</td>
+<td class="meta-label-right">RECEIVING DATE:</td>
+<td class="meta-value-right">${receivingDate}</td>
+</tr>
+</table>
+<table class="mrr-items">
+<thead>
+<tr>
+<th style="width:5%">ITEM<br>NO.</th>
+<th style="width:14%">ITEM<br>CODE</th>
+<th style="width:7%">QR<br>IMG</th>
+<th style="width:34%">ITEM DESCRIPTION</th>
+<th style="width:9%">REC.<br>QTY</th>
+<th style="width:9%">ATL<br>QTY</th>
+<th style="width:7%">UNIT</th>
+<th style="width:15%">REMARKS</th>
+</tr>
+</thead>
+<tbody>${itemsHtml}</tbody>
+</table>
+<div class="mrr-bottom">
+<div class="mrr-checkboxes">
+<div class="cb-row">
+<strong>ISSUES IN SUPPLIER PERFORMANCE:</strong>
+<span class="cb-item"><span class="cb-box"></span> PRODUCT/SERVICE</span>
+<span class="cb-item"><span class="cb-box"></span> DELIVERY</span>
+<span class="cb-item"><span class="cb-box"></span> CUSTOMER RELATIONS</span>
+<span class="cb-item"><span class="cb-box"></span> SUPPORT FUNCTION</span>
+<span class="cb-item"><span class="cb-box"></span> PRICE</span>
+</div>
+<div class="cb-row">
+<strong>ACTION TAKEN IF REJECT / PARTIAL ACCEPTANCE:</strong>
+<span class="cb-item"><span class="cb-box"></span> RETURN TO SUPPLIER</span>
+<span class="cb-item"><span class="cb-box"></span> ITEMS REPLACED BY SUPPLIER</span>
+<span class="cb-item"><span class="cb-box"></span> OTHERS</span>
+</div>
+</div>
+<div class="mrr-sigs">
+<div class="mrr-sig">
+<div class="mrr-sig-line">&nbsp;</div>
+<div class="mrr-sig-label">PREPARED BY</div>
+</div>
+<div class="mrr-sig">
+<div class="mrr-sig-line">&nbsp;</div>
+<div class="mrr-sig-label">CHECKED BY</div>
+</div>
+<div class="mrr-sig">
+<div class="mrr-sig-line">&nbsp;</div>
+<div class="mrr-sig-label">NOTED BY</div>
+</div>
+</div>
+</div>
+</div>`;
+
+container.innerHTML = html;
+}
+
+function printMrr() {
+window.print();
+}
+
+function closeMrrPrint() {
+if (mrrPrintModal) mrrPrintModal.hide();
 }
 
 async function openMrifList() {
