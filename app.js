@@ -2153,20 +2153,66 @@ container.innerHTML = html;
 }
 
 function printMrr() {
-// FIX: Copy print content to hidden container for proper isolated printing
 var previewContent = document.getElementById('mrrPrintContent');
-var printOnly = document.getElementById('mrrPrintOnly');
-if (previewContent && printOnly) {
-  printOnly.innerHTML = previewContent.innerHTML;
+if (!previewContent) return;
+
+// Get the inner HTML of the print sheet
+var sheetHtml = previewContent.innerHTML;
+
+// Build a complete standalone HTML document with inline styles
+var printStyles = `
+  @page { size: letter portrait; margin: 0.25in; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #000; line-height: 1.3; }
+  .mrr-print-sheet { width: 100%; max-width: 8in; margin: 0 auto; background: #fff; padding: 0.2in; }
+  .mrr-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+  .mrr-logo img { height: 48px; width: auto; }
+  .mrr-docno { text-align: right; }
+  .mrr-dn-label { font-weight: bold; font-size: 9pt; margin-right: 4px; }
+  .mrr-dn-box { display: inline-block; background: #f4cccc; border: 1px solid #e6b8b8; padding: 2px 10px; font-weight: bold; font-size: 10pt; color: #000; letter-spacing: 1px; }
+  .mrr-doc-qr { margin-top: 4px; text-align: right; }
+  .mrr-doc-qr img { width: 75px; height: 75px; }
+  .mrr-title { text-align: center; font-size: 12pt; font-weight: bold; letter-spacing: 5px; margin: 8px 0 14px 0; text-transform: uppercase; }
+  .mrr-meta-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 8.5pt; }
+  .mrr-meta-table td { padding: 0; vertical-align: middle; border: none; }
+  .mrr-meta-label { font-weight: bold; font-size: 8pt; letter-spacing: 2px; text-align: left; white-space: nowrap; padding: 3px 4px 3px 0; width: 20%; line-height: 1.2; }
+  .mrr-meta-value { background: #cfe2f3; padding: 4px 6px; font-size: 9pt; font-weight: bold; text-align: left; border: 1px solid #b6d7e8; width: 30%; line-height: 1.2; }
+  .mrr-meta-label-right { font-weight: bold; font-size: 8pt; letter-spacing: 1.5px; text-align: left; white-space: nowrap; padding: 3px 4px 3px 10px; width: 22%; line-height: 1.2; }
+  .mrr-meta-value-right { background: #cfe2f3; padding: 4px 6px; font-size: 9pt; font-weight: bold; text-align: left; border: 1px solid #b6d7e8; width: 28%; line-height: 1.2; }
+  .mrr-items { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 8.5pt; }
+  .mrr-items th, .mrr-items td { border: 1.5px solid #000; padding: 4px 5px; vertical-align: middle; }
+  .mrr-items th { background: #fff; font-weight: bold; text-align: center; font-size: 8pt; letter-spacing: 0.5px; }
+  .mrr-items td.td-center { text-align: center; }
+  .mrr-items td.td-left { text-align: left; }
+  .mrr-items td.td-nofurther { text-align: center; font-size: 7pt; font-weight: bold; padding: 3px; border: 1.5px solid #000; letter-spacing: 0.5px; }
+  .mrr-checkboxes { font-size: 7.5pt; margin-top: 6px; margin-bottom: 16px; }
+  .mrr-cb-section { margin-bottom: 6px; }
+  .mrr-cb-title { font-weight: bold; font-size: 7.5pt; letter-spacing: 0.5px; margin-bottom: 3px; text-transform: uppercase; }
+  .mrr-cb-row { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-bottom: 4px; padding-left: 2px; }
+  .mrr-cb-item { font-size: 7.5pt; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+  .mrr-cb-circle { font-size: 9pt; line-height: 1; font-family: "Courier New", monospace; }
+  .mrr-sigs { display: flex; justify-content: center; gap: 50px; margin-top: 24px; text-align: center; }
+  .mrr-sig { width: 26%; min-width: 140px; }
+  .mrr-sig-name { font-size: 9.5pt; font-weight: bold; text-transform: uppercase; margin-bottom: 1px; min-height: 16px; letter-spacing: 0.5px; }
+  .mrr-sig-line { border-bottom: 1.5px solid #000; height: 18px; margin-bottom: 2px; }
+  .mrr-sig-label { font-size: 8.5pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; font-style: italic; }
+`;
+
+var fullHtml = '<!DOCTYPE html>' +
+  '<html><head><meta charset="utf-8"><title>MRR Print</title><style>' + printStyles + '</style></head>' +
+  '<body onload="setTimeout(function(){ window.print(); setTimeout(function(){ window.close(); }, 500); }, 200);">' +
+  sheetHtml +
+  '</body></html>';
+
+// Open new window and write the complete document
+var printWin = window.open('', '_blank');
+if (!printWin) {
+  showToast('Please allow popups to print', 'warning');
+  return;
 }
-// Small delay to ensure DOM update before printing
-setTimeout(function() {
-  window.print();
-  // Clear after print
-  setTimeout(function() {
-    if (printOnly) printOnly.innerHTML = '';
-  }, 1000);
-}, 100);
+printWin.document.open();
+printWin.document.write(fullHtml);
+printWin.document.close();
 }
 
 function closeMrrPrint() {
