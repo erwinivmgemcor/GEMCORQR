@@ -2152,6 +2152,13 @@ var html = '<div class="mrr-print-sheet">' +
 container.innerHTML = html;
 }
 
+function printMrr() {
+window.print();
+}
+
+function closeMrrPrint() {
+if (mrrPrintModal) mrrPrintModal.hide();
+}
 
 async function openMrifList() {
 if (state.isLoading) return;
