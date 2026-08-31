@@ -1152,3 +1152,28 @@ body {
 @media print {
   @page { size: letter portrait; margin: 0.25in; }
 }
+
+/* ─── Manual MRR Modal ─── */
+#manualMrrModal .modal-header {
+  background: var(--gemcor-green);
+}
+
+#manualMrrModal .form-label {
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+}
+
+#manualMrrItemsTable input.form-control-sm {
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+}
+
+#manualMrrItemsTable .btn-outline-danger {
+  padding: 0.15rem 0.4rem;
+  font-size: 0.75rem;
+}
+
+.manual-mrr-code {
+  font-family: "Courier New", monospace;
+  font-weight: 600;
+}
