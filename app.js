@@ -2003,6 +2003,7 @@ var datePrepared = info['Date Prepared'] || info.datePrepared || '';
 var poNo = info['PO No.'] || info.poNo || '';
 var drNo = info['DR No.'] || info.drNo || info.dr || '';
 var receivingDate = info['Receiving Date'] || info.receivingDate || '';
+var preparedBy = info['Prepared By'] || info.preparedBy || '';
 
 // Format date nicely
 var dateStr = datePrepared;
@@ -2024,100 +2025,105 @@ var unit = it.unit || 'PIECE';
 var remarks = it.remarks || '';
 var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
 itemsHtml += '<tr>' +
-'<td class="td-center">' + (idx + 1) + '</td>' +
-'<td class="td-center">' + code + '</td>' +
-'<td class="td-center"><img src="' + qrUrl + '" style="width:32px;height:32px;display:block;margin:0 auto;" alt=""></td>' +
-'<td class="td-left">' + desc + '</td>' +
-'<td class="td-center">' + recQty + '</td>' +
-'<td class="td-center">' + atlQty + '</td>' +
-'<td class="td-center">' + unit + '</td>' +
-'<td class="td-center">' + remarks + '</td>' +
+'<td class="td-center" style="width:5%">' + (idx + 1) + '</td>' +
+'<td class="td-center" style="width:14%">' + code + '</td>' +
+'<td class="td-center" style="width:7%"><img src="' + qrUrl + '" style="width:32px;height:32px;display:block;margin:0 auto;" alt=""></td>' +
+'<td class="td-left" style="width:34%">' + desc + '</td>' +
+'<td class="td-center" style="width:9%">' + recQty + '</td>' +
+'<td class="td-center" style="width:9%">' + atlQty + '</td>' +
+'<td class="td-center" style="width:7%">' + unit + '</td>' +
+'<td class="td-center" style="width:15%">' + remarks + '</td>' +
 '</tr>';
 });
 
 // Add 1 empty row after data for spacing
 itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
 
-// "no further entries" row — merged across all columns, centered
+// "no further entries" row
 itemsHtml += '<tr><td class="td-nofurther" colspan="8">******************** no further entries below this line ********************</td></tr>';
 
 var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
 var html = `<div class="mrr-print-sheet">
 <div class="mrr-header">
-<div class="mrr-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>
-<div class="mrr-docno">
-<div><span class="mrr-dn-label">Receipt No.:</span><span class="mrr-dn-box">${docNo}</span></div>
-<div class="mrr-doc-qr"><img src="${mrrQrUrl}" alt="MRR QR" style="width:90px;height:90px;margin-top:4px;"></div>
-</div>
+  <div class="mrr-logo"><img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display='none'"></div>
+  <div class="mrr-docno">
+    <div><span class="mrr-dn-label">Receipt No.:</span><span class="mrr-dn-box">${docNo}</span></div>
+    <div class="mrr-doc-qr"><img src="${mrrQrUrl}" alt="MRR QR"></div>
+  </div>
 </div>
 <div class="mrr-title">MATERIALS RECEIVING REPORT</div>
-<table class="mrr-meta">
-<tr>
-<td class="meta-label-left">RECEIVING SITE:</td>
-<td class="meta-value-left" colspan="2">${receivingSite}</td>
-<td class="meta-label-right">PURCHASE ORDER / S.O. No.:</td>
-<td class="meta-value-right">${poNo}</td>
-</tr>
-<tr>
-<td class="meta-label-left">VENDOR / PROJECT SITE / CLIENT:</td>
-<td class="meta-value-left" colspan="2">${vendor}</td>
-<td class="meta-label-right">D.R. No. / S.I. No. / A.R. No.:</td>
-<td class="meta-value-right">${drNo}</td>
-</tr>
-<tr>
-<td class="meta-label-left">DATE PREPARED:</td>
-<td class="meta-value-left" colspan="2">${dateStr}</td>
-<td class="meta-label-right">RECEIVING DATE:</td>
-<td class="meta-value-right">${receivingDate}</td>
-</tr>
+<table class="mrr-meta-table">
+  <tr>
+    <td class="mrr-meta-label">RECEIVING SITE:</td>
+    <td class="mrr-meta-value">${receivingSite}</td>
+    <td class="mrr-meta-label-right">PURCHASE ORDER / S.O. No.:</td>
+    <td class="mrr-meta-value-right">${poNo}</td>
+  </tr>
+  <tr>
+    <td class="mrr-meta-label">VENDOR / PROJECT SITE / CLIENT:</td>
+    <td class="mrr-meta-value">${vendor}</td>
+    <td class="mrr-meta-label-right">D.R. No. / S.I. No. / A.R. No.:</td>
+    <td class="mrr-meta-value-right">${drNo}</td>
+  </tr>
+  <tr>
+    <td class="mrr-meta-label">DATE PREPARED:</td>
+    <td class="mrr-meta-value">${dateStr}</td>
+    <td class="mrr-meta-label-right">RECEIVING DATE:</td>
+    <td class="mrr-meta-value-right">${receivingDate}</td>
+  </tr>
 </table>
 <table class="mrr-items">
-<thead>
-<tr>
-<th style="width:5%">ITEM<br>NO.</th>
-<th style="width:14%">ITEM<br>CODE</th>
-<th style="width:7%">QR<br>IMG</th>
-<th style="width:34%">ITEM DESCRIPTION</th>
-<th style="width:9%">REC.<br>QTY</th>
-<th style="width:9%">ATL<br>QTY</th>
-<th style="width:7%">UNIT</th>
-<th style="width:15%">REMARKS</th>
-</tr>
-</thead>
-<tbody>${itemsHtml}</tbody>
+  <thead>
+    <tr>
+      <th style="width:5%">ITEM<br>NO.</th>
+      <th style="width:14%">ITEM<br>CODE</th>
+      <th style="width:7%">QR<br>IMG</th>
+      <th style="width:34%">ITEM DESCRIPTION</th>
+      <th style="width:9%">REC.<br>QTY</th>
+      <th style="width:9%">ATL<br>QTY</th>
+      <th style="width:7%">UNIT</th>
+      <th style="width:15%">REMARKS</th>
+    </tr>
+  </thead>
+  <tbody>${itemsHtml}</tbody>
 </table>
-<div class="mrr-bottom">
 <div class="mrr-checkboxes">
-<div class="cb-row">
-<strong>ISSUES IN SUPPLIER PERFORMANCE:</strong>
-<span class="cb-item"><span class="cb-box"></span> PRODUCT/SERVICE</span>
-<span class="cb-item"><span class="cb-box"></span> DELIVERY</span>
-<span class="cb-item"><span class="cb-box"></span> CUSTOMER RELATIONS</span>
-<span class="cb-item"><span class="cb-box"></span> SUPPORT FUNCTION</span>
-<span class="cb-item"><span class="cb-box"></span> PRICE</span>
-</div>
-<div class="cb-row">
-<strong>ACTION TAKEN IF REJECT / PARTIAL ACCEPTANCE:</strong>
-<span class="cb-item"><span class="cb-box"></span> RETURN TO SUPPLIER</span>
-<span class="cb-item"><span class="cb-box"></span> ITEMS REPLACED BY SUPPLIER</span>
-<span class="cb-item"><span class="cb-box"></span> OTHERS</span>
-</div>
+  <div class="mrr-cb-section">
+    <div class="mrr-cb-title">ISSUES IN SUPPLIER PERFORMANCE:</div>
+    <div class="mrr-cb-row">
+      <span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> PRODUCT/SERVICE</span>
+      <span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> DELIVERY</span>
+      <span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> CUSTOMER RELATIONS</span>
+      <span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> SUPPORT FUNCTION</span>
+      <span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> PRICE</span>
+    </div>
+  </div>
+  <div class="mrr-cb-section">
+    <div class="mrr-cb-title">ACTION TAKEN IF REJECT / PARTIAL ACCEPTANCE:</div>
+    <div class="mrr-cb-row">
+      <span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> RETURN TO SUPPLIER</span>
+      <span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> ITEMS REPLACED BY SUPPLIER</span>
+      <span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> OTHERS</span>
+    </div>
+  </div>
 </div>
 <div class="mrr-sigs">
-<div class="mrr-sig">
-<div class="mrr-sig-line">&nbsp;</div>
-<div class="mrr-sig-label">PREPARED BY</div>
-</div>
-<div class="mrr-sig">
-<div class="mrr-sig-line">&nbsp;</div>
-<div class="mrr-sig-label">CHECKED BY</div>
-</div>
-<div class="mrr-sig">
-<div class="mrr-sig-line">&nbsp;</div>
-<div class="mrr-sig-label">NOTED BY</div>
-</div>
-</div>
+  <div class="mrr-sig">
+    <div class="mrr-sig-name">${preparedBy}</div>
+    <div class="mrr-sig-line"></div>
+    <div class="mrr-sig-label">PREPARED BY</div>
+  </div>
+  <div class="mrr-sig">
+    <div class="mrr-sig-name"></div>
+    <div class="mrr-sig-line"></div>
+    <div class="mrr-sig-label">CHECKED BY</div>
+  </div>
+  <div class="mrr-sig">
+    <div class="mrr-sig-name"></div>
+    <div class="mrr-sig-line"></div>
+    <div class="mrr-sig-label">NOTED BY</div>
+  </div>
 </div>
 </div>`;
 
