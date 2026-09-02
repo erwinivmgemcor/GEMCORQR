@@ -1388,7 +1388,9 @@ hideLoading();
 function showRequestQr(ticketNo, docNo) {
 document.getElementById('requestTicketNo').textContent = ticketNo;
 document.getElementById('requestDocNo').textContent = docNo;
-const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(docNo);
+var appUrl = window.location.origin + window.location.pathname;
+var qrDataUrl = appUrl + '?doc=' + encodeURIComponent(docNo);
+const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(qrDataUrl);
 const img = document.getElementById('requestQrImg');
 img.src = qrUrl;
 img.style.display = 'block';
@@ -2747,8 +2749,55 @@ function closeMrifPrint() {
 if (mrifPrintModal) mrifPrintModal.hide();
 }
 
+
+// ============================================================================
+// AUTO-NAVIGATE FROM SCANNED QR CODE (?doc= parameter)
+// ============================================================================
+function checkUrlDocParam() {
+  var params = new URLSearchParams(window.location.search);
+  var docNo = params.get('doc');
+  if (!docNo) return;
+
+  console.log('[QR Scan] Detected doc parameter:', docNo);
+
+  // Determine doc type from prefix
+  var docType = 'MRIF';
+  if (docNo.indexOf('MRR') === 0) docType = 'MRR';
+  else if (docNo.indexOf('MRS') === 0) docType = 'MRS';
+
+  // Clean URL (remove ?doc= parameter) without reloading
+  if (window.history.replaceState) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
+  // Show loading
+  showLoading('Opening ' + docNo + '...');
+
+  // For warehouse mode, auto-select module and load document
+  var role = localStorage.getItem('ivm_userRole');
+  if (role === 'warehouse') {
+    // Switch to appropriate module
+    selectModule(docType).then(function() {
+      setTimeout(function() {
+        onDocSelect(docNo);
+        hideLoading();
+      }, 500);
+    }).catch(function(err) {
+      console.error('[QR Scan] Error:', err);
+      hideLoading();
+      showToast('Could not open document: ' + docNo, 'warning');
+    });
+  } else {
+    // Production mode - just show the document info
+    hideLoading();
+    showToast('Document ' + docNo + ' scanned. Switch to Warehouse mode to process.', 'info');
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
 initRole();
 // Set default receiving date for MRR
 document.getElementById('mrrReceivingDate').valueAsDate = new Date();
+// Check for ?doc= parameter in URL (scanned QR code)
+setTimeout(checkUrlDocParam, 1500);
 });
