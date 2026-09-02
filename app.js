@@ -1828,6 +1828,21 @@ function openInventoryBrowser() {
   document.getElementById('inventorySearchInput').value = '';
   inventoryBrowserModal.show();
   fetchInventoryItems();
+
+  // Show/hide "Create Request" button based on context
+  var footer = document.querySelector('#inventoryBrowserModal .modal-footer');
+  if (footer) {
+    var existingBtn = footer.querySelector('#btnInventoryCreateRequest');
+    if (!existingBtn) {
+      var createBtn = document.createElement('button');
+      createBtn.id = 'btnInventoryCreateRequest';
+      createBtn.className = 'btn btn-success';
+      createBtn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Create Request with Selected';
+      createBtn.onclick = function() { createRequestFromInventory(); };
+      createBtn.style.display = 'none';
+      footer.insertBefore(createBtn, footer.firstChild);
+    }
+  }
 }
 
 async function fetchInventoryItems() {
@@ -1935,6 +1950,17 @@ function addInventoryItemToRequest(index) {
 
   // Enable next button
   validateStep5();
+}
+
+
+function createRequestFromInventory() {
+  if (inventoryBrowserModal) inventoryBrowserModal.hide();
+  openNewRequest();
+  // Pre-fill items from selected inventory items
+  setTimeout(function() {
+    // Items will be added when user proceeds to Step 5
+    showToast('Start new request. Items will be available in Step 5.', 'info');
+  }, 500);
 }
 
 function addInventoryItemByData(item) {
