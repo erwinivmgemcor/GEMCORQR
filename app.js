@@ -2482,13 +2482,13 @@ var html = '<div class="mrr-print-sheet">' +
     '<tr>' +
       '<td class="mrr-meta-label">RECEIVING SITE:</td>' +
       '<td class="mrr-meta-value">' + receivingSite + '</td>' +
-      '<td class="mrr-meta-label-right">PURCHASE ORDER / S.O. No.:</td>' +
+      '<td class="mrr-meta-label-right">PO No. / SOF No.:</td>' +
       '<td class="mrr-meta-value-right">' + poNo + '</td>' +
     '</tr>' +
     '<tr>' +
-      '<td class="mrr-meta-label">VENDOR / PROJECT SITE / CLIENT:</td>' +
+      '<td class="mrr-meta-label">VENDOR:</td>' +
       '<td class="mrr-meta-value">' + vendor + '</td>' +
-      '<td class="mrr-meta-label-right">D.R. No. / S.I. No. / A.R. No.:</td>' +
+      '<td class="mrr-meta-label-right">DR No / SI No.:</td>' +
       '<td class="mrr-meta-value-right">' + drNo + '</td>' +
     '</tr>' +
     '<tr>' +
@@ -2502,13 +2502,12 @@ var html = '<div class="mrr-print-sheet">' +
     '<thead>' +
       '<tr>' +
         '<th style="width:5%">ITEM<br>NO.</th>' +
-        '<th style="width:14%">ITEM<br>CODE</th>' +
-        '<th style="width:7%">QR<br>IMG</th>' +
-        '<th style="width:34%">ITEM DESCRIPTION</th>' +
-        '<th style="width:9%">REC.<br>QTY</th>' +
-        '<th style="width:9%">ATL<br>QTY</th>' +
-        '<th style="width:7%">UNIT</th>' +
-        '<th style="width:15%">REMARKS</th>' +
+        '<th style="width:18%">ITEM<br>CODE</th>' +
+        '<th style="width:39%">ITEM DESCRIPTION</th>' +
+        '<th style="width:11%">REQUESTED<br>QUANTITY</th>' +
+        '<th style="width:11%">RECEIVED<br>QUANTITY</th>' +
+        '<th style="width:8%">UNIT</th>' +
+        '<th style="width:18%">REMARKS</th>' +
       '</tr>' +
     '</thead>' +
     '<tbody>' + itemsHtml + '</tbody>' +
@@ -2780,7 +2779,7 @@ function renderMrifPrint(docNo, info, items) {
         '</tr>';
     }
   } else {
-    itemsHtml += '<tr><td class="td-center" colspan="8" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
+    itemsHtml += '<tr><td class="td-center" colspan="7" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
   }
 
   // Add 1 empty row after data for spacing
