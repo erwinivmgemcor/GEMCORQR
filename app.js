@@ -1815,6 +1815,161 @@ async function submitManualMrr() {
 }
 
 // ============================================================================
+// INVENTORY BROWSER (Production New Request)
+// ============================================================================
+var inventoryBrowserModal = null;
+var inventoryItemsCache = [];
+var inventoryBrowserFiltered = [];
+
+function openInventoryBrowser() {
+  if (!inventoryBrowserModal) {
+    inventoryBrowserModal = new bootstrap.Modal(document.getElementById('inventoryBrowserModal'));
+  }
+  document.getElementById('inventorySearchInput').value = '';
+  inventoryBrowserModal.show();
+  fetchInventoryItems();
+}
+
+async function fetchInventoryItems() {
+  var tbody = document.getElementById('inventoryBrowserBody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading inventory...</td></tr>';
+
+  try {
+    var sheetId = getCleanSheetId();
+    var url = API_URL + '?action=getInventoryItems&sheetId=' + sheetId + '&_t=' + Date.now();
+    var res = await fetch(url, { redirect: 'follow' });
+    var text = await res.text();
+    var data;
+    try { data = JSON.parse(text); } catch(e) { data = {}; }
+
+    if (data.success && data.items) {
+      inventoryItemsCache = data.items;
+      inventoryBrowserFiltered = data.items;
+      renderInventoryItems();
+    } else {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">' + (data.error || 'No items found') + '</td></tr>';
+    }
+  } catch(err) {
+    console.error('[fetchInventoryItems] Error:', err);
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Failed to load inventory</td></tr>';
+  }
+}
+
+function renderInventoryItems() {
+  var tbody = document.getElementById('inventoryBrowserBody');
+  if (!tbody) return;
+
+  if (inventoryBrowserFiltered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No items match your search</td></tr>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < inventoryBrowserFiltered.length; i++) {
+    var it = inventoryBrowserFiltered[i];
+    var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=40x40&data=' + encodeURIComponent(it.inventoryId);
+    html += '<tr>' +
+      '<td class="align-middle text-center"><img src="' + qrUrl + '" style="width:36px;height:36px;" alt="QR"></td>' +
+      '<td class="align-middle"><code>' + it.inventoryId + '</code></td>' +
+      '<td class="align-middle">' + it.description + '</td>' +
+      '<td class="align-middle text-center">' + (it.onHand || '0') + '</td>' +
+      '<td class="align-middle text-center">' + (it.unit || 'PCS') + '</td>' +
+      '<td class="align-middle text-center">' +
+        '<button class="btn btn-sm btn-success" onclick="addInventoryItemToRequest(' + i + ')" title="Add to request">' +
+          '<i class="bi bi-plus-lg"></i>' +
+        '</button>' +
+      '</td>' +
+      '</tr>';
+  }
+  tbody.innerHTML = html;
+}
+
+function filterInventoryItems() {
+  var query = document.getElementById('inventorySearchInput').value.toLowerCase().trim();
+  if (!query) {
+    inventoryBrowserFiltered = inventoryItemsCache;
+  } else {
+    inventoryBrowserFiltered = inventoryItemsCache.filter(function(it) {
+      return (it.inventoryId && it.inventoryId.toLowerCase().indexOf(query) !== -1) ||
+             (it.description && it.description.toLowerCase().indexOf(query) !== -1) ||
+             (it.itemClass && it.itemClass.toLowerCase().indexOf(query) !== -1);
+    });
+  }
+  renderInventoryItems();
+}
+
+function addInventoryItemToRequest(index) {
+  var it = inventoryBrowserFiltered[index];
+  if (!it) return;
+
+  // Add a new item row in step 5
+  addStep5ItemRow();
+  var container = document.getElementById('step5ItemsContainer');
+  var rows = container.querySelectorAll('.step5-item-row');
+  var lastRow = rows[rows.length - 1];
+  if (!lastRow) return;
+
+  // Fill in the values
+  var codeInput = lastRow.querySelector('.req-item-code');
+  var searchInput = lastRow.querySelector('.req-item-search');
+  var descInput = lastRow.querySelector('.req-item-desc');
+  var qtyInput = lastRow.querySelector('.req-item-qty');
+  var unitInput = lastRow.querySelector('.req-item-unit');
+
+  if (codeInput) codeInput.value = it.inventoryId;
+  if (searchInput) searchInput.value = it.inventoryId + ' - ' + it.description;
+  if (descInput) descInput.value = it.description;
+  if (qtyInput) {
+    qtyInput.value = 1;
+    qtyInput.focus();
+    qtyInput.select();
+  }
+  if (unitInput) unitInput.value = it.unit || 'PCS';
+
+  // Close modal
+  if (inventoryBrowserModal) inventoryBrowserModal.hide();
+
+  // Show toast
+  showToast('Added: ' + it.inventoryId, 'success');
+
+  // Enable next button
+  validateStep5();
+}
+
+function addInventoryItemByData(item) {
+  if (!item) return;
+  addStep5ItemRow();
+  var container = document.getElementById('step5ItemsContainer');
+  var rows = container.querySelectorAll('.step5-item-row');
+  var lastRow = rows[rows.length - 1];
+  if (!lastRow) return;
+  var codeInput = lastRow.querySelector('.req-item-code');
+  var searchInput = lastRow.querySelector('.req-item-search');
+  var descInput = lastRow.querySelector('.req-item-desc');
+  var qtyInput = lastRow.querySelector('.req-item-qty');
+  var unitInput = lastRow.querySelector('.req-item-unit');
+  if (codeInput) codeInput.value = item.inventoryId;
+  if (searchInput) searchInput.value = item.inventoryId + ' - ' + item.description;
+  if (descInput) descInput.value = item.description;
+  if (qtyInput) {
+    qtyInput.value = 1;
+    qtyInput.focus();
+    qtyInput.select();
+  }
+  if (unitInput) unitInput.value = item.unit || 'PCS';
+  if (inventoryBrowserModal) inventoryBrowserModal.hide();
+  showToast('Added: ' + item.inventoryId, 'success');
+  validateStep5();
+}
+
+function openInventoryQrScan() {
+  // Use the existing QR scanner but with inventory mode
+  state.inventoryScanMode = true;
+  openQrScanner();
+}
+
+// ============================================================================
 // WAREHOUSE NOTIFICATIONS
 // ============================================================================
 
