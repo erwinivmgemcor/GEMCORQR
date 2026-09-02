@@ -594,6 +594,15 @@ if (state.html5QrCode) { state.html5QrCode.stop().catch(()=>{}); state.html5QrCo
 }
 function onScanSuccess(decodedText) {
 clearErrorAlert();
+
+// NEW: Detect URL with ?doc= parameter (scanned from production QR)
+var urlDocMatch = decodedText.match(/[?&]doc=([^&\s]+)/);
+if (urlDocMatch) {
+  var extractedDoc = decodeURIComponent(urlDocMatch[1]);
+  decodedText = extractedDoc;
+  console.log('[QR Scan] Extracted doc from URL:', extractedDoc);
+}
+
 const docPattern = /^(MRIF|MRR|MRS)\d{6,}$/i;
 if (docPattern.test(decodedText)) {
 playSuccessBeep();
