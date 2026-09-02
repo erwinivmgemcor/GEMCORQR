@@ -1177,3 +1177,53 @@ body {
   font-family: "Courier New", monospace;
   font-weight: 600;
 }
+
+/* ─── Inventory Browse Card ─── */
+.inventory-browse-card {
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.inventory-browse-card:hover {
+  border-color: var(--gemcor-green);
+  background: #f0f8f5;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(46,139,87,0.12);
+}
+
+/* ─── Inventory Browser Modal ─── */
+#inventoryBrowserModal .modal-header {
+  background: var(--gemcor-blue);
+}
+
+#inventoryBrowserModal .table-responsive {
+  border-radius: 8px;
+  border: 1px solid var(--gemcor-border);
+}
+
+#inventoryBrowserModal thead th {
+  background: #f8f9fa;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 10px;
+}
+
+#inventoryBrowserModal tbody td {
+  font-size: 0.85rem;
+  padding: 6px 10px;
+  vertical-align: middle;
+}
+
+#inventoryBrowserModal tbody tr:hover {
+  background: #f0f4f8;
+}
+
+#inventoryBrowserModal code {
+  font-size: 0.8rem;
+  background: #e8f0fe;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--gemcor-blue);
+}
