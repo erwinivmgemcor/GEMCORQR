@@ -2443,17 +2443,15 @@ if (items && items.length > 0) {
     var atlQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
     var unit = it.unit || it.uom || 'PIECE';
     var remarks = it.remarks || it.status || it.note || '';
-    var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
-    itemsHtml += '<tr>' +
-      '<td class="td-center" style="width:5%">' + (idx + 1) + '</td>' +
-      '<td class="td-center" style="width:14%">' + code + '</td>' +
-      '<td class="td-center" style="width:7%"><img src="' + qrUrl + '" style="width:30px;height:30px;display:block;margin:0 auto;" alt=""></td>' +
-      '<td class="td-left" style="width:34%">' + desc + '</td>' +
-      '<td class="td-center" style="width:9%">' + recQty + '</td>' +
-      '<td class="td-center" style="width:9%">' + atlQty + '</td>' +
-      '<td class="td-center" style="width:7%">' + unit + '</td>' +
-      '<td class="td-center" style="width:15%">' + remarks + '</td>' +
-      '</tr>';
+          itemsHtml += '<tr>' +
+        '<td class="td-center" style="width:5%">' + (idx + 1) + '</td>' +
+        '<td class="td-center" style="width:18%">' + code + '</td>' +
+        '<td class="td-left" style="width:39%">' + desc + '</td>' +
+        '<td class="td-center" style="width:11%">' + recQty + '</td>' +
+        '<td class="td-center" style="width:11%">' + atlQty + '</td>' +
+        '<td class="td-center" style="width:8%">' + unit + '</td>' +
+        '<td class="td-center" style="width:18%">' + remarks + '</td>' +
+        '</tr>';
   });
 }
 
