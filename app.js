@@ -2457,15 +2457,9 @@ if (items && items.length > 0) {
   });
 }
 
-// Add empty rows for spacing (3 empty rows like template)
-for (var e = 0; e < 3; e++) {
-  itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
-}
+// No empty rows - table ends with last item only
 
-// "no further entries" row
-itemsHtml += '<tr><td class="td-nofurther" colspan="8">******************** no further entries below this line ********************</td></tr>';
-
-// QR code for document
+  // QR code for document
 var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
 // Build HTML - EXACT structure matching template
@@ -2785,8 +2779,6 @@ function renderMrifPrint(docNo, info, items) {
   // Add 1 empty row after data for spacing
   itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
 
-  // "no further entries" row
-  itemsHtml += '<tr><td class="td-nofurther" colspan="8">******************** no further entries below this line ********************</td></tr>';
 
   var mrifQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
