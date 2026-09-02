@@ -784,9 +784,18 @@
             <p class="text-muted small">Search and add the materials you need.</p>
           </div>
           <div id="step5ItemsContainer"></div>
-          <button class="btn btn-outline-primary w-100 mt-2" onclick="addStep5ItemRow()">
-            <i class="bi bi-plus-lg"></i> Add Another Item
-          </button>
+          <div class="row g-2 mt-2">
+            <div class="col-6">
+              <button class="btn btn-outline-primary w-100" onclick="addStep5ItemRow()">
+                <i class="bi bi-plus-lg"></i> Add Manually
+              </button>
+            </div>
+            <div class="col-6">
+              <button class="btn btn-primary w-100" onclick="openInventoryBrowser()">
+                <i class="bi bi-box-seam me-1"></i>Browse Inventory
+              </button>
+            </div>
+          </div>
           <div class="wizard-nav mt-4">
             <button class="btn btn-outline-secondary" onclick="goToStep(4)"><i class="bi bi-arrow-left"></i> Back</button>
             <button class="btn btn-primary" id="btnStep5Next" onclick="goToStep(6)" disabled>Next <i class="bi bi-arrow-right"></i></button>
@@ -1094,6 +1103,57 @@
     </div>
   </div>
 </div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+   INVENTORY BROWSER MODAL
+   ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="inventoryBrowserModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="bi bi-box-seam me-2"></i>Browse Inventory</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2 mb-3">
+          <div class="col-12 col-md-8">
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-search"></i></span>
+              <input type="text" class="form-control" id="inventorySearchInput" placeholder="Search item code or description..." oninput="filterInventoryItems()">
+            </div>
+          </div>
+          <div class="col-12 col-md-4">
+            <button class="btn btn-outline-primary w-100" onclick="openInventoryQrScan()">
+              <i class="bi bi-qr-code-scan me-1"></i>Scan Item QR
+            </button>
+          </div>
+        </div>
+        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+          <table class="table table-sm table-hover" id="inventoryBrowserTable">
+            <thead class="table-light sticky-top">
+              <tr>
+                <th style="width:8%">QR</th>
+                <th style="width:22%">Item Code</th>
+                <th style="width:40%">Description</th>
+                <th style="width:12%">On-Hand</th>
+                <th style="width:10%">Unit</th>
+                <th style="width:8%">Action</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryBrowserBody">
+              <tr><td colspan="6" class="text-center text-muted py-3">Loading inventory...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 </body>
 </html>
