@@ -2430,6 +2430,10 @@ async function openMrrPrint(docNo) {
 // ═══════════════════════════════════════════════════════════════════════════
 // renderMrrPrint - CLEAN VERSION - Matches Google Sheet data exactly
 // ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// renderMrrPrint - EXACT 7 COLUMNS - No extra columns
+// Headers: ITEM NO. | ITEM CODE | ITEM DESCRIPTION | REQUESTED QUANTITY | RECEIVED QUANTITY | UNIT | REMARKS
+// ═══════════════════════════════════════════════════════════════════════════
 function renderMrrPrint(docNo, info, items) {
   var container = document.getElementById('mrrPrintContent');
   if (!container) {
@@ -2438,16 +2442,11 @@ function renderMrrPrint(docNo, info, items) {
   }
 
   console.log('[renderMrrPrint] 📋 Doc No:', docNo);
-  console.log('[renderMrrPrint] 📋 Info:', JSON.stringify(info));
   console.log('[renderMrrPrint] 📦 Items count:', items ? items.length : 0);
-  
-  if (items && items.length > 0) {
-    console.log('[renderMrrPrint] 📦 First item:', JSON.stringify(items[0]));
-  }
 
   // ─── Extract info ───
   var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
-  var vendor = info['Vendor/Client'] || info.vendor || info.client || info['PROJECT SITE'] || '';
+  var vendor = info['Vendor/Client'] || info.vendor || info.client || '';
   var datePrepared = info['Date Prepared'] || info.datePrepared || '';
   var poNo = info['PO No.'] || info.poNo || info['PURCHASE ORDER'] || '';
   var drNo = info['DR No.'] || info.drNo || info['D.R. No.'] || info.dr || '';
@@ -2470,7 +2469,7 @@ function renderMrrPrint(docNo, info, items) {
   var dateStr = formatDate(datePrepared) || formatDate(new Date());
   var recDateStr = formatDate(receivingDate) || dateStr;
 
-  // ─── Filter valid items ───
+  // ─── Filter valid items - EXACT 7 columns ───
   var validItems = [];
   if (items && items.length > 0) {
     for (var i = 0; i < items.length; i++) {
@@ -2496,16 +2495,16 @@ function renderMrrPrint(docNo, info, items) {
 
   console.log('[renderMrrPrint] ✅ Valid items:', validItems.length);
 
-  // ─── Build items HTML ───
+  // ─── Build items HTML - EXACT 7 columns ───
   var itemsHtml = '';
   if (validItems.length > 0) {
     for (var i = 0; i < validItems.length; i++) {
       var it = validItems[i];
       
-      // Get the actual data from the item
+      // Get EXACTLY the 7 fields we need
       var code = it.itemCode || it.inventoryId || it.code || '';
       var desc = it.description || it.desc || it.itemDescription || '';
-      var recQty = it.expectedQty || it.recQty || it.requestedQty || it.qty || 0;
+      var recQty = it.recQty || it.expectedQty || it.requestedQty || it.qty || 0;
       var atlQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
       var unit = it.unit || it.uom || 'PCS';
       var remarks = it.remarks || it.status || '';
@@ -2521,14 +2520,15 @@ function renderMrrPrint(docNo, info, items) {
 
       console.log('[renderMrrPrint] Row ' + (i+1) + ': ' + code + ' | ' + desc + ' | Qty: ' + recQty + ' | ATL: ' + atlQty + ' | Unit: ' + unit + ' | Remarks: ' + remarks);
 
+      // EXACTLY 7 columns - NO extra columns
       itemsHtml += '<tr>' +
-        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;">' + (i + 1) + '</td>' +
-        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;font-family:Courier New,monospace;">' + code + '</td>' +
-        '<td style="border:1.5px solid #000;padding:4px 6px;">' + desc + '</td>' +
-        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;">' + recQty + '</td>' +
-        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;">' + atlQty + '</td>' +
-        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;">' + unit + '</td>' +
-        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;">' + remarks + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;width:6%;">' + (i + 1) + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;width:18%;font-family:Courier New,monospace;">' + code + '</td>' +
+        '<td style="border:1.5px solid #000;padding:4px 6px;width:30%;">' + desc + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;width:11%;">' + recQty + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;width:11%;">' + atlQty + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;width:8%;">' + unit + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;width:16%;">' + remarks + '</td>' +
         '</tr>';
     }
   } else {
@@ -2545,7 +2545,7 @@ function renderMrrPrint(docNo, info, items) {
   // ─── QR code ───
   var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=' + encodeURIComponent(docNo);
 
-  // ─── HTML ───
+  // ─── COMPLETE HTML - EXACT 7 columns ───
   var html = '<div style="width:8.5in;min-height:11in;margin:0 auto;background:#fff;padding:0.25in 0.35in;font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#000;line-height:1.3;box-sizing:border-box;">' +
 
     // HEADER
@@ -2590,14 +2590,14 @@ function renderMrrPrint(docNo, info, items) {
       '</tr>' +
     '</table>' +
 
-    // ITEMS TABLE - 7 COLUMNS
+    // ITEMS TABLE - EXACT 7 COLUMNS
     '<table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:8pt;">' +
       '<thead>' +
         '<tr>' +
           '<th style="border:1.5px solid #000;padding:4px 6px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:6%;">ITEM<br>NO.</th>' +
           '<th style="border:1.5px solid #000;padding:4px 6px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:18%;">ITEM<br>CODE</th>' +
           '<th style="border:1.5px solid #000;padding:4px 6px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:30%;">ITEM DESCRIPTION</th>' +
-          '<th style="border:1.5px solid #000;padding:4px 6px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:11%;">REQUEST<br>QUANTITY</th>' +
+          '<th style="border:1.5px solid #000;padding:4px 6px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:11%;">REQUESTED<br>QUANTITY</th>' +
           '<th style="border:1.5px solid #000;padding:4px 6px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:11%;">RECEIVED<br>QUANTITY</th>' +
           '<th style="border:1.5px solid #000;padding:4px 6px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:8%;">UNIT</th>' +
           '<th style="border:1.5px solid #000;padding:4px 6px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:16%;">REMARKS</th>' +
@@ -2645,7 +2645,7 @@ function renderMrrPrint(docNo, info, items) {
   '</div>';
 
   container.innerHTML = html;
-  console.log('[renderMrrPrint] ✅ Rendered successfully!');
+  console.log('[renderMrrPrint] ✅ Rendered successfully - EXACT 7 columns');
 }
 function printMrr() {
   var previewContent = document.getElementById('mrrPrintContent');
