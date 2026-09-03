@@ -2304,7 +2304,7 @@ container.appendChild(el);
 }
 
 // ============================================================================
-// MRR PRINT PREVIEW — List & Print
+// MRR PRINT PREVIEW — List & Print (FIXED VERSION)
 // ============================================================================
 
 async function openMrrList() {
@@ -2393,159 +2393,187 @@ async function openMrrPrint(docNo) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// FIXED: renderMrrPrint - Correct column mapping and DR No. display
+// ═══════════════════════════════════════════════════════════════════════════
 function renderMrrPrint(docNo, info, items) {
-var container = document.getElementById('mrrPrintContent');
-if (!container) return;
+  var container = document.getElementById('mrrPrintContent');
+  if (!container) return;
 
-console.log('[renderMrrPrint] Items count:', items ? items.length : 0, 'Items:', items);
+  console.log('[renderMrrPrint] Items count:', items ? items.length : 0);
 
-// Extract info with fallbacks
-var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
-var vendor = info['Vendor/Client'] || info.vendor || info.client || '';
-var datePrepared = info['Date Prepared'] || info.datePrepared || '';
-var poNo = info['PO No.'] || info.poNo || '';
-var drNo = info['DR No.'] || info.drNo || info.dr || '';
-var receivingDate = info['Receiving Date'] || info.receivingDate || '';
-var preparedBy = info['Prepared By'] || info.preparedBy || '';
+  // ─── Extract info with correct field names ───
+  var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
+  var vendor = info['Vendor/Client'] || info.vendor || info.client || '';
+  var datePrepared = info['Date Prepared'] || info.datePrepared || '';
+  var poNo = info['PO No.'] || info.poNo || '';
+  
+  // FIX: DR No. - use the correct field name from backend
+  var drNo = info['DR No.'] || info.drNo || info['D.R. No.'] || info.dr || '';
+  var receivingDate = info['Receiving Date'] || info.receivingDate || '';
+  var preparedBy = info['Prepared By'] || info.preparedBy || '';
 
-// FIX: Format dates properly - handle raw Date objects and various formats
-function formatDate(val) {
-  if (!val || val === '') return '';
-  // If it's already a nice string like "August 31, 2026" or "8/31/2026", return as-is
-  if (typeof val === 'string' && val.indexOf('GMT') === -1 && val.indexOf('Standard') === -1) {
-    // Check if it's a simple date string
-    if (val.match(/^(January|February|March|April|May|June|July|August|September|October|November|December)/)) return val;
-    if (val.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) return val;
-  }
-  // Try to parse as date
-  try {
-    var d = new Date(val);
-    if (!isNaN(d.getTime()) && d.getFullYear() > 2000) {
-      var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-      return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+  // Format dates
+  function formatDate(val) {
+    if (!val || val === '') return '';
+    if (typeof val === 'string' && val.indexOf('GMT') === -1 && val.indexOf('Standard') === -1) {
+      if (val.match(/^(January|February|March|April|May|June|July|August|September|October|November|December)/)) return val;
+      if (val.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) return val;
     }
-  } catch(e) {}
-  // Return original if we can't parse
-  return String(val).replace(/\s*GMT.*$/, '').replace(/\s*Standard.*$/, '').trim();
-}
+    try {
+      var d = new Date(val);
+      if (!isNaN(d.getTime()) && d.getFullYear() > 2000) {
+        var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+      }
+    } catch(e) {}
+    return String(val).replace(/\s*GMT.*$/, '').replace(/\s*Standard.*$/, '').trim();
+  }
 
-var dateStr = formatDate(datePrepared);
-var recDateStr = formatDate(receivingDate);
+  var dateStr = formatDate(datePrepared);
+  var recDateStr = formatDate(receivingDate);
 
-// Build items HTML
-var itemsHtml = '';
-if (items && items.length > 0) {
-  items.forEach(function(it, idx) {
-    // Handle any property name variations
-    var code = it.itemCode || it.inventoryId || it.code || it.id || '';
-    var desc = it.description || it.desc || it.itemDescription || '';
-    var recQty = it.recQty || it.expectedQty || it.qty || it.quantity || 0;
-    var atlQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
-    var unit = it.unit || it.uom || 'PIECE';
-    var remarks = it.remarks || it.status || it.note || '';
-    var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
-    itemsHtml += '<tr>' +
-      '<td class="td-center" style="width:5%">' + (idx + 1) + '</td>' +
-      '<td class="td-center" style="width:14%">' + code + '</td>' +
-      '<td class="td-center" style="width:7%"><img src="' + qrUrl + '" style="width:30px;height:30px;display:block;margin:0 auto;" alt=""></td>' +
-      '<td class="td-left" style="width:34%">' + desc + '</td>' +
-      '<td class="td-center" style="width:9%">' + recQty + '</td>' +
-      '<td class="td-center" style="width:9%">' + atlQty + '</td>' +
-      '<td class="td-center" style="width:7%">' + unit + '</td>' +
-      '<td class="td-center" style="width:15%">' + remarks + '</td>' +
-      '</tr>';
-  });
-}
+  // ─── Build items HTML with CORRECT column mapping ───
+  var itemsHtml = '';
+  if (items && items.length > 0) {
+    items.forEach(function(it, idx) {
+      // FIX: Map properties correctly from backend data
+      var code = it.itemCode || it.inventoryId || it.code || '';
+      
+      // FIX: Get description - use code as fallback if description is empty
+      var desc = it.description || it.desc || it.itemDescription || code || '';
+      
+      // FIX: CORRECT column mapping - use the right properties
+      var recQty = it.expectedQty || it.recQty || it.requestedQty || it.qty || 0;
+      var atlQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
+      
+      // FIX: Unit should come from the unit field, NOT remarks
+      var unit = it.unit || it.uom || 'PIECE';
+      
+      // Remarks should show status/remarks from the sheet
+      var remarks = it.remarks || it.status || it.note || '';
+      
+      // If remarks is "PENDING" or empty, determine status based on quantities
+      if (remarks === 'PENDING' || remarks === '') {
+        if (atlQty >= recQty && recQty > 0) {
+          remarks = 'COMPLETE';
+        } else if (atlQty > 0) {
+          remarks = 'PARTIAL';
+        }
+      }
 
-// No empty rows - table ends with last item only
+      var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
+      
+      itemsHtml += '<tr>' +
+        '<td class="td-center" style="width:5%">' + (idx + 1) + '</td>' +
+        '<td class="td-center" style="width:14%">' + code + '</td>' +
+        '<td class="td-center" style="width:7%"><img src="' + qrUrl + '" style="width:30px;height:30px;display:block;margin:0 auto;" alt=""></td>' +
+        // FIX: Description should be in the description column
+        '<td class="td-left" style="width:34%">' + desc + '</td>' +
+        // FIX: REQUESTED QUANTITY (REC QTY) - first quantity column
+        '<td class="td-center" style="width:9%">' + recQty + '</td>' +
+        // FIX: RECEIVED QUANTITY (ATL QTY) - second quantity column
+        '<td class="td-center" style="width:9%">' + atlQty + '</td>' +
+        // FIX: UNIT - should NOT be in remarks column
+        '<td class="td-center" style="width:7%">' + unit + '</td>' +
+        // FIX: REMARKS - last column, shows status
+        '<td class="td-center" style="width:15%">' + remarks + '</td>' +
+        '</tr>';
+    });
+  } else {
+    itemsHtml += '<tr><td class="td-center" colspan="8" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
+  }
 
   // QR code for document
-var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
+  var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
-// Build HTML - EXACT structure matching template
-var html = '<div class="mrr-print-sheet">' +
-  '<div class="mrr-header">' +
-    '<div class="mrr-logo"><img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'"></div>' +
-    '<div class="mrr-docno">' +
-      '<div><span class="mrr-dn-label">Receipt No.:</span><span class="mrr-dn-box">' + docNo + '</span></div>' +
-      '<div class="mrr-doc-qr"><img src="' + mrrQrUrl + '" alt="MRR QR"></div>' +
+  // ─── Build HTML with CORRECT column headers ───
+  var html = '<div class="mrr-print-sheet">' +
+    '<div class="mrr-header">' +
+      '<div class="mrr-logo"><img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'"></div>' +
+      '<div class="mrr-docno">' +
+        '<div><span class="mrr-dn-label">Receipt No.:</span><span class="mrr-dn-box">' + docNo + '</span></div>' +
+        '<div class="mrr-doc-qr"><img src="' + mrrQrUrl + '" alt="MRR QR"></div>' +
+      '</div>' +
     '</div>' +
-  '</div>' +
-  '<div class="mrr-title">MATERIALS RECEIVING REPORT</div>' +
-  '<table class="mrr-meta-table">' +
-    '<tr>' +
-      '<td class="mrr-meta-label">RECEIVING SITE:</td>' +
-      '<td class="mrr-meta-value">' + receivingSite + '</td>' +
-      '<td class="mrr-meta-label-right">PO No. / SOF No.:</td>' +
-      '<td class="mrr-meta-value-right">' + poNo + '</td>' +
-    '</tr>' +
-    '<tr>' +
-      '<td class="mrr-meta-label">VENDOR:</td>' +
-      '<td class="mrr-meta-value">' + vendor + '</td>' +
-      '<td class="mrr-meta-label-right">DR No / SI No.:</td>' +
-      '<td class="mrr-meta-value-right">' + drNo + '</td>' +
-    '</tr>' +
-    '<tr>' +
-      '<td class="mrr-meta-label">DATE PREPARED:</td>' +
-      '<td class="mrr-meta-value">' + dateStr + '</td>' +
-      '<td class="mrr-meta-label-right">RECEIVING DATE:</td>' +
-      '<td class="mrr-meta-value-right">' + recDateStr + '</td>' +
-    '</tr>' +
-  '</table>' +
-  '<table class="mrr-items">' +
-    '<thead>' +
+    '<div class="mrr-title">MATERIALS RECEIVING REPORT</div>' +
+    '<table class="mrr-meta-table">' +
       '<tr>' +
-        '<th style="width:5%">ITEM<br>NO.</th>' +
-        '<th style="width:18%">ITEM<br>CODE</th>' +
-        '<th style="width:39%">ITEM DESCRIPTION</th>' +
-        '<th style="width:11%">REQUESTED<br>QUANTITY</th>' +
-        '<th style="width:11%">RECEIVED<br>QUANTITY</th>' +
-        '<th style="width:8%">UNIT</th>' +
-        '<th style="width:18%">REMARKS</th>' +
+        '<td class="mrr-meta-label">RECEIVING SITE:</td>' +
+        '<td class="mrr-meta-value">' + receivingSite + '</td>' +
+        '<td class="mrr-meta-label-right">PO No. / SOF No.:</td>' +
+        '<td class="mrr-meta-value-right">' + poNo + '</td>' +
       '</tr>' +
-    '</thead>' +
-    '<tbody>' + itemsHtml + '</tbody>' +
-  '</table>' +
-  '<div class="mrr-checkboxes">' +
-    '<div class="mrr-cb-section">' +
-      '<div class="mrr-cb-title">ISSUES IN SUPPLIER PERFORMANCE:</div>' +
-      '<div class="mrr-cb-row">' +
-        '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> PRODUCT/SERVICE</span>' +
-        '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> DELIVERY</span>' +
-        '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> CUSTOMER RELATIONS</span>' +
-        '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> SUPPORT FUNCTION</span>' +
-        '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> PRICE</span>' +
+      '<tr>' +
+        '<td class="mrr-meta-label">VENDOR:</td>' +
+        '<td class="mrr-meta-value">' + vendor + '</td>' +
+        '<td class="mrr-meta-label-right">DR No / SI No.:</td>' +
+        // FIX: DR No. should display the value from info
+        '<td class="mrr-meta-value-right">' + drNo + '</td>' +
+      '</tr>' +
+      '<tr>' +
+        '<td class="mrr-meta-label">DATE PREPARED:</td>' +
+        '<td class="mrr-meta-value">' + dateStr + '</td>' +
+        '<td class="mrr-meta-label-right">RECEIVING DATE:</td>' +
+        '<td class="mrr-meta-value-right">' + recDateStr + '</td>' +
+      '</tr>' +
+    '</table>' +
+    '<table class="mrr-items">' +
+      '<thead>' +
+        '<tr>' +
+          '<th style="width:5%">ITEM<br>NO.</th>' +
+          '<th style="width:14%">ITEM<br>CODE</th>' +
+          '<th style="width:7%">QR<br>IMG</th>' +
+          '<th style="width:34%">ITEM DESCRIPTION</th>' +
+          '<th style="width:9%">REQ.<br>QTY</th>' +
+          '<th style="width:9%">REC.<br>QTY</th>' +
+          '<th style="width:7%">UNIT</th>' +
+          '<th style="width:15%">REMARKS</th>' +
+        '</tr>' +
+      '</thead>' +
+      '<tbody>' + itemsHtml + '</tbody>' +
+    '</table>' +
+    '<div class="mrr-checkboxes">' +
+      '<div class="mrr-cb-section">' +
+        '<div class="mrr-cb-title">ISSUES IN SUPPLIER PERFORMANCE:</div>' +
+        '<div class="mrr-cb-row">' +
+          '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> PRODUCT/SERVICE</span>' +
+          '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> DELIVERY</span>' +
+          '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> CUSTOMER RELATIONS</span>' +
+          '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> SUPPORT FUNCTION</span>' +
+          '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> PRICE</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="mrr-cb-section">' +
+        '<div class="mrr-cb-title">ACTION TAKEN IF REJECT / PARTIAL ACCEPTANCE:</div>' +
+        '<div class="mrr-cb-row">' +
+          '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> RETURN TO SUPPLIER</span>' +
+          '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> ITEMS REPLACED BY SUPPLIER</span>' +
+          '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> OTHERS</span>' +
+        '</div>' +
       '</div>' +
     '</div>' +
-    '<div class="mrr-cb-section">' +
-      '<div class="mrr-cb-title">ACTION TAKEN IF REJECT / PARTIAL ACCEPTANCE:</div>' +
-      '<div class="mrr-cb-row">' +
-        '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> RETURN TO SUPPLIER</span>' +
-        '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> ITEMS REPLACED BY SUPPLIER</span>' +
-        '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> OTHERS</span>' +
+    '<div class="mrr-sigs">' +
+      '<div class="mrr-sig">' +
+        '<div class="mrr-sig-name">' + preparedBy + '</div>' +
+        '<div class="mrr-sig-line"></div>' +
+        '<div class="mrr-sig-label">PREPARED BY</div>' +
+      '</div>' +
+      '<div class="mrr-sig">' +
+        '<div class="mrr-sig-name"></div>' +
+        '<div class="mrr-sig-line"></div>' +
+        '<div class="mrr-sig-label">CHECKED BY</div>' +
+      '</div>' +
+      '<div class="mrr-sig">' +
+        '<div class="mrr-sig-name"></div>' +
+        '<div class="mrr-sig-line"></div>' +
+        '<div class="mrr-sig-label">NOTED BY</div>' +
       '</div>' +
     '</div>' +
-  '</div>' +
-  '<div class="mrr-sigs">' +
-    '<div class="mrr-sig">' +
-      '<div class="mrr-sig-name">' + preparedBy + '</div>' +
-      '<div class="mrr-sig-line"></div>' +
-      '<div class="mrr-sig-label">PREPARED BY</div>' +
-    '</div>' +
-    '<div class="mrr-sig">' +
-      '<div class="mrr-sig-name"></div>' +
-      '<div class="mrr-sig-line"></div>' +
-      '<div class="mrr-sig-label">CHECKED BY</div>' +
-    '</div>' +
-    '<div class="mrr-sig">' +
-      '<div class="mrr-sig-name"></div>' +
-      '<div class="mrr-sig-line"></div>' +
-      '<div class="mrr-sig-label">NOTED BY</div>' +
-    '</div>' +
-  '</div>' +
-'</div>';
+  '</div>';
 
-container.innerHTML = html;
+  container.innerHTML = html;
+  console.log('[renderMrrPrint] HTML rendered successfully');
 }
 
 function printMrr() {
