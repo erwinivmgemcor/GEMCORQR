@@ -2399,34 +2399,29 @@ async function openMrrPrint(docNo) {
 // ═══════════════════════════════════════════════════════════════════════════
 // FIXED: renderMrrPrint - Matches Desired Format (Second Picture)
 // ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// FIXED: renderMrrPrint - NO QR COLUMN - Exactly 7 columns
+// Headers: ITEM NO. | ITEM CODE | ITEM DESCRIPTION | REQUESTED QUANTITY | RECEIVED QUANTITY | UNIT | REMARKS
+// ═══════════════════════════════════════════════════════════════════════════
 function renderMrrPrint(docNo, info, items) {
   var container = document.getElementById('mrrPrintContent');
   if (!container) return;
 
-  console.log('[renderMrrPrint] Items count:', items ? items.length : 0);
+  console.log('[renderMrrPrint] Items:', items ? items.length : 0);
   console.log('[renderMrrPrint] Info:', JSON.stringify(info));
 
-  // ─── Extract info with correct field names ───
+  // ─── Extract info with proper fallbacks ───
   var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
-  var vendor = info['Vendor/Client'] || info.vendor || info.client || 'KEMA Energy Solution';
+  var vendor = info['Vendor/Client'] || info.vendor || info.client || info['PROJECT SITE'] || '';
   var datePrepared = info['Date Prepared'] || info.datePrepared || '';
-  
-  // FIX: PO No. - use multiple possible field names
   var poNo = info['PO No.'] || info.poNo || info['PURCHASE ORDER'] || '';
-  
-  // FIX: DR No. - use the correct field name from backend
   var drNo = info['DR No.'] || info.drNo || info['D.R. No.'] || info.dr || '';
   var receivingDate = info['Receiving Date'] || info.receivingDate || '';
   var preparedBy = info['Prepared By'] || info.preparedBy || '';
 
-  // ─── Format dates ───
+  // ─── Format date ───
   function formatDate(val) {
     if (!val || val === '') return '';
-    // If it's already a nice string
-    if (typeof val === 'string' && val.indexOf('GMT') === -1 && val.indexOf('Standard') === -1) {
-      if (val.match(/^(January|February|March|April|May|June|July|August|September|October|November|December)/)) return val;
-      if (val.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) return val;
-    }
     try {
       var d = new Date(val);
       if (!isNaN(d.getTime()) && d.getFullYear() > 2000) {
@@ -2434,191 +2429,171 @@ function renderMrrPrint(docNo, info, items) {
         return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
       }
     } catch(e) {}
-    return String(val).replace(/\s*GMT.*$/, '').replace(/\s*Standard.*$/, '').trim();
+    return String(val).replace(/\s*GMT.*$/, '').trim();
   }
 
-  var dateStr = formatDate(datePrepared);
-  var recDateStr = formatDate(receivingDate);
+  var dateStr = formatDate(datePrepared) || formatDate(new Date());
+  var recDateStr = formatDate(receivingDate) || dateStr;
 
-  // ─── Build items HTML with CORRECT column mapping ───
-  var itemsHtml = '';
-  var hasItems = false;
-  
+  // ─── Filter valid items ───
+  var validItems = [];
   if (items && items.length > 0) {
-    // Filter out empty/signature rows
-    var validItems = items.filter(function(it) {
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
       var code = (it.itemCode || it.inventoryId || it.code || '').trim();
-      if (!code) return false;
+      if (!code) continue;
       var codeLower = code.toLowerCase();
       if (codeLower === 'issued by' || codeLower === 'checked by' || 
           codeLower.indexOf('received by') !== -1 || codeLower.indexOf('______') !== -1 ||
           codeLower.indexOf('no further') !== -1) {
-        return false;
+        continue;
       }
-      return true;
-    });
-
-    if (validItems.length > 0) {
-      hasItems = true;
-      validItems.forEach(function(it, idx) {
-        var code = it.itemCode || it.inventoryId || it.code || '';
-        var desc = it.description || it.desc || it.itemDescription || code || '';
-        
-        // CORRECT: Map quantities correctly
-        var recQty = it.expectedQty || it.recQty || it.requestedQty || it.qty || 0;
-        var atlQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
-        
-        // Unit should be from unit field
-        var unit = it.unit || it.uom || 'PIECE';
-        
-        // Remarks - determine status
-        var remarks = it.remarks || it.status || '';
-        if (remarks === 'PENDING' || remarks === '') {
-          if (atlQty >= recQty && recQty > 0) {
-            remarks = 'COMPLETE';
-          } else if (atlQty > 0) {
-            remarks = 'PARTIAL';
-          }
-        }
-
-        var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
-        
-        itemsHtml += '<tr>' +
-          '<td class="td-center" style="width:6%">' + (idx + 1) + '</td>' +
-          '<td class="td-center" style="width:18%">' + code + '</td>' +
-          '<td class="td-center" style="width:8%"><img src="' + qrUrl + '" style="width:30px;height:30px;display:block;margin:0 auto;" alt=""></td>' +
-          '<td class="td-left" style="width:32%">' + desc + '</td>' +
-          '<td class="td-center" style="width:10%">' + recQty + '</td>' +
-          '<td class="td-center" style="width:10%">' + atlQty + '</td>' +
-          '<td class="td-center" style="width:8%">' + unit + '</td>' +
-          '<td class="td-center" style="width:8%">' + remarks + '</td>' +
-          '</tr>';
-      });
+      validItems.push(it);
     }
   }
 
-  // ─── If no valid items, show empty state ───
-  if (!hasItems) {
-    itemsHtml += '<tr><td class="td-center" colspan="8" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
+  // ─── Build items HTML - 7 columns, NO QR ───
+  var itemsHtml = '';
+  if (validItems.length > 0) {
+    for (var i = 0; i < validItems.length; i++) {
+      var it = validItems[i];
+      var code = it.itemCode || it.inventoryId || it.code || '';
+      var desc = it.description || it.desc || it.itemDescription || code;
+      var recQty = it.expectedQty || it.recQty || it.requestedQty || it.qty || 0;
+      var atlQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
+      var unit = it.unit || it.uom || 'PCS';
+      var remarks = it.remarks || it.status || '';
+      
+      if (remarks === 'PENDING' || remarks === '') {
+        if (atlQty >= recQty && recQty > 0) remarks = 'COMPLETE';
+        else if (atlQty > 0) remarks = 'PARTIAL';
+      }
+
+      itemsHtml += '<tr>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 5px;">' + (i + 1) + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 5px;font-family:Courier New,monospace;">' + code + '</td>' +
+        '<td style="border:1.5px solid #000;padding:4px 5px;">' + desc + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 5px;">' + recQty + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 5px;">' + atlQty + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 5px;">' + unit + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 5px;">' + remarks + '</td>' +
+        '</tr>';
+    }
+  } else {
+    itemsHtml = '<tr><td colspan="7" style="text-align:center;padding:20px;color:#999;border:1.5px solid #000;">No items found</td></tr>';
   }
 
-  // ─── Add "No Further Entries" row ───
+  // ─── NO FURTHER ENTRIES row ───
   itemsHtml += '<tr>' +
-    '<td class="td-center" colspan="8" style="padding:8px;text-align:center;font-weight:bold;font-size:8pt;letter-spacing:1px;border:1.5px solid #000;">' +
+    '<td colspan="7" style="text-align:center;font-weight:bold;font-size:7.5pt;padding:6px;border:1.5px solid #000;letter-spacing:1px;background:#f9f9f9;">' +
     '******************** NO FURTHER ENTRIES BELOW THIS LINE ********************' +
     '</td>' +
     '</tr>';
 
-  // ─── QR code for document ───
-  var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
+  // ─── QR for document ───
+  var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=' + encodeURIComponent(docNo);
 
-  // ─── Build HTML - EXACT match to desired format (second picture) ───
-  var html = '<div class="mrr-print-sheet">' +
-    // HEADER: Logo + Receipt No.
-    '<div class="mrr-header">' +
-      '<div class="mrr-logo">' +
-        '<img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'">' +
-        '<div style="font-size:8pt;font-weight:bold;letter-spacing:2px;margin-top:2px;">Greenmetal Electric Manufacturing Corporation</div>' +
+  // ─── COMPLETE HTML - 7 columns ───
+  var html = '<div style="width:8.5in;min-height:11in;margin:0 auto;background:#fff;padding:0.25in 0.35in;font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#000;line-height:1.3;box-sizing:border-box;">' +
+
+    // HEADER
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">' +
+      '<div>' +
+        '<div style="font-size:16pt;font-weight:bold;letter-spacing:2px;color:#1a3a5c;">GEMCOR</div>' +
+        '<div style="font-size:8pt;font-weight:bold;letter-spacing:1px;color:#333;">Greenmetal Electric Manufacturing Corporation</div>' +
       '</div>' +
-      '<div class="mrr-docno">' +
-        '<div style="display:flex;align-items:center;gap:10px;justify-content:flex-end;">' +
-          '<span class="mrr-dn-label" style="font-weight:bold;font-size:9pt;">Receipt No.:</span>' +
-          '<span class="mrr-dn-box" style="display:inline-block;background:#f4cccc;border:1px solid #e6b8b8;padding:2px 12px;font-weight:bold;font-size:10pt;color:#000;letter-spacing:1px;">' + docNo + '</span>' +
+      '<div style="text-align:right;">' +
+        '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">' +
+          '<span style="font-weight:bold;font-size:8pt;">Receipt No.:</span>' +
+          '<span style="display:inline-block;background:#f4cccc;border:1px solid #e6b8b8;padding:2px 10px;font-weight:bold;font-size:9pt;color:#000;letter-spacing:0.5px;">' + docNo + '</span>' +
         '</div>' +
-        '<div class="mrr-doc-qr" style="margin-top:4px;text-align:right;">' +
-          '<img src="' + mrrQrUrl + '" alt="MRR QR" style="width:75px;height:75px;">' +
+        '<div style="margin-top:4px;text-align:right;">' +
+          '<img src="' + mrrQrUrl + '" style="width:65px;height:65px;" alt="QR">' +
         '</div>' +
       '</div>' +
     '</div>' +
 
     // TITLE
-    '<div class="mrr-title" style="text-align:center;font-size:13pt;font-weight:bold;letter-spacing:6px;margin:8px 0 14px 0;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">' +
-      'MATERIALS RECEIVING REPORT' +
-    '</div>' +
+    '<div style="text-align:center;font-size:12pt;font-weight:bold;letter-spacing:5px;margin:6px 0 12px 0;text-transform:uppercase;">MATERIALS RECEIVING REPORT</div>' +
 
-    // META TABLE: Receiving Site, Vendor, Date Prepared, PO No., DR No., Receiving Date
-    '<table class="mrr-meta-table" style="width:100%;border-collapse:collapse;margin-bottom:12px;font-size:8.5pt;">' +
+    // META TABLE
+    '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;font-size:8pt;">' +
       '<tr>' +
-        '<td style="font-weight:bold;width:18%;padding:2px 4px 2px 0;text-align:left;white-space:nowrap;">RECEIVING SITE:</td>' +
-        '<td style="width:32%;padding:2px 6px;text-align:left;border-bottom:1px solid #000;">' + receivingSite + '</td>' +
-        '<td style="font-weight:bold;width:20%;padding:2px 4px 2px 12px;text-align:left;white-space:nowrap;">PURCHASE ORDER / S.O. No.:</td>' +
-        '<td style="width:30%;padding:2px 6px;text-align:left;border-bottom:1px solid #000;">' + poNo + '</td>' +
+        '<td style="font-weight:bold;width:22%;padding:2px 4px 2px 0;vertical-align:top;">RECEIVING SITE:</td>' +
+        '<td style="width:28%;padding:2px 4px;border-bottom:1px solid #000;">' + receivingSite + '</td>' +
+        '<td style="font-weight:bold;width:28%;padding:2px 4px 2px 12px;vertical-align:top;">PURCHASE ORDER / S.O. No.:</td>' +
+        '<td style="width:22%;padding:2px 4px;border-bottom:1px solid #000;">' + poNo + '</td>' +
       '</tr>' +
       '<tr>' +
-        '<td style="font-weight:bold;padding:2px 4px 2px 0;text-align:left;white-space:nowrap;">VENDOR / PROJECT SITE / CLIENT:</td>' +
-        '<td style="padding:2px 6px;text-align:left;border-bottom:1px solid #000;">' + vendor + '</td>' +
-        '<td style="font-weight:bold;padding:2px 4px 2px 12px;text-align:left;white-space:nowrap;">D.R. No. / S.I. No. / A.R. No.:</td>' +
-        '<td style="padding:2px 6px;text-align:left;border-bottom:1px solid #000;">' + drNo + '</td>' +
+        '<td style="font-weight:bold;padding:2px 4px 2px 0;vertical-align:top;">VENDOR / PROJECT SITE / CLIENT:</td>' +
+        '<td style="padding:2px 4px;border-bottom:1px solid #000;">' + vendor + '</td>' +
+        '<td style="font-weight:bold;padding:2px 4px 2px 12px;vertical-align:top;">D.R. No. / S.I. No. / A.R. No.:</td>' +
+        '<td style="padding:2px 4px;border-bottom:1px solid #000;">' + drNo + '</td>' +
       '</tr>' +
       '<tr>' +
-        '<td style="font-weight:bold;padding:2px 4px 2px 0;text-align:left;white-space:nowrap;">DATE PREPARED:</td>' +
-        '<td style="padding:2px 6px;text-align:left;border-bottom:1px solid #000;">' + dateStr + '</td>' +
-        '<td style="font-weight:bold;padding:2px 4px 2px 12px;text-align:left;white-space:nowrap;">RECEIVING DATE:</td>' +
-        '<td style="padding:2px 6px;text-align:left;border-bottom:1px solid #000;">' + recDateStr + '</td>' +
+        '<td style="font-weight:bold;padding:2px 4px 2px 0;vertical-align:top;">DATE PREPARED:</td>' +
+        '<td style="padding:2px 4px;border-bottom:1px solid #000;">' + dateStr + '</td>' +
+        '<td style="font-weight:bold;padding:2px 4px 2px 12px;vertical-align:top;">RECEIVING DATE:</td>' +
+        '<td style="padding:2px 4px;border-bottom:1px solid #000;">' + recDateStr + '</td>' +
       '</tr>' +
     '</table>' +
 
-    // ITEMS TABLE - CORRECT HEADERS MATCHING DESIRED FORMAT
-    '<table class="mrr-items" style="width:100%;border-collapse:collapse;margin-bottom:10px;font-size:8.5pt;">' +
+    // ITEMS TABLE - 7 COLUMNS, NO QR
+    '<table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:8pt;">' +
       '<thead>' +
         '<tr>' +
-          '<th style="width:6%;border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:8pt;letter-spacing:0.5px;background:#fff;">ITEM<br>NO.</th>' +
-          '<th style="width:18%;border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:8pt;letter-spacing:0.5px;background:#fff;">ITEM<br>CODE</th>' +
-          '<th style="width:8%;border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:8pt;letter-spacing:0.5px;background:#fff;">QR<br>IMG</th>' +
-          '<th style="width:32%;border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:8pt;letter-spacing:0.5px;background:#fff;">ITEM DESCRIPTION</th>' +
-          '<th style="width:10%;border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:8pt;letter-spacing:0.5px;background:#fff;">REQUEST<br>QUANTITY</th>' +
-          '<th style="width:10%;border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:8pt;letter-spacing:0.5px;background:#fff;">RECEIVED<br>QUANTITY</th>' +
-          '<th style="width:8%;border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:8pt;letter-spacing:0.5px;background:#fff;">UNIT</th>' +
-          '<th style="width:8%;border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:8pt;letter-spacing:0.5px;background:#fff;">REMARKS</th>' +
+          '<th style="border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:6%;">ITEM<br>NO.</th>' +
+          '<th style="border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:18%;">ITEM<br>CODE</th>' +
+          '<th style="border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:32%;">ITEM DESCRIPTION</th>' +
+          '<th style="border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:11%;">REQUESTED<br>QUANTITY</th>' +
+          '<th style="border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:11%;">RECEIVED<br>QUANTITY</th>' +
+          '<th style="border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:8%;">UNIT</th>' +
+          '<th style="border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:14%;">REMARKS</th>' +
         '</tr>' +
       '</thead>' +
       '<tbody>' + itemsHtml + '</tbody>' +
     '</table>' +
 
-    // CHECKBOXES SECTION
-    '<div class="mrr-checkboxes" style="font-size:7.5pt;margin-top:8px;margin-bottom:14px;font-family:Arial,Helvetica,sans-serif;">' +
-      '<div class="mrr-cb-section" style="margin-bottom:4px;">' +
-        '<div class="mrr-cb-title" style="font-weight:bold;font-size:7.5pt;letter-spacing:0.5px;margin-bottom:2px;text-transform:uppercase;">ISSUES IN SUPPLIER PERFORMANCE:</div>' +
-        '<div class="mrr-cb-row" style="display:flex;flex-wrap:wrap;gap:4px 16px;padding-left:2px;">' +
-          '<span class="mrr-cb-item" style="font-size:7.5pt;display:inline-flex;align-items:center;gap:2px;white-space:nowrap;"><span class="mrr-cb-circle" style="font-size:9pt;line-height:1;font-family:\'Courier New\',monospace;">( )</span> PRODUCT/SERVICE</span>' +
-          '<span class="mrr-cb-item" style="font-size:7.5pt;display:inline-flex;align-items:center;gap:2px;white-space:nowrap;"><span class="mrr-cb-circle" style="font-size:9pt;line-height:1;font-family:\'Courier New\',monospace;">( )</span> DELIVERY</span>' +
-          '<span class="mrr-cb-item" style="font-size:7.5pt;display:inline-flex;align-items:center;gap:2px;white-space:nowrap;"><span class="mrr-cb-circle" style="font-size:9pt;line-height:1;font-family:\'Courier New\',monospace;">( )</span> CUSTOMER RELATIONS</span>' +
-          '<span class="mrr-cb-item" style="font-size:7.5pt;display:inline-flex;align-items:center;gap:2px;white-space:nowrap;"><span class="mrr-cb-circle" style="font-size:9pt;line-height:1;font-family:\'Courier New\',monospace;">( )</span> SUPPORT FUNCTION</span>' +
-          '<span class="mrr-cb-item" style="font-size:7.5pt;display:inline-flex;align-items:center;gap:2px;white-space:nowrap;"><span class="mrr-cb-circle" style="font-size:9pt;line-height:1;font-family:\'Courier New\',monospace;">( )</span> PRICE</span>' +
-        '</div>' +
+    // CHECKBOXES
+    '<div style="font-size:7pt;margin-top:8px;margin-bottom:12px;">' +
+      '<div style="font-weight:bold;font-size:7pt;letter-spacing:0.5px;margin-bottom:2px;text-transform:uppercase;">ISSUES IN SUPPLIER PERFORMANCE:</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:2px 16px;padding-left:2px;">' +
+        '<span style="display:inline-flex;align-items:center;gap:2px;white-space:nowrap;"><span style="font-size:8pt;font-family:\'Courier New\',monospace;">( )</span> PRODUCT/SERVICE</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:2px;white-space:nowrap;"><span style="font-size:8pt;font-family:\'Courier New\',monospace;">( )</span> DELIVERY</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:2px;white-space:nowrap;"><span style="font-size:8pt;font-family:\'Courier New\',monospace;">( )</span> CUSTOMER RELATIONS</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:2px;white-space:nowrap;"><span style="font-size:8pt;font-family:\'Courier New\',monospace;">( )</span> SUPPORT FUNCTION</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:2px;white-space:nowrap;"><span style="font-size:8pt;font-family:\'Courier New\',monospace;">( )</span> PRICE</span>' +
       '</div>' +
-      '<div class="mrr-cb-section" style="margin-bottom:4px;">' +
-        '<div class="mrr-cb-title" style="font-weight:bold;font-size:7.5pt;letter-spacing:0.5px;margin-bottom:2px;text-transform:uppercase;">ACTION TAKEN IF REJECT / PARTIAL ACCEPTANCE:</div>' +
-        '<div class="mrr-cb-row" style="display:flex;flex-wrap:wrap;gap:4px 16px;padding-left:2px;">' +
-          '<span class="mrr-cb-item" style="font-size:7.5pt;display:inline-flex;align-items:center;gap:2px;white-space:nowrap;"><span class="mrr-cb-circle" style="font-size:9pt;line-height:1;font-family:\'Courier New\',monospace;">( )</span> RETURN TO SUPPLIER</span>' +
-          '<span class="mrr-cb-item" style="font-size:7.5pt;display:inline-flex;align-items:center;gap:2px;white-space:nowrap;"><span class="mrr-cb-circle" style="font-size:9pt;line-height:1;font-family:\'Courier New\',monospace;">( )</span> ITEMS REPLACED BY SUPPLIER</span>' +
-          '<span class="mrr-cb-item" style="font-size:7.5pt;display:inline-flex;align-items:center;gap:2px;white-space:nowrap;"><span class="mrr-cb-circle" style="font-size:9pt;line-height:1;font-family:\'Courier New\',monospace;">( )</span> OTHERS</span>' +
-        '</div>' +
+      '<div style="font-weight:bold;font-size:7pt;letter-spacing:0.5px;margin-top:4px;margin-bottom:2px;text-transform:uppercase;">ACTION TAKEN IF REJECT / PARTIAL ACCEPTANCE:</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:2px 16px;padding-left:2px;">' +
+        '<span style="display:inline-flex;align-items:center;gap:2px;white-space:nowrap;"><span style="font-size:8pt;font-family:\'Courier New\',monospace;">( )</span> RETURN TO SUPPLIER</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:2px;white-space:nowrap;"><span style="font-size:8pt;font-family:\'Courier New\',monospace;">( )</span> ITEMS REPLACED BY SUPPLIER</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:2px;white-space:nowrap;"><span style="font-size:8pt;font-family:\'Courier New\',monospace;">( )</span> OTHERS</span>' +
       '</div>' +
     '</div>' +
 
     // SIGNATURES
-    '<div class="mrr-sigs" style="display:flex;justify-content:center;gap:40px;margin-top:20px;text-align:center;">' +
-      '<div class="mrr-sig" style="width:26%;min-width:120px;">' +
-        '<div class="mrr-sig-name" style="font-size:9.5pt;font-weight:bold;text-transform:uppercase;margin-bottom:1px;min-height:16px;letter-spacing:0.5px;">' + preparedBy + '</div>' +
-        '<div class="mrr-sig-line" style="border-bottom:1.5px solid #000;height:18px;margin-bottom:2px;"></div>' +
-        '<div class="mrr-sig-label" style="font-size:8.5pt;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;font-style:italic;">PREPARED BY</div>' +
+    '<div style="display:flex;justify-content:center;gap:40px;margin-top:20px;text-align:center;">' +
+      '<div style="width:26%;min-width:120px;">' +
+        '<div style="font-size:9pt;font-weight:bold;text-transform:uppercase;min-height:18px;letter-spacing:0.5px;">' + preparedBy + '</div>' +
+        '<div style="border-bottom:1.5px solid #000;height:20px;margin-bottom:2px;"></div>' +
+        '<div style="font-size:8pt;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;font-style:italic;">PREPARED BY</div>' +
       '</div>' +
-      '<div class="mrr-sig" style="width:26%;min-width:120px;">' +
-        '<div class="mrr-sig-name" style="font-size:9.5pt;font-weight:bold;text-transform:uppercase;margin-bottom:1px;min-height:16px;letter-spacing:0.5px;">&nbsp;</div>' +
-        '<div class="mrr-sig-line" style="border-bottom:1.5px solid #000;height:18px;margin-bottom:2px;"></div>' +
-        '<div class="mrr-sig-label" style="font-size:8.5pt;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;font-style:italic;">CHECKED BY</div>' +
+      '<div style="width:26%;min-width:120px;">' +
+        '<div style="font-size:9pt;font-weight:bold;text-transform:uppercase;min-height:18px;">&nbsp;</div>' +
+        '<div style="border-bottom:1.5px solid #000;height:20px;margin-bottom:2px;"></div>' +
+        '<div style="font-size:8pt;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;font-style:italic;">CHECKED BY</div>' +
       '</div>' +
-      '<div class="mrr-sig" style="width:26%;min-width:120px;">' +
-        '<div class="mrr-sig-name" style="font-size:9.5pt;font-weight:bold;text-transform:uppercase;margin-bottom:1px;min-height:16px;letter-spacing:0.5px;">&nbsp;</div>' +
-        '<div class="mrr-sig-line" style="border-bottom:1.5px solid #000;height:18px;margin-bottom:2px;"></div>' +
-        '<div class="mrr-sig-label" style="font-size:8.5pt;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;font-style:italic;">NOTED BY</div>' +
+      '<div style="width:26%;min-width:120px;">' +
+        '<div style="font-size:9pt;font-weight:bold;text-transform:uppercase;min-height:18px;">&nbsp;</div>' +
+        '<div style="border-bottom:1.5px solid #000;height:20px;margin-bottom:2px;"></div>' +
+        '<div style="font-size:8pt;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;font-style:italic;">NOTED BY</div>' +
       '</div>' +
     '</div>' +
   '</div>';
 
   container.innerHTML = html;
-  console.log('[renderMrrPrint] HTML rendered successfully');
+  console.log('[renderMrrPrint] ✅ Rendered successfully - 7 columns, no QR');
 }
 function printMrr() {
   var previewContent = document.getElementById('mrrPrintContent');
