@@ -2353,21 +2353,35 @@ container.appendChild(el);
 
 async function openMrrPrint(docNo) {
   if (state.isLoading) return;
+  
+  // ─── FORCE CLEAR CACHE ───
+  // Clear any stored progress for this document
+  localStorage.removeItem('ivm_progress_' + docNo);
+  
+  // Reset items array
+  state.items = [];
+  
   showLoading('Loading ' + docNo + '...');
   try {
     var sheetId = getCleanSheetId();
     console.log('[openMrrPrint] sheetId:', sheetId, 'docNo:', docNo);
-    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRR&sheetId=' + sheetId + '&_t=' + Date.now();
+    
+    // ─── ADD CACHE-BUSTING PARAMETER ───
+    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + 
+              '&docType=MRR&sheetId=' + sheetId + '&_t=' + Date.now() + '&nocache=' + Math.random();
     console.log('[openMrrPrint] URL:', url);
+    
     var res = await fetch(url, { redirect: 'follow' });
     var text = await res.text();
     console.log('[openMrrPrint] Raw response:', text.substring(0, 500));
+    
     var data;
     try { data = JSON.parse(text); } catch(e) { 
       console.error('[openMrrPrint] JSON parse error:', e);
       data = {}; 
     }
     console.log('[openMrrPrint] Parsed data:', data);
+    
     if (data.error) {
       showToast('Error: ' + data.error, 'danger');
       return;
@@ -2376,15 +2390,25 @@ async function openMrrPrint(docNo) {
       showToast('Error: ' + (data.error || 'Failed to load document'), 'danger');
       return;
     }
+    
+    // ─── LOG THE ACTUAL DATA ───
+    console.log('[openMrrPrint] ✅ Items found:', data.items ? data.items.length : 0);
+    if (data.items && data.items.length > 0) {
+      console.log('[openMrrPrint] First item:', JSON.stringify(data.items[0]));
+    }
+    
     if (!data.items || data.items.length === 0) {
-      console.warn('[openMrrPrint] No items found for ' + docNo, data.debug);
+      console.warn('[openMrrPrint] No items found for ' + docNo);
       showToast('Warning: No items found in this document', 'warning');
     }
+    
     renderMrrPrint(docNo, data.info || {}, data.items || []);
+    
     if (mrrListModal) mrrListModal.hide();
     setTimeout(function() {
       if (mrrPrintModal) mrrPrintModal.show();
     }, 300);
+    
   } catch(err) {
     console.error('[openMrrPrint] Error:', err);
     showToast('Failed to load document: ' + err.message, 'danger');
@@ -2403,14 +2427,25 @@ async function openMrrPrint(docNo) {
 // FIXED: renderMrrPrint - NO QR COLUMN - Exactly 7 columns
 // Headers: ITEM NO. | ITEM CODE | ITEM DESCRIPTION | REQUESTED QUANTITY | RECEIVED QUANTITY | UNIT | REMARKS
 // ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// renderMrrPrint - CLEAN VERSION - Matches Google Sheet data exactly
+// ═══════════════════════════════════════════════════════════════════════════
 function renderMrrPrint(docNo, info, items) {
   var container = document.getElementById('mrrPrintContent');
-  if (!container) return;
+  if (!container) {
+    console.error('[renderMrrPrint] Container not found');
+    return;
+  }
 
-  console.log('[renderMrrPrint] Items:', items ? items.length : 0);
-  console.log('[renderMrrPrint] Info:', JSON.stringify(info));
+  console.log('[renderMrrPrint] 📋 Doc No:', docNo);
+  console.log('[renderMrrPrint] 📋 Info:', JSON.stringify(info));
+  console.log('[renderMrrPrint] 📦 Items count:', items ? items.length : 0);
+  
+  if (items && items.length > 0) {
+    console.log('[renderMrrPrint] 📦 First item:', JSON.stringify(items[0]));
+  }
 
-  // ─── Extract info with proper fallbacks ───
+  // ─── Extract info ───
   var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
   var vendor = info['Vendor/Client'] || info.vendor || info.client || info['PROJECT SITE'] || '';
   var datePrepared = info['Date Prepared'] || info.datePrepared || '';
@@ -2429,7 +2464,7 @@ function renderMrrPrint(docNo, info, items) {
         return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
       }
     } catch(e) {}
-    return String(val).replace(/\s*GMT.*$/, '').trim();
+    return String(val);
   }
 
   var dateStr = formatDate(datePrepared) || formatDate(new Date());
@@ -2442,58 +2477,75 @@ function renderMrrPrint(docNo, info, items) {
       var it = items[i];
       var code = (it.itemCode || it.inventoryId || it.code || '').trim();
       if (!code) continue;
+      
       var codeLower = code.toLowerCase();
-      if (codeLower === 'issued by' || codeLower === 'checked by' || 
-          codeLower.indexOf('received by') !== -1 || codeLower.indexOf('______') !== -1 ||
-          codeLower.indexOf('no further') !== -1) {
-        continue;
+      var skipWords = ['issued by', 'checked by', 'received by', 'prepared by', 'noted by', 
+                       '______', '________', 'no further', 'further entries'];
+      var shouldSkip = false;
+      for (var s = 0; s < skipWords.length; s++) {
+        if (codeLower.indexOf(skipWords[s]) !== -1) {
+          shouldSkip = true;
+          break;
+        }
       }
+      if (shouldSkip) continue;
+      
       validItems.push(it);
     }
   }
 
-  // ─── Build items HTML - 7 columns, NO QR ───
+  console.log('[renderMrrPrint] ✅ Valid items:', validItems.length);
+
+  // ─── Build items HTML ───
   var itemsHtml = '';
   if (validItems.length > 0) {
     for (var i = 0; i < validItems.length; i++) {
       var it = validItems[i];
+      
+      // Get the actual data from the item
       var code = it.itemCode || it.inventoryId || it.code || '';
-      var desc = it.description || it.desc || it.itemDescription || code;
+      var desc = it.description || it.desc || it.itemDescription || '';
       var recQty = it.expectedQty || it.recQty || it.requestedQty || it.qty || 0;
       var atlQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
       var unit = it.unit || it.uom || 'PCS';
       var remarks = it.remarks || it.status || '';
       
+      // Auto-determine remarks
       if (remarks === 'PENDING' || remarks === '') {
-        if (atlQty >= recQty && recQty > 0) remarks = 'COMPLETE';
-        else if (atlQty > 0) remarks = 'PARTIAL';
+        if (atlQty >= recQty && recQty > 0) {
+          remarks = 'COMPLETE';
+        } else if (atlQty > 0) {
+          remarks = 'PARTIAL';
+        }
       }
 
+      console.log('[renderMrrPrint] Row ' + (i+1) + ': ' + code + ' | ' + desc + ' | Qty: ' + recQty + ' | ATL: ' + atlQty + ' | Unit: ' + unit + ' | Remarks: ' + remarks);
+
       itemsHtml += '<tr>' +
-        '<td style="text-align:center;border:1.5px solid #000;padding:4px 5px;">' + (i + 1) + '</td>' +
-        '<td style="text-align:center;border:1.5px solid #000;padding:4px 5px;font-family:Courier New,monospace;">' + code + '</td>' +
-        '<td style="border:1.5px solid #000;padding:4px 5px;">' + desc + '</td>' +
-        '<td style="text-align:center;border:1.5px solid #000;padding:4px 5px;">' + recQty + '</td>' +
-        '<td style="text-align:center;border:1.5px solid #000;padding:4px 5px;">' + atlQty + '</td>' +
-        '<td style="text-align:center;border:1.5px solid #000;padding:4px 5px;">' + unit + '</td>' +
-        '<td style="text-align:center;border:1.5px solid #000;padding:4px 5px;">' + remarks + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;">' + (i + 1) + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;font-family:Courier New,monospace;">' + code + '</td>' +
+        '<td style="border:1.5px solid #000;padding:4px 6px;">' + desc + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;">' + recQty + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;">' + atlQty + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;">' + unit + '</td>' +
+        '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;">' + remarks + '</td>' +
         '</tr>';
     }
   } else {
     itemsHtml = '<tr><td colspan="7" style="text-align:center;padding:20px;color:#999;border:1.5px solid #000;">No items found</td></tr>';
   }
 
-  // ─── NO FURTHER ENTRIES row ───
+  // ─── NO FURTHER ENTRIES ───
   itemsHtml += '<tr>' +
     '<td colspan="7" style="text-align:center;font-weight:bold;font-size:7.5pt;padding:6px;border:1.5px solid #000;letter-spacing:1px;background:#f9f9f9;">' +
     '******************** NO FURTHER ENTRIES BELOW THIS LINE ********************' +
     '</td>' +
     '</tr>';
 
-  // ─── QR for document ───
+  // ─── QR code ───
   var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=' + encodeURIComponent(docNo);
 
-  // ─── COMPLETE HTML - 7 columns ───
+  // ─── HTML ───
   var html = '<div style="width:8.5in;min-height:11in;margin:0 auto;background:#fff;padding:0.25in 0.35in;font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#000;line-height:1.3;box-sizing:border-box;">' +
 
     // HEADER
@@ -2538,17 +2590,17 @@ function renderMrrPrint(docNo, info, items) {
       '</tr>' +
     '</table>' +
 
-    // ITEMS TABLE - 7 COLUMNS, NO QR
+    // ITEMS TABLE - 7 COLUMNS
     '<table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:8pt;">' +
       '<thead>' +
         '<tr>' +
-          '<th style="border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:6%;">ITEM<br>NO.</th>' +
-          '<th style="border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:18%;">ITEM<br>CODE</th>' +
-          '<th style="border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:32%;">ITEM DESCRIPTION</th>' +
-          '<th style="border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:11%;">REQUESTED<br>QUANTITY</th>' +
-          '<th style="border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:11%;">RECEIVED<br>QUANTITY</th>' +
-          '<th style="border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:8%;">UNIT</th>' +
-          '<th style="border:1.5px solid #000;padding:4px 5px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:14%;">REMARKS</th>' +
+          '<th style="border:1.5px solid #000;padding:4px 6px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:6%;">ITEM<br>NO.</th>' +
+          '<th style="border:1.5px solid #000;padding:4px 6px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:18%;">ITEM<br>CODE</th>' +
+          '<th style="border:1.5px solid #000;padding:4px 6px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:30%;">ITEM DESCRIPTION</th>' +
+          '<th style="border:1.5px solid #000;padding:4px 6px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:11%;">REQUEST<br>QUANTITY</th>' +
+          '<th style="border:1.5px solid #000;padding:4px 6px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:11%;">RECEIVED<br>QUANTITY</th>' +
+          '<th style="border:1.5px solid #000;padding:4px 6px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:8%;">UNIT</th>' +
+          '<th style="border:1.5px solid #000;padding:4px 6px;text-align:center;font-weight:bold;font-size:7.5pt;background:#f0f0f0;width:16%;">REMARKS</th>' +
         '</tr>' +
       '</thead>' +
       '<tbody>' + itemsHtml + '</tbody>' +
@@ -2593,7 +2645,7 @@ function renderMrrPrint(docNo, info, items) {
   '</div>';
 
   container.innerHTML = html;
-  console.log('[renderMrrPrint] ✅ Rendered successfully - 7 columns, no QR');
+  console.log('[renderMrrPrint] ✅ Rendered successfully!');
 }
 function printMrr() {
   var previewContent = document.getElementById('mrrPrintContent');
