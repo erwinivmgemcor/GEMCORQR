@@ -2342,9 +2342,16 @@ function renderMrrPrint(docNo, info, items) {
     return;
   }
 
-  console.log('[renderMrrPrint] 📋 Doc No:', docNo);
-  console.log('[renderMrrPrint] 📦 Items count:', items ? items.length : 0);
+  console.log('[renderMrrPrint] 🚀 SENIOR VERSION');
+  console.log('[renderMrrPrint] Doc No:', docNo);
+  console.log('[renderMrrPrint] Items count:', items ? items.length : 0);
+  
+  // ⭐ LOG THE ACTUAL DATA FOR DEBUGGING
+  if (items && items.length > 0) {
+    console.log('[renderMrrPrint] First item RAW:', JSON.stringify(items[0]));
+  }
 
+  // ─── EXTRACT INFO ───
   var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
   var vendor = info['Vendor/Client'] || info.vendor || info.client || '';
   var datePrepared = info['Date Prepared'] || info.datePrepared || '';
@@ -2353,6 +2360,7 @@ function renderMrrPrint(docNo, info, items) {
   var receivingDate = info['Receiving Date'] || info.receivingDate || '';
   var preparedBy = info['Prepared By'] || info.preparedBy || '';
 
+  // ─── FORMAT DATE ───
   function formatDate(val) {
     if (!val || val === '') return '';
     try {
@@ -2368,13 +2376,19 @@ function renderMrrPrint(docNo, info, items) {
   var dateStr = formatDate(datePrepared) || formatDate(new Date());
   var recDateStr = formatDate(receivingDate) || dateStr;
 
+  // ─── FILTER VALID ITEMS ───
   var validItems = [];
   if (items && items.length > 0) {
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
-      var code = (it.itemCode || it.inventoryId || it.code || '').trim();
+      
+      // ⭐ Get the code from multiple possible properties
+      var code = it.itemCode || it.inventoryId || it.code || '';
+      code = code.trim();
+      
       if (!code) continue;
       
+      // Skip signature rows
       var codeLower = code.toLowerCase();
       var skipWords = ['issued by', 'checked by', 'received by', 'prepared by', 'noted by', 
                        '______', '________', 'no further', 'further entries'];
@@ -2393,18 +2407,22 @@ function renderMrrPrint(docNo, info, items) {
 
   console.log('[renderMrrPrint] ✅ Valid items:', validItems.length);
 
+  // ─── BUILD ITEMS HTML - EXACTLY 7 COLUMNS ───
   var itemsHtml = '';
+  
   if (validItems.length > 0) {
     for (var i = 0; i < validItems.length; i++) {
       var it = validItems[i];
       
+      // ⭐ EXTRACT ALL 7 FIELDS WITH MULTIPLE FALLBACKS
       var code = it.itemCode || it.inventoryId || it.code || '';
       var desc = it.description || it.desc || it.itemDescription || '';
       var recQty = it.recQty || it.expectedQty || it.requestedQty || it.qty || 0;
-      var atlQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
+      var atlQty = it.atlQty || it.actualQty || it.issuedQty || it.receivedQty || it.actual || 0;
       var unit = it.unit || it.uom || 'PCS';
       var remarks = it.remarks || it.status || '';
       
+      // ⭐ AUTO-DETERMINE REMARKS IF PENDING
       if (remarks === 'PENDING' || remarks === '') {
         if (atlQty >= recQty && recQty > 0) {
           remarks = 'COMPLETE';
@@ -2413,6 +2431,13 @@ function renderMrrPrint(docNo, info, items) {
         }
       }
 
+      // ⭐ LOG EACH ITEM FOR VERIFICATION
+      console.log('[renderMrrPrint] Row ' + (i+1) + ':');
+      console.log('  CODE: "' + code + '"');
+      console.log('  DESC: "' + desc + '"');
+      console.log('  REQ: ' + recQty + ' | REC: ' + atlQty + ' | UNIT: ' + unit + ' | REMARKS: ' + remarks);
+
+      // ⭐ BUILD ROW WITH EXACTLY 7 COLUMNS - NO QR COLUMN
       itemsHtml += '<tr>' +
         '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;width:6%;">' + (i + 1) + '</td>' +
         '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;width:18%;font-family:Courier New,monospace;">' + code + '</td>' +
@@ -2427,16 +2452,20 @@ function renderMrrPrint(docNo, info, items) {
     itemsHtml = '<tr><td colspan="7" style="text-align:center;padding:20px;color:#999;border:1.5px solid #000;">No items found</td></tr>';
   }
 
+  // ─── NO FURTHER ENTRIES ───
   itemsHtml += '<tr>' +
     '<td colspan="7" style="text-align:center;font-weight:bold;font-size:7.5pt;padding:6px;border:1.5px solid #000;letter-spacing:1px;background:#f9f9f9;">' +
     '******************** NO FURTHER ENTRIES BELOW THIS LINE ********************' +
     '</td>' +
     '</tr>';
 
+  // ─── QR CODE ───
   var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=' + encodeURIComponent(docNo);
 
+  // ─── COMPLETE HTML ───
   var html = '<div style="width:8.5in;min-height:11in;margin:0 auto;background:#fff;padding:0.25in 0.35in;font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#000;line-height:1.3;box-sizing:border-box;">' +
 
+    // HEADER
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">' +
       '<div>' +
         '<div style="font-size:16pt;font-weight:bold;letter-spacing:2px;color:#1a3a5c;">GEMCOR</div>' +
@@ -2453,8 +2482,10 @@ function renderMrrPrint(docNo, info, items) {
       '</div>' +
     '</div>' +
 
+    // TITLE
     '<div style="text-align:center;font-size:12pt;font-weight:bold;letter-spacing:5px;margin:6px 0 12px 0;text-transform:uppercase;">MATERIALS RECEIVING REPORT</div>' +
 
+    // META TABLE
     '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;font-size:8pt;">' +
       '<tr>' +
         '<td style="font-weight:bold;width:22%;padding:2px 4px 2px 0;vertical-align:top;">RECEIVING SITE:</td>' +
@@ -2476,6 +2507,7 @@ function renderMrrPrint(docNo, info, items) {
       '</tr>' +
     '</table>' +
 
+    // ITEMS TABLE - EXACTLY 7 COLUMNS
     '<table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:8pt;">' +
       '<thead>' +
         '<tr>' +
@@ -2491,6 +2523,7 @@ function renderMrrPrint(docNo, info, items) {
       '<tbody>' + itemsHtml + '</tbody>' +
     '</table>' +
 
+    // CHECKBOXES
     '<div style="font-size:7pt;margin-top:8px;margin-bottom:12px;">' +
       '<div style="font-weight:bold;font-size:7pt;letter-spacing:0.5px;margin-bottom:2px;text-transform:uppercase;">ISSUES IN SUPPLIER PERFORMANCE:</div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:2px 16px;padding-left:2px;">' +
@@ -2508,6 +2541,7 @@ function renderMrrPrint(docNo, info, items) {
       '</div>' +
     '</div>' +
 
+    // SIGNATURES
     '<div style="display:flex;justify-content:center;gap:40px;margin-top:20px;text-align:center;">' +
       '<div style="width:26%;min-width:120px;">' +
         '<div style="font-size:9pt;font-weight:bold;text-transform:uppercase;min-height:18px;letter-spacing:0.5px;">' + preparedBy + '</div>' +
