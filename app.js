@@ -362,12 +362,10 @@ document.getElementById('moduleLabel').textContent = mod;
 updateLabels();
 changeDocument();
 await fetchPendingDocs();
-// Show/hide MRIF List button
 var mrifCard = document.getElementById('mrifListCard');
 if (mrifCard) {
 mrifCard.classList.toggle('d-none', mod !== 'MRIF');
 }
-// Show/hide MRR List button
 var mrrCard = document.getElementById('mrrListCard');
 if (mrrCard) {
 mrrCard.classList.toggle('d-none', mod !== 'MRR');
@@ -595,7 +593,6 @@ if (state.html5QrCode) { state.html5QrCode.stop().catch(()=>{}); state.html5QrCo
 function onScanSuccess(decodedText) {
 clearErrorAlert();
 
-// NEW: Detect URL with ?doc= parameter (scanned from production QR)
 var urlDocMatch = decodedText.match(/[?&]doc=([^&\s]+)/);
 if (urlDocMatch) {
   var extractedDoc = decodeURIComponent(urlDocMatch[1]);
@@ -681,7 +678,6 @@ state.quickScanner = null;
 }
 quickScanModal.hide();
 
-// 1. Document QR pattern
 const docPattern = /^(MRIF|MRR|MRS)\d{6,}$/i;
 if (docPattern.test(decodedText)) {
 const mod = decodedText.substring(0, 4).toUpperCase();
@@ -694,7 +690,6 @@ return;
 }
 }
 
-// 2. Try as PO Number (for MRR creation)
 const poResult = await lookupPoFromScan(decodedText);
 if (poResult && poResult.success) {
 playSuccessBeep();
@@ -708,7 +703,6 @@ state.poItemsModal.show();
 return;
 }
 
-// 3. Item QR (existing document)
 if (state.currentDoc && state.items.length > 0) {
 const item = state.items.find(i => i.inventoryId.toLowerCase() === decodedText.toLowerCase());
 if (item) {
@@ -766,8 +760,6 @@ hideLoading();
 function closePoItemsModal() {
 state.poItemsModal.hide();
 }
-
-
 
 let currentModalItem = null;
 function openQtyModal(item) {
@@ -914,9 +906,6 @@ console.log('[Submit] Parsed:', result);
 return result;
 }
 
-// =============================================================================
-// NEW REQUEST FUNCTIONS - WITH JO No. + SOF AUTO-FILL + REQUESTOR DROPDOWN
-// =============================================================================
 function openNewRequest() {
 if (state.isLoading) return;
 resetWizard();
@@ -925,12 +914,7 @@ loadRequestorList();
 newRequestModal.show();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// WIZARD FUNCTIONS — Step-by-step New Request
-// ═══════════════════════════════════════════════════════════════════════════
-
 function resetWizard() {
-  // Reset hidden fields
   document.getElementById('reqDocType').value = '';
   document.getElementById('reqJoNo').value = '';
   document.getElementById('reqRequestor').value = '';
@@ -939,30 +923,24 @@ function resetWizard() {
   document.getElementById('reqClientName').value = '';
   document.getElementById('reqProject').value = '';
 
-  // Reset step 1
   document.querySelectorAll('.doc-type-card').forEach(function(c) { c.classList.remove('selected'); });
   document.getElementById('btnStep1Next').disabled = true;
 
-  // Reset step 2
   document.getElementById('step2JoNo').value = '';
   document.getElementById('joNoStatus').innerHTML = '';
 
-  // Reset step 3
   document.getElementById('step3Requestor').value = '';
   document.getElementById('step3Department').value = '';
   document.getElementById('btnStep3Next').disabled = true;
 
-  // Reset step 5
   document.getElementById('step5ItemsContainer').innerHTML = '';
   addStep5ItemRow();
   document.getElementById('btnStep5Next').disabled = true;
 
-  // Go to step 1
   goToStep(1);
 }
 
 function goToStep(step) {
-  // Update step indicators
   document.querySelectorAll('.wizard-step').forEach(function(el) {
     var s = parseInt(el.getAttribute('data-step'));
     el.classList.remove('active', 'completed');
@@ -973,19 +951,16 @@ function goToStep(step) {
     }
   });
 
-  // Show/hide panels
   document.querySelectorAll('.wizard-panel').forEach(function(el) {
     el.classList.remove('active');
   });
   var panel = document.getElementById('step' + step);
   if (panel) panel.classList.add('active');
 
-  // If step 4, populate review data
   if (step === 4) {
     populateReviewData();
   }
 
-  // If step 6, populate final review
   if (step === 6) {
     populateFinalReview();
   }
@@ -1017,10 +992,8 @@ async function doStep2Next() {
 
   document.getElementById('joNoStatus').innerHTML = '<span class="text-primary"><i class="bi bi-arrow-repeat spin"></i> Looking up SOF data...</span>';
 
-  // Set the hidden field
   document.getElementById('reqJoNo').value = joNo;
 
-  // Call the lookup
   await lookupSofDataWizard();
 
   goToStep(3);
@@ -1173,7 +1146,6 @@ function populateFinalReview() {
   document.getElementById('finalClientName').textContent = document.getElementById('reqClientName').value || '-';
   document.getElementById('finalProject').textContent = document.getElementById('reqProject').value || '-';
 
-  // Populate items table
   var tbody = document.getElementById('finalItemsTable');
   tbody.innerHTML = '';
   var rows = document.querySelectorAll('#step5ItemsContainer .step5-item-row');
@@ -1198,11 +1170,9 @@ const text = await res.text();
 let data;
 try { data = JSON.parse(text); } catch(e) { data = {}; }
 
-// Populate old dropdown (for compatibility)
 const sel = document.getElementById('reqRequestor');
 sel.innerHTML = '<option value="">-- Select Requestor --</option>';
 
-// Populate wizard step 3 dropdown
 const sel3 = document.getElementById('step3Requestor');
 sel3.innerHTML = '<option value="">-- Select Requestor --</option>';
 
@@ -1330,7 +1300,6 @@ const clientName = document.getElementById('reqClientName').value.trim();
 const project = document.getElementById('reqProject').value.trim();
 if (!requestor) { alert('Select a requestor'); return; }
 
-// Collect items from wizard step 5
 const items = [];
 document.querySelectorAll('#step5ItemsContainer .step5-item-row').forEach(function(row) {
 const code = row.querySelector('.req-item-code').value;
@@ -1339,7 +1308,6 @@ const qty = parseInt(row.querySelector('.req-qty').value, 10);
 if (code && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty });
 });
 
-// Fallback: also check old container for backward compatibility
 document.querySelectorAll('#requestItemsContainer .row').forEach(function(row) {
 const code = row.querySelector('.req-item-code');
 const desc = row.querySelector('.req-item-desc');
@@ -1454,7 +1422,6 @@ badge.classList.toggle('d-none', readyCount === 0);
 console.log('[loadMyRequests] Badge count:', readyCount);
 }
 renderMyRequests(data.requests);
-// FIX: Update Production KPIs
 var kpiActive = document.getElementById('kpiActiveDocs');
 var kpiPending = document.getElementById('kpiPending');
 var kpiCompleted = document.getElementById('kpiCompleted');
@@ -1468,12 +1435,10 @@ console.log('[loadMyRequests] Toast notification shown!');
 }
 } else {
 console.log('[loadMyRequests] No requests or error:', data.error);
-// FIX: Show error to user instead of silent fail
 document.getElementById('myRequestsList').innerHTML = '<div class="list-group-item text-muted text-center py-3">' + (data.error ? 'Error: ' + data.error : 'No requests found') + '</div>';
 }
 } catch(e) {
 console.error('[loadMyRequests] Error:', e);
-// FIX: Show error to user
 document.getElementById('myRequestsList').innerHTML = '<div class="list-group-item text-danger text-center py-3">Failed to load requests. Check your connection.</div>';
 }
 finally { hideLoading(); }
@@ -1620,11 +1585,6 @@ hideLoading();
 }
 }
 
-
-
-// ============================================================================
-// MANUAL MRR CREATION (No PO required)
-// ============================================================================
 var manualMrrModal = null;
 var manualMrrItems = [];
 
@@ -1632,7 +1592,6 @@ function openManualMrrModal() {
   if (!manualMrrModal) {
     manualMrrModal = new bootstrap.Modal(document.getElementById('manualMrrModal'));
   }
-  // Reset form
   document.getElementById('manualMrrPoNo').value = '';
   document.getElementById('manualMrrDrNo').value = '';
   document.getElementById('manualMrrVendor').value = '';
@@ -1654,7 +1613,6 @@ function addManualMrrItem() {
   });
   renderManualMrrItems();
   updateManualMrrSubmitButton();
-  // Focus on the new item's code field
   setTimeout(function() {
     var inputs = document.querySelectorAll('.manual-mrr-code');
     if (inputs.length > 0) {
@@ -1752,7 +1710,6 @@ async function submitManualMrr() {
   var receivingDate = document.getElementById('manualMrrDate').value;
   var preparedBy = document.getElementById('manualMrrPreparedBy').value.trim();
 
-  // Filter only valid items
   var items = [];
   for (var i = 0; i < manualMrrItems.length; i++) {
     var it = manualMrrItems[i];
@@ -1814,9 +1771,6 @@ async function submitManualMrr() {
   }
 }
 
-// ============================================================================
-// INVENTORY BROWSER (Production New Request)
-// ============================================================================
 var inventoryBrowserModal = null;
 var inventoryItemsCache = [];
 var inventoryBrowserFiltered = [];
@@ -1829,7 +1783,6 @@ function openInventoryBrowser() {
   inventoryBrowserModal.show();
   fetchInventoryItems();
 
-  // Show/hide "Create Request" button based on context
   var footer = document.querySelector('#inventoryBrowserModal .modal-footer');
   if (footer) {
     var existingBtn = footer.querySelector('#btnInventoryCreateRequest');
@@ -1918,14 +1871,12 @@ function addInventoryItemToRequest(index) {
   var it = inventoryBrowserFiltered[index];
   if (!it) return;
 
-  // Add a new item row in step 5
   addStep5ItemRow();
   var container = document.getElementById('step5ItemsContainer');
   var rows = container.querySelectorAll('.step5-item-row');
   var lastRow = rows[rows.length - 1];
   if (!lastRow) return;
 
-  // Fill in the values
   var codeInput = lastRow.querySelector('.req-item-code');
   var searchInput = lastRow.querySelector('.req-item-search');
   var descInput = lastRow.querySelector('.req-item-desc');
@@ -1942,13 +1893,10 @@ function addInventoryItemToRequest(index) {
   }
   if (unitInput) unitInput.value = it.unit || 'PCS';
 
-  // Close modal
   if (inventoryBrowserModal) inventoryBrowserModal.hide();
 
-  // Show toast
   showToast('Added: ' + it.inventoryId, 'success');
 
-  // Enable next button
   validateStep5();
 }
 
@@ -1956,9 +1904,7 @@ function addInventoryItemToRequest(index) {
 function createRequestFromInventory() {
   if (inventoryBrowserModal) inventoryBrowserModal.hide();
   openNewRequest();
-  // Pre-fill items from selected inventory items
   setTimeout(function() {
-    // Items will be added when user proceeds to Step 5
     showToast('Start new request. Items will be available in Step 5.', 'info');
   }, 500);
 }
@@ -1990,25 +1936,18 @@ function addInventoryItemByData(item) {
 }
 
 function openInventoryQrScan() {
-  // Use the existing QR scanner but with inventory mode
   state.inventoryScanMode = true;
   openQrScanner();
 }
 
-// ============================================================================
-// WAREHOUSE NOTIFICATIONS
-// ============================================================================
-
 async function updateWarehouseKPIs() {
 try {
-// FIX: Use new getPendingDocCount to count only docs with PENDING items
 var sheetId = getCleanSheetId() || '';
 var url = API_URL + '?action=getPendingDocCount&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
 var res = await fetch(url, { redirect: 'follow' });
 var text = await res.text();
 var data;
 try { data = JSON.parse(text); } catch(e) { data = {}; }
-// NEW: Backend returns pendingCount, completedCount, totalCount
 var pendingCount = data.pendingCount || 0;
 var completedCount = data.completedCount || 0;
 var totalCount = data.totalCount || 0;
@@ -2018,13 +1957,9 @@ var kpiPending = document.getElementById('kpiPending');
 var kpiNotif = document.getElementById('kpiNotifications');
 var kpiCompleted = document.getElementById('kpiCompleted');
 
-// Active Docs = total MRIF docs
 if (kpiActive) kpiActive.textContent = totalCount;
-// Pending = docs with at least one PENDING item
 if (kpiPending) kpiPending.textContent = pendingCount;
-// Notifications = same as pending (docs needing attention)
 if (kpiNotif) kpiNotif.textContent = pendingCount;
-// Completed = fully processed docs (no pending items)
 if (kpiCompleted) kpiCompleted.textContent = completedCount;
 
 console.log('[KPI] Total:', totalCount, 'Pending:', pendingCount, 'Completed:', completedCount);
@@ -2039,7 +1974,6 @@ var res = await fetch(url);
 var data = await res.json();
 console.log('[WH Notifications] Response:', data);
 if (data.success && data.requests) {
-// FIX: Show last 7 days instead of just today, and include MRIF + MRS
 var today = new Date();
 var sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
 var currentMrifId = localStorage.getItem('sheetId_MRIF') || '';
@@ -2060,7 +1994,6 @@ var prevCount = parseInt(localStorage.getItem('ivm_whNotifCount') || '0');
 var newCount = filtered.length;
 localStorage.setItem('ivm_whNotifCount', newCount);
 
-// FIX: Show toast even on first notification
 if (newCount > prevCount) {
 var diff = newCount - prevCount;
 playSuccessBeep();
@@ -2075,10 +2008,8 @@ badge.classList.toggle('d-none', newCount === 0);
 btn.classList.toggle('d-none', false);
 }
 
-// FIX: Update ALL dashboard KPIs from single source of truth
 updateWarehouseKPIs();
 
-// Also render to modal list
 renderWarehouseNotifications(filtered);
 }
 } catch(e) {
@@ -2239,11 +2170,6 @@ if (badge) badge.classList.add('d-none');
 showToast('Notifications cleared', 'info');
 }
 
-
-// ============================================================================
-// MRIF PRINT PREVIEW — List & Print
-// ============================================================================
-
 async function openPendingMrifList() {
 if (state.isLoading) return;
 if (pendingMrifModal) pendingMrifModal.show();
@@ -2288,11 +2214,9 @@ el.innerHTML = '<div class="d-flex justify-content-between align-items-center">'
 el.querySelector('button').addEventListener('click', async function(e) {
 e.stopPropagation();
 if (pendingMrifModal) pendingMrifModal.hide();
-// FIX: Properly await selectModule to finish before loading document
 showToast('Loading ' + docNo + '...', 'info');
 try {
   await selectModule('MRIF');
-  // Now safe to load document
   await onDocSelect(docNo);
 } catch(err) {
   console.error('[Pending MRIF] Error loading doc:', err);
@@ -2302,10 +2226,6 @@ try {
 container.appendChild(el);
 });
 }
-
-// ============================================================================
-// MRR PRINT PREVIEW — List & Print (FIXED VERSION)
-// ============================================================================
 
 async function openMrrList() {
 if (state.isLoading) return;
@@ -2354,11 +2274,7 @@ container.appendChild(el);
 async function openMrrPrint(docNo) {
   if (state.isLoading) return;
   
-  // ─── FORCE CLEAR CACHE ───
-  // Clear any stored progress for this document
   localStorage.removeItem('ivm_progress_' + docNo);
-  
-  // Reset items array
   state.items = [];
   
   showLoading('Loading ' + docNo + '...');
@@ -2366,7 +2282,6 @@ async function openMrrPrint(docNo) {
     var sheetId = getCleanSheetId();
     console.log('[openMrrPrint] sheetId:', sheetId, 'docNo:', docNo);
     
-    // ─── ADD CACHE-BUSTING PARAMETER ───
     var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + 
               '&docType=MRR&sheetId=' + sheetId + '&_t=' + Date.now() + '&nocache=' + Math.random();
     console.log('[openMrrPrint] URL:', url);
@@ -2391,7 +2306,6 @@ async function openMrrPrint(docNo) {
       return;
     }
     
-    // ─── LOG THE ACTUAL DATA ───
     console.log('[openMrrPrint] ✅ Items found:', data.items ? data.items.length : 0);
     if (data.items && data.items.length > 0) {
       console.log('[openMrrPrint] First item:', JSON.stringify(data.items[0]));
@@ -2418,20 +2332,7 @@ async function openMrrPrint(docNo) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// FIXED: renderMrrPrint - Correct column mapping and DR No. display
-// ═══════════════════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════════════════
-// FIXED: renderMrrPrint - Matches Desired Format (Second Picture)
-// ═══════════════════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════════════════
-// FIXED: renderMrrPrint - NO QR COLUMN - Exactly 7 columns
-// Headers: ITEM NO. | ITEM CODE | ITEM DESCRIPTION | REQUESTED QUANTITY | RECEIVED QUANTITY | UNIT | REMARKS
-// ═══════════════════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════════════════
-// renderMrrPrint - CLEAN VERSION - Matches Google Sheet data exactly
-// ═══════════════════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════════════════
-// renderMrrPrint - EXACT 7 COLUMNS - No extra columns
+// renderMrrPrint - EXACT 7 COLUMNS - NO EXTRA COLUMNS
 // Headers: ITEM NO. | ITEM CODE | ITEM DESCRIPTION | REQUESTED QUANTITY | RECEIVED QUANTITY | UNIT | REMARKS
 // ═══════════════════════════════════════════════════════════════════════════
 function renderMrrPrint(docNo, info, items) {
@@ -2444,7 +2345,6 @@ function renderMrrPrint(docNo, info, items) {
   console.log('[renderMrrPrint] 📋 Doc No:', docNo);
   console.log('[renderMrrPrint] 📦 Items count:', items ? items.length : 0);
 
-  // ─── Extract info ───
   var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
   var vendor = info['Vendor/Client'] || info.vendor || info.client || '';
   var datePrepared = info['Date Prepared'] || info.datePrepared || '';
@@ -2453,7 +2353,6 @@ function renderMrrPrint(docNo, info, items) {
   var receivingDate = info['Receiving Date'] || info.receivingDate || '';
   var preparedBy = info['Prepared By'] || info.preparedBy || '';
 
-  // ─── Format date ───
   function formatDate(val) {
     if (!val || val === '') return '';
     try {
@@ -2469,7 +2368,6 @@ function renderMrrPrint(docNo, info, items) {
   var dateStr = formatDate(datePrepared) || formatDate(new Date());
   var recDateStr = formatDate(receivingDate) || dateStr;
 
-  // ─── Filter valid items - EXACT 7 columns ───
   var validItems = [];
   if (items && items.length > 0) {
     for (var i = 0; i < items.length; i++) {
@@ -2495,13 +2393,11 @@ function renderMrrPrint(docNo, info, items) {
 
   console.log('[renderMrrPrint] ✅ Valid items:', validItems.length);
 
-  // ─── Build items HTML - EXACT 7 columns ───
   var itemsHtml = '';
   if (validItems.length > 0) {
     for (var i = 0; i < validItems.length; i++) {
       var it = validItems[i];
       
-      // Get EXACTLY the 7 fields we need
       var code = it.itemCode || it.inventoryId || it.code || '';
       var desc = it.description || it.desc || it.itemDescription || '';
       var recQty = it.recQty || it.expectedQty || it.requestedQty || it.qty || 0;
@@ -2509,7 +2405,6 @@ function renderMrrPrint(docNo, info, items) {
       var unit = it.unit || it.uom || 'PCS';
       var remarks = it.remarks || it.status || '';
       
-      // Auto-determine remarks
       if (remarks === 'PENDING' || remarks === '') {
         if (atlQty >= recQty && recQty > 0) {
           remarks = 'COMPLETE';
@@ -2518,9 +2413,6 @@ function renderMrrPrint(docNo, info, items) {
         }
       }
 
-      console.log('[renderMrrPrint] Row ' + (i+1) + ': ' + code + ' | ' + desc + ' | Qty: ' + recQty + ' | ATL: ' + atlQty + ' | Unit: ' + unit + ' | Remarks: ' + remarks);
-
-      // EXACTLY 7 columns - NO extra columns
       itemsHtml += '<tr>' +
         '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;width:6%;">' + (i + 1) + '</td>' +
         '<td style="text-align:center;border:1.5px solid #000;padding:4px 6px;width:18%;font-family:Courier New,monospace;">' + code + '</td>' +
@@ -2535,20 +2427,16 @@ function renderMrrPrint(docNo, info, items) {
     itemsHtml = '<tr><td colspan="7" style="text-align:center;padding:20px;color:#999;border:1.5px solid #000;">No items found</td></tr>';
   }
 
-  // ─── NO FURTHER ENTRIES ───
   itemsHtml += '<tr>' +
     '<td colspan="7" style="text-align:center;font-weight:bold;font-size:7.5pt;padding:6px;border:1.5px solid #000;letter-spacing:1px;background:#f9f9f9;">' +
     '******************** NO FURTHER ENTRIES BELOW THIS LINE ********************' +
     '</td>' +
     '</tr>';
 
-  // ─── QR code ───
   var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=' + encodeURIComponent(docNo);
 
-  // ─── COMPLETE HTML - EXACT 7 columns ───
   var html = '<div style="width:8.5in;min-height:11in;margin:0 auto;background:#fff;padding:0.25in 0.35in;font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#000;line-height:1.3;box-sizing:border-box;">' +
 
-    // HEADER
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">' +
       '<div>' +
         '<div style="font-size:16pt;font-weight:bold;letter-spacing:2px;color:#1a3a5c;">GEMCOR</div>' +
@@ -2565,10 +2453,8 @@ function renderMrrPrint(docNo, info, items) {
       '</div>' +
     '</div>' +
 
-    // TITLE
     '<div style="text-align:center;font-size:12pt;font-weight:bold;letter-spacing:5px;margin:6px 0 12px 0;text-transform:uppercase;">MATERIALS RECEIVING REPORT</div>' +
 
-    // META TABLE
     '<table style="width:100%;border-collapse:collapse;margin-bottom:10px;font-size:8pt;">' +
       '<tr>' +
         '<td style="font-weight:bold;width:22%;padding:2px 4px 2px 0;vertical-align:top;">RECEIVING SITE:</td>' +
@@ -2590,7 +2476,6 @@ function renderMrrPrint(docNo, info, items) {
       '</tr>' +
     '</table>' +
 
-    // ITEMS TABLE - EXACT 7 COLUMNS
     '<table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:8pt;">' +
       '<thead>' +
         '<tr>' +
@@ -2606,7 +2491,6 @@ function renderMrrPrint(docNo, info, items) {
       '<tbody>' + itemsHtml + '</tbody>' +
     '</table>' +
 
-    // CHECKBOXES
     '<div style="font-size:7pt;margin-top:8px;margin-bottom:12px;">' +
       '<div style="font-weight:bold;font-size:7pt;letter-spacing:0.5px;margin-bottom:2px;text-transform:uppercase;">ISSUES IN SUPPLIER PERFORMANCE:</div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:2px 16px;padding-left:2px;">' +
@@ -2624,7 +2508,6 @@ function renderMrrPrint(docNo, info, items) {
       '</div>' +
     '</div>' +
 
-    // SIGNATURES
     '<div style="display:flex;justify-content:center;gap:40px;margin-top:20px;text-align:center;">' +
       '<div style="width:26%;min-width:120px;">' +
         '<div style="font-size:9pt;font-weight:bold;text-transform:uppercase;min-height:18px;letter-spacing:0.5px;">' + preparedBy + '</div>' +
@@ -2647,6 +2530,7 @@ function renderMrrPrint(docNo, info, items) {
   container.innerHTML = html;
   console.log('[renderMrrPrint] ✅ Rendered successfully - EXACT 7 columns');
 }
+
 function printMrr() {
   var previewContent = document.getElementById('mrrPrintContent');
   if (!previewContent) {
@@ -2659,7 +2543,6 @@ function printMrr() {
     return;
   }
 
-  // Build complete standalone HTML with ALL styles inline
   var printStyles =
     '@page { size: letter portrait; margin: 0.25in; }' +
     '* { box-sizing: border-box; }' +
@@ -2701,7 +2584,6 @@ function printMrr() {
     '<html><head><meta charset="utf-8"><title>MRR Print</title><style>' + printStyles + '</style></head>' +
     '<body>' + sheetHtml + '</body></html>';
 
-  // Use hidden iframe for reliable printing (no popup blockers, no Bootstrap interference)
   var iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.top = '-9999px';
@@ -2716,7 +2598,6 @@ function printMrr() {
   doc.write(fullHtml);
   doc.close();
 
-  // Wait for images to load then print
   setTimeout(function() {
     try {
       iframe.contentWindow.focus();
@@ -2725,7 +2606,6 @@ function printMrr() {
       console.error('Print error:', e);
       showToast('Print failed. Try again.', 'danger');
     }
-    // Clean up iframe after print dialog
     setTimeout(function() {
       if (iframe.parentNode) {
         document.body.removeChild(iframe);
@@ -2808,7 +2688,7 @@ async function openMrifPrint(docNo) {
       return;
     }
     if (!data.items || data.items.length === 0) {
-      console.warn('[openMrifPrint] No items found for ' + docNo, data.debug);
+      console.warn('[openMrifPrint] No items found for ' + docNo);
       showToast('Warning: No items found in this document', 'warning');
     }
     renderMrifPrint(docNo, data.info || {}, data.items || []);
@@ -2839,7 +2719,6 @@ function renderMrifPrint(docNo, info, items) {
   var client = info['Client Name'] || info.clientName || info.client || '';
   var project = info.Project || info.project || '';
 
-  // Format date nicely
   var dateStr = dateRaw;
   try {
     var d = new Date(dateRaw);
@@ -2875,9 +2754,7 @@ function renderMrifPrint(docNo, info, items) {
     itemsHtml += '<tr><td class="td-center" colspan="7" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
   }
 
-  // Add 1 empty row after data for spacing
   itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
-
 
   var mrifQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
@@ -2958,7 +2835,6 @@ function printMrif() {
     return;
   }
 
-  // Build complete standalone HTML with ALL MRIF print styles inline
   var printStyles =
     '@page { size: letter portrait; margin: 0.3in; }' +
     '* { box-sizing: border-box; }' +
@@ -2994,7 +2870,6 @@ function printMrif() {
     '<html><head><meta charset="utf-8"><title>MRIF Print</title><style>' + printStyles + '</style></head>' +
     '<body>' + sheetHtml + '</body></html>';
 
-  // Use hidden iframe for reliable printing
   var iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.top = '-9999px';
@@ -3029,10 +2904,6 @@ function closeMrifPrint() {
 if (mrifPrintModal) mrifPrintModal.hide();
 }
 
-
-// ============================================================================
-// AUTO-NAVIGATE FROM SCANNED QR CODE (?doc= parameter)
-// ============================================================================
 function checkUrlDocParam() {
   var params = new URLSearchParams(window.location.search);
   var docNo = params.get('doc');
@@ -3040,23 +2911,18 @@ function checkUrlDocParam() {
 
   console.log('[QR Scan] Detected doc parameter:', docNo);
 
-  // Determine doc type from prefix
   var docType = 'MRIF';
   if (docNo.indexOf('MRR') === 0) docType = 'MRR';
   else if (docNo.indexOf('MRS') === 0) docType = 'MRS';
 
-  // Clean URL (remove ?doc= parameter) without reloading
   if (window.history.replaceState) {
     window.history.replaceState({}, document.title, window.location.pathname);
   }
 
-  // Show loading
   showLoading('Opening ' + docNo + '...');
 
-  // For warehouse mode, auto-select module and load document
   var role = localStorage.getItem('ivm_userRole');
   if (role === 'warehouse') {
-    // Switch to appropriate module
     selectModule(docType).then(function() {
       setTimeout(function() {
         onDocSelect(docNo);
@@ -3068,7 +2934,6 @@ function checkUrlDocParam() {
       showToast('Could not open document: ' + docNo, 'warning');
     });
   } else {
-    // Production mode - just show the document info
     hideLoading();
     showToast('Document ' + docNo + ' scanned. Switch to Warehouse mode to process.', 'info');
   }
@@ -3076,8 +2941,6 @@ function checkUrlDocParam() {
 
 document.addEventListener('DOMContentLoaded', () => {
 initRole();
-// Set default receiving date for MRR
 document.getElementById('mrrReceivingDate').valueAsDate = new Date();
-// Check for ?doc= parameter in URL (scanned QR code)
 setTimeout(checkUrlDocParam, 1500);
 });
