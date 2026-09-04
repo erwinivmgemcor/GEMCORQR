@@ -800,7 +800,6 @@ document.getElementById('modalExpectedQty').value = item.qty;
 document.getElementById('modalInputLabel').textContent = isMRR ? 'ATL QTY (Received)' : (isMRS ? 'ATL QTY (Actual Returned)' : 'Enter Issued Qty');
 document.getElementById('modalInputQty').value = item.qty;
 
-// ─── Populate unit dropdown ───
 var unitSelect = document.getElementById('modalUnit');
 unitSelect.innerHTML = buildUnitOptions(item.unit || 'PIECE');
 
@@ -834,7 +833,6 @@ input.classList.add('is-invalid');
 playErrorBuzz();
 return;
 }
-// ─── Get selected unit ───
 var unitSelect = document.getElementById('modalUnit');
 var selectedUnit = unitSelect.value || 'PIECE';
 
@@ -1166,7 +1164,6 @@ function filterStep5Items(input, idx) {
         input.value = code + ' - ' + desc;
         document.getElementById('step5Code' + idx).value = code;
         document.getElementById('step5Desc' + idx).value = desc;
-        // Set unit dropdown
         var unitSelect = input.closest('.step5-item-row').querySelector('.req-unit');
         if (unitSelect && unitSelect.querySelector('option[value="' + unit + '"]')) {
           unitSelect.value = unit;
@@ -1842,7 +1839,7 @@ async function submitManualMrr() {
 }
 
 // ============================================================================
-// INVENTORY BROWSER (Production New Request)
+// INVENTORY BROWSER (Production New Request) - SIMPLIFIED: QR, ITEM CODE, DESCRIPTION only
 // ============================================================================
 var inventoryBrowserModal = null;
 var inventoryItemsCache = [];
@@ -1855,26 +1852,12 @@ function openInventoryBrowser() {
   document.getElementById('inventorySearchInput').value = '';
   inventoryBrowserModal.show();
   fetchInventoryItems();
-
-  var footer = document.querySelector('#inventoryBrowserModal .modal-footer');
-  if (footer) {
-    var existingBtn = footer.querySelector('#btnInventoryCreateRequest');
-    if (!existingBtn) {
-      var createBtn = document.createElement('button');
-      createBtn.id = 'btnInventoryCreateRequest';
-      createBtn.className = 'btn btn-success';
-      createBtn.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Create Request with Selected';
-      createBtn.onclick = function() { createRequestFromInventory(); };
-      createBtn.style.display = 'none';
-      footer.insertBefore(createBtn, footer.firstChild);
-    }
-  }
 }
 
 async function fetchInventoryItems() {
   var tbody = document.getElementById('inventoryBrowserBody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading inventory...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="3" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading inventory...</td></tr>';
 
   try {
     var sheetId = getCleanSheetId();
@@ -1889,11 +1872,11 @@ async function fetchInventoryItems() {
       inventoryBrowserFiltered = data.items;
       renderInventoryItems();
     } else {
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">' + (data.error || 'No items found') + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">' + (data.error || 'No items found') + '</td></tr>';
     }
   } catch(err) {
     console.error('[fetchInventoryItems] Error:', err);
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Failed to load inventory</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-3">Failed to load inventory</td></tr>';
   }
 }
 
@@ -1902,7 +1885,7 @@ function renderInventoryItems() {
   if (!tbody) return;
 
   if (inventoryBrowserFiltered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No items match your search</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No items match your search</td></tr>';
     return;
   }
 
@@ -1914,13 +1897,6 @@ function renderInventoryItems() {
       '<td class="align-middle text-center"><img src="' + qrUrl + '" style="width:36px;height:36px;" alt="QR"></td>' +
       '<td class="align-middle"><code>' + it.inventoryId + '</code></td>' +
       '<td class="align-middle">' + it.description + '</td>' +
-      '<td class="align-middle text-center">' + (it.onHand || '0') + '</td>' +
-      '<td class="align-middle text-center">' + (it.unit || 'PCS') + '</td>' +
-      '<td class="align-middle text-center">' +
-        '<button class="btn btn-sm btn-success" onclick="addInventoryItemToRequest(' + i + ')" title="Add to request">' +
-          '<i class="bi bi-plus-lg"></i>' +
-        '</button>' +
-      '</td>' +
       '</tr>';
   }
   tbody.innerHTML = html;
@@ -1933,90 +1909,15 @@ function filterInventoryItems() {
   } else {
     inventoryBrowserFiltered = inventoryItemsCache.filter(function(it) {
       return (it.inventoryId && it.inventoryId.toLowerCase().indexOf(query) !== -1) ||
-             (it.description && it.description.toLowerCase().indexOf(query) !== -1) ||
-             (it.itemClass && it.itemClass.toLowerCase().indexOf(query) !== -1);
+             (it.description && it.description.toLowerCase().indexOf(query) !== -1);
     });
   }
   renderInventoryItems();
 }
 
-function addInventoryItemToRequest(index) {
-  var it = inventoryBrowserFiltered[index];
-  if (!it) return;
-
-  addStep5ItemRow();
-  var container = document.getElementById('step5ItemsContainer');
-  var rows = container.querySelectorAll('.step5-item-row');
-  var lastRow = rows[rows.length - 1];
-  if (!lastRow) return;
-
-  var codeInput = lastRow.querySelector('.req-item-code');
-  var searchInput = lastRow.querySelector('.req-item-search');
-  var descInput = lastRow.querySelector('.req-item-desc');
-  var qtyInput = lastRow.querySelector('.req-qty');
-  var unitSelect = lastRow.querySelector('.req-unit');
-
-  if (codeInput) codeInput.value = it.inventoryId;
-  if (searchInput) searchInput.value = it.inventoryId + ' - ' + it.description;
-  if (descInput) descInput.value = it.description;
-  if (qtyInput) {
-    qtyInput.value = 1;
-    qtyInput.focus();
-    qtyInput.select();
-  }
-  if (unitSelect && unitSelect.querySelector('option[value="' + (it.unit || 'PIECE') + '"]')) {
-    unitSelect.value = it.unit || 'PIECE';
-  }
-
-  if (inventoryBrowserModal) inventoryBrowserModal.hide();
-
-  showToast('Added: ' + it.inventoryId, 'success');
-  validateStep5();
-}
-
-function createRequestFromInventory() {
-  if (inventoryBrowserModal) inventoryBrowserModal.hide();
-  openNewRequest();
-  setTimeout(function() {
-    showToast('Start new request. Items will be available in Step 5.', 'info');
-  }, 500);
-}
-
-function addInventoryItemByData(item) {
-  if (!item) return;
-  addStep5ItemRow();
-  var container = document.getElementById('step5ItemsContainer');
-  var rows = container.querySelectorAll('.step5-item-row');
-  var lastRow = rows[rows.length - 1];
-  if (!lastRow) return;
-  var codeInput = lastRow.querySelector('.req-item-code');
-  var searchInput = lastRow.querySelector('.req-item-search');
-  var descInput = lastRow.querySelector('.req-item-desc');
-  var qtyInput = lastRow.querySelector('.req-qty');
-  var unitSelect = lastRow.querySelector('.req-unit');
-  if (codeInput) codeInput.value = item.inventoryId;
-  if (searchInput) searchInput.value = item.inventoryId + ' - ' + item.description;
-  if (descInput) descInput.value = item.description;
-  if (qtyInput) {
-    qtyInput.value = 1;
-    qtyInput.focus();
-    qtyInput.select();
-  }
-  if (unitSelect && unitSelect.querySelector('option[value="' + (item.unit || 'PIECE') + '"]')) {
-    unitSelect.value = item.unit || 'PIECE';
-  }
-  if (inventoryBrowserModal) inventoryBrowserModal.hide();
-  showToast('Added: ' + item.inventoryId, 'success');
-  validateStep5();
-}
-
 function openInventoryQrScan() {
   state.inventoryScanMode = true;
   openQrScanner();
-}
-
-function validateStep5() {
-  checkStep5Items();
 }
 
 // ============================================================================
