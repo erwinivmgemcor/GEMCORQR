@@ -1103,7 +1103,7 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
-   INVENTORY BROWSER MODAL
+   INVENTORY BROWSER MODAL - SIMPLIFIED: QR, ITEM CODE, DESCRIPTION only
    ═══════════════════════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="inventoryBrowserModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -1114,32 +1114,24 @@
       </div>
       <div class="modal-body">
         <div class="row g-2 mb-3">
-          <div class="col-12 col-md-8">
+          <div class="col-12">
             <div class="input-group">
               <span class="input-group-text"><i class="bi bi-search"></i></span>
               <input type="text" class="form-control" id="inventorySearchInput" placeholder="Search item code or description..." oninput="filterInventoryItems()">
             </div>
-          </div>
-          <div class="col-12 col-md-4">
-            <button class="btn btn-outline-primary w-100" onclick="openInventoryQrScan()">
-              <i class="bi bi-qr-code-scan me-1"></i>Scan Item QR
-            </button>
           </div>
         </div>
         <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
           <table class="table table-sm table-hover" id="inventoryBrowserTable">
             <thead class="table-light sticky-top">
               <tr>
-                <th style="width:8%">QR</th>
-                <th style="width:22%">Item Code</th>
-                <th style="width:40%">Description</th>
-                <th style="width:12%">On-Hand</th>
-                <th style="width:10%">Unit</th>
-                <th style="width:8%">Action</th>
+                <th style="width:10%">QR</th>
+                <th style="width:30%">ITEM CODE</th>
+                <th style="width:60%">DESCRIPTION</th>
               </tr>
             </thead>
             <tbody id="inventoryBrowserBody">
-              <tr><td colspan="6" class="text-center text-muted py-3">Loading inventory...</td></tr>
+              <tr><td colspan="3" class="text-center text-muted py-3">Loading inventory...</td></tr>
             </tbody>
           </table>
         </div>
