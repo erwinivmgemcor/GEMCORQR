@@ -305,27 +305,55 @@ body {
 .status-completed { background: #d1fae5; color: #065f46; }
 .status-served { background: #d1fae5; color: #065f46; }
 
+/* ─── Navbar / Header ─── */
+.navbar.navbar-dark {
+  background: var(--gemcor-blue) !important;
+}
+
+.navbar.navbar-dark .navbar-brand {
+  color: #fff !important;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.navbar.navbar-dark .navbar-brand i {
+  color: var(--gemcor-green-light);
+  margin-right: 6px;
+}
+
+.navbar.navbar-dark .btn {
+  color: #fff !important;
+}
+
+.navbar.navbar-dark .badge {
+  background: rgba(255,255,255,0.2) !important;
+  color: #fff !important;
+}
+
 /* ─── PIN Dots ─── */
 .pin-dots {
   display: flex;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   margin: 16px 0;
 }
 
 .pin-dot {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  border: 2px solid var(--gemcor-gray);
+  border: 2.5px solid var(--gemcor-gray);
   background: transparent;
-  transition: var(--gemcor-transition);
+  transition: all 0.2s ease;
+  display: inline-block;
+  flex-shrink: 0;
 }
 
 .pin-dot.filled {
   background: var(--gemcor-blue);
   border-color: var(--gemcor-blue);
-  box-shadow: 0 0 8px rgba(30,58,95,0.3);
+  box-shadow: 0 0 10px rgba(30,58,95,0.4);
+  transform: scale(1.1);
 }
 
 /* ─── Scanner ─── */
@@ -431,38 +459,136 @@ body {
 }
 
 /* ─── Wizard ─── */
+.wizard-steps {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
 .wizard-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  opacity: 0.4;
+  transition: var(--gemcor-transition);
+}
+
+.wizard-step.active {
+  opacity: 1;
+}
+
+.wizard-step.completed {
+  opacity: 0.7;
+}
+
+.wizard-step .step-number {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--gemcor-border);
+  color: var(--gemcor-gray);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  transition: var(--gemcor-transition);
+}
+
+.wizard-step.active .step-number {
+  background: var(--gemcor-blue);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(30,58,95,0.15);
+}
+
+.wizard-step.completed .step-number {
+  background: var(--gemcor-green);
+  color: #fff;
+}
+
+.wizard-step .step-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #1e3a5f !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.wizard-step.active .step-label {
+  color: var(--gemcor-blue) !important;
+  font-weight: 700;
+}
+
+.wizard-step.completed .step-label {
+  color: var(--gemcor-green) !important;
+}
+
+.wizard-panel {
   display: none;
   animation: fadeIn 0.3s ease;
 }
 
-.wizard-step.active {
+.wizard-panel.active {
   display: block;
+}
+
+/* ─── Document Type Cards (MRIF / MRS) ─── */
+.doc-type-card {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  padding: 20px;
+  background: #fff;
+}
+
+.doc-type-card:hover {
+  border-color: var(--gemcor-blue);
+  background: #f0f4f8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(30,58,95,0.12);
+}
+
+.doc-type-card.selected {
+  border-color: var(--gemcor-blue);
+  background: #e8f0fe;
+  box-shadow: 0 0 0 3px rgba(30,58,95,0.1);
+}
+
+.doc-type-card .doc-type-icon {
+  font-size: 2rem;
+  margin-bottom: 8px;
+  color: var(--gemcor-blue);
+  transition: transform 0.2s ease;
+}
+
+.doc-type-card:hover .doc-type-icon {
+  transform: scale(1.1);
+}
+
+.doc-type-card .doc-type-title {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--gemcor-dark);
+  margin-bottom: 4px;
+}
+
+.doc-type-card .doc-type-subtitle {
+  font-size: 0.85rem;
+  color: var(--gemcor-gray);
+}
+
+.doc-type-card .doc-type-desc {
+  font-size: 0.8rem;
+  color: var(--gemcor-gray);
+  margin-top: 4px;
 }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-.wizard-progress {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 20px;
-}
-
-.wizard-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--gemcor-border);
-  transition: var(--gemcor-transition);
-}
-
-.wizard-dot.active {
-  background: var(--gemcor-blue);
-  transform: scale(1.2);
 }
 
 /* ─── Production Banner ─── */
@@ -1020,55 +1146,84 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MRR PRINT MEDIA — PROPER ISOLATED PRINTING
+   MRR PRINT MEDIA — IFRAME PRINTING (reliable, no Bootstrap interference)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 @media print {
   @page { size: letter portrait; margin: 0.25in; }
+}
 
-  /* Hide everything on the page */
-  body > * { display: none !important; }
+/* ─── Manual MRR Modal ─── */
+#manualMrrModal .modal-header {
+  background: var(--gemcor-green);
+}
 
-  /* Show only the print container */
-  #mrrPrintOnly {
-    display: block !important;
-    position: static;
-    width: 100%;
-    margin: 0;
-    padding: 0;
-  }
+#manualMrrModal .form-label {
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+}
 
-  #mrrPrintOnly * {
-    visibility: visible !important;
-    display: initial;
-  }
+#manualMrrItemsTable input.form-control-sm {
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+}
 
-  /* Reset any modal/bootstrap interference */
-  #mrrPrintOnly .mrr-print-sheet {
-    width: 100%;
-    padding: 0.15in;
-    margin: 0;
-    box-shadow: none;
-    page-break-after: avoid;
-    font-size: 9pt;
-  }
+#manualMrrItemsTable .btn-outline-danger {
+  padding: 0.15rem 0.4rem;
+  font-size: 0.75rem;
+}
 
-  #mrrPrintOnly .mrr-logo img { height: 42px; }
-  #mrrPrintOnly .mrr-doc-qr img { width: 70px; height: 70px; }
-  #mrrPrintOnly .mrr-title { font-size: 11pt; margin: 6px 0 10px 0; }
-  #mrrPrintOnly .mrr-meta-table { margin-bottom: 10px; }
-  #mrrPrintOnly .mrr-meta-label { font-size: 7.5pt; }
-  #mrrPrintOnly .mrr-meta-value { font-size: 8pt; padding: 3px 5px; }
-  #mrrPrintOnly .mrr-meta-label-right { font-size: 7.5pt; }
-  #mrrPrintOnly .mrr-meta-value-right { font-size: 8pt; padding: 3px 5px; }
-  #mrrPrintOnly .mrr-items { font-size: 8pt; }
-  #mrrPrintOnly .mrr-items th { font-size: 7.5pt; }
-  #mrrPrintOnly .mrr-checkboxes { font-size: 7pt; }
-  #mrrPrintOnly .mrr-cb-title { font-size: 7pt; }
-  #mrrPrintOnly .mrr-cb-item { font-size: 7pt; }
-  #mrrPrintOnly .mrr-sigs { gap: 40px; margin-top: 18px; }
-  #mrrPrintOnly .mrr-sig { width: 28%; }
-  #mrrPrintOnly .mrr-sig-name { font-size: 9pt; }
-  #mrrPrintOnly .mrr-sig-line { height: 16px; }
-  #mrrPrintOnly .mrr-sig-label { font-size: 8pt; }
+.manual-mrr-code {
+  font-family: "Courier New", monospace;
+  font-weight: 600;
+}
+
+/* ─── Inventory Browse Card ─── */
+.inventory-browse-card {
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.inventory-browse-card:hover {
+  border-color: var(--gemcor-green);
+  background: #f0f8f5;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(46,139,87,0.12);
+}
+
+/* ─── Inventory Browser Modal ─── */
+#inventoryBrowserModal .modal-header {
+  background: var(--gemcor-blue);
+}
+
+#inventoryBrowserModal .table-responsive {
+  border-radius: 8px;
+  border: 1px solid var(--gemcor-border);
+}
+
+#inventoryBrowserModal thead th {
+  background: #f8f9fa;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 10px;
+}
+
+#inventoryBrowserModal tbody td {
+  font-size: 0.85rem;
+  padding: 6px 10px;
+  vertical-align: middle;
+}
+
+#inventoryBrowserModal tbody tr:hover {
+  background: #f0f4f8;
+}
+
+#inventoryBrowserModal code {
+  font-size: 0.8rem;
+  background: #e8f0fe;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--gemcor-blue);
 }
