@@ -2304,7 +2304,7 @@ container.appendChild(el);
 }
 
 // ============================================================================
-// MRR PRINT PREVIEW — List & Print (FIXED: 7-column layout with REMARKS spanning G:H)
+// MRR PRINT PREVIEW — List & Print (FIXED: displays DR No and RECEIVED QTY)
 // ============================================================================
 
 async function openMrrList() {
@@ -2397,19 +2397,26 @@ function renderMrrPrint(docNo, info, items) {
 var container = document.getElementById('mrrPrintContent');
 if (!container) return;
 
-console.log('[renderMrrPrint] Items count:', items ? items.length : 0, 'Items:', items);
-console.log('[renderMrrPrint] Info:', JSON.stringify(info));
+console.log('[renderMrrPrint] ==================== START ====================');
+console.log('[renderMrrPrint] docNo:', docNo);
+console.log('[renderMrrPrint] Info object:', JSON.stringify(info, null, 2));
+console.log('[renderMrrPrint] Items count:', items ? items.length : 0);
+if (items && items.length > 0) {
+  console.log('[renderMrrPrint] First item:', JSON.stringify(items[0], null, 2));
+}
+console.log('[renderMrrPrint] ================================================');
 
 // Extract info with fallbacks - matching new 7-column structure
 var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
 var vendor = info['Vendor/Client'] || info.vendor || info.client || '';
 var datePrepared = info['Date Prepared'] || info.datePrepared || '';
 var poNo = info['PO No.'] || info.poNo || '';
-var drNo = info['DR No.'] || info.drNo || info['DR No / SI No.'] || info.dr || '';
+// CRITICAL FIX: DR No - try multiple possible keys
+var drNo = info['DR No.'] || info['DR No / SI No.'] || info['DR No'] || info.drNo || info['D.R. No.'] || info.dr || '';
 var receivingDate = info['Receiving Date'] || info.receivingDate || '';
 var preparedBy = info['Prepared By'] || info.preparedBy || '';
 
-console.log('[renderMrrPrint] DR No. extracted:', drNo);
+console.log('[renderMrrPrint] Extracted DR No.:', drNo);
 
 // Format dates
 function formatDate(val) {
@@ -2431,17 +2438,20 @@ function formatDate(val) {
 var dateStr = formatDate(datePrepared);
 var recDateStr = formatDate(receivingDate);
 
-// Build items HTML with 7-column structure (REMARKS spans G:H)
+// Build items HTML with 7-column structure
 var itemsHtml = '';
 if (items && items.length > 0) {
   items.forEach(function(it, idx) {
     var code = it.itemCode || it.inventoryId || it.code || it.id || '';
     var desc = it.description || it.desc || it.itemDescription || '';
     var recQty = it.recQty || it.expectedQty || it.qty || it.quantity || 0;
-    // RECEIVED QTY = ATL QTY (actual quantity received)
+    // CRITICAL FIX: RECEIVED QTY = ATL QTY (actual quantity received)
     var receivedQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
     var unit = it.unit || it.uom || 'PIECE';
     var remarks = it.remarks || it.status || it.note || '';
+    
+    console.log('[renderMrrPrint] Item ' + (idx+1) + ' - code: ' + code + ', recQty: ' + recQty + ', receivedQty: ' + receivedQty);
+    
     var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
     itemsHtml += '<tr>' +
       '<td class="td-center" style="width:5%">' + (idx + 1) + '</td>' +
@@ -2542,7 +2552,8 @@ var html = '<div class="mrr-print-sheet">' +
 '</div>';
 
 container.innerHTML = html;
-console.log('[renderMrrPrint] HTML rendered with DR No.:', drNo);
+console.log('[renderMrrPrint] HTML rendered. DR No displayed:', drNo);
+console.log('[renderMrrPrint] ==================== END ====================');
 }
 
 function printMrr() {
