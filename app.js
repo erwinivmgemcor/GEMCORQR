@@ -5,10 +5,16 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
 const DEFAULT_PIN = '0000';
 
+// ─── Unit Options for dropdowns ───
+const UNIT_OPTIONS = [
+  'ASSEMB', 'BOX', 'CAN', 'GAL', 'KG', 'LENGTH', 'LITERS',
+  'METER', 'MM', 'PAIR', 'PIECE', 'REAM', 'ROLL', 'SET',
+  'SHEET', 'TANK', 'UNIT'
+];
+
 // ─── Helper: Clean document number (remove suffix like -after-sales) ───
 function cleanDocNo(docNo) {
   if (!docNo) return '';
-  // Remove any -suffix at the end (e.g., MRIF0020760-after-sales → MRIF0020760)
   return docNo.replace(/-\w+$/, '').replace(/-\w+-\w+$/, '');
 }
 
@@ -53,6 +59,16 @@ const roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
 const productionNameModal = new bootstrap.Modal(document.getElementById('productionNameModal'));
 state.poScanModal = new bootstrap.Modal(document.getElementById('poScanModal'));
 state.poItemsModal = new bootstrap.Modal(document.getElementById('poItemsModal'));
+
+// ─── Helper: Build unit dropdown options ───
+function buildUnitOptions(selected) {
+  var html = '';
+  UNIT_OPTIONS.forEach(function(u) {
+    var sel = (u === selected) ? ' selected' : '';
+    html += '<option value="' + u + '"' + sel + '>' + u + '</option>';
+  });
+  return html;
+}
 
 function showLoading(text) {
 state.isLoading = true;
@@ -369,12 +385,10 @@ document.getElementById('moduleLabel').textContent = mod;
 updateLabels();
 changeDocument();
 await fetchPendingDocs();
-// Show/hide MRIF List button
 var mrifCard = document.getElementById('mrifListCard');
 if (mrifCard) {
 mrifCard.classList.toggle('d-none', mod !== 'MRIF');
 }
-// Show/hide MRR List button
 var mrrCard = document.getElementById('mrrListCard');
 if (mrrCard) {
 mrrCard.classList.toggle('d-none', mod !== 'MRR');
@@ -532,6 +546,7 @@ inventoryId: it.inventoryId || it.code || it.itemCode || '',
 description: it.description || it.desc || '',
 qty: Number(it.qty || it.requestedQty || it.expectedQty || 0),
 issuedQty: Number(it.issuedQty || it.actualQty || 0),
+unit: it.unit || 'PIECE',
 rowIndex: it.rowIndex || (idx + 13),
 verified: false
 }));
@@ -552,6 +567,7 @@ tr.className = 'item-row' + (item.verified ? ' verified' : '');
 tr.innerHTML = '<td><div class="fw-bold small">' + item.inventoryId + '</div><div class="text-muted small">' + item.description + '</div></td>' +
 '<td class="text-center">' + item.qty + '</td>' +
 '<td class="text-center fw-bold">' + (item.verified ? item.issuedQty : '-') + '</td>' +
+'<td class="text-center">' + (item.unit || 'PIECE') + '</td>' +
 '<td>' + getStatusBadge(item) + '</td>';
 tbody.appendChild(tr);
 });
@@ -604,7 +620,6 @@ if (state.html5QrCode) { state.html5QrCode.stop().catch(()=>{}); state.html5QrCo
 function onScanSuccess(decodedText) {
 clearErrorAlert();
 
-// NEW: Detect URL with ?doc= parameter (scanned from production QR)
 var urlDocMatch = decodedText.match(/[?&]doc=([^&\s]+)/);
 if (urlDocMatch) {
   var extractedDoc = decodeURIComponent(urlDocMatch[1]);
@@ -690,7 +705,6 @@ state.quickScanner = null;
 }
 quickScanModal.hide();
 
-// 1. Document QR pattern
 const docPattern = /^(MRIF|MRR|MRS)\d{6,}$/i;
 if (docPattern.test(decodedText)) {
 const mod = decodedText.substring(0, 4).toUpperCase();
@@ -703,7 +717,6 @@ return;
 }
 }
 
-// 2. Try as PO Number (for MRR creation)
 const poResult = await lookupPoFromScan(decodedText);
 if (poResult && poResult.success) {
 playSuccessBeep();
@@ -717,7 +730,6 @@ state.poItemsModal.show();
 return;
 }
 
-// 3. Item QR (existing document)
 if (state.currentDoc && state.items.length > 0) {
 const item = state.items.find(i => i.inventoryId.toLowerCase() === decodedText.toLowerCase());
 if (item) {
@@ -776,8 +788,6 @@ function closePoItemsModal() {
 state.poItemsModal.hide();
 }
 
-
-
 let currentModalItem = null;
 function openQtyModal(item) {
 currentModalItem = item;
@@ -789,6 +799,11 @@ document.getElementById('modalExpectedLabel').textContent = isMRR ? 'REC. QTY' :
 document.getElementById('modalExpectedQty').value = item.qty;
 document.getElementById('modalInputLabel').textContent = isMRR ? 'ATL QTY (Received)' : (isMRS ? 'ATL QTY (Actual Returned)' : 'Enter Issued Qty');
 document.getElementById('modalInputQty').value = item.qty;
+
+// ─── Populate unit dropdown ───
+var unitSelect = document.getElementById('modalUnit');
+unitSelect.innerHTML = buildUnitOptions(item.unit || 'PIECE');
+
 document.getElementById('modalHint').textContent = isMRR ? 'MRR Mode: You may receive any quantity.' : (isMRS ? 'MRS Mode: Returned qty cannot exceed expected.' : 'MRIF Mode: Issued qty cannot exceed requested.');
 document.getElementById('modalInputQty').classList.remove('is-invalid');
 qtyModal.show();
@@ -819,7 +834,12 @@ input.classList.add('is-invalid');
 playErrorBuzz();
 return;
 }
+// ─── Get selected unit ───
+var unitSelect = document.getElementById('modalUnit');
+var selectedUnit = unitSelect.value || 'PIECE';
+
 currentModalItem.issuedQty = qtyVal;
+currentModalItem.unit = selectedUnit;
 currentModalItem.verified = true;
 saveDocProgress();
 renderItems();
@@ -904,7 +924,7 @@ hideLoading();
 
 async function submitTransaction(verifiedItems) {
 const itemsStr = verifiedItems.map(i => 
-encodeURIComponent(i.inventoryId) + ',' + i.issuedQty + ',' + i.rowIndex
+encodeURIComponent(i.inventoryId) + ',' + i.issuedQty + ',' + i.rowIndex + ',' + encodeURIComponent(i.unit || 'PIECE')
 ).join(';');
 const url = API_URL + '?action=submitTransaction' +
 '&docNo=' + encodeURIComponent(state.currentDoc) +
@@ -924,7 +944,7 @@ return result;
 }
 
 // =============================================================================
-// NEW REQUEST FUNCTIONS - WITH JO No. + SOF AUTO-FILL + REQUESTOR DROPDOWN
+// NEW REQUEST FUNCTIONS - WITH UNIT DROPDOWN
 // =============================================================================
 function openNewRequest() {
 if (state.isLoading) return;
@@ -939,7 +959,6 @@ newRequestModal.show();
 // ═══════════════════════════════════════════════════════════════════════════
 
 function resetWizard() {
-  // Reset hidden fields
   document.getElementById('reqDocType').value = '';
   document.getElementById('reqJoNo').value = '';
   document.getElementById('reqRequestor').value = '';
@@ -948,30 +967,24 @@ function resetWizard() {
   document.getElementById('reqClientName').value = '';
   document.getElementById('reqProject').value = '';
 
-  // Reset step 1
   document.querySelectorAll('.doc-type-card').forEach(function(c) { c.classList.remove('selected'); });
   document.getElementById('btnStep1Next').disabled = true;
 
-  // Reset step 2
   document.getElementById('step2JoNo').value = '';
   document.getElementById('joNoStatus').innerHTML = '';
 
-  // Reset step 3
   document.getElementById('step3Requestor').value = '';
   document.getElementById('step3Department').value = '';
   document.getElementById('btnStep3Next').disabled = true;
 
-  // Reset step 5
   document.getElementById('step5ItemsContainer').innerHTML = '';
   addStep5ItemRow();
   document.getElementById('btnStep5Next').disabled = true;
 
-  // Go to step 1
   goToStep(1);
 }
 
 function goToStep(step) {
-  // Update step indicators
   document.querySelectorAll('.wizard-step').forEach(function(el) {
     var s = parseInt(el.getAttribute('data-step'));
     el.classList.remove('active', 'completed');
@@ -982,19 +995,16 @@ function goToStep(step) {
     }
   });
 
-  // Show/hide panels
   document.querySelectorAll('.wizard-panel').forEach(function(el) {
     el.classList.remove('active');
   });
   var panel = document.getElementById('step' + step);
   if (panel) panel.classList.add('active');
 
-  // If step 4, populate review data
   if (step === 4) {
     populateReviewData();
   }
 
-  // If step 6, populate final review
   if (step === 6) {
     populateFinalReview();
   }
@@ -1026,10 +1036,8 @@ async function doStep2Next() {
 
   document.getElementById('joNoStatus').innerHTML = '<span class="text-primary"><i class="bi bi-arrow-repeat spin"></i> Looking up SOF data...</span>';
 
-  // Set the hidden field
   document.getElementById('reqJoNo').value = joNo;
 
-  // Call the lookup
   await lookupSofDataWizard();
 
   goToStep(3);
@@ -1105,22 +1113,24 @@ function addStep5ItemRow() {
   var div = document.createElement('div');
   div.className = 'step5-item-row';
   div.innerHTML = '<div class="row g-2 align-items-end">' +
-    '<div class="col-12 col-md-5">' +
+    '<div class="col-12 col-md-4">' +
       '<label class="form-label small">Item</label>' +
       '<input type="text" class="form-control req-item-search" placeholder="Type to search..." oninput="filterStep5Items(this,' + idx + ')" onfocus="filterStep5Items(this,' + idx + ')">' +
       '<div class="list-group position-absolute z-3 d-none req-dropdown" style="max-height:150px;overflow-y:auto;width:90%;" id="step5Dropdown' + idx + '"></div>' +
       '<input type="hidden" class="req-item-code" id="step5Code' + idx + '">' +
       '<input type="hidden" class="req-item-desc" id="step5Desc' + idx + '">' +
     '</div>' +
-    '<div class="col-4 col-md-2">' +
+    '<div class="col-3 col-md-2">' +
       '<label class="form-label small">Qty</label>' +
       '<input type="number" class="form-control req-qty" min="1" value="1">' +
     '</div>' +
-    '<div class="col-4 col-md-2">' +
+    '<div class="col-3 col-md-3">' +
       '<label class="form-label small">Unit</label>' +
-      '<input type="text" class="form-control req-unit" value="PCS" readonly>' +
+      '<select class="form-select req-unit">' +
+        buildUnitOptions('PIECE') +
+      '</select>' +
     '</div>' +
-    '<div class="col-4 col-md-3">' +
+    '<div class="col-2 col-md-3">' +
       '<button class="btn btn-outline-danger btn-sm w-100" onclick="this.closest(\'.step5-item-row\').remove(); checkStep5Items();">' +
         '<i class="bi bi-trash"></i> Remove' +
       '</button>' +
@@ -1148,6 +1158,7 @@ function filterStep5Items(input, idx) {
     matches.forEach(function(it) {
       var code = it.code || it.inventoryId || '';
       var desc = it.description || '';
+      var unit = it.unit || 'PIECE';
       var el = document.createElement('div');
       el.className = 'list-group-item list-group-item-action';
       el.innerHTML = '<div class="fw-bold small">' + code + '</div><div class="small text-muted">' + desc + '</div>';
@@ -1155,6 +1166,11 @@ function filterStep5Items(input, idx) {
         input.value = code + ' - ' + desc;
         document.getElementById('step5Code' + idx).value = code;
         document.getElementById('step5Desc' + idx).value = desc;
+        // Set unit dropdown
+        var unitSelect = input.closest('.step5-item-row').querySelector('.req-unit');
+        if (unitSelect && unitSelect.querySelector('option[value="' + unit + '"]')) {
+          unitSelect.value = unit;
+        }
         dropdown.classList.add('d-none');
         checkStep5Items();
       };
@@ -1182,7 +1198,6 @@ function populateFinalReview() {
   document.getElementById('finalClientName').textContent = document.getElementById('reqClientName').value || '-';
   document.getElementById('finalProject').textContent = document.getElementById('reqProject').value || '-';
 
-  // Populate items table
   var tbody = document.getElementById('finalItemsTable');
   tbody.innerHTML = '';
   var rows = document.querySelectorAll('#step5ItemsContainer .step5-item-row');
@@ -1207,11 +1222,9 @@ const text = await res.text();
 let data;
 try { data = JSON.parse(text); } catch(e) { data = {}; }
 
-// Populate old dropdown (for compatibility)
 const sel = document.getElementById('reqRequestor');
 sel.innerHTML = '<option value="">-- Select Requestor --</option>';
 
-// Populate wizard step 3 dropdown
 const sel3 = document.getElementById('step3Requestor');
 sel3.innerHTML = '<option value="">-- Select Requestor --</option>';
 
@@ -1290,10 +1303,10 @@ const container = document.getElementById('requestItemsContainer');
 const idx = container.children.length;
 const div = document.createElement('div');
 div.className = 'row g-2 mb-2 align-items-end';
-div.innerHTML = '<div class="col-5"><label class="form-label small">Item</label><input type="text" class="form-control req-item-search" placeholder="Type to search..." oninput="filterRequestItems(this,'+idx+')" onfocus="filterRequestItems(this,'+idx+')"><div class="list-group position-absolute z-3 d-none req-dropdown" style="max-height:150px;overflow-y:auto;" id="reqDropdown'+idx+'"></div><input type="hidden" class="req-item-code" id="reqCode'+idx+'"><input type="hidden" class="req-item-desc" id="reqDesc'+idx+'"></div>' +
+div.innerHTML = '<div class="col-4"><label class="form-label small">Item</label><input type="text" class="form-control req-item-search" placeholder="Type to search..." oninput="filterRequestItems(this,'+idx+')" onfocus="filterRequestItems(this,'+idx+')"><div class="list-group position-absolute z-3 d-none req-dropdown" style="max-height:150px;overflow-y:auto;" id="reqDropdown'+idx+'"></div><input type="hidden" class="req-item-code" id="reqCode'+idx+'"><input type="hidden" class="req-item-desc" id="reqDesc'+idx+'"></div>' +
 '<div class="col-3"><label class="form-label small">Qty</label><input type="number" class="form-control req-qty" min="1" value="1"></div>' +
-'<div class="col-3"><label class="form-label small">Unit</label><input type="text" class="form-control req-unit" value="PCS" readonly></div>' +
-'<div class="col-1"><button class="btn btn-outline-danger btn-sm" onclick="this.closest(\'.row\').remove()"><i class="bi bi-trash"></i></button></div>';
+'<div class="col-3"><label class="form-label small">Unit</label><select class="form-select req-unit">' + buildUnitOptions('PIECE') + '</select></div>' +
+'<div class="col-2"><button class="btn btn-outline-danger btn-sm" onclick="this.closest(\'.row\').remove()"><i class="bi bi-trash"></i></button></div>';
 container.appendChild(div);
 }
 
@@ -1313,6 +1326,7 @@ dropdown.innerHTML = '<div class="list-group-item text-muted">No matches</div>';
 matches.forEach(it => {
 const code = it.code || it.inventoryId || '';
 const desc = it.description || '';
+const unit = it.unit || 'PIECE';
 const el = document.createElement('div');
 el.className = 'list-group-item list-group-item-action';
 el.innerHTML = '<div class="fw-bold small">' + code + '</div><div class="small text-muted">' + desc + '</div>';
@@ -1320,6 +1334,10 @@ el.onclick = () => {
 input.value = code + ' - ' + desc;
 document.getElementById('reqCode'+idx).value = code;
 document.getElementById('reqDesc'+idx).value = desc;
+var unitSelect = input.closest('.row').querySelector('.req-unit');
+if (unitSelect && unitSelect.querySelector('option[value="' + unit + '"]')) {
+unitSelect.value = unit;
+}
 dropdown.classList.add('d-none');
 };
 dropdown.appendChild(el);
@@ -1339,25 +1357,26 @@ const clientName = document.getElementById('reqClientName').value.trim();
 const project = document.getElementById('reqProject').value.trim();
 if (!requestor) { alert('Select a requestor'); return; }
 
-// Collect items from wizard step 5
 const items = [];
 document.querySelectorAll('#step5ItemsContainer .step5-item-row').forEach(function(row) {
 const code = row.querySelector('.req-item-code').value;
 const desc = row.querySelector('.req-item-desc').value;
 const qty = parseInt(row.querySelector('.req-qty').value, 10);
-if (code && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty });
+const unit = row.querySelector('.req-unit').value || 'PIECE';
+if (code && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty, unit: unit });
 });
 
-// Fallback: also check old container for backward compatibility
 document.querySelectorAll('#requestItemsContainer .row').forEach(function(row) {
 const code = row.querySelector('.req-item-code');
 const desc = row.querySelector('.req-item-desc');
 const qty = row.querySelector('.req-qty');
+const unit = row.querySelector('.req-unit');
 if (code && desc && qty) {
 var c = code.value;
 var d = desc.value;
 var q = parseInt(qty.value, 10);
-if (c && q > 0) items.push({ inventoryId: c, description: d, qty: q });
+var u = unit ? unit.value : 'PIECE';
+if (c && q > 0) items.push({ inventoryId: c, description: d, qty: q, unit: u });
 }
 });
 
@@ -1463,7 +1482,6 @@ badge.classList.toggle('d-none', readyCount === 0);
 console.log('[loadMyRequests] Badge count:', readyCount);
 }
 renderMyRequests(data.requests);
-// FIX: Update Production KPIs
 var kpiActive = document.getElementById('kpiActiveDocs');
 var kpiPending = document.getElementById('kpiPending');
 var kpiCompleted = document.getElementById('kpiCompleted');
@@ -1477,12 +1495,10 @@ console.log('[loadMyRequests] Toast notification shown!');
 }
 } else {
 console.log('[loadMyRequests] No requests or error:', data.error);
-// FIX: Show error to user instead of silent fail
 document.getElementById('myRequestsList').innerHTML = '<div class="list-group-item text-muted text-center py-3">' + (data.error ? 'Error: ' + data.error : 'No requests found') + '</div>';
 }
 } catch(e) {
 console.error('[loadMyRequests] Error:', e);
-// FIX: Show error to user
 document.getElementById('myRequestsList').innerHTML = '<div class="list-group-item text-danger text-center py-3">Failed to load requests. Check your connection.</div>';
 }
 finally { hideLoading(); }
@@ -1549,6 +1565,12 @@ list.innerHTML = state.poItemsData.map((item, idx) => `
 <label class="form-label mb-0 small">ATL Qty</label>
 <input type="number" class="form-control form-control-sm" id="po-atl-${idx}" value="${item.qty || 0}" min="0" style="width:80px">
 </div>
+<div style="min-width:100px">
+<label class="form-label mb-0 small">Unit</label>
+<select class="form-select form-select-sm" id="po-unit-${idx}">
+  ${buildUnitOptions(item.unit || 'PCS')}
+</select>
+</div>
 </div>
 </div>
 </div>
@@ -1579,11 +1601,12 @@ const selected = [];
 state.poItemsData.forEach((item, idx) => {
 if (document.getElementById('po-check-' + idx).checked) {
 const atlQty = parseFloat(document.getElementById('po-atl-' + idx).value) || 0;
+const unit = document.getElementById('po-unit-' + idx).value || 'PCS';
 selected.push({
 inventoryId: item.inventoryId || item.itemCode || '',
 description: item.description || '',
 qty: item.qty || 0,
-unit: item.unit || 'PCS',
+unit: unit,
 atlQty: atlQty
 });
 }
@@ -1629,10 +1652,8 @@ hideLoading();
 }
 }
 
-
-
 // ============================================================================
-// MANUAL MRR CREATION (No PO required)
+// MANUAL MRR CREATION (No PO required) - WITH UNIT DROPDOWN
 // ============================================================================
 var manualMrrModal = null;
 var manualMrrItems = [];
@@ -1641,7 +1662,6 @@ function openManualMrrModal() {
   if (!manualMrrModal) {
     manualMrrModal = new bootstrap.Modal(document.getElementById('manualMrrModal'));
   }
-  // Reset form
   document.getElementById('manualMrrPoNo').value = '';
   document.getElementById('manualMrrDrNo').value = '';
   document.getElementById('manualMrrVendor').value = '';
@@ -1659,11 +1679,10 @@ function addManualMrrItem() {
     description: '',
     qty: 1,
     atlQty: 0,
-    unit: 'PCS'
+    unit: 'PIECE'
   });
   renderManualMrrItems();
   updateManualMrrSubmitButton();
-  // Focus on the new item's code field
   setTimeout(function() {
     var inputs = document.querySelectorAll('.manual-mrr-code');
     if (inputs.length > 0) {
@@ -1719,10 +1738,10 @@ function renderManualMrrItems() {
         'value="' + (it.atlQty || 0) + '" ' +
         'onchange="updateManualMrrItem(' + i + ', \'atlQty\', parseFloat(this.value)||0)" ' +
         'min="0" step="0.01"></td>' +
-      '<td><input type="text" class="form-control form-control-sm text-center" ' +
-        'value="' + (it.unit || 'PCS') + '" ' +
-        'onchange="updateManualMrrItem(' + i + ', \'unit\', this.value)" ' +
-        'placeholder="Unit"></td>' +
+      '<td><select class="form-select form-select-sm manual-mrr-unit" ' +
+        'onchange="updateManualMrrItem(' + i + ', \'unit\', this.value)">' +
+        buildUnitOptions(it.unit || 'PIECE') +
+      '</select></td>' +
       '<td class="align-middle text-center">' +
         '<button class="btn btn-sm btn-outline-danger" onclick="removeManualMrrItem(' + i + ')" title="Remove">' +
           '<i class="bi bi-trash"></i>' +
@@ -1761,7 +1780,6 @@ async function submitManualMrr() {
   var receivingDate = document.getElementById('manualMrrDate').value;
   var preparedBy = document.getElementById('manualMrrPreparedBy').value.trim();
 
-  // Filter only valid items
   var items = [];
   for (var i = 0; i < manualMrrItems.length; i++) {
     var it = manualMrrItems[i];
@@ -1771,7 +1789,7 @@ async function submitManualMrr() {
         description: it.description.trim(),
         qty: it.qty,
         atlQty: it.atlQty || 0,
-        unit: it.unit || 'PCS'
+        unit: it.unit || 'PIECE'
       });
     }
   }
@@ -1838,7 +1856,6 @@ function openInventoryBrowser() {
   inventoryBrowserModal.show();
   fetchInventoryItems();
 
-  // Show/hide "Create Request" button based on context
   var footer = document.querySelector('#inventoryBrowserModal .modal-footer');
   if (footer) {
     var existingBtn = footer.querySelector('#btnInventoryCreateRequest');
@@ -1927,19 +1944,17 @@ function addInventoryItemToRequest(index) {
   var it = inventoryBrowserFiltered[index];
   if (!it) return;
 
-  // Add a new item row in step 5
   addStep5ItemRow();
   var container = document.getElementById('step5ItemsContainer');
   var rows = container.querySelectorAll('.step5-item-row');
   var lastRow = rows[rows.length - 1];
   if (!lastRow) return;
 
-  // Fill in the values
   var codeInput = lastRow.querySelector('.req-item-code');
   var searchInput = lastRow.querySelector('.req-item-search');
   var descInput = lastRow.querySelector('.req-item-desc');
-  var qtyInput = lastRow.querySelector('.req-item-qty');
-  var unitInput = lastRow.querySelector('.req-item-unit');
+  var qtyInput = lastRow.querySelector('.req-qty');
+  var unitSelect = lastRow.querySelector('.req-unit');
 
   if (codeInput) codeInput.value = it.inventoryId;
   if (searchInput) searchInput.value = it.inventoryId + ' - ' + it.description;
@@ -1949,25 +1964,20 @@ function addInventoryItemToRequest(index) {
     qtyInput.focus();
     qtyInput.select();
   }
-  if (unitInput) unitInput.value = it.unit || 'PCS';
+  if (unitSelect && unitSelect.querySelector('option[value="' + (it.unit || 'PIECE') + '"]')) {
+    unitSelect.value = it.unit || 'PIECE';
+  }
 
-  // Close modal
   if (inventoryBrowserModal) inventoryBrowserModal.hide();
 
-  // Show toast
   showToast('Added: ' + it.inventoryId, 'success');
-
-  // Enable next button
   validateStep5();
 }
-
 
 function createRequestFromInventory() {
   if (inventoryBrowserModal) inventoryBrowserModal.hide();
   openNewRequest();
-  // Pre-fill items from selected inventory items
   setTimeout(function() {
-    // Items will be added when user proceeds to Step 5
     showToast('Start new request. Items will be available in Step 5.', 'info');
   }, 500);
 }
@@ -1982,8 +1992,8 @@ function addInventoryItemByData(item) {
   var codeInput = lastRow.querySelector('.req-item-code');
   var searchInput = lastRow.querySelector('.req-item-search');
   var descInput = lastRow.querySelector('.req-item-desc');
-  var qtyInput = lastRow.querySelector('.req-item-qty');
-  var unitInput = lastRow.querySelector('.req-item-unit');
+  var qtyInput = lastRow.querySelector('.req-qty');
+  var unitSelect = lastRow.querySelector('.req-unit');
   if (codeInput) codeInput.value = item.inventoryId;
   if (searchInput) searchInput.value = item.inventoryId + ' - ' + item.description;
   if (descInput) descInput.value = item.description;
@@ -1992,16 +2002,21 @@ function addInventoryItemByData(item) {
     qtyInput.focus();
     qtyInput.select();
   }
-  if (unitInput) unitInput.value = item.unit || 'PCS';
+  if (unitSelect && unitSelect.querySelector('option[value="' + (item.unit || 'PIECE') + '"]')) {
+    unitSelect.value = item.unit || 'PIECE';
+  }
   if (inventoryBrowserModal) inventoryBrowserModal.hide();
   showToast('Added: ' + item.inventoryId, 'success');
   validateStep5();
 }
 
 function openInventoryQrScan() {
-  // Use the existing QR scanner but with inventory mode
   state.inventoryScanMode = true;
   openQrScanner();
+}
+
+function validateStep5() {
+  checkStep5Items();
 }
 
 // ============================================================================
@@ -2010,14 +2025,12 @@ function openInventoryQrScan() {
 
 async function updateWarehouseKPIs() {
 try {
-// FIX: Use new getPendingDocCount to count only docs with PENDING items
 var sheetId = getCleanSheetId() || '';
 var url = API_URL + '?action=getPendingDocCount&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
 var res = await fetch(url, { redirect: 'follow' });
 var text = await res.text();
 var data;
 try { data = JSON.parse(text); } catch(e) { data = {}; }
-// NEW: Backend returns pendingCount, completedCount, totalCount
 var pendingCount = data.pendingCount || 0;
 var completedCount = data.completedCount || 0;
 var totalCount = data.totalCount || 0;
@@ -2027,13 +2040,9 @@ var kpiPending = document.getElementById('kpiPending');
 var kpiNotif = document.getElementById('kpiNotifications');
 var kpiCompleted = document.getElementById('kpiCompleted');
 
-// Active Docs = total MRIF docs
 if (kpiActive) kpiActive.textContent = totalCount;
-// Pending = docs with at least one PENDING item
 if (kpiPending) kpiPending.textContent = pendingCount;
-// Notifications = same as pending (docs needing attention)
 if (kpiNotif) kpiNotif.textContent = pendingCount;
-// Completed = fully processed docs (no pending items)
 if (kpiCompleted) kpiCompleted.textContent = completedCount;
 
 console.log('[KPI] Total:', totalCount, 'Pending:', pendingCount, 'Completed:', completedCount);
@@ -2048,7 +2057,6 @@ var res = await fetch(url);
 var data = await res.json();
 console.log('[WH Notifications] Response:', data);
 if (data.success && data.requests) {
-// FIX: Show last 7 days instead of just today, and include MRIF + MRS
 var today = new Date();
 var sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
 var currentMrifId = localStorage.getItem('sheetId_MRIF') || '';
@@ -2069,7 +2077,6 @@ var prevCount = parseInt(localStorage.getItem('ivm_whNotifCount') || '0');
 var newCount = filtered.length;
 localStorage.setItem('ivm_whNotifCount', newCount);
 
-// FIX: Show toast even on first notification
 if (newCount > prevCount) {
 var diff = newCount - prevCount;
 playSuccessBeep();
@@ -2084,10 +2091,7 @@ badge.classList.toggle('d-none', newCount === 0);
 btn.classList.toggle('d-none', false);
 }
 
-// FIX: Update ALL dashboard KPIs from single source of truth
 updateWarehouseKPIs();
-
-// Also render to modal list
 renderWarehouseNotifications(filtered);
 }
 } catch(e) {
@@ -2247,7 +2251,6 @@ var badge = document.getElementById('whNotifBadge');
 if (badge) badge.classList.add('d-none');
 showToast('Notifications cleared', 'info');
 }
-
 
 // ============================================================================
 // MRIF PRINT PREVIEW — List & Print
@@ -2413,19 +2416,16 @@ if (items && items.length > 0) {
 }
 console.log('[renderMrrPrint] ================================================');
 
-// Extract info with fallbacks - matching new 7-column structure
 var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
 var vendor = info['Vendor/Client'] || info.vendor || info.client || '';
 var datePrepared = info['Date Prepared'] || info.datePrepared || '';
 var poNo = info['PO No.'] || info.poNo || '';
-// CRITICAL FIX: DR No - try multiple possible keys
 var drNo = info['DR No.'] || info['DR No / SI No.'] || info['DR No'] || info.drNo || info['D.R. No.'] || info.dr || '';
 var receivingDate = info['Receiving Date'] || info.receivingDate || '';
 var preparedBy = info['Prepared By'] || info.preparedBy || '';
 
 console.log('[renderMrrPrint] Extracted DR No.:', drNo);
 
-// Format dates
 function formatDate(val) {
   if (!val || val === '') return '';
   if (typeof val === 'string' && val.indexOf('GMT') === -1 && val.indexOf('Standard') === -1) {
@@ -2445,16 +2445,12 @@ function formatDate(val) {
 var dateStr = formatDate(datePrepared);
 var recDateStr = formatDate(receivingDate);
 
-// Build items HTML with 7-column structure
 var itemsHtml = '';
 if (items && items.length > 0) {
   items.forEach(function(it, idx) {
-    // FIX: Only use inventoryId or itemCode for the CODE column
-    // If both are empty, leave it blank - don't fall back to description
     var code = it.inventoryId || it.itemCode || '';
     var desc = it.description || it.desc || it.itemDescription || '';
     var recQty = it.recQty || it.expectedQty || it.qty || it.quantity || 0;
-    // RECEIVED QTY = ATL QTY (actual quantity received)
     var receivedQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
     var unit = it.unit || it.uom || 'PIECE';
     var remarks = it.remarks || it.status || it.note || '';
@@ -2474,10 +2470,8 @@ if (items && items.length > 0) {
   });
 }
 
-// QR code for document
 var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
-// Build HTML - matching Google Sheet 7-column structure
 var html = '<div class="mrr-print-sheet">' +
   '<div class="mrr-header">' +
     '<div class="mrr-logo"><img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'"></div>' +
@@ -2577,7 +2571,6 @@ function printMrr() {
     return;
   }
 
-  // Build complete standalone HTML with ALL styles inline
   var printStyles =
     '@page { size: letter portrait; margin: 0.25in; }' +
     '* { box-sizing: border-box; }' +
@@ -2619,7 +2612,6 @@ function printMrr() {
     '<html><head><meta charset="utf-8"><title>MRR Print</title><style>' + printStyles + '</style></head>' +
     '<body>' + sheetHtml + '</body></html>';
 
-  // Use hidden iframe for reliable printing
   var iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.top = '-9999px';
@@ -2755,7 +2747,6 @@ function renderMrifPrint(docNo, info, items) {
   var client = info['Client Name'] || info.clientName || info.client || '';
   var project = info.Project || info.project || '';
 
-  // Format date nicely
   var dateStr = dateRaw;
   try {
     var d = new Date(dateRaw);
@@ -2791,9 +2782,7 @@ function renderMrifPrint(docNo, info, items) {
     itemsHtml += '<tr><td class="td-center" colspan="7" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
   }
 
-  // Add 1 empty row after data for spacing
   itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
-
 
   var mrifQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
@@ -2874,7 +2863,6 @@ function printMrif() {
     return;
   }
 
-  // Build complete standalone HTML with ALL MRIF print styles inline
   var printStyles =
     '@page { size: letter portrait; margin: 0.3in; }' +
     '* { box-sizing: border-box; }' +
@@ -2910,7 +2898,6 @@ function printMrif() {
     '<html><head><meta charset="utf-8"><title>MRIF Print</title><style>' + printStyles + '</style></head>' +
     '<body>' + sheetHtml + '</body></html>';
 
-  // Use hidden iframe for reliable printing
   var iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.top = '-9999px';
@@ -2945,7 +2932,6 @@ function closeMrifPrint() {
 if (mrifPrintModal) mrifPrintModal.hide();
 }
 
-
 // ============================================================================
 // AUTO-NAVIGATE FROM SCANNED QR CODE (?doc= parameter)
 // ============================================================================
@@ -2956,23 +2942,18 @@ function checkUrlDocParam() {
 
   console.log('[QR Scan] Detected doc parameter:', docNo);
 
-  // Determine doc type from prefix
   var docType = 'MRIF';
   if (docNo.indexOf('MRR') === 0) docType = 'MRR';
   else if (docNo.indexOf('MRS') === 0) docType = 'MRS';
 
-  // Clean URL (remove ?doc= parameter) without reloading
   if (window.history.replaceState) {
     window.history.replaceState({}, document.title, window.location.pathname);
   }
 
-  // Show loading
   showLoading('Opening ' + cleanDocNo(docNo) + '...');
 
-  // For warehouse mode, auto-select module and load document
   var role = localStorage.getItem('ivm_userRole');
   if (role === 'warehouse') {
-    // Switch to appropriate module
     selectModule(docType).then(function() {
       setTimeout(function() {
         onDocSelect(docNo);
@@ -2984,7 +2965,6 @@ function checkUrlDocParam() {
       showToast('Could not open document: ' + cleanDocNo(docNo), 'warning');
     });
   } else {
-    // Production mode - just show the document info
     hideLoading();
     showToast('Document ' + cleanDocNo(docNo) + ' scanned. Switch to Warehouse mode to process.', 'info');
   }
@@ -2992,8 +2972,6 @@ function checkUrlDocParam() {
 
 document.addEventListener('DOMContentLoaded', () => {
 initRole();
-// Set default receiving date for MRR
 document.getElementById('mrrReceivingDate').valueAsDate = new Date();
-// Check for ?doc= parameter in URL (scanned QR code)
 setTimeout(checkUrlDocParam, 1500);
 });
