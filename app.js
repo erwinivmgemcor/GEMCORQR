@@ -1839,7 +1839,7 @@ async function submitManualMrr() {
 }
 
 // ============================================================================
-// INVENTORY BROWSER (Production New Request) - SIMPLIFIED: QR, ITEM CODE, DESCRIPTION only
+// INVENTORY BROWSER - SIMPLIFIED: QR, ITEM CODE, DESCRIPTION only (FIXED)
 // ============================================================================
 var inventoryBrowserModal = null;
 var inventoryItemsCache = [];
@@ -1860,23 +1860,31 @@ async function fetchInventoryItems() {
   tbody.innerHTML = '<tr><td colspan="3" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading inventory...</td></tr>';
 
   try {
-    var sheetId = getCleanSheetId();
+    // ─── ALWAYS use master sheet ID for inventory ───
+    var sheetId = '1HSxuSlik8hvbHppOE56ICzl1Jz9cCxFWCJ4EN-bzVFs';
     var url = API_URL + '?action=getInventoryItems&sheetId=' + sheetId + '&_t=' + Date.now();
+    console.log('[fetchInventoryItems] URL:', url);
     var res = await fetch(url, { redirect: 'follow' });
     var text = await res.text();
+    console.log('[fetchInventoryItems] Raw response:', text.substring(0, 500));
     var data;
-    try { data = JSON.parse(text); } catch(e) { data = {}; }
+    try { data = JSON.parse(text); } catch(e) { 
+      console.error('[fetchInventoryItems] JSON parse error:', e);
+      data = {}; 
+    }
 
     if (data.success && data.items) {
       inventoryItemsCache = data.items;
       inventoryBrowserFiltered = data.items;
       renderInventoryItems();
+      console.log('[fetchInventoryItems] Loaded ' + data.items.length + ' items');
     } else {
-      tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">' + (data.error || 'No items found') + '</td></tr>';
+      console.error('[fetchInventoryItems] Error:', data.error || 'Unknown error');
+      tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-3">' + (data.error || 'Failed to load inventory. Check console.') + '</td></tr>';
     }
   } catch(err) {
     console.error('[fetchInventoryItems] Error:', err);
-    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-3">Failed to load inventory</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-3">Failed to load inventory: ' + err.message + '</td></tr>';
   }
 }
 
