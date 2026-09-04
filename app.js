@@ -2398,15 +2398,18 @@ var container = document.getElementById('mrrPrintContent');
 if (!container) return;
 
 console.log('[renderMrrPrint] Items count:', items ? items.length : 0, 'Items:', items);
+console.log('[renderMrrPrint] Info:', JSON.stringify(info));
 
 // Extract info with fallbacks - matching new 7-column structure
 var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
 var vendor = info['Vendor/Client'] || info.vendor || info.client || '';
 var datePrepared = info['Date Prepared'] || info.datePrepared || '';
 var poNo = info['PO No.'] || info.poNo || '';
-var drNo = info['DR No.'] || info.drNo || info.dr || '';
+var drNo = info['DR No.'] || info.drNo || info['DR No / SI No.'] || info.dr || '';
 var receivingDate = info['Receiving Date'] || info.receivingDate || '';
 var preparedBy = info['Prepared By'] || info.preparedBy || '';
+
+console.log('[renderMrrPrint] DR No. extracted:', drNo);
 
 // Format dates
 function formatDate(val) {
@@ -2435,7 +2438,8 @@ if (items && items.length > 0) {
     var code = it.itemCode || it.inventoryId || it.code || it.id || '';
     var desc = it.description || it.desc || it.itemDescription || '';
     var recQty = it.recQty || it.expectedQty || it.qty || it.quantity || 0;
-    var atlQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
+    // RECEIVED QTY = ATL QTY (actual quantity received)
+    var receivedQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
     var unit = it.unit || it.uom || 'PIECE';
     var remarks = it.remarks || it.status || it.note || '';
     var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
@@ -2444,7 +2448,7 @@ if (items && items.length > 0) {
       '<td class="td-center" style="width:16%">' + code + '</td>' +
       '<td class="td-left" style="width:35%">' + desc + '</td>' +
       '<td class="td-center" style="width:10%">' + recQty + '</td>' +
-      '<td class="td-center" style="width:10%">' + atlQty + '</td>' +
+      '<td class="td-center" style="width:10%">' + receivedQty + '</td>' +
       '<td class="td-center" style="width:8%">' + unit + '</td>' +
       '<td class="td-center" style="width:16%">' + remarks + '</td>' +
       '</tr>';
@@ -2538,6 +2542,7 @@ var html = '<div class="mrr-print-sheet">' +
 '</div>';
 
 container.innerHTML = html;
+console.log('[renderMrrPrint] HTML rendered with DR No.:', drNo);
 }
 
 function printMrr() {
