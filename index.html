@@ -13,7 +13,6 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <link rel="stylesheet" href="style.css">
 <style>
-/* Clickable KPI Cards */
 .kpi-clickable {
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -22,14 +21,10 @@
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0,0,0,0.12);
 }
-
-/* Amber modal header */
 .bg-amber {
   background-color: #f59e0b !important;
   color: #1f2937 !important;
 }
-
-/* Pending MRIF list items */
 .pending-mrif-item {
   cursor: pointer;
   transition: background-color 0.15s ease;
@@ -38,7 +33,6 @@
   background-color: #f8f9fa;
 }
 </style>
-<base target="_blank">
 <base target="_blank">
 </head>
 <body>
@@ -302,6 +296,7 @@
               <th>Item Code</th>
               <th id="headerExpected">Req. Qty</th>
               <th id="headerInput">Issued Qty</th>
+              <th>Unit</th>
               <th>Status</th>
             </tr></thead>
             <tbody id="itemsTable"></tbody>
@@ -342,6 +337,12 @@
           <label class="form-label" id="modalInputLabel">Enter Issued Qty</label>
           <input type="number" id="modalInputQty" class="form-control" min="0" step="1" oninput="onQtyInput()">
           <div id="modalHint" class="form-text"></div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Unit</label>
+          <select id="modalUnit" class="form-select">
+            <!-- Populated by JavaScript -->
+          </select>
         </div>
       </div>
       <div class="modal-footer">
@@ -1054,7 +1055,7 @@
           </div>
           <div class="col-md-6">
             <label class="form-label small fw-bold">Receiving Date <span class="text-danger">*</span></label>
-            <input type="date" class="form-control" id="manualMrrDate" value="2026-09-01">
+            <input type="date" class="form-control" id="manualMrrDate">
           </div>
           <div class="col-md-6">
             <label class="form-label small fw-bold">Prepared By</label>
@@ -1074,10 +1075,10 @@
               <tr>
                 <th style="width:5%">#</th>
                 <th style="width:20%">Item Code <span class="text-danger">*</span></th>
-                <th style="width:35%">Description <span class="text-danger">*</span></th>
-                <th style="width:12%">Rec. Qty <span class="text-danger">*</span></th>
-                <th style="width:12%">ATL Qty</th>
-                <th style="width:10%">Unit</th>
+                <th style="width:30%">Description <span class="text-danger">*</span></th>
+                <th style="width:10%">Rec. Qty <span class="text-danger">*</span></th>
+                <th style="width:10%">ATL Qty</th>
+                <th style="width:15%">Unit</th>
                 <th style="width:6%"></th>
               </tr>
             </thead>
@@ -1100,7 +1101,6 @@
     </div>
   </div>
 </div>
-
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
    INVENTORY BROWSER MODAL
@@ -1150,7 +1150,6 @@
     </div>
   </div>
 </div>
-
 
 </body>
 </html>
