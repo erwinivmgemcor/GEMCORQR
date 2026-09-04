@@ -2304,7 +2304,7 @@ container.appendChild(el);
 }
 
 // ============================================================================
-// MRR PRINT PREVIEW — List & Print
+// MRR PRINT PREVIEW — List & Print (FIXED: 7-column layout with REMARKS spanning G:H)
 // ============================================================================
 
 async function openMrrList() {
@@ -2399,7 +2399,7 @@ if (!container) return;
 
 console.log('[renderMrrPrint] Items count:', items ? items.length : 0, 'Items:', items);
 
-// Extract info with fallbacks
+// Extract info with fallbacks - matching new 7-column structure
 var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
 var vendor = info['Vendor/Client'] || info.vendor || info.client || '';
 var datePrepared = info['Date Prepared'] || info.datePrepared || '';
@@ -2408,16 +2408,13 @@ var drNo = info['DR No.'] || info.drNo || info.dr || '';
 var receivingDate = info['Receiving Date'] || info.receivingDate || '';
 var preparedBy = info['Prepared By'] || info.preparedBy || '';
 
-// FIX: Format dates properly - handle raw Date objects and various formats
+// Format dates
 function formatDate(val) {
   if (!val || val === '') return '';
-  // If it's already a nice string like "August 31, 2026" or "8/31/2026", return as-is
   if (typeof val === 'string' && val.indexOf('GMT') === -1 && val.indexOf('Standard') === -1) {
-    // Check if it's a simple date string
     if (val.match(/^(January|February|March|April|May|June|July|August|September|October|November|December)/)) return val;
     if (val.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) return val;
   }
-  // Try to parse as date
   try {
     var d = new Date(val);
     if (!isNaN(d.getTime()) && d.getFullYear() > 2000) {
@@ -2425,18 +2422,16 @@ function formatDate(val) {
       return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
     }
   } catch(e) {}
-  // Return original if we can't parse
   return String(val).replace(/\s*GMT.*$/, '').replace(/\s*Standard.*$/, '').trim();
 }
 
 var dateStr = formatDate(datePrepared);
 var recDateStr = formatDate(receivingDate);
 
-// Build items HTML
+// Build items HTML with 7-column structure (REMARKS spans G:H)
 var itemsHtml = '';
 if (items && items.length > 0) {
   items.forEach(function(it, idx) {
-    // Handle any property name variations
     var code = it.itemCode || it.inventoryId || it.code || it.id || '';
     var desc = it.description || it.desc || it.itemDescription || '';
     var recQty = it.recQty || it.expectedQty || it.qty || it.quantity || 0;
@@ -2446,23 +2441,20 @@ if (items && items.length > 0) {
     var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
     itemsHtml += '<tr>' +
       '<td class="td-center" style="width:5%">' + (idx + 1) + '</td>' +
-      '<td class="td-center" style="width:14%">' + code + '</td>' +
-      '<td class="td-center" style="width:7%"><img src="' + qrUrl + '" style="width:30px;height:30px;display:block;margin:0 auto;" alt=""></td>' +
-      '<td class="td-left" style="width:34%">' + desc + '</td>' +
-      '<td class="td-center" style="width:9%">' + recQty + '</td>' +
-      '<td class="td-center" style="width:9%">' + atlQty + '</td>' +
-      '<td class="td-center" style="width:7%">' + unit + '</td>' +
-      '<td class="td-center" style="width:15%">' + remarks + '</td>' +
+      '<td class="td-center" style="width:16%">' + code + '</td>' +
+      '<td class="td-left" style="width:35%">' + desc + '</td>' +
+      '<td class="td-center" style="width:10%">' + recQty + '</td>' +
+      '<td class="td-center" style="width:10%">' + atlQty + '</td>' +
+      '<td class="td-center" style="width:8%">' + unit + '</td>' +
+      '<td class="td-center" style="width:16%">' + remarks + '</td>' +
       '</tr>';
   });
 }
 
-// No empty rows - table ends with last item only
-
-  // QR code for document
+// QR code for document
 var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
-// Build HTML - EXACT structure matching template
+// Build HTML - matching Google Sheet 7-column structure
 var html = '<div class="mrr-print-sheet">' +
   '<div class="mrr-header">' +
     '<div class="mrr-logo"><img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'"></div>' +
@@ -2475,33 +2467,33 @@ var html = '<div class="mrr-print-sheet">' +
   '<table class="mrr-meta-table">' +
     '<tr>' +
       '<td class="mrr-meta-label">RECEIVING SITE:</td>' +
-      '<td class="mrr-meta-value">' + receivingSite + '</td>' +
+      '<td class="mrr-meta-value" colspan="5">' + receivingSite + '</td>' +
       '<td class="mrr-meta-label-right">PO No. / SOF No.:</td>' +
       '<td class="mrr-meta-value-right">' + poNo + '</td>' +
     '</tr>' +
     '<tr>' +
       '<td class="mrr-meta-label">VENDOR:</td>' +
-      '<td class="mrr-meta-value">' + vendor + '</td>' +
+      '<td class="mrr-meta-value" colspan="5">' + vendor + '</td>' +
       '<td class="mrr-meta-label-right">DR No / SI No.:</td>' +
       '<td class="mrr-meta-value-right">' + drNo + '</td>' +
     '</tr>' +
     '<tr>' +
       '<td class="mrr-meta-label">DATE PREPARED:</td>' +
-      '<td class="mrr-meta-value">' + dateStr + '</td>' +
+      '<td class="mrr-meta-value" colspan="2">' + dateStr + '</td>' +
       '<td class="mrr-meta-label-right">RECEIVING DATE:</td>' +
-      '<td class="mrr-meta-value-right">' + recDateStr + '</td>' +
+      '<td class="mrr-meta-value-right" colspan="4">' + recDateStr + '</td>' +
     '</tr>' +
   '</table>' +
   '<table class="mrr-items">' +
     '<thead>' +
       '<tr>' +
         '<th style="width:5%">ITEM<br>NO.</th>' +
-        '<th style="width:18%">ITEM<br>CODE</th>' +
-        '<th style="width:39%">ITEM DESCRIPTION</th>' +
-        '<th style="width:11%">REQUESTED<br>QUANTITY</th>' +
-        '<th style="width:11%">RECEIVED<br>QUANTITY</th>' +
+        '<th style="width:16%">ITEM<br>CODE</th>' +
+        '<th style="width:35%">ITEM DESCRIPTION</th>' +
+        '<th style="width:10%">REQUESTED<br>QTY</th>' +
+        '<th style="width:10%">RECEIVED<br>QTY</th>' +
         '<th style="width:8%">UNIT</th>' +
-        '<th style="width:18%">REMARKS</th>' +
+        '<th style="width:16%">REMARKS</th>' +
       '</tr>' +
     '</thead>' +
     '<tbody>' + itemsHtml + '</tbody>' +
@@ -2540,7 +2532,7 @@ var html = '<div class="mrr-print-sheet">' +
     '<div class="mrr-sig">' +
       '<div class="mrr-sig-name"></div>' +
       '<div class="mrr-sig-line"></div>' +
-      '<div class="mrr-sig-label">NOTED BY</div>' +
+      '<div class="mrr-sig-label">RECEIVED BY / DATE</div>' +
     '</div>' +
   '</div>' +
 '</div>';
@@ -2576,10 +2568,10 @@ function printMrr() {
     '.mrr-title { text-align: center; font-size: 12pt; font-weight: bold; letter-spacing: 5px; margin: 8px 0 14px 0; text-transform: uppercase; }' +
     '.mrr-meta-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 8.5pt; }' +
     '.mrr-meta-table td { padding: 0; vertical-align: middle; border: none; }' +
-    '.mrr-meta-label { font-weight: bold; font-size: 8pt; letter-spacing: 2px; text-align: left; white-space: nowrap; padding: 3px 4px 3px 0; width: 20%; line-height: 1.2; }' +
-    '.mrr-meta-value { background: #cfe2f3; padding: 4px 6px; font-size: 9pt; font-weight: bold; text-align: left; border: 1px solid #b6d7e8; width: 30%; line-height: 1.2; }' +
-    '.mrr-meta-label-right { font-weight: bold; font-size: 8pt; letter-spacing: 1.5px; text-align: left; white-space: nowrap; padding: 3px 4px 3px 10px; width: 22%; line-height: 1.2; }' +
-    '.mrr-meta-value-right { background: #cfe2f3; padding: 4px 6px; font-size: 9pt; font-weight: bold; text-align: left; border: 1px solid #b6d7e8; width: 28%; line-height: 1.2; }' +
+    '.mrr-meta-label { font-weight: bold; font-size: 8pt; letter-spacing: 2px; text-align: left; white-space: nowrap; padding: 3px 4px 3px 0; width: 18%; line-height: 1.2; }' +
+    '.mrr-meta-value { background: #cfe2f3; padding: 4px 6px; font-size: 9pt; font-weight: bold; text-align: left; border: 1px solid #b6d7e8; width: 32%; line-height: 1.2; }' +
+    '.mrr-meta-label-right { font-weight: bold; font-size: 8pt; letter-spacing: 1.5px; text-align: left; white-space: nowrap; padding: 3px 4px 3px 10px; width: 20%; line-height: 1.2; }' +
+    '.mrr-meta-value-right { background: #cfe2f3; padding: 4px 6px; font-size: 9pt; font-weight: bold; text-align: left; border: 1px solid #b6d7e8; width: 30%; line-height: 1.2; }' +
     '.mrr-items { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 8.5pt; }' +
     '.mrr-items th, .mrr-items td { border: 1.5px solid #000; padding: 4px 5px; vertical-align: middle; }' +
     '.mrr-items th { background: #fff; font-weight: bold; text-align: center; font-size: 8pt; letter-spacing: 0.5px; }' +
@@ -2602,7 +2594,7 @@ function printMrr() {
     '<html><head><meta charset="utf-8"><title>MRR Print</title><style>' + printStyles + '</style></head>' +
     '<body>' + sheetHtml + '</body></html>';
 
-  // Use hidden iframe for reliable printing (no popup blockers, no Bootstrap interference)
+  // Use hidden iframe for reliable printing
   var iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.top = '-9999px';
@@ -2617,7 +2609,6 @@ function printMrr() {
   doc.write(fullHtml);
   doc.close();
 
-  // Wait for images to load then print
   setTimeout(function() {
     try {
       iframe.contentWindow.focus();
@@ -2626,7 +2617,6 @@ function printMrr() {
       console.error('Print error:', e);
       showToast('Print failed. Try again.', 'danger');
     }
-    // Clean up iframe after print dialog
     setTimeout(function() {
       if (iframe.parentNode) {
         document.body.removeChild(iframe);
