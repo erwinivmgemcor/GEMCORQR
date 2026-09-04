@@ -5,6 +5,13 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
 const DEFAULT_PIN = '0000';
 
+// ─── Helper: Clean document number (remove suffix like -after-sales) ───
+function cleanDocNo(docNo) {
+  if (!docNo) return '';
+  // Remove any -suffix at the end (e.g., MRIF0020760-after-sales → MRIF0020760)
+  return docNo.replace(/-\w+$/, '').replace(/-\w+-\w+$/, '');
+}
+
 const state = {
 currentModule: 'MRIF',
 currentDoc: null,
@@ -409,7 +416,8 @@ state.docList = docs;
 docs.forEach(d => {
 const val = typeof d === 'string' ? d : (d.docNo || d.name || d);
 const opt = document.createElement('option');
-opt.value = val; opt.textContent = val;
+opt.value = val;
+opt.textContent = cleanDocNo(val);
 sel.appendChild(opt);
 });
 }
@@ -420,9 +428,10 @@ sel.innerHTML = '<option value="">-- Select Document --</option>';
 if (!state.docList) return;
 state.docList.forEach(d => {
 const val = typeof d === 'string' ? d : (d.docNo || d.name || d);
-if (val.toLowerCase().includes(term)) {
+if (cleanDocNo(val).toLowerCase().includes(term)) {
 const opt = document.createElement('option');
-opt.value = val; opt.textContent = val;
+opt.value = val;
+opt.textContent = cleanDocNo(val);
 sel.appendChild(opt);
 }
 });
@@ -437,7 +446,7 @@ resetDocumentState();
 state.currentDoc = docNo;
 document.getElementById('docPickerSection').classList.add('d-none');
 document.getElementById('activeTransactionSection').classList.remove('d-none');
-document.getElementById('docTitle').textContent = docNo;
+document.getElementById('docTitle').textContent = cleanDocNo(docNo);
 await fetchDocItems(docNo, state.currentModule);
 checkForProgress();
 } finally {
@@ -687,7 +696,7 @@ if (docPattern.test(decodedText)) {
 const mod = decodedText.substring(0, 4).toUpperCase();
 if (['MRIF','MRR','MRS'].includes(mod)) {
 playSuccessBeep();
-showToast('Loading document ' + decodedText + '...', 'success');
+showToast('Loading document ' + cleanDocNo(decodedText) + '...', 'success');
 selectModule(mod);
 setTimeout(() => onDocSelect(decodedText), 500);
 return;
@@ -2101,7 +2110,7 @@ var type = req.type || 'MRIF';
 var html = '<div class="list-group-item wh-notif-item py-2" data-docno="' + docNo + '" data-type="' + type + '">' +
 '<div class="d-flex justify-content-between align-items-start">' +
 '<div>' +
-'<div class="doc-no">' + docNo + ' <span class="badge bg-secondary">' + type + '</span></div>' +
+'<div class="doc-no">' + cleanDocNo(docNo) + ' <span class="badge bg-secondary">' + type + '</span></div>' +
 '<div class="requestor"><i class="bi bi-person me-1"></i>' + (req.requestor || 'Unknown') + '</div>' +
 '<div class="timestamp"><i class="bi bi-clock me-1"></i>' + dateStr + '</div>' +
 '</div>' +
@@ -2136,7 +2145,7 @@ var type = req.type || 'MRIF';
 var html = '<div class="list-group-item wh-notif-item py-3" data-docno="' + docNo + '" data-type="' + type + '">' +
 '<div class="d-flex justify-content-between align-items-start">' +
 '<div>' +
-'<div class="doc-no">' + docNo + ' <span class="badge bg-secondary">' + type + '</span></div>' +
+'<div class="doc-no">' + cleanDocNo(docNo) + ' <span class="badge bg-secondary">' + type + '</span></div>' +
 '<div class="requestor"><i class="bi bi-person me-1"></i>' + (req.requestor || 'Unknown') + '</div>' +
 '<div class="timestamp"><i class="bi bi-clock me-1"></i>' + dateStr + '</div>' +
 '</div>' +
@@ -2209,7 +2218,7 @@ for (var i = 0; i < select.options.length; i++) {
 if (select.options[i].value === docNo) {
 select.selectedIndex = i;
 onDocSelect(docNo);
-showToast('Loading ' + docNo + '...', 'info');
+showToast('Loading ' + cleanDocNo(docNo) + '...', 'info');
 return;
 }
 }
@@ -2227,7 +2236,7 @@ return;
 }
 }
 }
-showToast('Could not find ' + docNo + '. It may have been processed.', 'danger');
+showToast('Could not find ' + cleanDocNo(docNo) + '. It may have been processed.', 'danger');
 }, 1000);
 }
 
@@ -2281,22 +2290,20 @@ var docNo = typeof d === 'string' ? d : (d.docNo || d.name || '');
 var el = document.createElement('div');
 el.className = 'list-group-item pending-mrif-item';
 el.innerHTML = '<div class="d-flex justify-content-between align-items-center">' +
-'<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + docNo + '</strong></div>' +
+'<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + cleanDocNo(docNo) + '</strong></div>' +
 '<button class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-in-right me-1"></i>Process</button>' +
 '</div>' +
 '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i>Has items awaiting release</div>';
 el.querySelector('button').addEventListener('click', async function(e) {
 e.stopPropagation();
 if (pendingMrifModal) pendingMrifModal.hide();
-// FIX: Properly await selectModule to finish before loading document
-showToast('Loading ' + docNo + '...', 'info');
+showToast('Loading ' + cleanDocNo(docNo) + '...', 'info');
 try {
   await selectModule('MRIF');
-  // Now safe to load document
   await onDocSelect(docNo);
 } catch(err) {
   console.error('[Pending MRIF] Error loading doc:', err);
-  showToast('Failed to load ' + docNo + '. Try again.', 'danger');
+  showToast('Failed to load ' + cleanDocNo(docNo) + '. Try again.', 'danger');
 }
 });
 container.appendChild(el);
@@ -2304,7 +2311,7 @@ container.appendChild(el);
 }
 
 // ============================================================================
-// MRR PRINT PREVIEW — List & Print (FIXED: displays DR No and RECEIVED QTY)
+// MRR PRINT PREVIEW — List & Print
 // ============================================================================
 
 async function openMrrList() {
@@ -2344,7 +2351,7 @@ docs.forEach(function(d) {
 var docNo = typeof d === 'string' ? d : (d.docNo || d.name || d);
 var el = document.createElement('div');
 el.className = 'list-group-item mrif-list-item d-flex justify-content-between align-items-center';
-el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-success"></i><strong>' + docNo + '</strong></div>' +
+el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-success"></i><strong>' + cleanDocNo(docNo) + '</strong></div>' +
 '<button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>View / Print</button>';
 el.addEventListener('click', function() { openMrrPrint(docNo); });
 container.appendChild(el);
@@ -2353,7 +2360,7 @@ container.appendChild(el);
 
 async function openMrrPrint(docNo) {
   if (state.isLoading) return;
-  showLoading('Loading ' + docNo + '...');
+  showLoading('Loading ' + cleanDocNo(docNo) + '...');
   try {
     var sheetId = getCleanSheetId();
     console.log('[openMrrPrint] sheetId:', sheetId, 'docNo:', docNo);
@@ -2442,17 +2449,19 @@ var recDateStr = formatDate(receivingDate);
 var itemsHtml = '';
 if (items && items.length > 0) {
   items.forEach(function(it, idx) {
-    var code = it.itemCode || it.inventoryId || it.code || it.id || '';
+    // FIX: Only use inventoryId or itemCode for the CODE column
+    // If both are empty, leave it blank - don't fall back to description
+    var code = it.inventoryId || it.itemCode || '';
     var desc = it.description || it.desc || it.itemDescription || '';
     var recQty = it.recQty || it.expectedQty || it.qty || it.quantity || 0;
-    // CRITICAL FIX: RECEIVED QTY = ATL QTY (actual quantity received)
+    // RECEIVED QTY = ATL QTY (actual quantity received)
     var receivedQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
     var unit = it.unit || it.uom || 'PIECE';
     var remarks = it.remarks || it.status || it.note || '';
     
-    console.log('[renderMrrPrint] Item ' + (idx+1) + ' - code: ' + code + ', recQty: ' + recQty + ', receivedQty: ' + receivedQty);
+    console.log('[renderMrrPrint] Item ' + (idx+1) + ' - code: "' + code + '", recQty: ' + recQty + ', receivedQty: ' + receivedQty);
     
-    var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
+    var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code || 'blank');
     itemsHtml += '<tr>' +
       '<td class="td-center" style="width:5%">' + (idx + 1) + '</td>' +
       '<td class="td-center" style="width:16%">' + code + '</td>' +
@@ -2473,7 +2482,7 @@ var html = '<div class="mrr-print-sheet">' +
   '<div class="mrr-header">' +
     '<div class="mrr-logo"><img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'"></div>' +
     '<div class="mrr-docno">' +
-      '<div><span class="mrr-dn-label">Receipt No.:</span><span class="mrr-dn-box">' + docNo + '</span></div>' +
+      '<div><span class="mrr-dn-label">Receipt No.:</span><span class="mrr-dn-box">' + cleanDocNo(docNo) + '</span></div>' +
       '<div class="mrr-doc-qr"><img src="' + mrrQrUrl + '" alt="MRR QR"></div>' +
     '</div>' +
   '</div>' +
@@ -2682,7 +2691,7 @@ docs.forEach(function(d) {
 var docNo = typeof d === 'string' ? d : (d.docNo || d.name || d);
 var el = document.createElement('div');
 el.className = 'list-group-item mrif-list-item d-flex justify-content-between align-items-center';
-el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + docNo + '</strong></div>' +
+el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + cleanDocNo(docNo) + '</strong></div>' +
 '<button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>View / Print</button>';
 el.addEventListener('click', function() { openMrifPrint(docNo); });
 container.appendChild(el);
@@ -2691,7 +2700,7 @@ container.appendChild(el);
 
 async function openMrifPrint(docNo) {
   if (state.isLoading) return;
-  showLoading('Loading ' + docNo + '...');
+  showLoading('Loading ' + cleanDocNo(docNo) + '...');
   try {
     var sheetId = getCleanSheetId();
     console.log('[openMrifPrint] sheetId:', sheetId, 'docNo:', docNo);
@@ -2792,7 +2801,7 @@ function renderMrifPrint(docNo, info, items) {
     '<div class="mrif-header">' +
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
       '<div class="mrif-docno">' +
-        '<div><span class="mrif-dn-label">MRIF No.:</span><span class="mrif-dn-box">' + docNo + '</span></div>' +
+        '<div><span class="mrif-dn-label">MRIF No.:</span><span class="mrif-dn-box">' + cleanDocNo(docNo) + '</span></div>' +
         '<div class="mrif-doc-qr"><img src="' + mrifQrUrl + '" alt="MRIF QR" style="width:90px;height:90px;margin-top:4px;"></div>' +
       '</div>' +
     '</div>' +
@@ -2958,7 +2967,7 @@ function checkUrlDocParam() {
   }
 
   // Show loading
-  showLoading('Opening ' + docNo + '...');
+  showLoading('Opening ' + cleanDocNo(docNo) + '...');
 
   // For warehouse mode, auto-select module and load document
   var role = localStorage.getItem('ivm_userRole');
@@ -2972,12 +2981,12 @@ function checkUrlDocParam() {
     }).catch(function(err) {
       console.error('[QR Scan] Error:', err);
       hideLoading();
-      showToast('Could not open document: ' + docNo, 'warning');
+      showToast('Could not open document: ' + cleanDocNo(docNo), 'warning');
     });
   } else {
     // Production mode - just show the document info
     hideLoading();
-    showToast('Document ' + docNo + ' scanned. Switch to Warehouse mode to process.', 'info');
+    showToast('Document ' + cleanDocNo(docNo) + ' scanned. Switch to Warehouse mode to process.', 'info');
   }
 }
 
