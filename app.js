@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    IVM WAREHOUSE QR — APPLICATION LOGIC
-   (FIXED: MRIF/MRS print preview now shows clean doc number without suffix)
+   (Added: Click on My Requests to re-open QR modal)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
@@ -16,7 +16,6 @@ const UNIT_OPTIONS = [
 // ─── Helper: Clean document number (remove suffix like -after-sales) ───
 function cleanDocNo(docNo) {
   if (!docNo) return '';
-  // Remove any -suffix at the end (e.g., MRIF0020760-after-sales → MRIF0020760)
   return docNo.replace(/-\w+$/, '').replace(/-\w+-\w+$/, '');
 }
 
@@ -1700,7 +1699,8 @@ var isPartial = (status === 'PARTIAL');
 var badgeClass = isCompleted ? 'success' : (isPartial ? 'info' : 'warning');
 var statusText = isCompleted ? 'COMPLETED' : (isPartial ? 'PARTIAL' : 'PENDING');
 var icon = isCompleted ? 'bi-check-circle-fill' : (isPartial ? 'bi-hourglass-split' : 'bi-clock');
-var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + '">' +
+var docNo = req.docNo || '';
+var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + '" data-docno="' + docNo + '" style="cursor:pointer;">' +
 '<div class="d-flex justify-content-between align-items-start">' +
 '<div>' +
 '<div class="fw-bold">' + (req.docNo || '') + ' <span class="badge bg-secondary">' + (req.type || '') + '</span></div>' +
@@ -1709,8 +1709,19 @@ var html = '<div class="list-group-item request-card ' + (isCompleted ? 'complet
 '<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + statusText + '</span>' +
 '</div>' +
 '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
+'<div class="small text-muted mt-1"><i class="bi bi-qr-code me-1"></i> Click to re-open QR</div>' +
 '</div>';
 container.innerHTML += html;
+});
+
+// ─── Add click event to each request card to re-open QR modal ───
+container.querySelectorAll('.request-card').forEach(function(el) {
+el.addEventListener('click', function(e) {
+var docNo = this.getAttribute('data-docno');
+if (docNo) {
+showRequestQr(docNo, docNo);
+}
+});
 });
 }
 
@@ -2739,7 +2750,7 @@ if (mrrPrintModal) mrrPrintModal.hide();
 }
 
 // ============================================================================
-// MRIF LIST & PRINT (FIXED: shows clean doc number without suffix)
+// MRIF LIST & PRINT
 // ============================================================================
 
 async function openMrifList() {
@@ -2882,7 +2893,6 @@ function renderMrifPrint(docNo, info, items) {
 
   var mrifQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
-  // ─── FIX: Use cleanDocNo() for the document number display ───
   var html = '<div class="mrif-print-sheet">' +
     '<div class="mrif-header">' +
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
@@ -3030,7 +3040,7 @@ if (mrifPrintModal) mrifPrintModal.hide();
 }
 
 // ============================================================================
-// MRS PRINT PREVIEW — List & Print (FIXED: shows clean doc number without suffix)
+// MRS PRINT PREVIEW — List & Print
 // ============================================================================
 
 async function openMrsList() {
@@ -3173,7 +3183,6 @@ function renderMrsPrint(docNo, info, items) {
 
   var mrsQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
-  // ─── FIX: Use cleanDocNo() for the document number display ───
   var html = '<div class="mrif-print-sheet">' +
     '<div class="mrif-header">' +
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
