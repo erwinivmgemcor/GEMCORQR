@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    IVM WAREHOUSE QR — APPLICATION LOGIC
-   (Full version with QR scanning and MRR print fix)
+   (Fixed: QR scan from new request now loads document directly)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
@@ -55,7 +55,6 @@ var mrifPrintModal = document.getElementById('mrifPrintModal') ? new bootstrap.M
 var pendingMrifModal = document.getElementById('pendingMrifModal') ? new bootstrap.Modal(document.getElementById('pendingMrifModal')) : null;
 var mrrListModal = document.getElementById('mrrListModal') ? new bootstrap.Modal(document.getElementById('mrrListModal')) : null;
 var mrrPrintModal = document.getElementById('mrrPrintModal') ? new bootstrap.Modal(document.getElementById('mrrPrintModal')) : null;
-// ─── MRS Modal references ───
 var mrsListModal = document.getElementById('mrsListModal') ? new bootstrap.Modal(document.getElementById('mrsListModal')) : null;
 var mrsPrintModal = document.getElementById('mrsPrintModal') ? new bootstrap.Modal(document.getElementById('mrsPrintModal')) : null;
 const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
@@ -64,7 +63,6 @@ const productionNameModal = new bootstrap.Modal(document.getElementById('product
 state.poScanModal = new bootstrap.Modal(document.getElementById('poScanModal'));
 state.poItemsModal = new bootstrap.Modal(document.getElementById('poItemsModal'));
 
-// ─── Helper: Build unit dropdown options ───
 function buildUnitOptions(selected) {
   var html = '';
   UNIT_OPTIONS.forEach(function(u) {
@@ -389,7 +387,6 @@ document.getElementById('moduleLabel').textContent = mod;
 updateLabels();
 changeDocument();
 await fetchPendingDocs();
-// Show/hide list buttons
 var mrifCard = document.getElementById('mrifListCard');
 if (mrifCard) mrifCard.classList.toggle('d-none', mod !== 'MRIF');
 var mrrCard = document.getElementById('mrrListCard');
@@ -466,6 +463,12 @@ document.getElementById('activeTransactionSection').classList.remove('d-none');
 document.getElementById('docTitle').textContent = cleanDocNo(docNo);
 await fetchDocItems(docNo, state.currentModule);
 checkForProgress();
+} catch(err) {
+console.error('[onDocSelect] Error:', err);
+showToast('Failed to load document: ' + err.message, 'danger');
+// Ensure we hide loading and show the doc picker again
+document.getElementById('docPickerSection').classList.remove('d-none');
+document.getElementById('activeTransactionSection').classList.add('d-none');
 } finally {
 hideLoading();
 }
@@ -532,18 +535,34 @@ document.getElementById('resumeBanner').classList.add('d-none');
 
 async function fetchDocItems(docNo, docType) {
 const sheetId = getCleanSheetId();
-if (!sheetId) return;
+if (!sheetId) {
+showToast('No Sheet ID configured for ' + docType + '. Please sync or enter Sheet ID in Settings.', 'warning');
+throw new Error('No Sheet ID');
+}
 try {
 const url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=' + docType + '&sheetId=' + sheetId + '&_t=' + Date.now();
+console.log('[fetchDocItems] URL:', url);
 const res = await fetch(url, { redirect: 'follow' });
 const text = await res.text();
+console.log('[fetchDocItems] Raw response:', text.substring(0, 500));
 let data;
-try { data = JSON.parse(text); } catch(e) { data = []; }
+try { data = JSON.parse(text); } catch(e) { 
+console.error('[fetchDocItems] JSON parse error:', e);
+showToast('Invalid response from server', 'danger');
+throw new Error('Invalid response');
+}
 if (data.error) {
 showToast('Error: ' + data.error, 'danger');
-return;
+throw new Error(data.error);
+}
+if (!data.success) {
+showToast('Error: ' + (data.error || 'Failed to load document'), 'danger');
+throw new Error(data.error || 'Failed to load document');
 }
 const items = Array.isArray(data) ? data : (data.items || []);
+if (items.length === 0) {
+showToast('Warning: No items found in this document', 'warning');
+}
 state.items = items.map((it, idx) => ({
 inventoryId: it.inventoryId || it.code || it.itemCode || '',
 description: it.description || it.desc || '',
@@ -556,7 +575,9 @@ verified: false
 renderItems();
 startScanner();
 } catch(err) {
-showToast('Failed to load items', 'danger');
+console.error('[fetchDocItems] Error:', err);
+// Re-throw so that onDocSelect can handle it
+throw err;
 }
 }
 function renderItems() {
@@ -623,14 +644,23 @@ if (state.html5QrCode) { state.html5QrCode.stop().catch(()=>{}); state.html5QrCo
 function onScanSuccess(decodedText) {
 clearErrorAlert();
 
+// ─── Check if it's a URL with ?doc= parameter (QR from new request) ───
 var urlDocMatch = decodedText.match(/[?&]doc=([^&\s]+)/);
 if (urlDocMatch) {
   var extractedDoc = decodeURIComponent(urlDocMatch[1]);
-  decodedText = extractedDoc;
-  console.log('[QR Scan] Extracted doc from URL:', extractedDoc);
+  console.log('[Scan] Extracted doc from URL:', extractedDoc);
+  var mod = 'MRIF';
+  if (extractedDoc.indexOf('MRR') === 0) mod = 'MRR';
+  else if (extractedDoc.indexOf('MRS') === 0) mod = 'MRS';
+  playSuccessBeep();
+  showToast('Loading document ' + cleanDocNo(extractedDoc) + '...', 'success');
+  selectModule(mod);
+  setTimeout(() => onDocSelect(extractedDoc), 500);
+  return;
 }
 
-const docPattern = /^(MRIF|MRR|MRS)\d{6,}$/i;
+// ─── Check if it's a plain document number ───
+const docPattern = /^(MRIF|MRR|MRS)\d{6,}/i;
 if (docPattern.test(decodedText)) {
 playSuccessBeep();
 if (confirm('Document QR detected: ' + decodedText + '\n\nSwitch to this document?')) {
@@ -642,6 +672,8 @@ setTimeout(() => onDocSelect(decodedText), 300);
 }
 return;
 }
+
+// ─── Try as Item QR (existing document) ───
 const item = state.items.find(i => i.inventoryId.toLowerCase() === decodedText.toLowerCase());
 if (!item) {
 playErrorBuzz();
@@ -708,19 +740,6 @@ state.quickScanner = null;
 }
 quickScanModal.hide();
 
-// ─── Check if it's a document QR (MRIF, MRR, MRS) ───
-const docPattern = /^(MRIF|MRR|MRS)\d{6,}/i;
-if (docPattern.test(decodedText)) {
-const mod = decodedText.substring(0, 4).toUpperCase();
-if (['MRIF','MRR','MRS'].includes(mod)) {
-playSuccessBeep();
-showToast('Loading document ' + cleanDocNo(decodedText) + '...', 'success');
-selectModule(mod);
-setTimeout(() => onDocSelect(decodedText), 500);
-return;
-}
-}
-
 // ─── Check if it's a URL with ?doc= parameter (QR from new request) ───
 var urlDocMatch = decodedText.match(/[?&]doc=([^&\s]+)/);
 if (urlDocMatch) {
@@ -734,6 +753,19 @@ if (urlDocMatch) {
   selectModule(mod);
   setTimeout(() => onDocSelect(extractedDoc), 500);
   return;
+}
+
+// ─── Check if it's a plain document number ───
+const docPattern = /^(MRIF|MRR|MRS)\d{6,}/i;
+if (docPattern.test(decodedText)) {
+const mod = decodedText.substring(0, 4).toUpperCase();
+if (['MRIF','MRR','MRS'].includes(mod)) {
+playSuccessBeep();
+showToast('Loading document ' + cleanDocNo(decodedText) + '...', 'success');
+selectModule(mod);
+setTimeout(() => onDocSelect(decodedText), 500);
+return;
+}
 }
 
 // ─── Try as PO Number (for MRR creation) ───
@@ -972,10 +1004,6 @@ loadRequestInventory();
 loadRequestorList();
 newRequestModal.show();
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// WIZARD FUNCTIONS — Step-by-step New Request
-// ═══════════════════════════════════════════════════════════════════════════
 
 function resetWizard() {
   document.getElementById('reqDocType').value = '';
@@ -2243,7 +2271,7 @@ container.appendChild(el);
 }
 
 // ============================================================================
-// MRR PRINT PREVIEW — List & Print (FIXED: correct data extraction)
+// MRR PRINT PREVIEW — List & Print
 // ============================================================================
 
 async function openMrrList() {
@@ -2345,7 +2373,6 @@ if (items && items.length > 0) {
 }
 console.log('[renderMrrPrint] ================================================');
 
-// ─── Extract meta info ───
 var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
 var vendor = info['Vendor/Client'] || info.vendor || info.client || '';
 var datePrepared = info['Date Prepared'] || info.datePrepared || '';
@@ -2375,16 +2402,12 @@ function formatDate(val) {
 var dateStr = formatDate(datePrepared);
 var recDateStr = formatDate(receivingDate);
 
-// ─── Build items HTML ───
 var itemsHtml = '';
 if (items && items.length > 0) {
   items.forEach(function(it, idx) {
-    // ITEM CODE - use inventoryId or itemCode
     var code = it.inventoryId || it.itemCode || '';
     var desc = it.description || it.desc || it.itemDescription || '';
-    // REQUESTED QTY = recQty, expectedQty, or qty
     var requestedQty = it.recQty || it.expectedQty || it.qty || it.quantity || 0;
-    // RECEIVED QTY = atlQty, actualQty, issuedQty, or actual
     var receivedQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
     var unit = it.unit || it.uom || 'PIECE';
     var remarks = it.remarks || it.status || it.note || '';
@@ -2404,10 +2427,8 @@ if (items && items.length > 0) {
   });
 }
 
-// ─── QR code for document ───
 var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
-// ─── Build complete HTML ───
 var html = '<div class="mrr-print-sheet">' +
   '<div class="mrr-header">' +
     '<div class="mrr-logo"><img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'"></div>' +
