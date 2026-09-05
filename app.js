@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    IVM WAREHOUSE QR — APPLICATION LOGIC
-   (Added: Manual MRIF Creation with Auto-Suggest)
+   (Fixed: Manual MRIF no longer auto-loads; document appears in lists)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
@@ -2037,7 +2037,7 @@ async function submitManualMrr() {
 }
 
 // ============================================================================
-// MANUAL MRIF CREATION — WITH AUTO-SUGGEST (UPDATED)
+// MANUAL MRIF CREATION — WITH AUTO-SUGGEST (FIXED: no auto-load)
 // ============================================================================
 function openManualMrifModal() {
   if (!manualMrifModal) {
@@ -2293,12 +2293,11 @@ async function submitManualMrif() {
     if (data && data.success) {
       if (manualMrifModal) manualMrifModal.hide();
       showToast('Manual MRIF created: ' + data.docNo, 'success');
+      // Refresh document list and notifications but do NOT auto-load
       await fetchPendingDocs();
-      setTimeout(function() {
-        selectModule('MRIF').then(function() {
-          onDocSelect(data.docNo);
-        });
-      }, 500);
+      await loadWarehouseNotifications();
+      // Also refresh KPIs
+      await updateWarehouseKPIs();
     } else {
       showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
     }
@@ -2982,7 +2981,7 @@ function printMrr() {
     '.mrr-cb-item { font-size: 7.5pt; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }' +
     '.mrr-cb-circle { font-size: 9pt; line-height: 1; font-family: "Courier New", monospace; }' +
     '.mrr-sigs { display: flex; justify-content: center; gap: 50px; margin-top: 24px; text-align: center; }' +
-    '.mrr-sig { width: 26%; min-width: 140px; }' +
+       '.mrr-sig { width: 26%; min-width: 140px; }' +
     '.mrr-sig-name { font-size: 9.5pt; font-weight: bold; text-transform: uppercase; margin-bottom: 1px; min-height: 16px; letter-spacing: 0.5px; }' +
     '.mrr-sig-line { border-bottom: 1.5px solid #000; height: 18px; margin-bottom: 2px; }' +
     '.mrr-sig-label { font-size: 8.5pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; font-style: italic; }';
@@ -3234,6 +3233,7 @@ function renderMrifPrint(docNo, info, items) {
   container.innerHTML = html;
   console.log('[renderMrifPrint] HTML rendered successfully');
 }
+
 function printMrif() {
   var previewContent = document.getElementById('mrifPrintContent');
   if (!previewContent) {
