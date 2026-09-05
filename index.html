@@ -890,25 +890,31 @@
   </div>
 </div>
 
-<!-- Request Success Modal -->
-<div class="modal fade" id="requestSuccessModal" tabindex="-1">
+<!-- Request Success Modal (UPDATED with Download & Share) -->
+<div class="modal fade" id="requestSuccessModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content text-center">
-      <div class="modal-body py-5">
+      <div class="modal-body py-4">
         <i class="bi bi-check-circle-fill text-success" style="font-size:3rem"></i>
-        <h4 class="mt-3">Request Created!</h4>
+        <h4 class="mt-2">Request Created!</h4>
         <div class="my-2">
           <span class="badge bg-secondary">Ticket: <span id="requestTicketNo"></span></span><br>
           <span class="badge bg-primary mt-1">Doc: <span id="requestDocNo"></span></span>
         </div>
         <div class="my-3 d-flex justify-content-center">
-          <img id="requestQrImg" src="" alt="QR Code" class="qr-display mx-auto" style="max-width:280px;width:100%">
+          <img id="requestQrImg" src="" alt="QR Code" class="qr-display mx-auto" style="max-width:280px;width:100%;border:1px solid #ddd;border-radius:8px;padding:8px;">
         </div>
         <div id="qrFallback" class="d-none alert alert-warning mt-2"></div>
         <p class="text-muted small">Show this QR code to the warehouse team.</p>
       </div>
-      <div class="modal-footer justify-content-center">
-        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Done</button>
+      <div class="modal-footer justify-content-center gap-2">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-success" id="downloadQrBtn" onclick="downloadRequestQr()">
+          <i class="bi bi-download me-1"></i> Download
+        </button>
+        <button type="button" class="btn btn-primary" id="shareQrBtn" onclick="shareRequestQr()" style="display:none;">
+          <i class="bi bi-share me-1"></i> Share
+        </button>
       </div>
     </div>
   </div>
@@ -1155,7 +1161,7 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
-   INVENTORY BROWSER MODAL - SIMPLIFIED: QR, ITEM CODE, DESCRIPTION only
+   INVENTORY BROWSER MODAL
    ═══════════════════════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="inventoryBrowserModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
