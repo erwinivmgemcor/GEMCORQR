@@ -201,18 +201,22 @@
     </div>
   </div>
 
-  <!-- MRIF List Button -->
+  <!-- MRIF List & Manual MRIF Card -->
   <div id="mrifListCard" class="card mb-4 border-0 shadow-sm d-none">
     <div class="card-body text-center py-3">
-      <button class="btn btn-warning w-100" onclick="openMrifList()">
+      <button class="btn btn-warning w-100 mb-2" onclick="openMrifList()">
         <i class="bi bi-printer me-2"></i>
         <strong>See All MRIF / List of MRIF</strong>
       </button>
-      <small class="text-muted d-block mt-1">View and print MRIF documents</small>
+      <button class="btn btn-outline-primary w-100" onclick="openManualMrifModal()">
+        <i class="bi bi-plus-circle me-2"></i>
+        <strong>Create Manual MRIF</strong>
+      </button>
+      <small class="text-muted d-block mt-1">For items without JO or production request</small>
     </div>
   </div>
 
-  <!-- MRR List Button -->
+  <!-- MRR List & Manual MRR Card -->
   <div id="mrrListCard" class="card mb-4 border-0 shadow-sm d-none">
     <div class="card-body text-center py-3">
       <button class="btn btn-success w-100 mb-2" onclick="openMrrList()">
@@ -1154,6 +1158,91 @@
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-success" id="btnSubmitManualMrr" onclick="submitManualMrr()" disabled>
           <i class="bi bi-check-circle me-1"></i>Create MRR
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+   MANUAL MRIF MODAL (NEW)
+   ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="manualMrifModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-warning text-dark">
+        <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Create Manual MRIF</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info small">
+          <i class="bi bi-info-circle me-1"></i>
+          Use this to release items without a JO number or production request.
+        </div>
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Requestor <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="manualMrifRequestor" placeholder="Enter requestor name" oninput="updateManualMrifSubmitButton()">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Department</label>
+            <input type="text" class="form-control" id="manualMrifDepartment" placeholder="Department / Section">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-bold">JO No. <span class="text-muted">(optional)</span></label>
+            <input type="text" class="form-control" id="manualMrifJoNo" placeholder="JO number if any">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-bold">GEM SO No. <span class="text-muted">(optional)</span></label>
+            <input type="text" class="form-control" id="manualMrifGemSoNo" placeholder="GEM SO number">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-bold">Date <span class="text-danger">*</span></label>
+            <input type="date" class="form-control" id="manualMrifDate">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Client Name <span class="text-muted">(optional)</span></label>
+            <input type="text" class="form-control" id="manualMrifClient" placeholder="Client name">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Project <span class="text-muted">(optional)</span></label>
+            <input type="text" class="form-control" id="manualMrifProject" placeholder="Project name">
+          </div>
+        </div>
+        <hr>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h6 class="mb-0 fw-bold"><i class="bi bi-box-seam me-1"></i>Items</h6>
+          <button class="btn btn-sm btn-primary" onclick="addManualMrifItem()">
+            <i class="bi bi-plus-lg me-1"></i>Add Item
+          </button>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered" id="manualMrifItemsTable">
+            <thead class="table-light">
+              <tr>
+                <th style="width:5%">#</th>
+                <th style="width:20%">Item Code <span class="text-danger">*</span></th>
+                <th style="width:30%">Description <span class="text-danger">*</span></th>
+                <th style="width:10%">Qty <span class="text-danger">*</span></th>
+                <th style="width:10%">ATL Qty</th>
+                <th style="width:15%">Unit</th>
+                <th style="width:6%"></th>
+              </tr>
+            </thead>
+            <tbody id="manualMrifItemsBody">
+              <!-- Items added here -->
+            </tbody>
+          </table>
+        </div>
+        <div id="manualMrifEmptyState" class="text-center text-muted py-3">
+          <i class="bi bi-inbox fs-1"></i>
+          <p class="small mb-0">No items yet. Click "Add Item" to start.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-warning" id="btnSubmitManualMrif" onclick="submitManualMrif()" disabled>
+          <i class="bi bi-check-circle me-1"></i>Create MRIF
         </button>
       </div>
     </div>
