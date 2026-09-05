@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    IVM WAREHOUSE QR — APPLICATION LOGIC
-   (Fixed: Manual MRIF no longer auto-loads; document appears in lists)
+   (Fixed: Manual MRIF loading stuck, added auto-suggest)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
@@ -2037,7 +2037,7 @@ async function submitManualMrr() {
 }
 
 // ============================================================================
-// MANUAL MRIF CREATION — WITH AUTO-SUGGEST (FIXED: no auto-load)
+// MANUAL MRIF CREATION — WITH AUTO-SUGGEST (FIXED: no auto-load, proper loading)
 // ============================================================================
 function openManualMrifModal() {
   if (!manualMrifModal) {
@@ -2264,6 +2264,7 @@ async function submitManualMrif() {
   }
 
   showLoading('Creating Manual MRIF...');
+
   try {
     var payload = {
       action: 'createRequest',
@@ -2279,6 +2280,8 @@ async function submitManualMrif() {
       isManual: true
     };
 
+    console.log('[Manual MRIF] Payload:', payload);
+
     var res = await fetch(API_URL, {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -2286,25 +2289,31 @@ async function submitManualMrif() {
       redirect: 'follow'
     });
 
+    console.log('[Manual MRIF] Response status:', res.status);
+
     var text = await res.text();
+    console.log('[Manual MRIF] Raw response:', text);
+
     var data;
-    try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+    try { data = JSON.parse(text); } catch(e) {
+      throw new Error('Invalid JSON response from server');
+    }
 
     if (data && data.success) {
       if (manualMrifModal) manualMrifModal.hide();
       showToast('Manual MRIF created: ' + data.docNo, 'success');
-      // Refresh document list and notifications but do NOT auto-load
+      // Refresh lists but do NOT auto-load
       await fetchPendingDocs();
       await loadWarehouseNotifications();
-      // Also refresh KPIs
       await updateWarehouseKPIs();
     } else {
       showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
     }
   } catch(err) {
+    console.error('[Manual MRIF] Error:', err);
     showToast('Error: ' + err.message, 'danger');
   } finally {
-    hideLoading();
+    hideLoading(); // ALWAYS hide the loading overlay
   }
 }
 
@@ -2981,7 +2990,7 @@ function printMrr() {
     '.mrr-cb-item { font-size: 7.5pt; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }' +
     '.mrr-cb-circle { font-size: 9pt; line-height: 1; font-family: "Courier New", monospace; }' +
     '.mrr-sigs { display: flex; justify-content: center; gap: 50px; margin-top: 24px; text-align: center; }' +
-       '.mrr-sig { width: 26%; min-width: 140px; }' +
+    '.mrr-sig { width: 26%; min-width: 140px; }' +
     '.mrr-sig-name { font-size: 9.5pt; font-weight: bold; text-transform: uppercase; margin-bottom: 1px; min-height: 16px; letter-spacing: 0.5px; }' +
     '.mrr-sig-line { border-bottom: 1.5px solid #000; height: 18px; margin-bottom: 2px; }' +
     '.mrr-sig-label { font-size: 8.5pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; font-style: italic; }';
