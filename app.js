@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    IVM WAREHOUSE QR — APPLICATION LOGIC
-   (Fixed: Manual MRIF loading stuck, added auto-suggest)
+   (Fixed: Manual MRIF loading stuck, added timeout safety)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
@@ -2037,7 +2037,7 @@ async function submitManualMrr() {
 }
 
 // ============================================================================
-// MANUAL MRIF CREATION — WITH AUTO-SUGGEST (FIXED: no auto-load, proper loading)
+// MANUAL MRIF CREATION — WITH AUTO-SUGGEST & SAFETY TIMEOUT
 // ============================================================================
 function openManualMrifModal() {
   if (!manualMrifModal) {
@@ -2265,6 +2265,12 @@ async function submitManualMrif() {
 
   showLoading('Creating Manual MRIF...');
 
+  // ─── SAFETY TIMEOUT: force hide loading after 10 seconds ───
+  var timeoutId = setTimeout(function() {
+    console.warn('[Manual MRIF] Loading timeout – forcing hide.');
+    hideLoading();
+  }, 10000);
+
   try {
     var payload = {
       action: 'createRequest',
@@ -2302,7 +2308,6 @@ async function submitManualMrif() {
     if (data && data.success) {
       if (manualMrifModal) manualMrifModal.hide();
       showToast('Manual MRIF created: ' + data.docNo, 'success');
-      // Refresh lists but do NOT auto-load
       await fetchPendingDocs();
       await loadWarehouseNotifications();
       await updateWarehouseKPIs();
@@ -2313,6 +2318,7 @@ async function submitManualMrif() {
     console.error('[Manual MRIF] Error:', err);
     showToast('Error: ' + err.message, 'danger');
   } finally {
+    clearTimeout(timeoutId); // cancel the timeout if we finished early
     hideLoading(); // ALWAYS hide the loading overlay
   }
 }
