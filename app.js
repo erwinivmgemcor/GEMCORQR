@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    IVM WAREHOUSE QR — APPLICATION LOGIC
-   (Fixed: QR scan from new request now loads document directly)
+   (FIXED: Quick Scan now waits for module switch before loading document)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
@@ -576,7 +576,6 @@ renderItems();
 startScanner();
 } catch(err) {
 console.error('[fetchDocItems] Error:', err);
-// Re-throw so that onDocSelect can handle it
 throw err;
 }
 }
@@ -654,8 +653,13 @@ if (urlDocMatch) {
   else if (extractedDoc.indexOf('MRS') === 0) mod = 'MRS';
   playSuccessBeep();
   showToast('Loading document ' + cleanDocNo(extractedDoc) + '...', 'success');
-  selectModule(mod);
-  setTimeout(() => onDocSelect(extractedDoc), 500);
+  // FIX: await selectModule before loading document
+  selectModule(mod).then(() => {
+    onDocSelect(extractedDoc);
+  }).catch(err => {
+    console.error('[onScanSuccess] Error switching module:', err);
+    showToast('Failed to switch module: ' + err.message, 'danger');
+  });
   return;
 }
 
@@ -666,8 +670,12 @@ playSuccessBeep();
 if (confirm('Document QR detected: ' + decodedText + '\n\nSwitch to this document?')) {
 const mod = decodedText.substring(0, 4).toUpperCase();
 if (['MRIF','MRR','MRS'].includes(mod)) {
-selectModule(mod);
-setTimeout(() => onDocSelect(decodedText), 300);
+selectModule(mod).then(() => {
+  onDocSelect(decodedText);
+}).catch(err => {
+  console.error('[onScanSuccess] Error switching module:', err);
+  showToast('Failed to switch module: ' + err.message, 'danger');
+});
 }
 }
 return;
@@ -750,8 +758,17 @@ if (urlDocMatch) {
   else if (extractedDoc.indexOf('MRS') === 0) mod = 'MRS';
   playSuccessBeep();
   showToast('Loading document ' + cleanDocNo(extractedDoc) + '...', 'success');
-  selectModule(mod);
-  setTimeout(() => onDocSelect(extractedDoc), 500);
+  // FIX: await selectModule before loading document
+  try {
+    await selectModule(mod);
+    await onDocSelect(extractedDoc);
+  } catch(err) {
+    console.error('[QuickScan] Error loading document:', err);
+    showToast('Failed to load document: ' + err.message, 'danger');
+    // Show the doc picker again so user can try manually
+    document.getElementById('docPickerSection').classList.remove('d-none');
+    document.getElementById('activeTransactionSection').classList.add('d-none');
+  }
   return;
 }
 
@@ -762,8 +779,15 @@ const mod = decodedText.substring(0, 4).toUpperCase();
 if (['MRIF','MRR','MRS'].includes(mod)) {
 playSuccessBeep();
 showToast('Loading document ' + cleanDocNo(decodedText) + '...', 'success');
-selectModule(mod);
-setTimeout(() => onDocSelect(decodedText), 500);
+try {
+  await selectModule(mod);
+  await onDocSelect(decodedText);
+} catch(err) {
+  console.error('[QuickScan] Error loading document:', err);
+  showToast('Failed to load document: ' + err.message, 'danger');
+  document.getElementById('docPickerSection').classList.remove('d-none');
+  document.getElementById('activeTransactionSection').classList.add('d-none');
+}
 return;
 }
 }
