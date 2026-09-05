@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    IVM WAREHOUSE QR — APPLICATION LOGIC
-   (Added: Click on My Requests to re-open QR modal)
+   (FIXED: List shows suffix, print preview shows clean)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
@@ -436,7 +436,7 @@ docs.forEach(d => {
 const val = typeof d === 'string' ? d : (d.docNo || d.name || d);
 const opt = document.createElement('option');
 opt.value = val;
-opt.textContent = cleanDocNo(val);
+opt.textContent = cleanDocNo(val); // show clean in dropdown
 sel.appendChild(opt);
 });
 }
@@ -1703,7 +1703,7 @@ var docNo = req.docNo || '';
 var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + '" data-docno="' + docNo + '" style="cursor:pointer;">' +
 '<div class="d-flex justify-content-between align-items-start">' +
 '<div>' +
-'<div class="fw-bold">' + (req.docNo || '') + ' <span class="badge bg-secondary">' + (req.type || '') + '</span></div>' +
+'<div class="fw-bold">' + docNo + ' <span class="badge bg-secondary">' + (req.type || '') + '</span></div>' +
 '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
 '</div>' +
 '<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + statusText + '</span>' +
@@ -1714,7 +1714,6 @@ var html = '<div class="list-group-item request-card ' + (isCompleted ? 'complet
 container.innerHTML += html;
 });
 
-// ─── Add click event to each request card to re-open QR modal ───
 container.querySelectorAll('.request-card').forEach(function(el) {
 el.addEventListener('click', function(e) {
 var docNo = this.getAttribute('data-docno');
@@ -2217,7 +2216,7 @@ var type = req.type || 'MRIF';
 var html = '<div class="list-group-item wh-notif-item py-2" data-docno="' + docNo + '" data-type="' + type + '">' +
 '<div class="d-flex justify-content-between align-items-start">' +
 '<div>' +
-'<div class="doc-no">' + cleanDocNo(docNo) + ' <span class="badge bg-secondary">' + type + '</span></div>' +
+'<div class="doc-no">' + docNo + ' <span class="badge bg-secondary">' + type + '</span></div>' +  // show full docNo
 '<div class="requestor"><i class="bi bi-person me-1"></i>' + (req.requestor || 'Unknown') + '</div>' +
 '<div class="timestamp"><i class="bi bi-clock me-1"></i>' + dateStr + '</div>' +
 '</div>' +
@@ -2252,7 +2251,7 @@ var type = req.type || 'MRIF';
 var html = '<div class="list-group-item wh-notif-item py-3" data-docno="' + docNo + '" data-type="' + type + '">' +
 '<div class="d-flex justify-content-between align-items-start">' +
 '<div>' +
-'<div class="doc-no">' + cleanDocNo(docNo) + ' <span class="badge bg-secondary">' + type + '</span></div>' +
+'<div class="doc-no">' + docNo + ' <span class="badge bg-secondary">' + type + '</span></div>' +
 '<div class="requestor"><i class="bi bi-person me-1"></i>' + (req.requestor || 'Unknown') + '</div>' +
 '<div class="timestamp"><i class="bi bi-clock me-1"></i>' + dateStr + '</div>' +
 '</div>' +
@@ -2396,7 +2395,7 @@ var docNo = typeof d === 'string' ? d : (d.docNo || d.name || '');
 var el = document.createElement('div');
 el.className = 'list-group-item pending-mrif-item';
 el.innerHTML = '<div class="d-flex justify-content-between align-items-center">' +
-'<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + cleanDocNo(docNo) + '</strong></div>' +
+'<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + docNo + '</strong></div>' +  // show full docNo
 '<button class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-in-right me-1"></i>Process</button>' +
 '</div>' +
 '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i>Has items awaiting release</div>';
@@ -2457,7 +2456,7 @@ docs.forEach(function(d) {
 var docNo = typeof d === 'string' ? d : (d.docNo || d.name || d);
 var el = document.createElement('div');
 el.className = 'list-group-item mrif-list-item d-flex justify-content-between align-items-center';
-el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-success"></i><strong>' + cleanDocNo(docNo) + '</strong></div>' +
+el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-success"></i><strong>' + docNo + '</strong></div>' +  // show full docNo
 '<button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>View / Print</button>';
 el.addEventListener('click', function() { openMrrPrint(docNo); });
 container.appendChild(el);
@@ -2790,7 +2789,7 @@ docs.forEach(function(d) {
 var docNo = typeof d === 'string' ? d : (d.docNo || d.name || d);
 var el = document.createElement('div');
 el.className = 'list-group-item mrif-list-item d-flex justify-content-between align-items-center';
-el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + cleanDocNo(docNo) + '</strong></div>' +
+el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + docNo + '</strong></div>' +  // show full docNo
 '<button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>View / Print</button>';
 el.addEventListener('click', function() { openMrifPrint(docNo); });
 container.appendChild(el);
@@ -2897,7 +2896,7 @@ function renderMrifPrint(docNo, info, items) {
     '<div class="mrif-header">' +
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
       '<div class="mrif-docno">' +
-        '<div><span class="mrif-dn-label">MRIF No.:</span><span class="mrif-dn-box">' + cleanDocNo(docNo) + '</span></div>' +
+        '<div><span class="mrif-dn-label">MRIF No.:</span><span class="mrif-dn-box">' + cleanDocNo(docNo) + '</span></div>' +  // clean in print
         '<div class="mrif-doc-qr"><img src="' + mrifQrUrl + '" alt="MRIF QR" style="width:90px;height:90px;margin-top:4px;"></div>' +
       '</div>' +
     '</div>' +
@@ -3080,7 +3079,7 @@ docs.forEach(function(d) {
 var docNo = typeof d === 'string' ? d : (d.docNo || d.name || d);
 var el = document.createElement('div');
 el.className = 'list-group-item mrif-list-item d-flex justify-content-between align-items-center';
-el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + cleanDocNo(docNo) + '</strong></div>' +
+el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + docNo + '</strong></div>' +  // show full docNo
 '<button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>View / Print</button>';
 el.addEventListener('click', function() { openMrsPrint(docNo); });
 container.appendChild(el);
@@ -3187,7 +3186,7 @@ function renderMrsPrint(docNo, info, items) {
     '<div class="mrif-header">' +
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
       '<div class="mrif-docno">' +
-        '<div><span class="mrif-dn-label">MRS No.:</span><span class="mrif-dn-box">' + cleanDocNo(docNo) + '</span></div>' +
+        '<div><span class="mrif-dn-label">MRS No.:</span><span class="mrif-dn-box">' + cleanDocNo(docNo) + '</span></div>' +  // clean in print
         '<div class="mrif-doc-qr"><img src="' + mrsQrUrl + '" alt="MRS QR" style="width:90px;height:90px;margin-top:4px;"></div>' +
       '</div>' +
     '</div>' +
