@@ -2428,6 +2428,7 @@ async function fetchInventoryItems() {
   tbody.innerHTML = '<tr><td colspan="3" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading inventory...</td></tr>';
 
   try {
+    // Use the same sheet ID as the master sheet (can also be fetched from settings)
     var sheetId = '1HSxuSlik8hvbHppOE56ICzl1Jz9cCxFWCJ4EN-bzVFs';
     var url = API_URL + '?action=getInventoryItems&sheetId=' + sheetId + '&_t=' + Date.now();
     console.log('[fetchInventoryItems] URL:', url);
@@ -2437,17 +2438,18 @@ async function fetchInventoryItems() {
     var data;
     try { data = JSON.parse(text); } catch(e) { 
       console.error('[fetchInventoryItems] JSON parse error:', e);
-      data = {}; 
+      throw new Error('Invalid response from server');
     }
 
-    if (data.success && data.items) {
+    if (data.success && data.items && data.items.length > 0) {
       inventoryItemsCache = data.items;
       inventoryBrowserFiltered = data.items;
       renderInventoryItems();
       console.log('[fetchInventoryItems] Loaded ' + data.items.length + ' items');
     } else {
-      console.error('[fetchInventoryItems] Error:', data.error || 'Unknown error');
-      tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-3">' + (data.error || 'Failed to load inventory. Check console.') + '</td></tr>';
+      var errorMsg = data.error || 'No items found. Please check that your inventory sheet exists and has data.';
+      console.error('[fetchInventoryItems] Error:', errorMsg);
+      tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-3">' + errorMsg + '</td></tr>';
     }
   } catch(err) {
     console.error('[fetchInventoryItems] Error:', err);
