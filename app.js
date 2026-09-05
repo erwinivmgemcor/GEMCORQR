@@ -2491,6 +2491,51 @@ function filterInventoryItems() {
   }
   renderInventoryItems();
 }
+// ─── QR Zoom Modal ──────────────────────────────────────────────────────────
+var qrZoomModal = null;
+
+function openQrZoom(item) {
+  if (!qrZoomModal) {
+    qrZoomModal = new bootstrap.Modal(document.getElementById('qrZoomModal'));
+  }
+  // Set the item details
+  document.getElementById('qrZoomCode').textContent = item.inventoryId || item.code || '';
+  document.getElementById('qrZoomDesc').textContent = item.description || '';
+  
+  // Generate larger QR
+  var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(item.inventoryId || item.code || '');
+  document.getElementById('qrZoomImg').src = qrUrl;
+  document.getElementById('qrZoomImg').onerror = function() {
+    this.style.display = 'none';
+    document.getElementById('qrZoomFallback').classList.remove('d-none');
+  };
+  document.getElementById('qrZoomFallback').classList.add('d-none');
+  document.getElementById('qrZoomImg').style.display = 'block';
+  
+  qrZoomModal.show();
+}
+
+function renderInventoryItems() {
+  var tbody = document.getElementById('inventoryBrowserBody');
+  if (!tbody) return;
+
+  if (inventoryBrowserFiltered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No items match your search</td></tr>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < inventoryBrowserFiltered.length; i++) {
+    var it = inventoryBrowserFiltered[i];
+    var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(it.inventoryId);
+    html += '<tr class="inventory-row" style="cursor:pointer;" onclick="openQrZoom({inventoryId:\'' + it.inventoryId.replace(/'/g, "\\'") + '\', code:\'' + it.code.replace(/'/g, "\\'") + '\', description:\'' + it.description.replace(/'/g, "\\'") + '\'})">' +
+      '<td class="align-middle text-center"><img src="' + qrUrl + '" style="width:40px;height:40px;" alt="QR"></td>' +
+      '<td class="align-middle"><code>' + it.inventoryId + '</code></td>' +
+      '<td class="align-middle">' + it.description + '</td>' +
+      '</tr>';
+  }
+  tbody.innerHTML = html;
+}
 
 function openInventoryQrScan() {
   state.inventoryScanMode = true;
