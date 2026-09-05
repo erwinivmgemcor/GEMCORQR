@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    IVM WAREHOUSE QR — APPLICATION LOGIC
-   (Added: Manual MRIF Creation)
+   (Added: Manual MRIF Creation with Auto-Suggest)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
@@ -2037,7 +2037,7 @@ async function submitManualMrr() {
 }
 
 // ============================================================================
-// MANUAL MRIF CREATION (NEW FEATURE)
+// MANUAL MRIF CREATION — WITH AUTO-SUGGEST (UPDATED)
 // ============================================================================
 function openManualMrifModal() {
   if (!manualMrifModal) {
@@ -2057,6 +2057,8 @@ function openManualMrifModal() {
   renderManualMrifItems();
   updateManualMrifSubmitButton();
   manualMrifModal.show();
+  // Load inventory for suggestions
+  loadRequestInventory();
 }
 
 function addManualMrifItem() {
@@ -2070,9 +2072,9 @@ function addManualMrifItem() {
   renderManualMrifItems();
   updateManualMrifSubmitButton();
   setTimeout(function() {
-    var inputs = document.querySelectorAll('.manual-mrif-code');
-    if (inputs.length > 0) {
-      inputs[inputs.length - 1].focus();
+    var searches = document.querySelectorAll('.manual-mrif-search');
+    if (searches.length > 0) {
+      searches[searches.length - 1].focus();
     }
   }, 100);
 }
@@ -2108,16 +2110,27 @@ function renderManualMrifItems() {
     var it = manualMrifItems[i];
     html += '<tr>' +
       '<td class="align-middle text-center">' + (i + 1) + '</td>' +
-      '<td><input type="text" class="form-control form-control-sm manual-mrif-code" ' +
-        'value="' + (it.inventoryId || '') + '" ' +
-        'onchange="updateManualMrifItem(' + i + ', \'inventoryId\', this.value)" ' +
-        'placeholder="Item code"></td>' +
+      '<td>' +
+        '<div style="position:relative;">' +
+          '<input type="text" class="form-control form-control-sm manual-mrif-search" ' +
+            'placeholder="Type to search..." ' +
+            'value="' + (it.inventoryId ? it.inventoryId + ' - ' + it.description : '') + '" ' +
+            'oninput="filterManualMrifItems(this, ' + i + ')" ' +
+            'onfocus="filterManualMrifItems(this, ' + i + ')" ' +
+            'autocomplete="off">' +
+          '<div class="list-group position-absolute z-3 d-none manual-mrif-dropdown" ' +
+            'style="max-height:150px;overflow-y:auto;width:100%;" ' +
+            'id="manualMrifDropdown' + i + '"></div>' +
+          '<input type="hidden" class="manual-mrif-code" id="manualMrifCode' + i + '" value="' + (it.inventoryId || '') + '">' +
+          '<input type="hidden" class="manual-mrif-desc" id="manualMrifDesc' + i + '" value="' + (it.description || '') + '">' +
+        '</div>' +
+      '</td>' +
       '<td><input type="text" class="form-control form-control-sm" ' +
         'value="' + (it.description || '') + '" ' +
         'onchange="updateManualMrifItem(' + i + ', \'description\', this.value)" ' +
         'placeholder="Description"></td>' +
       '<td><input type="number" class="form-control form-control-sm text-center" ' +
-        'value="' + (it.qty || 0) + '" ' +
+        'value="' + (it.qty || 1) + '" ' +
         'onchange="updateManualMrifItem(' + i + ', \'qty\', parseFloat(this.value)||0)" ' +
         'min="1" step="1"></td>' +
       '<td><input type="number" class="form-control form-control-sm text-center" ' +
@@ -2136,6 +2149,58 @@ function renderManualMrifItems() {
       '</tr>';
   }
   tbody.innerHTML = html;
+}
+
+function filterManualMrifItems(input, idx) {
+  var term = input.value.toLowerCase();
+  var dropdown = document.getElementById('manualMrifDropdown' + idx);
+  dropdown.innerHTML = '';
+
+  if (!term) {
+    dropdown.classList.add('d-none');
+    return;
+  }
+
+  var matches = state.requestInventoryList.filter(function(it) {
+    var code = (it.code || it.inventoryId || '').toLowerCase();
+    var desc = (it.description || '').toLowerCase();
+    return code.includes(term) || desc.includes(term);
+  }).slice(0, 10);
+
+  if (matches.length === 0) {
+    dropdown.innerHTML = '<div class="list-group-item text-muted">No matches</div>';
+  } else {
+    matches.forEach(function(it) {
+      var code = it.code || it.inventoryId || '';
+      var desc = it.description || '';
+      var unit = it.unit || 'PIECE';
+      var el = document.createElement('div');
+      el.className = 'list-group-item list-group-item-action';
+      el.innerHTML = '<div class="fw-bold small">' + code + '</div><div class="small text-muted">' + desc + '</div>';
+      el.onclick = function() {
+        input.value = code + ' - ' + desc;
+        document.getElementById('manualMrifCode' + idx).value = code;
+        document.getElementById('manualMrifDesc' + idx).value = desc;
+        var row = input.closest('tr');
+        if (row) {
+          var descInput = row.querySelector('td:nth-child(3) input');
+          if (descInput) descInput.value = desc;
+        }
+        var unitSelect = input.closest('td').querySelector('.manual-mrif-unit') ||
+                         input.closest('tr').querySelector('.manual-mrif-unit');
+        if (unitSelect && unitSelect.querySelector('option[value="' + unit + '"]')) {
+          unitSelect.value = unit;
+        }
+        manualMrifItems[idx].inventoryId = code;
+        manualMrifItems[idx].description = desc;
+        manualMrifItems[idx].unit = unit;
+        dropdown.classList.add('d-none');
+        updateManualMrifSubmitButton();
+      };
+      dropdown.appendChild(el);
+    });
+  }
+  dropdown.classList.remove('d-none');
 }
 
 function updateManualMrifSubmitButton() {
@@ -2165,15 +2230,25 @@ async function submitManualMrif() {
   var project = document.getElementById('manualMrifProject').value.trim();
 
   var items = [];
-  for (var i = 0; i < manualMrifItems.length; i++) {
-    var it = manualMrifItems[i];
-    if (it.inventoryId && it.inventoryId.trim() && it.description && it.description.trim() && it.qty > 0) {
+  var rows = document.querySelectorAll('#manualMrifItemsBody tr');
+  for (var i = 0; i < rows.length; i++) {
+    var codeInput = rows[i].querySelector('.manual-mrif-code');
+    var descInput = rows[i].querySelector('.manual-mrif-desc');
+    var qtyInput = rows[i].querySelector('td:nth-child(4) input');
+    var atlInput = rows[i].querySelector('td:nth-child(5) input');
+    var unitSelect = rows[i].querySelector('.manual-mrif-unit');
+    var code = codeInput ? codeInput.value.trim() : '';
+    var desc = descInput ? descInput.value.trim() : '';
+    var qty = qtyInput ? parseInt(qtyInput.value, 10) : 0;
+    var atl = atlInput ? parseInt(atlInput.value, 10) : 0;
+    var unit = unitSelect ? unitSelect.value : 'PIECE';
+    if (code && desc && qty > 0) {
       items.push({
-        inventoryId: it.inventoryId.trim(),
-        description: it.description.trim(),
-        qty: it.qty,
-        atlQty: it.atlQty || 0,
-        unit: it.unit || 'PIECE'
+        inventoryId: code,
+        description: desc,
+        qty: qty,
+        atlQty: atl,
+        unit: unit
       });
     }
   }
@@ -2219,7 +2294,6 @@ async function submitManualMrif() {
       if (manualMrifModal) manualMrifModal.hide();
       showToast('Manual MRIF created: ' + data.docNo, 'success');
       await fetchPendingDocs();
-      // Optionally auto-load the newly created document
       setTimeout(function() {
         selectModule('MRIF').then(function() {
           onDocSelect(data.docNo);
