@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    IVM WAREHOUSE QR — APPLICATION LOGIC
-   (FIXED: Quick Scan now waits for module switch before loading document)
+   (Full version with QR Download & Share)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
@@ -18,6 +18,11 @@ function cleanDocNo(docNo) {
   if (!docNo) return '';
   return docNo.replace(/-\w+$/, '').replace(/-\w+-\w+$/, '');
 }
+
+// ─── For QR download/share ───
+let lastQrDocNo = '';
+let lastQrTicketNo = '';
+let lastQrImageData = '';
 
 const state = {
 currentModule: 'MRIF',
@@ -536,7 +541,7 @@ document.getElementById('resumeBanner').classList.add('d-none');
 async function fetchDocItems(docNo, docType) {
 const sheetId = getCleanSheetId();
 if (!sheetId) {
-showToast('No Sheet ID configured for ' + docType + '. Please sync or enter Sheet ID in Settings.', 'warning');
+showToast('⚠️ No Sheet ID configured for ' + docType + '. Please go to Settings and sync or enter the Sheet ID.', 'warning');
 throw new Error('No Sheet ID');
 }
 try {
@@ -757,8 +762,23 @@ if (urlDocMatch) {
   if (extractedDoc.indexOf('MRR') === 0) mod = 'MRR';
   else if (extractedDoc.indexOf('MRS') === 0) mod = 'MRS';
   playSuccessBeep();
+  
+  // ─── Check if sheet ID is set ───
+  var sheetKey = 'sheetId_' + mod;
+  var sheetId = localStorage.getItem(sheetKey);
+  if (!sheetId || !extractSheetId(sheetId)) {
+    showToast('⚠️ Sheet ID for ' + mod + ' is missing. Please go to Settings and sync or enter the Sheet ID.', 'warning');
+    // Also try to sync automatically
+    await syncModuleLinks();
+    // Check again after sync
+    sheetId = localStorage.getItem(sheetKey);
+    if (!sheetId || !extractSheetId(sheetId)) {
+      showToast('Still missing Sheet ID. Please set it manually in Settings.', 'danger');
+      return;
+    }
+  }
+  
   showToast('Loading document ' + cleanDocNo(extractedDoc) + '...', 'success');
-  // FIX: await selectModule before loading document
   try {
     await selectModule(mod);
     await onDocSelect(extractedDoc);
@@ -777,18 +797,30 @@ const docPattern = /^(MRIF|MRR|MRS)\d{6,}/i;
 if (docPattern.test(decodedText)) {
 const mod = decodedText.substring(0, 4).toUpperCase();
 if (['MRIF','MRR','MRS'].includes(mod)) {
-playSuccessBeep();
-showToast('Loading document ' + cleanDocNo(decodedText) + '...', 'success');
-try {
-  await selectModule(mod);
-  await onDocSelect(decodedText);
-} catch(err) {
-  console.error('[QuickScan] Error loading document:', err);
-  showToast('Failed to load document: ' + err.message, 'danger');
-  document.getElementById('docPickerSection').classList.remove('d-none');
-  document.getElementById('activeTransactionSection').classList.add('d-none');
-}
-return;
+  playSuccessBeep();
+  // ─── Check if sheet ID is set ───
+  var sheetKey = 'sheetId_' + mod;
+  var sheetId = localStorage.getItem(sheetKey);
+  if (!sheetId || !extractSheetId(sheetId)) {
+    showToast('⚠️ Sheet ID for ' + mod + ' is missing. Please go to Settings and sync or enter the Sheet ID.', 'warning');
+    await syncModuleLinks();
+    sheetId = localStorage.getItem(sheetKey);
+    if (!sheetId || !extractSheetId(sheetId)) {
+      showToast('Still missing Sheet ID. Please set it manually in Settings.', 'danger');
+      return;
+    }
+  }
+  showToast('Loading document ' + cleanDocNo(decodedText) + '...', 'success');
+  try {
+    await selectModule(mod);
+    await onDocSelect(decodedText);
+  } catch(err) {
+    console.error('[QuickScan] Error loading document:', err);
+    showToast('Failed to load document: ' + err.message, 'danger');
+    document.getElementById('docPickerSection').classList.remove('d-none');
+    document.getElementById('activeTransactionSection').classList.add('d-none');
+  }
+  return;
 }
 }
 
@@ -1492,21 +1524,124 @@ hideLoading();
 }
 }
 
+function downloadRequestQr() {
+  if (!lastQrDocNo || !lastQrTicketNo) {
+    showToast('No QR to download', 'warning');
+    return;
+  }
+  // Get the QR image element
+  const img = document.getElementById('requestQrImg');
+  if (!img || !img.src || img.src === '') {
+    showToast('QR image not loaded', 'warning');
+    return;
+  }
+
+  // Create a canvas with text + QR
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  
+  // Load the image
+  const qrImg = new Image();
+  qrImg.crossOrigin = 'Anonymous';
+  qrImg.onload = function() {
+    // Set canvas size: QR image width, plus padding for text
+    const padding = 30;
+    const textHeight = 70; // space for two lines of text
+    const width = qrImg.width + padding * 2;
+    const height = qrImg.height + padding * 2 + textHeight;
+    canvas.width = width;
+    canvas.height = height;
+
+    // White background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw text at top
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 16px Arial, sans-serif';
+    ctx.fillText('Ticket: ' + lastQrTicketNo, width/2, 10);
+    ctx.font = '14px Arial, sans-serif';
+    ctx.fillText('Doc: ' + lastQrDocNo, width/2, 32);
+
+    // Draw QR code below text
+    ctx.drawImage(qrImg, padding, padding + textHeight);
+
+    // Trigger download
+    const link = document.createElement('a');
+    link.download = 'QR-' + lastQrDocNo + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  };
+  qrImg.onerror = function() {
+    showToast('Failed to load QR image for download', 'danger');
+  };
+  qrImg.src = img.src;
+}
+
+async function shareRequestQr() {
+  if (!navigator.share) {
+    showToast('Share not supported on this device', 'warning');
+    return;
+  }
+  if (!lastQrDocNo || !lastQrTicketNo) {
+    showToast('No QR to share', 'warning');
+    return;
+  }
+
+  const img = document.getElementById('requestQrImg');
+  if (!img || !img.src) {
+    showToast('QR image not loaded', 'warning');
+    return;
+  }
+
+  try {
+    // Fetch the image as a blob
+    const response = await fetch(img.src);
+    const blob = await response.blob();
+    const file = new File([blob], 'QR-' + lastQrDocNo + '.png', { type: 'image/png' });
+    await navigator.share({
+      title: 'GEMCOR Request QR',
+      text: 'Ticket: ' + lastQrTicketNo + '\nDoc: ' + lastQrDocNo,
+      files: [file]
+    });
+  } catch(err) {
+    if (err.name !== 'AbortError') {
+      showToast('Share failed: ' + err.message, 'danger');
+    }
+  }
+}
+
 function showRequestQr(ticketNo, docNo) {
-document.getElementById('requestTicketNo').textContent = ticketNo;
-document.getElementById('requestDocNo').textContent = docNo;
-var appUrl = window.location.origin + window.location.pathname;
-var qrDataUrl = appUrl + '?doc=' + encodeURIComponent(docNo);
-const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(qrDataUrl);
-const img = document.getElementById('requestQrImg');
-img.src = qrUrl;
-img.style.display = 'block';
-img.onerror = function() {
-img.style.display = 'none';
-document.getElementById('qrFallback').classList.remove('d-none');
-document.getElementById('qrFallback').innerHTML = '<strong>Doc No:</strong> ' + docNo;
-};
-requestSuccessModal.show();
+  document.getElementById('requestTicketNo').textContent = ticketNo;
+  document.getElementById('requestDocNo').textContent = docNo;
+  
+  // Store for download/share
+  lastQrTicketNo = ticketNo;
+  lastQrDocNo = docNo;
+
+  var appUrl = window.location.origin + window.location.pathname;
+  var qrDataUrl = appUrl + '?doc=' + encodeURIComponent(docNo);
+  const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(qrDataUrl);
+  const img = document.getElementById('requestQrImg');
+  img.src = qrUrl;
+  img.style.display = 'block';
+  img.onerror = function() {
+    img.style.display = 'none';
+    document.getElementById('qrFallback').classList.remove('d-none');
+    document.getElementById('qrFallback').innerHTML = '<strong>Doc No:</strong> ' + docNo;
+  };
+
+  // Show share button if supported
+  const shareBtn = document.getElementById('shareQrBtn');
+  if (navigator.share) {
+    shareBtn.style.display = 'inline-block';
+  } else {
+    shareBtn.style.display = 'none';
+  }
+
+  requestSuccessModal.show();
 }
 
 async function loadMyRequests() {
