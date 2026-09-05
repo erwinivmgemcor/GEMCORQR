@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    IVM WAREHOUSE QR — APPLICATION LOGIC
+   (Full version with MRS Print Preview added)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
@@ -54,6 +55,9 @@ var mrifPrintModal = document.getElementById('mrifPrintModal') ? new bootstrap.M
 var pendingMrifModal = document.getElementById('pendingMrifModal') ? new bootstrap.Modal(document.getElementById('pendingMrifModal')) : null;
 var mrrListModal = document.getElementById('mrrListModal') ? new bootstrap.Modal(document.getElementById('mrrListModal')) : null;
 var mrrPrintModal = document.getElementById('mrrPrintModal') ? new bootstrap.Modal(document.getElementById('mrrPrintModal')) : null;
+// ─── MRS Modal references ───
+var mrsListModal = document.getElementById('mrsListModal') ? new bootstrap.Modal(document.getElementById('mrsListModal')) : null;
+var mrsPrintModal = document.getElementById('mrsPrintModal') ? new bootstrap.Modal(document.getElementById('mrsPrintModal')) : null;
 const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
 const roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
 const productionNameModal = new bootstrap.Modal(document.getElementById('productionNameModal'));
@@ -385,14 +389,13 @@ document.getElementById('moduleLabel').textContent = mod;
 updateLabels();
 changeDocument();
 await fetchPendingDocs();
+// Show/hide list buttons
 var mrifCard = document.getElementById('mrifListCard');
-if (mrifCard) {
-mrifCard.classList.toggle('d-none', mod !== 'MRIF');
-}
+if (mrifCard) mrifCard.classList.toggle('d-none', mod !== 'MRIF');
 var mrrCard = document.getElementById('mrrListCard');
-if (mrrCard) {
-mrrCard.classList.toggle('d-none', mod !== 'MRR');
-}
+if (mrrCard) mrrCard.classList.toggle('d-none', mod !== 'MRR');
+var mrsCard = document.getElementById('mrsListCard');
+if (mrsCard) mrsCard.classList.toggle('d-none', mod !== 'MRS');
 } finally {
 hideLoading();
 }
@@ -1839,7 +1842,7 @@ async function submitManualMrr() {
 }
 
 // ============================================================================
-// INVENTORY BROWSER - SIMPLIFIED: QR, ITEM CODE, DESCRIPTION only (FIXED)
+// INVENTORY BROWSER - SIMPLIFIED: QR, ITEM CODE, DESCRIPTION only
 // ============================================================================
 var inventoryBrowserModal = null;
 var inventoryItemsCache = [];
@@ -1860,7 +1863,6 @@ async function fetchInventoryItems() {
   tbody.innerHTML = '<tr><td colspan="3" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading inventory...</td></tr>';
 
   try {
-    // ─── ALWAYS use master sheet ID for inventory ───
     var sheetId = '1HSxuSlik8hvbHppOE56ICzl1Jz9cCxFWCJ4EN-bzVFs';
     var url = API_URL + '?action=getInventoryItems&sheetId=' + sheetId + '&_t=' + Date.now();
     console.log('[fetchInventoryItems] URL:', url);
@@ -2839,6 +2841,300 @@ function printMrif() {
 
 function closeMrifPrint() {
 if (mrifPrintModal) mrifPrintModal.hide();
+}
+
+// ============================================================================
+// MRS PRINT PREVIEW — List & Print (NEW)
+// ============================================================================
+
+async function openMrsList() {
+if (state.isLoading) return;
+if (mrsListModal) mrsListModal.show();
+var container = document.getElementById('mrsListContainer');
+if (container) {
+container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRS documents...</div></div>';
+}
+try {
+var sheetId = getCleanSheetId();
+if (!sheetId) {
+if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">No MRS Sheet ID configured. Please sync or enter Sheet ID in Settings.</div>';
+return;
+}
+var url = API_URL + '?action=getPendingDocs&docType=MRS&sheetId=' + sheetId + '&_t=' + Date.now();
+var res = await fetch(url, { redirect: 'follow' });
+var text = await res.text();
+var data;
+try { data = JSON.parse(text); } catch(e) { data = {}; }
+var docs = Array.isArray(data) ? data : (data.documents || data.docs || []);
+renderMrsList(docs);
+} catch(err) {
+if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error loading documents: ' + err.message + '</div>';
+}
+}
+
+function renderMrsList(docs) {
+var container = document.getElementById('mrsListContainer');
+if (!container) return;
+container.innerHTML = '';
+if (!docs || docs.length === 0) {
+container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No MRS documents found</div>';
+return;
+}
+docs.forEach(function(d) {
+var docNo = typeof d === 'string' ? d : (d.docNo || d.name || d);
+var el = document.createElement('div');
+el.className = 'list-group-item mrif-list-item d-flex justify-content-between align-items-center';
+el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + cleanDocNo(docNo) + '</strong></div>' +
+'<button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>View / Print</button>';
+el.addEventListener('click', function() { openMrsPrint(docNo); });
+container.appendChild(el);
+});
+}
+
+async function openMrsPrint(docNo) {
+  if (state.isLoading) return;
+  showLoading('Loading ' + cleanDocNo(docNo) + '...');
+  try {
+    var sheetId = getCleanSheetId();
+    console.log('[openMrsPrint] sheetId:', sheetId, 'docNo:', docNo);
+    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRS&sheetId=' + sheetId + '&_t=' + Date.now();
+    console.log('[openMrsPrint] URL:', url);
+    var res = await fetch(url, { redirect: 'follow' });
+    var text = await res.text();
+    console.log('[openMrsPrint] Raw response:', text.substring(0, 500));
+    var data;
+    try { data = JSON.parse(text); } catch(e) { 
+      console.error('[openMrsPrint] JSON parse error:', e);
+      data = {}; 
+    }
+    console.log('[openMrsPrint] Parsed data:', data);
+    if (data.error) {
+      showToast('Error: ' + data.error, 'danger');
+      return;
+    }
+    if (!data.success) {
+      showToast('Error: ' + (data.error || 'Failed to load document'), 'danger');
+      return;
+    }
+    if (!data.items || data.items.length === 0) {
+      console.warn('[openMrsPrint] No items found for ' + docNo, data.debug);
+      showToast('Warning: No items found in this document', 'warning');
+    }
+    renderMrsPrint(docNo, data.info || {}, data.items || []);
+    if (mrsListModal) mrsListModal.hide();
+    setTimeout(function() {
+      if (mrsPrintModal) mrsPrintModal.show();
+    }, 300);
+  } catch(err) {
+    console.error('[openMrsPrint] Error:', err);
+    showToast('Failed to load document: ' + err.message, 'danger');
+  } finally {
+    hideLoading();
+  }
+}
+
+function renderMrsPrint(docNo, info, items) {
+  var container = document.getElementById('mrsPrintContent');
+  if (!container) return;
+
+  console.log('[renderMrsPrint] docNo:', docNo, 'items count:', items ? items.length : 0);
+  console.log('[renderMrsPrint] info:', JSON.stringify(info));
+
+  var requestor = info.Requestor || info.requestor || info.requestorName || '';
+  var department = info.Department || info.department || info.dept || '';
+  var dateRaw = info.Date || info.date || info['Date Prepared'] || info.datePrepared || '';
+  var gemSo = info['GEM SO No.'] || info.gemSoNo || info.gemSo || '';
+  var joNo = info['JO No.'] || info.joNo || '';
+  var client = info['Client Name'] || info.clientName || info.client || '';
+  var project = info.Project || info.project || '';
+
+  // Format date
+  var dateStr = dateRaw;
+  try {
+    var d = new Date(dateRaw);
+    if (!isNaN(d.getTime()) && d.getFullYear() > 2000) {
+      var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      dateStr = months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+    }
+  } catch(e) {}
+
+  var itemsHtml = '';
+  if (items && items.length > 0) {
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var code = it.itemCode || it.inventoryId || it.code || '';
+      var desc = it.description || it.desc || '';
+      var qtyReturned = it.expectedQty || it.qty || it.requestedQty || 0; // QTY RETURNED from sheet
+      var actualReturned = it.actualQty || it.issuedQty || it.atlQty || 0; // ATL QTY (Actual)
+      var unit = it.unit || 'PIECE';
+      var remarks = it.remarks || '';
+      var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
+      itemsHtml += '<tr>' +
+        '<td class="td-center">' + (i + 1) + '</td>' +
+        '<td class="td-center">' + code + '</td>' +
+        '<td class="td-center"><img src="' + qrUrl + '" style="width:32px;height:32px;display:block;margin:0 auto;" alt=""></td>' +
+        '<td class="td-left">' + desc + '</td>' +
+        '<td class="td-center">' + qtyReturned + '</td>' +
+        '<td class="td-center">' + actualReturned + '</td>' +
+        '<td class="td-center">' + unit + '</td>' +
+        '<td class="td-center">' + remarks + '</td>' +
+        '</tr>';
+    }
+  } else {
+    itemsHtml += '<tr><td class="td-center" colspan="7" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
+  }
+
+  // One empty row for spacing
+  itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
+
+  var mrsQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
+
+  var html = '<div class="mrif-print-sheet">' +  // reuse MRIF print styles (they are similar)
+    '<div class="mrif-header">' +
+      '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
+      '<div class="mrif-docno">' +
+        '<div><span class="mrif-dn-label">MRS No.:</span><span class="mrif-dn-box">' + cleanDocNo(docNo) + '</span></div>' +
+        '<div class="mrif-doc-qr"><img src="' + mrsQrUrl + '" alt="MRS QR" style="width:90px;height:90px;margin-top:4px;"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="mrif-title">MATERIALS RETURN SLIP</div>' +
+    '<table class="mrif-meta">' +
+      '<tr>' +
+        '<td class="meta-label">REQUESTOR:</td>' +
+        '<td class="meta-value" colspan="2">' + requestor + '</td>' +
+        '<td class="meta-label-right">GEM SO No.:</td>' +
+        '<td class="meta-blue">' + gemSo + '</td>' +
+        '<td class="meta-label-right">JO No.:</td>' +
+        '<td class="meta-blue">' + joNo + '</td>' +
+      '</tr>' +
+      '<tr>' +
+        '<td class="meta-label">DEPARTMENT/SECTION:</td>' +
+        '<td class="meta-value" colspan="4">' + department + '</td>' +
+        '<td class="meta-label-right">CLIENT NAME:</td>' +
+        '<td class="meta-value">' + client + '</td>' +
+      '</tr>' +
+      '<tr>' +
+        '<td class="meta-label">DATE:</td>' +
+        '<td class="meta-blue" colspan="2">' + dateStr + '</td>' +
+        '<td class="meta-label-right">PROJECT:</td>' +
+        '<td class="meta-value" colspan="3">' + project + '</td>' +
+      '</tr>' +
+    '</table>' +
+    '<table class="mrif-items">' +
+      '<thead>' +
+        '<tr>' +
+          '<th style="width:5%">ITEM<br>NO.</th>' +
+          '<th style="width:14%">ITEM<br>CODE</th>' +
+          '<th style="width:7%">QR<br>IMG</th>' +
+          '<th style="width:34%">ITEM DESCRIPTION</th>' +
+          '<th style="width:9%">QTY<br>RETURNED</th>' +
+          '<th style="width:9%">ATL QTY<br>(Actual)</th>' +
+          '<th style="width:7%">UNIT</th>' +
+          '<th style="width:15%">REMARKS</th>' +
+        '</tr>' +
+      '</thead>' +
+      '<tbody>' + itemsHtml + '</tbody>' +
+    '</table>' +
+    '<div class="mrif-sigs">' +
+      '<div class="mrif-sig">' +
+        '<div class="mrif-sig-line"></div>' +
+        '<div class="mrif-sig-label">ISSUED BY</div>' +
+      '</div>' +
+      '<div class="mrif-sig">' +
+        '<div class="mrif-sig-line"></div>' +
+        '<div class="mrif-sig-label">CHECKED BY</div>' +
+      '</div>' +
+      '<div class="mrif-sig">' +
+        '<div class="mrif-sig-line"></div>' +
+        '<div class="mrif-sig-label">RECEIVED BY/DATE</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  container.innerHTML = html;
+  console.log('[renderMrsPrint] HTML rendered successfully');
+}
+
+function printMrs() {
+  var previewContent = document.getElementById('mrsPrintContent');
+  if (!previewContent) {
+    showToast('Print content not found', 'danger');
+    return;
+  }
+  var sheetHtml = previewContent.innerHTML;
+  if (!sheetHtml || sheetHtml.trim() === '') {
+    showToast('Nothing to print', 'warning');
+    return;
+  }
+
+  // Reuse MRIF print styles (they match the layout)
+  var printStyles =
+    '@page { size: letter portrait; margin: 0.3in; }' +
+    '* { box-sizing: border-box; }' +
+    'body { margin: 0; padding: 0; font-family: "Times New Roman", Times, serif; font-size: 10pt; color: #000; line-height: 1.3; }' +
+    '.mrif-print-sheet { width: 100%; max-width: 8in; margin: 0 auto; background: #fff; padding: 0.2in; }' +
+    '.mrif-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }' +
+    '.mrif-logo img { height: 55px; width: auto; }' +
+    '.mrif-docno { text-align: right; }' +
+    '.mrif-dn-label { font-weight: bold; font-size: 10pt; margin-right: 6px; }' +
+    '.mrif-dn-box { display: inline-block; background: #f8d7da; border: 1px solid #f5c6cb; padding: 2px 10px; font-weight: bold; font-size: 11pt; color: #721c24; }' +
+    '.mrif-doc-qr { margin-top: 4px; }' +
+    '.mrif-doc-qr img { width: 90px; height: 90px; }' +
+    '.mrif-title { text-align: center; font-size: 14pt; font-weight: bold; letter-spacing: 4px; margin: 12px 0 16px 0; text-transform: uppercase; }' +
+    '.mrif-meta { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 9.5pt; }' +
+    '.mrif-meta td { padding: 3px 6px; vertical-align: top; }' +
+    '.meta-label { font-weight: bold; width: 18%; text-align: left; white-space: nowrap; }' +
+    '.meta-value { width: 32%; text-align: left; border-bottom: 1px solid #000; }' +
+    '.meta-label-right { font-weight: bold; width: 18%; text-align: left; white-space: nowrap; padding-left: 12px; }' +
+    '.meta-value-right { width: 32%; text-align: left; border-bottom: 1px solid #000; }' +
+    '.meta-blue { background: #cfe2f3; padding: 2px 6px; font-weight: bold; }' +
+    '.mrif-items { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 9pt; }' +
+    '.mrif-items th, .mrif-items td { border: 1px solid #000; padding: 4px 5px; vertical-align: middle; }' +
+    '.mrif-items th { background: #fff; font-weight: bold; text-align: center; font-size: 8.5pt; }' +
+    '.mrif-items td.td-center { text-align: center; }' +
+    '.mrif-items td.td-left { text-align: left; }' +
+    '.mrif-items td.td-nofurther { text-align: center; font-size: 7pt; font-weight: bold; padding: 4px; border: 1px solid #000; }' +
+    '.mrif-sigs { display: flex; justify-content: space-around; margin-top: 30px; text-align: center; }' +
+    '.mrif-sig { width: 30%; }' +
+    '.mrif-sig-line { border-bottom: 1px solid #000; height: 28px; margin-bottom: 2px; font-size: 8pt; }' +
+    '.mrif-sig-label { font-size: 9pt; font-weight: bold; text-transform: uppercase; }';
+
+  var fullHtml = '<!DOCTYPE html>' +
+    '<html><head><meta charset="utf-8"><title>MRS Print</title><style>' + printStyles + '</style></head>' +
+    '<body>' + sheetHtml + '</body></html>';
+
+  var iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.top = '-9999px';
+  iframe.style.left = '-9999px';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = 'none';
+  document.body.appendChild(iframe);
+
+  var doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write(fullHtml);
+  doc.close();
+
+  setTimeout(function() {
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch(e) {
+      console.error('Print error:', e);
+      showToast('Print failed. Try again.', 'danger');
+    }
+    setTimeout(function() {
+      if (iframe.parentNode) {
+        document.body.removeChild(iframe);
+      }
+    }, 2000);
+  }, 800);
+}
+
+function closeMrsPrint() {
+if (mrsPrintModal) mrsPrintModal.hide();
 }
 
 // ============================================================================
