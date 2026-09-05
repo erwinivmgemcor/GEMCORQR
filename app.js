@@ -1,10 +1,11 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    IVM WAREHOUSE QR — APPLICATION LOGIC
-   (Fixed: Manual MRIF loading stuck, added timeout safety)
+   (Added: Toast replace alerts, Batch Verify, Audit Trail)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
 const DEFAULT_PIN = '0000';
+const APP_VERSION = '2.1.0';
 
 // ─── Unit Options for dropdowns ───
 const UNIT_OPTIONS = [
@@ -46,7 +47,8 @@ errorTimer: null,
 docList: [],
 pinBuffer: '',
 pinAttempts: 0,
-isLoading: false
+isLoading: false,
+warehouseName: localStorage.getItem('ivm_warehouseName') || ''
 };
 
 const qtyModal = new bootstrap.Modal(document.getElementById('qtyModal'));
@@ -65,6 +67,7 @@ var mrsPrintModal = document.getElementById('mrsPrintModal') ? new bootstrap.Mod
 const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
 const roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
 const productionNameModal = new bootstrap.Modal(document.getElementById('productionNameModal'));
+const batchVerifyModal = new bootstrap.Modal(document.getElementById('batchVerifyModal'));
 state.poScanModal = new bootstrap.Modal(document.getElementById('poScanModal'));
 state.poItemsModal = new bootstrap.Modal(document.getElementById('poItemsModal'));
 
@@ -187,7 +190,10 @@ loadMyRequests();
 }
 function saveProductionName() {
 var name = document.getElementById('productionNameInput').value.trim();
-if (!name) { alert('Please enter your name'); return; }
+if (!name) {
+showToast('Please enter your name', 'warning');
+return;
+}
 localStorage.setItem('ivm_requestorName', name);
 productionNameModal.hide();
 localStorage.removeItem('ivm_requestStatuses');
@@ -224,6 +230,17 @@ const storedPin = localStorage.getItem('ivm_warehousePin') || DEFAULT_PIN;
 if (state.pinBuffer === storedPin) {
 localStorage.setItem('ivm_userRole', 'warehouse');
 state.pinAttempts = 0;
+// Ask for warehouse name if not set
+if (!state.warehouseName) {
+let name = prompt('Please enter your full name (for audit trail):');
+if (name && name.trim()) {
+state.warehouseName = name.trim();
+localStorage.setItem('ivm_warehouseName', state.warehouseName);
+} else {
+state.warehouseName = 'WAREHOUSE';
+localStorage.setItem('ivm_warehouseName', 'WAREHOUSE');
+}
+}
 roleModal.hide();
 applyRoleUI();
 showToast('Warehouse mode unlocked', 'success');
@@ -237,7 +254,7 @@ document.getElementById('pinError').classList.remove('d-none');
 clearPin();
 playErrorBuzz();
 if (state.pinAttempts >= 3) {
-alert('Too many failed attempts. Please contact admin.');
+showToast('Too many failed attempts. Please contact admin.', 'danger');
 state.pinAttempts = 0;
 }
 }
@@ -312,6 +329,8 @@ document.getElementById('syncSection').style.display = isProduction ? 'none' : '
 document.getElementById('sheetIdsSection').style.display = isProduction ? 'none' : '';
 document.getElementById('currentRoleDisplay').textContent = role === 'warehouse' ? 'Warehouse Staff' : 'Production Staff';
 document.getElementById('currentRoleDisplay').className = role === 'warehouse' ? 'badge bg-success' : 'badge bg-primary';
+// show version
+document.getElementById('appVersion').textContent = 'v' + APP_VERSION;
 settingsModal.show();
 }
 function loadSettingsToUI() {
@@ -357,7 +376,7 @@ try {
 data = JSON.parse(text);
 } catch(e) {
 console.error('[Sync] JSON parse failed. Raw response:', text);
-alert('Sync error: Invalid response from server.\n\nThe server did not return valid JSON.\nCheck the browser console (F12) for details.\n\nFirst 200 chars of response:\n' + text.substring(0, 200));
+showToast('Sync error: Invalid response from server. Check console.', 'danger');
 throw new Error('Invalid response');
 }
 console.log('[Sync] Parsed:', data);
@@ -369,15 +388,15 @@ const MRS = links.MRS || links.mrs || '';
 if (MRIF) { localStorage.setItem('sheetId_MRIF', extractSheetId(MRIF)); document.getElementById('sheetId_MRIF').value = extractSheetId(MRIF); }
 if (MRR) { localStorage.setItem('sheetId_MRR', extractSheetId(MRR)); document.getElementById('sheetId_MRR').value = extractSheetId(MRR); }
 if (MRS) { localStorage.setItem('sheetId_MRS', extractSheetId(MRS)); document.getElementById('sheetId_MRS').value = extractSheetId(MRS); }
-alert('Module IDs synced!\nMRIF: ' + (MRIF?'OK':'Missing') + '\nMRR: ' + (MRR?'OK':'Missing') + '\nMRS: ' + (MRS?'OK':'Missing'));
+showToast('Module IDs synced!', 'success');
 if (state.currentModule) selectModule(state.currentModule);
 } else {
-alert('Sync failed: ' + (data.error || 'No links found') + '\n\nResponse: ' + JSON.stringify(data).substring(0, 200));
+showToast('Sync failed: ' + (data.error || 'No links found'), 'danger');
 }
 } catch(err) {
 console.error('[Sync] Error:', err);
 if (err.message !== 'Invalid response') {
-alert('Sync error: ' + err.message);
+showToast('Sync error: ' + err.message, 'danger');
 }
 } finally {
 hideLoading();
@@ -578,7 +597,8 @@ qty: Number(it.qty || it.requestedQty || it.expectedQty || 0),
 issuedQty: Number(it.issuedQty || it.actualQty || 0),
 unit: it.unit || 'PIECE',
 rowIndex: it.rowIndex || (idx + 13),
-verified: false
+verified: false,
+selected: false  // for batch verify
 }));
 renderItems();
 startScanner();
@@ -587,6 +607,12 @@ console.error('[fetchDocItems] Error:', err);
 throw err;
 }
 }
+
+// ─── BATCH VERIFY ──────────────────────────────────────────────────────────
+function toggleSelectAll(checked) {
+document.querySelectorAll('#itemsTable .item-select').forEach(cb => cb.checked = checked);
+}
+
 function renderItems() {
 const tbody = document.getElementById('itemsTable');
 tbody.innerHTML = '';
@@ -595,16 +621,19 @@ state.items.forEach((item, idx) => {
 if (item.verified) verified++;
 const tr = document.createElement('tr');
 tr.className = 'item-row' + (item.verified ? ' verified' : '');
-tr.innerHTML = '<td><div class="fw-bold small">' + item.inventoryId + '</div><div class="text-muted small">' + item.description + '</div></td>' +
-'<td class="text-center">' + item.qty + '</td>' +
-'<td class="text-center fw-bold">' + (item.verified ? item.issuedQty : '-') + '</td>' +
-'<td class="text-center">' + (item.unit || 'PIECE') + '</td>' +
-'<td>' + getStatusBadge(item) + '</td>';
+tr.innerHTML =
+  '<td><input type="checkbox" class="item-select" data-index="' + idx + '" ' + (item.selected ? 'checked' : '') + '></td>' +
+  '<td><div class="fw-bold small">' + item.inventoryId + '</div><div class="text-muted small">' + item.description + '</div></td>' +
+  '<td class="text-center">' + item.qty + '</td>' +
+  '<td class="text-center fw-bold">' + (item.verified ? item.issuedQty : '-') + '</td>' +
+  '<td class="text-center">' + (item.unit || 'PIECE') + '</td>' +
+  '<td>' + getStatusBadge(item) + '</td>';
 tbody.appendChild(tr);
 });
 document.getElementById('verifyCount').textContent = verified + '/' + state.items.length + ' Verified';
 updateSubmitButton(verified, state.items.length);
 }
+
 function getStatusBadge(item) {
 if (!item.verified) return '<span class="status-badge status-pending">PENDING</span>';
 if (state.currentModule === 'MRR') {
@@ -612,6 +641,7 @@ return item.issuedQty >= item.qty ? '<span class="status-badge status-served">CO
 }
 return item.issuedQty >= item.qty ? '<span class="status-badge status-served">SERVED</span>' : '<span class="status-badge status-partial">PARTIAL</span>';
 }
+
 function filterItems() {
 const term = document.getElementById('itemFilter').value.toLowerCase();
 document.querySelectorAll('#itemsTable tr').forEach(tr => {
@@ -619,6 +649,52 @@ const text = tr.textContent.toLowerCase();
 tr.style.display = text.includes(term) ? '' : 'none';
 });
 }
+
+function openBatchVerify() {
+const selected = document.querySelectorAll('#itemsTable .item-select:checked');
+if (selected.length === 0) {
+showToast('Please select at least one item', 'warning');
+return;
+}
+// Populate modal info
+document.getElementById('batchCount').textContent = selected.length;
+const firstRow = selected[0].closest('tr');
+const unitCell = firstRow.querySelector('td:nth-child(5)');
+const unit = unitCell ? unitCell.textContent.trim() : 'PIECE';
+document.getElementById('batchUnit').textContent = unit;
+document.getElementById('batchQtyInput').value = '';
+document.getElementById('batchQtyInput').dataset.unit = unit;
+batchVerifyModal.show();
+}
+
+function confirmBatchVerify() {
+const qtyInput = document.getElementById('batchQtyInput');
+const qtyVal = parseInt(qtyInput.value, 10);
+if (isNaN(qtyVal) || qtyVal < 0) {
+showToast('Please enter a valid quantity', 'warning');
+return;
+}
+const unit = qtyInput.dataset.unit || 'PIECE';
+const selectedRows = document.querySelectorAll('#itemsTable .item-select:checked');
+selectedRows.forEach(cb => {
+const idx = parseInt(cb.dataset.index, 10);
+const item = state.items[idx];
+if (!item) return;
+const isMRR = state.currentModule === 'MRR';
+if (!isMRR && qtyVal > item.qty) {
+// If exceeds allowed, cap it
+showToast('Warning: Some items have qty capped at requested amount', 'warning');
+}
+const finalQty = isMRR ? qtyVal : Math.min(qtyVal, item.qty);
+item.issuedQty = finalQty;
+item.unit = unit;
+item.verified = true;
+});
+batchVerifyModal.hide();
+renderItems();
+showToast('Batch verify completed', 'success');
+}
+
 function updateSubmitButton(verified, total) {
 const btn = document.getElementById('submitBtn');
 const txt = document.getElementById('submitBtnText');
@@ -1028,6 +1104,7 @@ const url = API_URL + '?action=submitTransaction' +
 '&docType=' + encodeURIComponent(state.currentModule) +
 '&sheetId=' + encodeURIComponent(getCleanSheetId()) +
 '&items=' + itemsStr +
+'&processedBy=' + encodeURIComponent(state.warehouseName || 'WAREHOUSE') +
 '&_t=' + Date.now();
 console.log('[Submit] URL length:', url.length);
 console.log('[Submit] URL:', url);
@@ -1447,7 +1524,10 @@ const joNo = document.getElementById('reqJoNo').value.trim();
 const gemSoNo = document.getElementById('reqGemSoNo').value.trim();
 const clientName = document.getElementById('reqClientName').value.trim();
 const project = document.getElementById('reqProject').value.trim();
-if (!requestor) { alert('Select a requestor'); return; }
+if (!requestor) {
+showToast('Select a requestor', 'warning');
+return;
+}
 
 const items = [];
 document.querySelectorAll('#step5ItemsContainer .step5-item-row').forEach(function(row) {
@@ -1472,7 +1552,10 @@ if (c && q > 0) items.push({ inventoryId: c, description: d, qty: q, unit: u });
 }
 });
 
-if (items.length === 0) { alert('Add at least one item'); return; }
+if (items.length === 0) {
+showToast('Add at least one item', 'warning');
+return;
+}
 showLoading('Creating request...');
 try {
 const payload = {
@@ -1505,10 +1588,10 @@ statuses[data.docNo] = 'PENDING';
 localStorage.setItem('ivm_requestStatuses', JSON.stringify(statuses));
 loadMyRequests();
 } else {
-alert('Failed: ' + (data.error || 'Unknown error'));
+showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
 }
 } catch(err) {
-alert('Error: ' + err.message);
+showToast('Error: ' + err.message, 'danger');
 } finally {
 hideLoading();
 }
