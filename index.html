@@ -13,25 +13,11 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <link rel="stylesheet" href="style.css">
 <style>
-.kpi-clickable {
-  cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-.kpi-clickable:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-}
-.bg-amber {
-  background-color: #f59e0b !important;
-  color: #1f2937 !important;
-}
-.pending-mrif-item {
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-.pending-mrif-item:hover {
-  background-color: #f8f9fa;
-}
+.kpi-clickable { cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.kpi-clickable:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+.bg-amber { background-color: #f59e0b !important; color: #1f2937 !important; }
+.pending-mrif-item { cursor: pointer; transition: background-color 0.15s ease; }
+.pending-mrif-item:hover { background-color: #f8f9fa; }
 </style>
 <base target="_blank">
 </head>
@@ -308,6 +294,7 @@
         <div class="table-responsive">
           <table class="table table-sm table-hover mb-0">
             <thead><tr>
+              <th style="width:30px"><input type="checkbox" onchange="toggleSelectAll(this.checked)"></th>
               <th>Item Code</th>
               <th id="headerExpected">Req. Qty</th>
               <th id="headerInput">Issued Qty</th>
@@ -318,6 +305,18 @@
           </table>
         </div>
       </div>
+    </div>
+
+    <!-- Batch Verify & Submit -->
+    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mt-2">
+      <div>
+        <button class="btn btn-sm btn-outline-primary" onclick="toggleSelectAll(true)">Select All</button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="toggleSelectAll(false)">Deselect All</button>
+        <button class="btn btn-sm btn-success" onclick="openBatchVerify()">
+          <i class="bi bi-check-all me-1"></i> Batch Verify
+        </button>
+      </div>
+      <span class="fw-bold" id="verifyCount">0/0 Verified</span>
     </div>
 
     <button id="submitBtn" class="btn btn-success w-100 mt-4 py-3" onclick="onSubmit()">
@@ -600,6 +599,9 @@
             <button class="btn btn-warning w-100 mb-2" onclick="testConnection()">Test GAS Connection</button>
             <div id="testResult" class="test-result d-none"></div>
           </div>
+        </div>
+        <div class="mt-2 text-center text-muted small">
+          <span id="appVersion">v1.0</span>
         </div>
       </div>
       <div class="modal-footer">
@@ -1081,7 +1083,6 @@
 <!-- Hidden print containers -->
 <div id="mrrPrintOnly" class="d-none"></div>
 <div id="whNotificationsList" class="d-none"></div>
-<script src="app.js"></script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
    MANUAL MRR MODAL
@@ -1165,7 +1166,7 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
-   MANUAL MRIF MODAL (UPDATED WITH AUTO-SUGGEST)
+   MANUAL MRIF MODAL (WITH AUTO-SUGGEST)
    ═══════════════════════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="manualMrifModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -1290,5 +1291,38 @@
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════════════════
+   BATCH VERIFY MODAL
+   ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="batchVerifyModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="bi bi-check-all me-2"></i>Batch Verify</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>You have selected <strong id="batchCount">0</strong> item(s).</p>
+        <div class="mb-3">
+          <label class="form-label fw-bold">Enter the quantity to set for all selected items:</label>
+          <input type="number" id="batchQtyInput" class="form-control form-control-lg" min="0" step="1" placeholder="e.g. 5" />
+          <div class="form-text">Unit: <strong id="batchUnit">PIECE</strong></div>
+        </div>
+        <div class="alert alert-info">
+          <i class="bi bi-info-circle me-2"></i>
+          For MRIF/MRS, the quantity will be capped at the requested amount.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="confirmBatchVerify()">
+          <i class="bi bi-check-lg me-1"></i> Apply to All
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
 </body>
 </html>
