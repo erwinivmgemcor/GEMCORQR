@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    IVM WAREHOUSE QR — APPLICATION LOGIC
-   (Full version with QR Download & Share)
+   (FIXED: MRIF/MRS print preview now shows clean doc number without suffix)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
@@ -16,6 +16,7 @@ const UNIT_OPTIONS = [
 // ─── Helper: Clean document number (remove suffix like -after-sales) ───
 function cleanDocNo(docNo) {
   if (!docNo) return '';
+  // Remove any -suffix at the end (e.g., MRIF0020760-after-sales → MRIF0020760)
   return docNo.replace(/-\w+$/, '').replace(/-\w+-\w+$/, '');
 }
 
@@ -471,7 +472,6 @@ checkForProgress();
 } catch(err) {
 console.error('[onDocSelect] Error:', err);
 showToast('Failed to load document: ' + err.message, 'danger');
-// Ensure we hide loading and show the doc picker again
 document.getElementById('docPickerSection').classList.remove('d-none');
 document.getElementById('activeTransactionSection').classList.add('d-none');
 } finally {
@@ -648,7 +648,6 @@ if (state.html5QrCode) { state.html5QrCode.stop().catch(()=>{}); state.html5QrCo
 function onScanSuccess(decodedText) {
 clearErrorAlert();
 
-// ─── Check if it's a URL with ?doc= parameter (QR from new request) ───
 var urlDocMatch = decodedText.match(/[?&]doc=([^&\s]+)/);
 if (urlDocMatch) {
   var extractedDoc = decodeURIComponent(urlDocMatch[1]);
@@ -658,7 +657,6 @@ if (urlDocMatch) {
   else if (extractedDoc.indexOf('MRS') === 0) mod = 'MRS';
   playSuccessBeep();
   showToast('Loading document ' + cleanDocNo(extractedDoc) + '...', 'success');
-  // FIX: await selectModule before loading document
   selectModule(mod).then(() => {
     onDocSelect(extractedDoc);
   }).catch(err => {
@@ -668,7 +666,6 @@ if (urlDocMatch) {
   return;
 }
 
-// ─── Check if it's a plain document number ───
 const docPattern = /^(MRIF|MRR|MRS)\d{6,}/i;
 if (docPattern.test(decodedText)) {
 playSuccessBeep();
@@ -686,7 +683,6 @@ selectModule(mod).then(() => {
 return;
 }
 
-// ─── Try as Item QR (existing document) ───
 const item = state.items.find(i => i.inventoryId.toLowerCase() === decodedText.toLowerCase());
 if (!item) {
 playErrorBuzz();
@@ -753,7 +749,6 @@ state.quickScanner = null;
 }
 quickScanModal.hide();
 
-// ─── Check if it's a URL with ?doc= parameter (QR from new request) ───
 var urlDocMatch = decodedText.match(/[?&]doc=([^&\s]+)/);
 if (urlDocMatch) {
   var extractedDoc = decodeURIComponent(urlDocMatch[1]);
@@ -763,14 +758,11 @@ if (urlDocMatch) {
   else if (extractedDoc.indexOf('MRS') === 0) mod = 'MRS';
   playSuccessBeep();
   
-  // ─── Check if sheet ID is set ───
   var sheetKey = 'sheetId_' + mod;
   var sheetId = localStorage.getItem(sheetKey);
   if (!sheetId || !extractSheetId(sheetId)) {
     showToast('⚠️ Sheet ID for ' + mod + ' is missing. Please go to Settings and sync or enter the Sheet ID.', 'warning');
-    // Also try to sync automatically
     await syncModuleLinks();
-    // Check again after sync
     sheetId = localStorage.getItem(sheetKey);
     if (!sheetId || !extractSheetId(sheetId)) {
       showToast('Still missing Sheet ID. Please set it manually in Settings.', 'danger');
@@ -785,20 +777,17 @@ if (urlDocMatch) {
   } catch(err) {
     console.error('[QuickScan] Error loading document:', err);
     showToast('Failed to load document: ' + err.message, 'danger');
-    // Show the doc picker again so user can try manually
     document.getElementById('docPickerSection').classList.remove('d-none');
     document.getElementById('activeTransactionSection').classList.add('d-none');
   }
   return;
 }
 
-// ─── Check if it's a plain document number ───
 const docPattern = /^(MRIF|MRR|MRS)\d{6,}/i;
 if (docPattern.test(decodedText)) {
 const mod = decodedText.substring(0, 4).toUpperCase();
 if (['MRIF','MRR','MRS'].includes(mod)) {
   playSuccessBeep();
-  // ─── Check if sheet ID is set ───
   var sheetKey = 'sheetId_' + mod;
   var sheetId = localStorage.getItem(sheetKey);
   if (!sheetId || !extractSheetId(sheetId)) {
@@ -824,7 +813,6 @@ if (['MRIF','MRR','MRS'].includes(mod)) {
 }
 }
 
-// ─── Try as PO Number (for MRR creation) ───
 const poResult = await lookupPoFromScan(decodedText);
 if (poResult && poResult.success) {
 playSuccessBeep();
@@ -838,7 +826,6 @@ state.poItemsModal.show();
 return;
 }
 
-// ─── Try as Item QR (existing document) ───
 if (state.currentDoc && state.items.length > 0) {
 const item = state.items.find(i => i.inventoryId.toLowerCase() === decodedText.toLowerCase());
 if (item) {
@@ -1529,34 +1516,28 @@ function downloadRequestQr() {
     showToast('No QR to download', 'warning');
     return;
   }
-  // Get the QR image element
   const img = document.getElementById('requestQrImg');
   if (!img || !img.src || img.src === '') {
     showToast('QR image not loaded', 'warning');
     return;
   }
 
-  // Create a canvas with text + QR
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   
-  // Load the image
   const qrImg = new Image();
   qrImg.crossOrigin = 'Anonymous';
   qrImg.onload = function() {
-    // Set canvas size: QR image width, plus padding for text
     const padding = 30;
-    const textHeight = 70; // space for two lines of text
+    const textHeight = 70;
     const width = qrImg.width + padding * 2;
     const height = qrImg.height + padding * 2 + textHeight;
     canvas.width = width;
     canvas.height = height;
 
-    // White background
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, width, height);
 
-    // Draw text at top
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillStyle = '#000000';
@@ -1565,10 +1546,8 @@ function downloadRequestQr() {
     ctx.font = '14px Arial, sans-serif';
     ctx.fillText('Doc: ' + lastQrDocNo, width/2, 32);
 
-    // Draw QR code below text
     ctx.drawImage(qrImg, padding, padding + textHeight);
 
-    // Trigger download
     const link = document.createElement('a');
     link.download = 'QR-' + lastQrDocNo + '.png';
     link.href = canvas.toDataURL('image/png');
@@ -1597,7 +1576,6 @@ async function shareRequestQr() {
   }
 
   try {
-    // Fetch the image as a blob
     const response = await fetch(img.src);
     const blob = await response.blob();
     const file = new File([blob], 'QR-' + lastQrDocNo + '.png', { type: 'image/png' });
@@ -1617,7 +1595,6 @@ function showRequestQr(ticketNo, docNo) {
   document.getElementById('requestTicketNo').textContent = ticketNo;
   document.getElementById('requestDocNo').textContent = docNo;
   
-  // Store for download/share
   lastQrTicketNo = ticketNo;
   lastQrDocNo = docNo;
 
@@ -1633,7 +1610,6 @@ function showRequestQr(ticketNo, docNo) {
     document.getElementById('qrFallback').innerHTML = '<strong>Doc No:</strong> ' + docNo;
   };
 
-  // Show share button if supported
   const shareBtn = document.getElementById('shareQrBtn');
   if (navigator.share) {
     shareBtn.style.display = 'inline-block';
@@ -2763,7 +2739,7 @@ if (mrrPrintModal) mrrPrintModal.hide();
 }
 
 // ============================================================================
-// MRIF LIST & PRINT
+// MRIF LIST & PRINT (FIXED: shows clean doc number without suffix)
 // ============================================================================
 
 async function openMrifList() {
@@ -2906,6 +2882,7 @@ function renderMrifPrint(docNo, info, items) {
 
   var mrifQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
+  // ─── FIX: Use cleanDocNo() for the document number display ───
   var html = '<div class="mrif-print-sheet">' +
     '<div class="mrif-header">' +
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
@@ -3053,7 +3030,7 @@ if (mrifPrintModal) mrifPrintModal.hide();
 }
 
 // ============================================================================
-// MRS PRINT PREVIEW — List & Print
+// MRS PRINT PREVIEW — List & Print (FIXED: shows clean doc number without suffix)
 // ============================================================================
 
 async function openMrsList() {
@@ -3196,6 +3173,7 @@ function renderMrsPrint(docNo, info, items) {
 
   var mrsQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
+  // ─── FIX: Use cleanDocNo() for the document number display ───
   var html = '<div class="mrif-print-sheet">' +
     '<div class="mrif-header">' +
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
