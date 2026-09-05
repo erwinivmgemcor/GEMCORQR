@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    IVM WAREHOUSE QR — APPLICATION LOGIC
-   (Added: Toast replace alerts, Batch Verify, Audit Trail)
+   (All fixes applied: MRR print preview, Browse Inventory, MRR/MRIF lists)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
@@ -14,7 +14,7 @@ const UNIT_OPTIONS = [
   'SHEET', 'TANK', 'UNIT'
 ];
 
-// ─── Helper: Clean document number (remove suffix like -after-sales) ───
+// ─── Helper: Clean document number ───
 function cleanDocNo(docNo) {
   if (!docNo) return '';
   return docNo.replace(/-\w+$/, '').replace(/-\w+-\w+$/, '');
@@ -68,6 +68,7 @@ const quickScanModal = new bootstrap.Modal(document.getElementById('quickScanMod
 const roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
 const productionNameModal = new bootstrap.Modal(document.getElementById('productionNameModal'));
 const batchVerifyModal = new bootstrap.Modal(document.getElementById('batchVerifyModal'));
+const qrZoomModal = new bootstrap.Modal(document.getElementById('qrZoomModal'));
 state.poScanModal = new bootstrap.Modal(document.getElementById('poScanModal'));
 state.poItemsModal = new bootstrap.Modal(document.getElementById('poItemsModal'));
 
@@ -329,7 +330,6 @@ document.getElementById('syncSection').style.display = isProduction ? 'none' : '
 document.getElementById('sheetIdsSection').style.display = isProduction ? 'none' : '';
 document.getElementById('currentRoleDisplay').textContent = role === 'warehouse' ? 'Warehouse Staff' : 'Production Staff';
 document.getElementById('currentRoleDisplay').className = role === 'warehouse' ? 'badge bg-success' : 'badge bg-primary';
-// show version
 document.getElementById('appVersion').textContent = 'v' + APP_VERSION;
 settingsModal.show();
 }
@@ -434,21 +434,30 @@ document.getElementById('headerInput').textContent = isMRR ? 'ATL QTY' : (isMRS 
 
 async function fetchPendingDocs() {
 const sheetId = getCleanSheetId();
-if (!sheetId) { showToast('No Sheet ID for ' + state.currentModule, 'warning'); return; }
+if (!sheetId) {
+showToast('⚠️ No Sheet ID for ' + state.currentModule + '. Please sync or enter it in Settings.', 'warning');
+return [];
+}
 try {
 const url = API_URL + '?action=getPendingDocs&docType=' + state.currentModule + '&sheetId=' + sheetId + '&_t=' + Date.now();
+console.log('[fetchPendingDocs] URL:', url);
 const res = await fetch(url, { redirect: 'follow' });
+if (!res.ok) throw new Error('HTTP ' + res.status);
 const text = await res.text();
+console.log('[fetchPendingDocs] Raw response:', text.substring(0, 500));
 let data;
 try { data = JSON.parse(text); } catch(e) { data = []; }
 if (data.error) {
 showToast('Error: ' + data.error, 'danger');
-return;
+return [];
 }
 const docs = Array.isArray(data) ? data : (data.docs || data.documents || []);
 populateDocSelect(docs);
+return docs;
 } catch(err) {
-showToast('Failed to load documents', 'danger');
+console.error('[fetchPendingDocs] Error:', err);
+showToast('Failed to load documents: ' + err.message, 'danger');
+return [];
 }
 }
 function populateDocSelect(docs) {
@@ -598,7 +607,7 @@ issuedQty: Number(it.issuedQty || it.actualQty || 0),
 unit: it.unit || 'PIECE',
 rowIndex: it.rowIndex || (idx + 13),
 verified: false,
-selected: false  // for batch verify
+selected: false
 }));
 renderItems();
 startScanner();
@@ -656,7 +665,6 @@ if (selected.length === 0) {
 showToast('Please select at least one item', 'warning');
 return;
 }
-// Populate modal info
 document.getElementById('batchCount').textContent = selected.length;
 const firstRow = selected[0].closest('tr');
 const unitCell = firstRow.querySelector('td:nth-child(5)');
@@ -682,7 +690,6 @@ const item = state.items[idx];
 if (!item) return;
 const isMRR = state.currentModule === 'MRR';
 if (!isMRR && qtyVal > item.qty) {
-// If exceeds allowed, cap it
 showToast('Warning: Some items have qty capped at requested amount', 'warning');
 }
 const finalQty = isMRR ? qtyVal : Math.min(qtyVal, item.qty);
@@ -1931,7 +1938,7 @@ hideLoading();
 }
 
 // ============================================================================
-// MANUAL MRR CREATION (No PO required) - WITH UNIT DROPDOWN
+// MANUAL MRR CREATION (No PO required)
 // ============================================================================
 var manualMrrModal = null;
 var manualMrrItems = [];
@@ -2126,21 +2133,18 @@ function openManualMrifModal() {
   if (!manualMrifModal) {
     manualMrifModal = new bootstrap.Modal(document.getElementById('manualMrifModal'));
   }
-  // Reset form
   document.getElementById('manualMrifRequestor').value = '';
   document.getElementById('manualMrifDepartment').value = '';
   document.getElementById('manualMrifJoNo').value = '';
   document.getElementById('manualMrifGemSoNo').value = '';
   document.getElementById('manualMrifClient').value = '';
   document.getElementById('manualMrifProject').value = '';
-  // Set date to today
   var today = new Date().toISOString().split('T')[0];
   document.getElementById('manualMrifDate').value = today;
   manualMrifItems = [];
   renderManualMrifItems();
   updateManualMrifSubmitButton();
   manualMrifModal.show();
-  // Load inventory for suggestions
   loadRequestInventory();
 }
 
@@ -2348,7 +2352,6 @@ async function submitManualMrif() {
 
   showLoading('Creating Manual MRIF...');
 
-  // ─── SAFETY TIMEOUT: force hide loading after 10 seconds ───
   var timeoutId = setTimeout(function() {
     console.warn('[Manual MRIF] Loading timeout – forcing hide.');
     hideLoading();
@@ -2401,13 +2404,13 @@ async function submitManualMrif() {
     console.error('[Manual MRIF] Error:', err);
     showToast('Error: ' + err.message, 'danger');
   } finally {
-    clearTimeout(timeoutId); // cancel the timeout if we finished early
-    hideLoading(); // ALWAYS hide the loading overlay
+    clearTimeout(timeoutId);
+    hideLoading();
   }
 }
 
 // ============================================================================
-// INVENTORY BROWSER - SIMPLIFIED: QR, ITEM CODE, DESCRIPTION only
+// INVENTORY BROWSER - with QR Zoom
 // ============================================================================
 var inventoryBrowserModal = null;
 var inventoryItemsCache = [];
@@ -2422,13 +2425,32 @@ function openInventoryBrowser() {
   fetchInventoryItems();
 }
 
+// ─── QR Zoom Modal ──────────────────────────────────────────────────────────
+function openQrZoom(item) {
+  if (!qrZoomModal) {
+    qrZoomModal = new bootstrap.Modal(document.getElementById('qrZoomModal'));
+  }
+  document.getElementById('qrZoomCode').textContent = item.inventoryId || item.code || '';
+  document.getElementById('qrZoomDesc').textContent = item.description || '';
+  
+  var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(item.inventoryId || item.code || '');
+  document.getElementById('qrZoomImg').src = qrUrl;
+  document.getElementById('qrZoomImg').onerror = function() {
+    this.style.display = 'none';
+    document.getElementById('qrZoomFallback').classList.remove('d-none');
+  };
+  document.getElementById('qrZoomFallback').classList.add('d-none');
+  document.getElementById('qrZoomImg').style.display = 'block';
+  
+  qrZoomModal.show();
+}
+
 async function fetchInventoryItems() {
   var tbody = document.getElementById('inventoryBrowserBody');
   if (!tbody) return;
   tbody.innerHTML = '<tr><td colspan="3" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading inventory...</td></tr>';
 
   try {
-    // Use the same sheet ID as the master sheet (can also be fetched from settings)
     var sheetId = '1HSxuSlik8hvbHppOE56ICzl1Jz9cCxFWCJ4EN-bzVFs';
     var url = API_URL + '?action=getInventoryItems&sheetId=' + sheetId + '&_t=' + Date.now();
     console.log('[fetchInventoryItems] URL:', url);
@@ -2469,9 +2491,11 @@ function renderInventoryItems() {
   var html = '';
   for (var i = 0; i < inventoryBrowserFiltered.length; i++) {
     var it = inventoryBrowserFiltered[i];
-    var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=40x40&data=' + encodeURIComponent(it.inventoryId);
-    html += '<tr>' +
-      '<td class="align-middle text-center"><img src="' + qrUrl + '" style="width:36px;height:36px;" alt="QR"></td>' +
+    var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(it.inventoryId);
+    var safeCode = it.inventoryId.replace(/'/g, "\\'");
+    var safeDesc = it.description.replace(/'/g, "\\'");
+    html += '<tr class="inventory-row" style="cursor:pointer;" onclick="openQrZoom({inventoryId:\'' + safeCode + '\', code:\'' + safeCode + '\', description:\'' + safeDesc + '\'})">' +
+      '<td class="align-middle text-center"><img src="' + qrUrl + '" style="width:40px;height:40px;" alt="QR"></td>' +
       '<td class="align-middle"><code>' + it.inventoryId + '</code></td>' +
       '<td class="align-middle">' + it.description + '</td>' +
       '</tr>';
@@ -2490,51 +2514,6 @@ function filterInventoryItems() {
     });
   }
   renderInventoryItems();
-}
-// ─── QR Zoom Modal ──────────────────────────────────────────────────────────
-var qrZoomModal = null;
-
-function openQrZoom(item) {
-  if (!qrZoomModal) {
-    qrZoomModal = new bootstrap.Modal(document.getElementById('qrZoomModal'));
-  }
-  // Set the item details
-  document.getElementById('qrZoomCode').textContent = item.inventoryId || item.code || '';
-  document.getElementById('qrZoomDesc').textContent = item.description || '';
-  
-  // Generate larger QR
-  var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(item.inventoryId || item.code || '');
-  document.getElementById('qrZoomImg').src = qrUrl;
-  document.getElementById('qrZoomImg').onerror = function() {
-    this.style.display = 'none';
-    document.getElementById('qrZoomFallback').classList.remove('d-none');
-  };
-  document.getElementById('qrZoomFallback').classList.add('d-none');
-  document.getElementById('qrZoomImg').style.display = 'block';
-  
-  qrZoomModal.show();
-}
-
-function renderInventoryItems() {
-  var tbody = document.getElementById('inventoryBrowserBody');
-  if (!tbody) return;
-
-  if (inventoryBrowserFiltered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No items match your search</td></tr>';
-    return;
-  }
-
-  var html = '';
-  for (var i = 0; i < inventoryBrowserFiltered.length; i++) {
-    var it = inventoryBrowserFiltered[i];
-    var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(it.inventoryId);
-    html += '<tr class="inventory-row" style="cursor:pointer;" onclick="openQrZoom({inventoryId:\'' + it.inventoryId.replace(/'/g, "\\'") + '\', code:\'' + it.code.replace(/'/g, "\\'") + '\', description:\'' + it.description.replace(/'/g, "\\'") + '\'})">' +
-      '<td class="align-middle text-center"><img src="' + qrUrl + '" style="width:40px;height:40px;" alt="QR"></td>' +
-      '<td class="align-middle"><code>' + it.inventoryId + '</code></td>' +
-      '<td class="align-middle">' + it.description + '</td>' +
-      '</tr>';
-  }
-  tbody.innerHTML = html;
 }
 
 function openInventoryQrScan() {
@@ -2776,155 +2755,125 @@ showToast('Notifications cleared', 'info');
 }
 
 // ============================================================================
-// MRIF PRINT PREVIEW — List & Print
+// DOCUMENT LISTS (MRIF, MRR, MRS) - with filtering and error handling
 // ============================================================================
 
-async function openPendingMrifList() {
-if (state.isLoading) return;
-if (pendingMrifModal) pendingMrifModal.show();
-var container = document.getElementById('pendingMrifListContainer');
-if (container) {
-container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading pending MRIFs...</div></div>';
-}
-try {
-var sheetId = getCleanSheetId() || '';
-var url = API_URL + '?action=getPendingDocCount&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
-var res = await fetch(url, { redirect: 'follow' });
-var text = await res.text();
-var data;
-try { data = JSON.parse(text); } catch(e) { data = {}; }
-if (data.success && data.documents) {
-renderPendingMrifList(data.documents);
-} else {
-if (container) container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No pending MRIFs found</div>';
-}
-} catch(err) {
-if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + err.message + '</div>';
-}
-}
-
-function renderPendingMrifList(docs) {
-var container = document.getElementById('pendingMrifListContainer');
-if (!container) return;
-container.innerHTML = '';
-if (!docs || docs.length === 0) {
-container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No pending MRIFs</div>';
-return;
-}
-docs.forEach(function(d) {
-var docNo = typeof d === 'string' ? d : (d.docNo || d.name || '');
-var el = document.createElement('div');
-el.className = 'list-group-item pending-mrif-item';
-el.innerHTML = '<div class="d-flex justify-content-between align-items-center">' +
-'<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + docNo + '</strong></div>' +
-'<button class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-in-right me-1"></i>Process</button>' +
-'</div>' +
-'<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i>Has items awaiting release</div>';
-el.querySelector('button').addEventListener('click', async function(e) {
-e.stopPropagation();
-if (pendingMrifModal) pendingMrifModal.hide();
-showToast('Loading ' + cleanDocNo(docNo) + '...', 'info');
-try {
-  await selectModule('MRIF');
-  await onDocSelect(docNo);
-} catch(err) {
-  console.error('[Pending MRIF] Error loading doc:', err);
-  showToast('Failed to load ' + cleanDocNo(docNo) + '. Try again.', 'danger');
-}
-});
-container.appendChild(el);
-});
-}
-
-// ============================================================================
-// MRR PRINT PREVIEW — List & Print
-// ============================================================================
-
-async function openMrrList() {
-if (state.isLoading) return;
-if (mrrListModal) mrrListModal.show();
-var container = document.getElementById('mrrListContainer');
-if (container) {
-container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRR documents...</div></div>';
-}
-try {
-var sheetId = getCleanSheetId();
-if (!sheetId) {
-if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">No MRR Sheet ID configured. Please sync or enter Sheet ID in Settings.</div>';
-return;
-}
-var url = API_URL + '?action=getPendingDocs&docType=MRR&sheetId=' + sheetId + '&_t=' + Date.now();
-var res = await fetch(url, { redirect: 'follow' });
-var text = await res.text();
-var data;
-try { data = JSON.parse(text); } catch(e) { data = {}; }
-var docs = Array.isArray(data) ? data : (data.documents || data.docs || []);
-renderMrrList(docs);
-} catch(err) {
-if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error loading documents: ' + err.message + '</div>';
-}
-}
-
-function renderMrrList(docs) {
-var container = document.getElementById('mrrListContainer');
-if (!container) return;
-container.innerHTML = '';
-if (!docs || docs.length === 0) {
-container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No MRR documents found</div>';
-return;
-}
-docs.forEach(function(d) {
-var docNo = typeof d === 'string' ? d : (d.docNo || d.name || d);
-var el = document.createElement('div');
-el.className = 'list-group-item mrif-list-item d-flex justify-content-between align-items-center';
-el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-success"></i><strong>' + docNo + '</strong></div>' +
-'<button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>View / Print</button>';
-el.addEventListener('click', function() { openMrrPrint(docNo); });
-container.appendChild(el);
-});
-}
-
-async function openMrrPrint(docNo) {
-  if (state.isLoading) return;
-  showLoading('Loading ' + cleanDocNo(docNo) + '...');
+async function loadDocumentListForModule(docType) {
+  var prevModule = state.currentModule;
+  state.currentModule = docType;
+  var id = getCleanSheetId();
+  state.currentModule = prevModule;
+  
+  if (!id) {
+    showToast('⚠️ No Sheet ID for ' + docType + '. Please sync or enter it in Settings.', 'warning');
+    return [];
+  }
+  
   try {
-    var sheetId = getCleanSheetId();
-    console.log('[openMrrPrint] sheetId:', sheetId, 'docNo:', docNo);
-    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRR&sheetId=' + sheetId + '&_t=' + Date.now();
-    console.log('[openMrrPrint] URL:', url);
-    var res = await fetch(url, { redirect: 'follow' });
-    var text = await res.text();
-    console.log('[openMrrPrint] Raw response:', text.substring(0, 500));
-    var data;
-    try { data = JSON.parse(text); } catch(e) { 
-      console.error('[openMrrPrint] JSON parse error:', e);
-      data = {}; 
-    }
-    console.log('[openMrrPrint] Parsed data:', data);
+    const url = API_URL + '?action=getPendingDocs&docType=' + docType + '&sheetId=' + id + '&_t=' + Date.now();
+    console.log('[loadDocumentListForModule] URL:', url);
+    const res = await fetch(url, { redirect: 'follow' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    console.log('[loadDocumentListForModule] Raw response:', text.substring(0, 500));
+    let data;
+    try { data = JSON.parse(text); } catch(e) { data = {}; }
     if (data.error) {
       showToast('Error: ' + data.error, 'danger');
-      return;
+      return [];
     }
-    if (!data.success) {
-      showToast('Error: ' + (data.error || 'Failed to load document'), 'danger');
-      return;
-    }
-    if (!data.items || data.items.length === 0) {
-      console.warn('[openMrrPrint] No items found for ' + docNo, data.debug);
-      showToast('Warning: No items found in this document', 'warning');
-    }
-    renderMrrPrint(docNo, data.info || {}, data.items || []);
-    if (mrrListModal) mrrListModal.hide();
-    setTimeout(function() {
-      if (mrrPrintModal) mrrPrintModal.show();
-    }, 300);
+    const docs = Array.isArray(data) ? data : (data.docs || data.documents || []);
+    return docs;
   } catch(err) {
-    console.error('[openMrrPrint] Error:', err);
-    showToast('Failed to load document: ' + err.message, 'danger');
-  } finally {
-    hideLoading();
+    console.error('[loadDocumentListForModule] Error:', err);
+    showToast('Failed to load ' + docType + ' list: ' + err.message, 'danger');
+    return [];
   }
 }
+
+function renderDocumentList(container, docs, docType) {
+  if (!container) return;
+  container.innerHTML = '';
+  if (!docs || docs.length === 0) {
+    container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No ' + docType + ' documents found</div>';
+    return;
+  }
+  var ignoreList = ['MONITORING', 'SUMMARY', 'SYNC', 'SERVED', 'INVENTORYCODES', 'REQUESTOR LIST', 'SOF MONITORING 2026', 'GEMCOR PRF PO', 'Sheet1', 'LINKS', 'Copy of INVENTORYCODES', 'DOCLINKS'];
+  var filtered = docs.filter(function(d) {
+    var name = d.docNo || d.sheetName || '';
+    for (var i = 0; i < ignoreList.length; i++) {
+      if (name.toUpperCase().indexOf(ignoreList[i]) !== -1) return false;
+    }
+    return true;
+  });
+  if (filtered.length === 0) {
+    container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No valid ' + docType + ' documents found</div>';
+    return;
+  }
+  filtered.forEach(function(d) {
+    var docNo = typeof d === 'string' ? d : (d.docNo || d.name || d.sheetName || '');
+    var el = document.createElement('div');
+    el.className = 'list-group-item mrif-list-item d-flex justify-content-between align-items-center';
+    var color = docType === 'MRR' ? 'success' : (docType === 'MRIF' ? 'warning' : 'warning');
+    el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-' + color + '"></i><strong>' + docNo + '</strong></div>' +
+      '<button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>View / Print</button>';
+    el.addEventListener('click', function() {
+      if (docType === 'MRIF') openMrifPrint(docNo);
+      else if (docType === 'MRR') openMrrPrint(docNo);
+      else if (docType === 'MRS') openMrsPrint(docNo);
+    });
+    container.appendChild(el);
+  });
+}
+
+async function openMrifList() {
+  if (state.isLoading) return;
+  if (mrifListModal) mrifListModal.show();
+  var container = document.getElementById('mrifListContainer');
+  if (container) {
+    container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRIF documents...</div></div>';
+  }
+  try {
+    var docs = await loadDocumentListForModule('MRIF');
+    renderDocumentList(container, docs, 'MRIF');
+  } catch(err) {
+    if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + err.message + '</div>';
+  }
+}
+
+async function openMrrList() {
+  if (state.isLoading) return;
+  if (mrrListModal) mrrListModal.show();
+  var container = document.getElementById('mrrListContainer');
+  if (container) {
+    container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRR documents...</div></div>';
+  }
+  try {
+    var docs = await loadDocumentListForModule('MRR');
+    renderDocumentList(container, docs, 'MRR');
+  } catch(err) {
+    if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + err.message + '</div>';
+  }
+}
+
+async function openMrsList() {
+  if (state.isLoading) return;
+  if (mrsListModal) mrsListModal.show();
+  var container = document.getElementById('mrsListContainer');
+  if (container) {
+    container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRS documents...</div></div>';
+  }
+  try {
+    var docs = await loadDocumentListForModule('MRS');
+    renderDocumentList(container, docs, 'MRS');
+  } catch(err) {
+    if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + err.message + '</div>';
+  }
+}
+
+// ============================================================================
+// MRR PRINT PREVIEW — Fixed
+// ============================================================================
 
 function renderMrrPrint(docNo, info, items) {
   var container = document.getElementById('mrrPrintContent');
@@ -2934,7 +2883,6 @@ function renderMrrPrint(docNo, info, items) {
   console.log('[renderMrrPrint] Info object:', JSON.stringify(info, null, 2));
   console.log('[renderMrrPrint] Items count:', items ? items.length : 0);
 
-  // ─── Extract fields with fallbacks ───
   var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
   var vendor = info['Vendor/Client'] || info.vendor || info.client || '';
   var datePrepared = info['Date Prepared'] || info.datePrepared || '';
@@ -2943,7 +2891,6 @@ function renderMrrPrint(docNo, info, items) {
   var receivingDate = info['Receiving Date'] || info.receivingDate || '';
   var preparedBy = info['Prepared By'] || info.preparedBy || '';
 
-  // ─── Format dates ───
   function formatDate(val) {
     if (!val || val === '') return '';
     if (typeof val === 'string' && val.indexOf('GMT') === -1 && val.indexOf('Standard') === -1) {
@@ -2963,7 +2910,6 @@ function renderMrrPrint(docNo, info, items) {
   var dateStr = formatDate(datePrepared);
   var recDateStr = formatDate(receivingDate);
 
-  // ─── Build items table ───
   var itemsHtml = '';
   if (items && items.length > 0) {
     for (var idx = 0; idx < items.length; idx++) {
@@ -2992,7 +2938,6 @@ function renderMrrPrint(docNo, info, items) {
 
   var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
-  // ─── Build the print HTML ───
   var html = '<div class="mrr-print-sheet">' +
     '<div class="mrr-header">' +
       '<div class="mrr-logo"><img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'"></div>' +
@@ -3079,182 +3024,9 @@ function renderMrrPrint(docNo, info, items) {
   console.log('[renderMrrPrint] HTML rendered. DR No displayed:', drNo);
 }
 
-function printMrr() {
-  var previewContent = document.getElementById('mrrPrintContent');
-  if (!previewContent) {
-    showToast('Print content not found', 'danger');
-    return;
-  }
-  var sheetHtml = previewContent.innerHTML;
-  if (!sheetHtml || sheetHtml.trim() === '') {
-    showToast('Nothing to print', 'warning');
-    return;
-  }
-
-  var printStyles =
-    '@page { size: letter portrait; margin: 0.25in; }' +
-    '* { box-sizing: border-box; }' +
-    'body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #000; line-height: 1.3; }' +
-    '.mrr-print-sheet { width: 100%; max-width: 8in; margin: 0 auto; background: #fff; padding: 0.2in; }' +
-    '.mrr-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }' +
-    '.mrr-logo img { height: 48px; width: auto; }' +
-    '.mrr-docno { text-align: right; }' +
-    '.mrr-dn-label { font-weight: bold; font-size: 9pt; margin-right: 4px; }' +
-    '.mrr-dn-box { display: inline-block; background: #f4cccc; border: 1px solid #e6b8b8; padding: 2px 10px; font-weight: bold; font-size: 10pt; color: #000; letter-spacing: 1px; }' +
-    '.mrr-doc-qr { margin-top: 4px; text-align: right; }' +
-    '.mrr-doc-qr img { width: 75px; height: 75px; }' +
-    '.mrr-title { text-align: center; font-size: 12pt; font-weight: bold; letter-spacing: 5px; margin: 8px 0 14px 0; text-transform: uppercase; }' +
-    '.mrr-meta-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 8.5pt; }' +
-    '.mrr-meta-table td { padding: 0; vertical-align: middle; border: none; }' +
-    '.mrr-meta-label { font-weight: bold; font-size: 8pt; letter-spacing: 2px; text-align: left; white-space: nowrap; padding: 3px 4px 3px 0; width: 18%; line-height: 1.2; }' +
-    '.mrr-meta-value { background: #cfe2f3; padding: 4px 6px; font-size: 9pt; font-weight: bold; text-align: left; border: 1px solid #b6d7e8; width: 32%; line-height: 1.2; }' +
-    '.mrr-meta-label-right { font-weight: bold; font-size: 8pt; letter-spacing: 1.5px; text-align: left; white-space: nowrap; padding: 3px 4px 3px 10px; width: 20%; line-height: 1.2; }' +
-    '.mrr-meta-value-right { background: #cfe2f3; padding: 4px 6px; font-size: 9pt; font-weight: bold; text-align: left; border: 1px solid #b6d7e8; width: 30%; line-height: 1.2; }' +
-    '.mrr-items { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 8.5pt; }' +
-    '.mrr-items th, .mrr-items td { border: 1.5px solid #000; padding: 4px 5px; vertical-align: middle; }' +
-    '.mrr-items th { background: #fff; font-weight: bold; text-align: center; font-size: 8pt; letter-spacing: 0.5px; }' +
-    '.mrr-items td.td-center { text-align: center; }' +
-    '.mrr-items td.td-left { text-align: left; }' +
-    '.mrr-items td.td-nofurther { text-align: center; font-size: 7pt; font-weight: bold; padding: 3px; border: 1.5px solid #000; letter-spacing: 0.5px; }' +
-    '.mrr-checkboxes { font-size: 7.5pt; margin-top: 6px; margin-bottom: 16px; }' +
-    '.mrr-cb-section { margin-bottom: 6px; }' +
-    '.mrr-cb-title { font-weight: bold; font-size: 7.5pt; letter-spacing: 0.5px; margin-bottom: 3px; text-transform: uppercase; }' +
-    '.mrr-cb-row { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-bottom: 4px; padding-left: 2px; }' +
-    '.mrr-cb-item { font-size: 7.5pt; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }' +
-    '.mrr-cb-circle { font-size: 9pt; line-height: 1; font-family: "Courier New", monospace; }' +
-    '.mrr-sigs { display: flex; justify-content: center; gap: 50px; margin-top: 24px; text-align: center; }' +
-    '.mrr-sig { width: 26%; min-width: 140px; }' +
-    '.mrr-sig-name { font-size: 9.5pt; font-weight: bold; text-transform: uppercase; margin-bottom: 1px; min-height: 16px; letter-spacing: 0.5px; }' +
-    '.mrr-sig-line { border-bottom: 1.5px solid #000; height: 18px; margin-bottom: 2px; }' +
-    '.mrr-sig-label { font-size: 8.5pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; font-style: italic; }';
-
-  var fullHtml = '<!DOCTYPE html>' +
-    '<html><head><meta charset="utf-8"><title>MRR Print</title><style>' + printStyles + '</style></head>' +
-    '<body>' + sheetHtml + '</body></html>';
-
-  var iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.top = '-9999px';
-  iframe.style.left = '-9999px';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
-  iframe.style.border = 'none';
-  document.body.appendChild(iframe);
-
-  var doc = iframe.contentWindow.document;
-  doc.open();
-  doc.write(fullHtml);
-  doc.close();
-
-  setTimeout(function() {
-    try {
-      iframe.contentWindow.focus();
-      iframe.contentWindow.print();
-    } catch(e) {
-      console.error('Print error:', e);
-      showToast('Print failed. Try again.', 'danger');
-    }
-    setTimeout(function() {
-      if (iframe.parentNode) {
-        document.body.removeChild(iframe);
-      }
-    }, 2000);
-  }, 800);
-}
-
-function closeMrrPrint() {
-if (mrrPrintModal) mrrPrintModal.hide();
-}
-
 // ============================================================================
-// MRIF LIST & PRINT
+// MRIF PRINT PREVIEW — Fixed
 // ============================================================================
-
-async function openMrifList() {
-if (state.isLoading) return;
-if (mrifListModal) mrifListModal.show();
-var container = document.getElementById('mrifListContainer');
-if (container) {
-container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRIF documents...</div></div>';
-}
-try {
-var sheetId = getCleanSheetId();
-if (!sheetId) {
-if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">No MRIF Sheet ID configured. Please sync or enter Sheet ID in Settings.</div>';
-return;
-}
-var url = API_URL + '?action=getPendingDocs&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
-var res = await fetch(url, { redirect: 'follow' });
-var text = await res.text();
-var data;
-try { data = JSON.parse(text); } catch(e) { data = {}; }
-var docs = Array.isArray(data) ? data : (data.documents || data.docs || []);
-renderMrifList(docs);
-} catch(err) {
-if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error loading documents: ' + err.message + '</div>';
-}
-}
-
-function renderMrifList(docs) {
-var container = document.getElementById('mrifListContainer');
-if (!container) return;
-container.innerHTML = '';
-if (!docs || docs.length === 0) {
-container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No MRIF documents found</div>';
-return;
-}
-docs.forEach(function(d) {
-var docNo = typeof d === 'string' ? d : (d.docNo || d.name || d);
-var el = document.createElement('div');
-el.className = 'list-group-item mrif-list-item d-flex justify-content-between align-items-center';
-el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + docNo + '</strong></div>' +
-'<button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>View / Print</button>';
-el.addEventListener('click', function() { openMrifPrint(docNo); });
-container.appendChild(el);
-});
-}
-
-async function openMrifPrint(docNo) {
-  if (state.isLoading) return;
-  showLoading('Loading ' + cleanDocNo(docNo) + '...');
-  try {
-    var sheetId = getCleanSheetId();
-    console.log('[openMrifPrint] sheetId:', sheetId, 'docNo:', docNo);
-    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
-    console.log('[openMrifPrint] URL:', url);
-    var res = await fetch(url, { redirect: 'follow' });
-    var text = await res.text();
-    console.log('[openMrifPrint] Raw response:', text.substring(0, 500));
-    var data;
-    try { data = JSON.parse(text); } catch(e) { 
-      console.error('[openMrifPrint] JSON parse error:', e);
-      data = {}; 
-    }
-    console.log('[openMrifPrint] Parsed data:', data);
-    if (data.error) {
-      showToast('Error: ' + data.error, 'danger');
-      return;
-    }
-    if (!data.success) {
-      showToast('Error: ' + (data.error || 'Failed to load document'), 'danger');
-      return;
-    }
-    if (!data.items || data.items.length === 0) {
-      console.warn('[openMrifPrint] No items found for ' + docNo, data.debug);
-      showToast('Warning: No items found in this document', 'warning');
-    }
-    renderMrifPrint(docNo, data.info || {}, data.items || []);
-    if (mrifListModal) mrifListModal.hide();
-    setTimeout(function() {
-      if (mrifPrintModal) mrifPrintModal.show();
-    }, 300);
-  } catch(err) {
-    console.error('[openMrifPrint] Error:', err);
-    showToast('Failed to load document: ' + err.message, 'danger');
-  } finally {
-    hideLoading();
-  }
-}
 
 function renderMrifPrint(docNo, info, items) {
   var container = document.getElementById('mrifPrintContent');
@@ -3375,6 +3147,7 @@ function renderMrifPrint(docNo, info, items) {
   container.innerHTML = html;
   console.log('[renderMrifPrint] HTML rendered successfully');
 }
+
 function printMrif() {
   var previewContent = document.getElementById('mrifPrintContent');
   if (!previewContent) {
@@ -3457,94 +3230,99 @@ if (mrifPrintModal) mrifPrintModal.hide();
 }
 
 // ============================================================================
-// MRS PRINT PREVIEW — List & Print
+// MRR PRINT PREVIEW — Full functions
 // ============================================================================
 
-async function openMrsList() {
-if (state.isLoading) return;
-if (mrsListModal) mrsListModal.show();
-var container = document.getElementById('mrsListContainer');
-if (container) {
-container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRS documents...</div></div>';
-}
-try {
-var sheetId = getCleanSheetId();
-if (!sheetId) {
-if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">No MRS Sheet ID configured. Please sync or enter Sheet ID in Settings.</div>';
-return;
-}
-var url = API_URL + '?action=getPendingDocs&docType=MRS&sheetId=' + sheetId + '&_t=' + Date.now();
-var res = await fetch(url, { redirect: 'follow' });
-var text = await res.text();
-var data;
-try { data = JSON.parse(text); } catch(e) { data = {}; }
-var docs = Array.isArray(data) ? data : (data.documents || data.docs || []);
-renderMrsList(docs);
-} catch(err) {
-if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error loading documents: ' + err.message + '</div>';
-}
-}
-
-function renderMrsList(docs) {
-var container = document.getElementById('mrsListContainer');
-if (!container) return;
-container.innerHTML = '';
-if (!docs || docs.length === 0) {
-container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No MRS documents found</div>';
-return;
-}
-docs.forEach(function(d) {
-var docNo = typeof d === 'string' ? d : (d.docNo || d.name || d);
-var el = document.createElement('div');
-el.className = 'list-group-item mrif-list-item d-flex justify-content-between align-items-center';
-el.innerHTML = '<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + docNo + '</strong></div>' +
-'<button class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>View / Print</button>';
-el.addEventListener('click', function() { openMrsPrint(docNo); });
-container.appendChild(el);
-});
-}
-
-async function openMrsPrint(docNo) {
-  if (state.isLoading) return;
-  showLoading('Loading ' + cleanDocNo(docNo) + '...');
-  try {
-    var sheetId = getCleanSheetId();
-    console.log('[openMrsPrint] sheetId:', sheetId, 'docNo:', docNo);
-    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRS&sheetId=' + sheetId + '&_t=' + Date.now();
-    console.log('[openMrsPrint] URL:', url);
-    var res = await fetch(url, { redirect: 'follow' });
-    var text = await res.text();
-    console.log('[openMrsPrint] Raw response:', text.substring(0, 500));
-    var data;
-    try { data = JSON.parse(text); } catch(e) { 
-      console.error('[openMrsPrint] JSON parse error:', e);
-      data = {}; 
-    }
-    console.log('[openMrsPrint] Parsed data:', data);
-    if (data.error) {
-      showToast('Error: ' + data.error, 'danger');
-      return;
-    }
-    if (!data.success) {
-      showToast('Error: ' + (data.error || 'Failed to load document'), 'danger');
-      return;
-    }
-    if (!data.items || data.items.length === 0) {
-      console.warn('[openMrsPrint] No items found for ' + docNo, data.debug);
-      showToast('Warning: No items found in this document', 'warning');
-    }
-    renderMrsPrint(docNo, data.info || {}, data.items || []);
-    if (mrsListModal) mrsListModal.hide();
-    setTimeout(function() {
-      if (mrsPrintModal) mrsPrintModal.show();
-    }, 300);
-  } catch(err) {
-    console.error('[openMrsPrint] Error:', err);
-    showToast('Failed to load document: ' + err.message, 'danger');
-  } finally {
-    hideLoading();
+function printMrr() {
+  var previewContent = document.getElementById('mrrPrintContent');
+  if (!previewContent) {
+    showToast('Print content not found', 'danger');
+    return;
   }
+  var sheetHtml = previewContent.innerHTML;
+  if (!sheetHtml || sheetHtml.trim() === '') {
+    showToast('Nothing to print', 'warning');
+    return;
+  }
+
+  var printStyles =
+    '@page { size: letter portrait; margin: 0.25in; }' +
+    '* { box-sizing: border-box; }' +
+    'body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #000; line-height: 1.3; }' +
+    '.mrr-print-sheet { width: 100%; max-width: 8in; margin: 0 auto; background: #fff; padding: 0.2in; }' +
+    '.mrr-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }' +
+    '.mrr-logo img { height: 48px; width: auto; }' +
+    '.mrr-docno { text-align: right; }' +
+    '.mrr-dn-label { font-weight: bold; font-size: 9pt; margin-right: 4px; }' +
+    '.mrr-dn-box { display: inline-block; background: #f4cccc; border: 1px solid #e6b8b8; padding: 2px 10px; font-weight: bold; font-size: 10pt; color: #000; letter-spacing: 1px; }' +
+    '.mrr-doc-qr { margin-top: 4px; text-align: right; }' +
+    '.mrr-doc-qr img { width: 75px; height: 75px; }' +
+    '.mrr-title { text-align: center; font-size: 12pt; font-weight: bold; letter-spacing: 5px; margin: 8px 0 14px 0; text-transform: uppercase; }' +
+    '.mrr-meta-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 8.5pt; }' +
+    '.mrr-meta-table td { padding: 0; vertical-align: middle; border: none; }' +
+    '.mrr-meta-label { font-weight: bold; font-size: 8pt; letter-spacing: 2px; text-align: left; white-space: nowrap; padding: 3px 4px 3px 0; width: 18%; line-height: 1.2; }' +
+    '.mrr-meta-value { background: #cfe2f3; padding: 4px 6px; font-size: 9pt; font-weight: bold; text-align: left; border: 1px solid #b6d7e8; width: 32%; line-height: 1.2; }' +
+    '.mrr-meta-label-right { font-weight: bold; font-size: 8pt; letter-spacing: 1.5px; text-align: left; white-space: nowrap; padding: 3px 4px 3px 10px; width: 20%; line-height: 1.2; }' +
+    '.mrr-meta-value-right { background: #cfe2f3; padding: 4px 6px; font-size: 9pt; font-weight: bold; text-align: left; border: 1px solid #b6d7e8; width: 30%; line-height: 1.2; }' +
+    '.mrr-items { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 8.5pt; }' +
+    '.mrr-items th, .mrr-items td { border: 1.5px solid #000; padding: 4px 5px; vertical-align: middle; }' +
+    '.mrr-items th { background: #fff; font-weight: bold; text-align: center; font-size: 8pt; letter-spacing: 0.5px; }' +
+    '.mrr-items td.td-center { text-align: center; }' +
+    '.mrr-items td.td-left { text-align: left; }' +
+    '.mrr-items td.td-nofurther { text-align: center; font-size: 7pt; font-weight: bold; padding: 3px; border: 1.5px solid #000; letter-spacing: 0.5px; }' +
+    '.mrr-checkboxes { font-size: 7.5pt; margin-top: 6px; margin-bottom: 16px; }' +
+    '.mrr-cb-section { margin-bottom: 6px; }' +
+    '.mrr-cb-title { font-weight: bold; font-size: 7.5pt; letter-spacing: 0.5px; margin-bottom: 3px; text-transform: uppercase; }' +
+    '.mrr-cb-row { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-bottom: 4px; padding-left: 2px; }' +
+    '.mrr-cb-item { font-size: 7.5pt; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }' +
+    '.mrr-cb-circle { font-size: 9pt; line-height: 1; font-family: "Courier New", monospace; }' +
+    '.mrr-sigs { display: flex; justify-content: center; gap: 50px; margin-top: 24px; text-align: center; }' +
+    '.mrr-sig { width: 26%; min-width: 140px; }' +
+    '.mrr-sig-name { font-size: 9.5pt; font-weight: bold; text-transform: uppercase; margin-bottom: 1px; min-height: 16px; letter-spacing: 0.5px; }' +
+    '.mrr-sig-line { border-bottom: 1.5px solid #000; height: 18px; margin-bottom: 2px; }' +
+    '.mrr-sig-label { font-size: 8.5pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; font-style: italic; }';
+
+  var fullHtml = '<!DOCTYPE html>' +
+    '<html><head><meta charset="utf-8"><title>MRR Print</title><style>' + printStyles + '</style></head>' +
+    '<body>' + sheetHtml + '</body></html>';
+
+  var iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.top = '-9999px';
+  iframe.style.left = '-9999px';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = 'none';
+  document.body.appendChild(iframe);
+
+  var doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write(fullHtml);
+  doc.close();
+
+  setTimeout(function() {
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch(e) {
+      console.error('Print error:', e);
+      showToast('Print failed. Try again.', 'danger');
+    }
+    setTimeout(function() {
+      if (iframe.parentNode) {
+        document.body.removeChild(iframe);
+      }
+    }, 2000);
+  }, 800);
 }
+
+function closeMrrPrint() {
+if (mrrPrintModal) mrrPrintModal.hide();
+}
+
+// ============================================================================
+// MRS PRINT PREVIEW — List & Print
+// ============================================================================
 
 function renderMrsPrint(docNo, info, items) {
   var container = document.getElementById('mrsPrintContent');
@@ -3748,7 +3526,131 @@ if (mrsPrintModal) mrsPrintModal.hide();
 }
 
 // ============================================================================
-// AUTO-NAVIGATE FROM SCANNED QR CODE (?doc= parameter)
+// MRIF/MRR/MRS OPEN PRINT FUNCTIONS
+// ============================================================================
+
+async function openMrifPrint(docNo) {
+  if (state.isLoading) return;
+  showLoading('Loading ' + cleanDocNo(docNo) + '...');
+  try {
+    var sheetId = getCleanSheetId();
+    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
+    console.log('[openMrifPrint] URL:', url);
+    var res = await fetch(url, { redirect: 'follow' });
+    var text = await res.text();
+    console.log('[openMrifPrint] Raw response:', text.substring(0, 500));
+    var data;
+    try { data = JSON.parse(text); } catch(e) { 
+      console.error('[openMrifPrint] JSON parse error:', e);
+      data = {}; 
+    }
+    if (data.error) {
+      showToast('Error: ' + data.error, 'danger');
+      return;
+    }
+    if (!data.success) {
+      showToast('Error: ' + (data.error || 'Failed to load document'), 'danger');
+      return;
+    }
+    if (!data.items || data.items.length === 0) {
+      console.warn('[openMrifPrint] No items found for ' + docNo, data.debug);
+      showToast('Warning: No items found in this document', 'warning');
+    }
+    renderMrifPrint(docNo, data.info || {}, data.items || []);
+    if (mrifListModal) mrifListModal.hide();
+    setTimeout(function() {
+      if (mrifPrintModal) mrifPrintModal.show();
+    }, 300);
+  } catch(err) {
+    console.error('[openMrifPrint] Error:', err);
+    showToast('Failed to load document: ' + err.message, 'danger');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function openMrrPrint(docNo) {
+  if (state.isLoading) return;
+  showLoading('Loading ' + cleanDocNo(docNo) + '...');
+  try {
+    var sheetId = getCleanSheetId();
+    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRR&sheetId=' + sheetId + '&_t=' + Date.now();
+    console.log('[openMrrPrint] URL:', url);
+    var res = await fetch(url, { redirect: 'follow' });
+    var text = await res.text();
+    console.log('[openMrrPrint] Raw response:', text.substring(0, 500));
+    var data;
+    try { data = JSON.parse(text); } catch(e) { 
+      console.error('[openMrrPrint] JSON parse error:', e);
+      data = {}; 
+    }
+    if (data.error) {
+      showToast('Error: ' + data.error, 'danger');
+      return;
+    }
+    if (!data.success) {
+      showToast('Error: ' + (data.error || 'Failed to load document'), 'danger');
+      return;
+    }
+    if (!data.items || data.items.length === 0) {
+      console.warn('[openMrrPrint] No items found for ' + docNo, data.debug);
+      showToast('Warning: No items found in this document', 'warning');
+    }
+    renderMrrPrint(docNo, data.info || {}, data.items || []);
+    if (mrrListModal) mrrListModal.hide();
+    setTimeout(function() {
+      if (mrrPrintModal) mrrPrintModal.show();
+    }, 300);
+  } catch(err) {
+    console.error('[openMrrPrint] Error:', err);
+    showToast('Failed to load document: ' + err.message, 'danger');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function openMrsPrint(docNo) {
+  if (state.isLoading) return;
+  showLoading('Loading ' + cleanDocNo(docNo) + '...');
+  try {
+    var sheetId = getCleanSheetId();
+    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRS&sheetId=' + sheetId + '&_t=' + Date.now();
+    console.log('[openMrsPrint] URL:', url);
+    var res = await fetch(url, { redirect: 'follow' });
+    var text = await res.text();
+    console.log('[openMrsPrint] Raw response:', text.substring(0, 500));
+    var data;
+    try { data = JSON.parse(text); } catch(e) { 
+      console.error('[openMrsPrint] JSON parse error:', e);
+      data = {}; 
+    }
+    if (data.error) {
+      showToast('Error: ' + data.error, 'danger');
+      return;
+    }
+    if (!data.success) {
+      showToast('Error: ' + (data.error || 'Failed to load document'), 'danger');
+      return;
+    }
+    if (!data.items || data.items.length === 0) {
+      console.warn('[openMrsPrint] No items found for ' + docNo, data.debug);
+      showToast('Warning: No items found in this document', 'warning');
+    }
+    renderMrsPrint(docNo, data.info || {}, data.items || []);
+    if (mrsListModal) mrsListModal.hide();
+    setTimeout(function() {
+      if (mrsPrintModal) mrsPrintModal.show();
+    }, 300);
+  } catch(err) {
+    console.error('[openMrsPrint] Error:', err);
+    showToast('Failed to load document: ' + err.message, 'danger');
+  } finally {
+    hideLoading();
+  }
+}
+
+// ============================================================================
+// AUTO-NAVIGATE FROM SCANNED QR CODE
 // ============================================================================
 function checkUrlDocParam() {
   var params = new URLSearchParams(window.location.search);
@@ -3783,6 +3685,67 @@ function checkUrlDocParam() {
     hideLoading();
     showToast('Document ' + cleanDocNo(docNo) + ' scanned. Switch to Warehouse mode to process.', 'info');
   }
+}
+
+// ============================================================================
+// PENDING MRIF LIST (from KPI click)
+// ============================================================================
+
+async function openPendingMrifList() {
+if (state.isLoading) return;
+if (pendingMrifModal) pendingMrifModal.show();
+var container = document.getElementById('pendingMrifListContainer');
+if (container) {
+container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading pending MRIFs...</div></div>';
+}
+try {
+var sheetId = getCleanSheetId() || '';
+var url = API_URL + '?action=getPendingDocCount&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
+var res = await fetch(url, { redirect: 'follow' });
+var text = await res.text();
+var data;
+try { data = JSON.parse(text); } catch(e) { data = {}; }
+if (data.success && data.documents) {
+renderPendingMrifList(data.documents);
+} else {
+if (container) container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No pending MRIFs found</div>';
+}
+} catch(err) {
+if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + err.message + '</div>';
+}
+}
+
+function renderPendingMrifList(docs) {
+var container = document.getElementById('pendingMrifListContainer');
+if (!container) return;
+container.innerHTML = '';
+if (!docs || docs.length === 0) {
+container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No pending MRIFs</div>';
+return;
+}
+docs.forEach(function(d) {
+var docNo = typeof d === 'string' ? d : (d.docNo || d.name || '');
+var el = document.createElement('div');
+el.className = 'list-group-item pending-mrif-item';
+el.innerHTML = '<div class="d-flex justify-content-between align-items-center">' +
+'<div><i class="bi bi-file-earmark-text me-2 text-warning"></i><strong>' + docNo + '</strong></div>' +
+'<button class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-in-right me-1"></i>Process</button>' +
+'</div>' +
+'<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i>Has items awaiting release</div>';
+el.querySelector('button').addEventListener('click', async function(e) {
+e.stopPropagation();
+if (pendingMrifModal) pendingMrifModal.hide();
+showToast('Loading ' + cleanDocNo(docNo) + '...', 'info');
+try {
+  await selectModule('MRIF');
+  await onDocSelect(docNo);
+} catch(err) {
+  console.error('[Pending MRIF] Error loading doc:', err);
+  showToast('Failed to load ' + cleanDocNo(docNo) + '. Try again.', 'danger');
+}
+});
+container.appendChild(el);
+});
 }
 
 document.addEventListener('DOMContentLoaded', () => {
