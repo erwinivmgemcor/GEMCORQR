@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    IVM WAREHOUSE QR — APPLICATION LOGIC
-   (Full version with MRS Print Preview added)
+   (Full version with QR scanning and MRR print fix)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const API_URL = 'https://script.google.com/macros/s/AKfycbw-EX38TvEOLHcYRh0EUks9c9e7M0pIGS1fwi8ELPqs7KZnKtcy99hYZvIyg9blVSJz/exec';
@@ -708,7 +708,8 @@ state.quickScanner = null;
 }
 quickScanModal.hide();
 
-const docPattern = /^(MRIF|MRR|MRS)\d{6,}$/i;
+// ─── Check if it's a document QR (MRIF, MRR, MRS) ───
+const docPattern = /^(MRIF|MRR|MRS)\d{6,}/i;
 if (docPattern.test(decodedText)) {
 const mod = decodedText.substring(0, 4).toUpperCase();
 if (['MRIF','MRR','MRS'].includes(mod)) {
@@ -720,6 +721,22 @@ return;
 }
 }
 
+// ─── Check if it's a URL with ?doc= parameter (QR from new request) ───
+var urlDocMatch = decodedText.match(/[?&]doc=([^&\s]+)/);
+if (urlDocMatch) {
+  var extractedDoc = decodeURIComponent(urlDocMatch[1]);
+  console.log('[QuickScan] Extracted doc from URL:', extractedDoc);
+  var mod = 'MRIF';
+  if (extractedDoc.indexOf('MRR') === 0) mod = 'MRR';
+  else if (extractedDoc.indexOf('MRS') === 0) mod = 'MRS';
+  playSuccessBeep();
+  showToast('Loading document ' + cleanDocNo(extractedDoc) + '...', 'success');
+  selectModule(mod);
+  setTimeout(() => onDocSelect(extractedDoc), 500);
+  return;
+}
+
+// ─── Try as PO Number (for MRR creation) ───
 const poResult = await lookupPoFromScan(decodedText);
 if (poResult && poResult.success) {
 playSuccessBeep();
@@ -733,6 +750,7 @@ state.poItemsModal.show();
 return;
 }
 
+// ─── Try as Item QR (existing document) ───
 if (state.currentDoc && state.items.length > 0) {
 const item = state.items.find(i => i.inventoryId.toLowerCase() === decodedText.toLowerCase());
 if (item) {
@@ -2225,7 +2243,7 @@ container.appendChild(el);
 }
 
 // ============================================================================
-// MRR PRINT PREVIEW — List & Print
+// MRR PRINT PREVIEW — List & Print (FIXED: correct data extraction)
 // ============================================================================
 
 async function openMrrList() {
@@ -2327,6 +2345,7 @@ if (items && items.length > 0) {
 }
 console.log('[renderMrrPrint] ================================================');
 
+// ─── Extract meta info ───
 var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
 var vendor = info['Vendor/Client'] || info.vendor || info.client || '';
 var datePrepared = info['Date Prepared'] || info.datePrepared || '';
@@ -2356,24 +2375,28 @@ function formatDate(val) {
 var dateStr = formatDate(datePrepared);
 var recDateStr = formatDate(receivingDate);
 
+// ─── Build items HTML ───
 var itemsHtml = '';
 if (items && items.length > 0) {
   items.forEach(function(it, idx) {
+    // ITEM CODE - use inventoryId or itemCode
     var code = it.inventoryId || it.itemCode || '';
     var desc = it.description || it.desc || it.itemDescription || '';
-    var recQty = it.recQty || it.expectedQty || it.qty || it.quantity || 0;
+    // REQUESTED QTY = recQty, expectedQty, or qty
+    var requestedQty = it.recQty || it.expectedQty || it.qty || it.quantity || 0;
+    // RECEIVED QTY = atlQty, actualQty, issuedQty, or actual
     var receivedQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
     var unit = it.unit || it.uom || 'PIECE';
     var remarks = it.remarks || it.status || it.note || '';
     
-    console.log('[renderMrrPrint] Item ' + (idx+1) + ' - code: "' + code + '", recQty: ' + recQty + ', receivedQty: ' + receivedQty);
+    console.log('[renderMrrPrint] Item ' + (idx+1) + ' - code: "' + code + '", requestedQty: ' + requestedQty + ', receivedQty: ' + receivedQty);
     
     var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code || 'blank');
     itemsHtml += '<tr>' +
       '<td class="td-center" style="width:5%">' + (idx + 1) + '</td>' +
       '<td class="td-center" style="width:16%">' + code + '</td>' +
       '<td class="td-left" style="width:35%">' + desc + '</td>' +
-      '<td class="td-center" style="width:10%">' + recQty + '</td>' +
+      '<td class="td-center" style="width:10%">' + requestedQty + '</td>' +
       '<td class="td-center" style="width:10%">' + receivedQty + '</td>' +
       '<td class="td-center" style="width:8%">' + unit + '</td>' +
       '<td class="td-center" style="width:16%">' + remarks + '</td>' +
@@ -2381,8 +2404,10 @@ if (items && items.length > 0) {
   });
 }
 
+// ─── QR code for document ───
 var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
+// ─── Build complete HTML ───
 var html = '<div class="mrr-print-sheet">' +
   '<div class="mrr-header">' +
     '<div class="mrr-logo"><img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'"></div>' +
@@ -2556,6 +2581,10 @@ function printMrr() {
 function closeMrrPrint() {
 if (mrrPrintModal) mrrPrintModal.hide();
 }
+
+// ============================================================================
+// MRIF LIST & PRINT
+// ============================================================================
 
 async function openMrifList() {
 if (state.isLoading) return;
