@@ -2844,7 +2844,7 @@ if (mrifPrintModal) mrifPrintModal.hide();
 }
 
 // ============================================================================
-// MRS PRINT PREVIEW — List & Print (NEW)
+// MRS PRINT PREVIEW — List & Print
 // ============================================================================
 
 async function openMrsList() {
@@ -2948,7 +2948,6 @@ function renderMrsPrint(docNo, info, items) {
   var client = info['Client Name'] || info.clientName || info.client || '';
   var project = info.Project || info.project || '';
 
-  // Format date
   var dateStr = dateRaw;
   try {
     var d = new Date(dateRaw);
@@ -2964,8 +2963,8 @@ function renderMrsPrint(docNo, info, items) {
       var it = items[i];
       var code = it.itemCode || it.inventoryId || it.code || '';
       var desc = it.description || it.desc || '';
-      var qtyReturned = it.expectedQty || it.qty || it.requestedQty || 0; // QTY RETURNED from sheet
-      var actualReturned = it.actualQty || it.issuedQty || it.atlQty || 0; // ATL QTY (Actual)
+      var qtyReturned = it.expectedQty || it.qty || it.requestedQty || 0;
+      var actualReturned = it.actualQty || it.issuedQty || it.atlQty || 0;
       var unit = it.unit || 'PIECE';
       var remarks = it.remarks || '';
       var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
@@ -2984,12 +2983,11 @@ function renderMrsPrint(docNo, info, items) {
     itemsHtml += '<tr><td class="td-center" colspan="7" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
   }
 
-  // One empty row for spacing
   itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
 
   var mrsQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
-  var html = '<div class="mrif-print-sheet">' +  // reuse MRIF print styles (they are similar)
+  var html = '<div class="mrif-print-sheet">' +
     '<div class="mrif-header">' +
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
       '<div class="mrif-docno">' +
@@ -3067,7 +3065,6 @@ function printMrs() {
     return;
   }
 
-  // Reuse MRIF print styles (they match the layout)
   var printStyles =
     '@page { size: letter portrait; margin: 0.3in; }' +
     '* { box-sizing: border-box; }' +
