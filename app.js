@@ -3259,10 +3259,10 @@ function renderMrifPrint(docNo, info, items) {
         '</tr>';
     }
   } else {
-    itemsHtml += '<tr><td class="td-center" colspan="7" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
+    itemsHtml += '<tr><td class="td-center" colspan="8" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
   }
 
-  itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
+  itemsHtml += '<tr><td class="td-center" colspan="8">&nbsp;</td></tr>';
 
   var mrifQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
 
@@ -3331,7 +3331,6 @@ function renderMrifPrint(docNo, info, items) {
   container.innerHTML = html;
   console.log('[renderMrifPrint] HTML rendered successfully');
 }
-
 function printMrif() {
   var previewContent = document.getElementById('mrifPrintContent');
   if (!previewContent) {
