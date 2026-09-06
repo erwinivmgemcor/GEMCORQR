@@ -108,54 +108,63 @@
       </div>
     </div>
 
-    <!-- Analytics Section -->
-    <div id="analyticsSection" class="mt-4">
-      <div id="analyticsLoading" class="text-center py-4">
-        <div class="spinner-border text-primary"></div>
-        <div class="text-muted mt-2">Loading analytics...</div>
-      </div>
-      <div id="analyticsContent" class="d-none">
-        <div class="row g-3 mb-3">
-          <div class="col-md-4">
-            <div class="card h-100 analytics-card">
-              <div class="card-body text-center">
-                <div class="text-muted small">Average Processing Time</div>
-                <div class="h2" id="avgProcessingTime">-</div>
-                <div class="text-muted small">From request to completion</div>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-8">
-            <div class="card h-100 analytics-card">
-              <div class="card-header">Daily Request Volume (Last 30 Days)</div>
-              <div class="card-body" style="height:180px;">
-                <div id="dailyChartContainer"><canvas id="dailyChart"></canvas></div>
-              </div>
-            </div>
+   <!-- Analytics Section -->
+<div id="analyticsSection" class="mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="mb-0"><i class="bi bi-graph-up me-2"></i>Analytics Dashboard</h6>
+    <button class="btn btn-sm btn-outline-primary" onclick="loadAnalytics()">
+      <i class="bi bi-arrow-repeat me-1"></i>Refresh
+    </button>
+  </div>
+  <div id="analyticsLoading" class="text-center py-4">
+    <div class="spinner-border text-primary"></div>
+    <div class="text-muted mt-2">Loading analytics...</div>
+  </div>
+  <div id="analyticsError" class="alert alert-danger d-none">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+    <span id="analyticsErrorText">Failed to load analytics.</span>
+    <button class="btn btn-sm btn-outline-danger ms-2" onclick="loadAnalytics()">Retry</button>
+  </div>
+  <div id="analyticsContent" class="d-none">
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <div class="card h-100 analytics-card">
+          <div class="card-body text-center">
+            <div class="text-muted small">Average Processing Time</div>
+            <div class="h2" id="avgProcessingTime">-</div>
+            <div class="text-muted small">From request to completion</div>
           </div>
         </div>
-        <div class="row g-3">
-          <div class="col-md-6">
-            <div class="card analytics-card">
-              <div class="card-header">Top 10 Most Requested Items</div>
-              <div class="card-body" style="height:250px;">
-                <div id="topItemsChartContainer"><canvas id="topItemsChart"></canvas></div>
-              </div>
-            </div>
+      </div>
+      <div class="col-md-8">
+        <div class="card h-100 analytics-card">
+          <div class="card-header">Daily Request Volume (Last 30 Days)</div>
+          <div class="card-body" style="height:180px;">
+            <div id="dailyChartContainer"><canvas id="dailyChart"></canvas></div>
           </div>
-          <div class="col-md-6">
-            <div class="card analytics-card">
-              <div class="card-header">Staff Performance</div>
-              <div class="card-body" style="height:250px;">
-                <div id="staffChartContainer"><canvas id="staffChart"></canvas></div>
-              </div>
-            </div>
+        </div>
+      </div>
+    </div>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="card analytics-card">
+          <div class="card-header">Top 10 Most Requested Items</div>
+          <div class="card-body" style="height:250px;">
+            <div id="topItemsChartContainer"><canvas id="topItemsChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card analytics-card">
+          <div class="card-header">Staff Performance</div>
+          <div class="card-body" style="height:250px;">
+            <div id="staffChartContainer"><canvas id="staffChart"></canvas></div>
           </div>
         </div>
       </div>
     </div>
   </div>
-
+</div>
   <!-- Module Buttons -->
   <div class="row g-2 mb-4" id="moduleButtonsRow">
     <div class="col-3" id="btnMRR">
