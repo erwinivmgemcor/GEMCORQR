@@ -1,18 +1,31 @@
 // ============================================================
-// AUTHENTICATION & ROLE MANAGEMENT (with null checks)
+// AUTHENTICATION & ROLE MANAGEMENT (with User Login)
 // ============================================================
 
 function initRole() {
+  // Check if user already logged in (from localStorage)
+  var savedUser = localStorage.getItem('ivm_username');
+  if (savedUser) {
+    state.currentUser = savedUser;
+    state.currentUserFullname = localStorage.getItem('ivm_userFullname') || savedUser;
+  }
+
   const role = localStorage.getItem('ivm_userRole');
   if (!role) {
     if (roleModal) roleModal.show();
   } else {
     applyRoleUI();
     if (role === 'warehouse') {
-      if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
-        setTimeout(() => { if (settingsModal) settingsModal.show(); }, 500);
+      // If user not logged in, show login modal
+      if (!state.currentUser) {
+        setTimeout(showLoginModal, 300);
+      } else {
+        // User already logged in, load modules
+        if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
+          setTimeout(() => { if (settingsModal) settingsModal.show(); }, 500);
+        }
+        selectModule('MRIF');
       }
-      selectModule('MRIF');
     } else {
       checkProductionName();
     }
@@ -26,6 +39,10 @@ function selectRole(role) {
     applyRoleUI();
     showToast('Production mode activated', 'success');
     checkProductionName();
+  } else if (role === 'warehouse') {
+    if (roleModal) roleModal.hide();
+    // Show login modal instead of PIN prompt
+    showLoginModal();
   }
 }
 
@@ -50,6 +67,95 @@ function saveProductionName() {
   loadMyRequests();
 }
 
+// ─── User Login ──────────────────────────────────────────────────
+function showLoginModal() {
+  var loginModal = document.getElementById('loginModal');
+  if (!loginModal) return;
+  // Reset fields
+  var userField = document.getElementById('loginUsername');
+  var passField = document.getElementById('loginPassword');
+  var errorField = document.getElementById('loginError');
+  if (userField) userField.value = '';
+  if (passField) passField.value = '';
+  if (errorField) errorField.classList.add('d-none');
+  var modal = new bootstrap.Modal(loginModal, { backdrop: 'static' });
+  modal.show();
+  // Focus username
+  setTimeout(function() {
+    if (userField) userField.focus();
+  }, 300);
+}
+
+async function loginUser() {
+  var username = document.getElementById('loginUsername').value.trim();
+  var password = document.getElementById('loginPassword').value.trim();
+  var errorField = document.getElementById('loginError');
+  var loginBtn = document.getElementById('loginBtn');
+  if (!username || !password) {
+    if (errorField) {
+      errorField.textContent = 'Please enter username and password';
+      errorField.classList.remove('d-none');
+    }
+    return;
+  }
+  // Show loading
+  if (loginBtn) {
+    loginBtn.disabled = true;
+    loginBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Checking...';
+  }
+  try {
+    var url = API_URL + '?action=verifyUser&username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password) + '&_t=' + Date.now();
+    var res = await fetch(url, { redirect: 'follow' });
+    var data = await res.json();
+    if (data.success) {
+      state.currentUser = data.username;
+      state.currentUserFullname = data.fullname || data.username;
+      localStorage.setItem('ivm_username', state.currentUser);
+      localStorage.setItem('ivm_userFullname', state.currentUserFullname);
+      // Close login modal
+      var loginModal = document.getElementById('loginModal');
+      if (loginModal) {
+        var modal = bootstrap.Modal.getInstance(loginModal);
+        if (modal) modal.hide();
+      }
+      showToast('Welcome, ' + state.currentUserFullname + '!', 'success');
+      // Update UI and load modules
+      applyRoleUI();
+      if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
+        setTimeout(() => { if (settingsModal) settingsModal.show(); }, 500);
+      }
+      selectModule('MRIF');
+      setTimeout(loadAnalytics, 500);
+    } else {
+      if (errorField) {
+        errorField.textContent = data.error || 'Login failed';
+        errorField.classList.remove('d-none');
+      }
+    }
+  } catch(err) {
+    if (errorField) {
+      errorField.textContent = 'Network error: ' + err.message;
+      errorField.classList.remove('d-none');
+    }
+  } finally {
+    if (loginBtn) {
+      loginBtn.disabled = false;
+      loginBtn.innerHTML = 'Login';
+    }
+  }
+}
+
+function logoutUser() {
+  if (confirm('Logout ' + (state.currentUserFullname || state.currentUser) + '?')) {
+    state.currentUser = null;
+    state.currentUserFullname = '';
+    localStorage.removeItem('ivm_username');
+    localStorage.removeItem('ivm_userFullname');
+    location.reload();
+  }
+}
+
+// ─── PIN Entry (kept for admin fallback) ──────────────────────
 function showPinEntry() {
   var section = document.getElementById('pinEntrySection');
   if (section) section.classList.remove('d-none');
@@ -90,23 +196,18 @@ function verifyPin() {
   if (state.pinBuffer === storedPin) {
     localStorage.setItem('ivm_userRole', 'warehouse');
     state.pinAttempts = 0;
-    if (!state.warehouseName) {
-      let name = prompt('Please enter your full name (for audit trail):');
-      if (name && name.trim()) {
-        state.warehouseName = name.trim();
-        localStorage.setItem('ivm_warehouseName', state.warehouseName);
-      } else {
-        state.warehouseName = 'WAREHOUSE';
-        localStorage.setItem('ivm_warehouseName', 'WAREHOUSE');
-      }
-    }
     if (roleModal) roleModal.hide();
     applyRoleUI();
     showToast('Warehouse mode unlocked', 'success');
-    if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
-      setTimeout(() => { if (settingsModal) settingsModal.show(); }, 500);
+    // Force login if not logged in
+    if (!state.currentUser) {
+      setTimeout(showLoginModal, 300);
+    } else {
+      if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
+        setTimeout(() => { if (settingsModal) settingsModal.show(); }, 500);
+      }
+      selectModule('MRIF');
     }
-    selectModule('MRIF');
   } else {
     state.pinAttempts++;
     var err = document.getElementById('pinError');
@@ -120,11 +221,13 @@ function verifyPin() {
   }
 }
 
+// ─── Role UI ────────────────────────────────────────────────────
 function applyRoleUI() {
   const role = localStorage.getItem('ivm_userRole');
   const isProduction = (role === 'production');
+  const isWarehouse = (role === 'warehouse');
 
-  // ─── Safe element updates ──────────────────────────────
+  // ─── Update UI elements ──────────────────────────────────────
   var btnMRR = document.getElementById('btnMRR');
   var btnMRIF = document.getElementById('btnMRIF');
   var btnMRS = document.getElementById('btnMRS');
@@ -150,6 +253,13 @@ function applyRoleUI() {
   var whBtn = document.getElementById('whNotifBtn');
   if (whBtn) whBtn.classList.toggle('d-none', isProduction);
 
+  // ─── Show/hide logout button ────────────────────────────────
+  var logoutItem = document.getElementById('logoutNavItem');
+  if (logoutItem) {
+    logoutItem.style.display = (isWarehouse && state.currentUser) ? 'flex' : 'none';
+  }
+
+  // ─── Handle intervals ────────────────────────────────────────
   if (isProduction) {
     var active = document.getElementById('activeTransactionSection');
     if (active) active.classList.add('d-none');
@@ -172,7 +282,7 @@ function applyRoleUI() {
     updateWarehouseKPIs();
   }
 
-  // ─── Call the sidebar override if it exists ──────────────
+  // ─── Call sidebar role handler ──────────────────────────────
   if (typeof window.applySidebarRole === 'function') {
     window.applySidebarRole(role);
   }
