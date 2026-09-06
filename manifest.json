@@ -1,0 +1,21 @@
+{
+  "name": "GEMCOR WMS",
+  "short_name": "GEMCOR WMS",
+  "description": "Warehouse Management System for GEMCOR",
+  "start_url": "/GEMCORQR/",
+  "display": "standalone",
+  "background_color": "#f4f6f9",
+  "theme_color": "#1e3a5f",
+  "icons": [
+    {
+      "src": "gemcor-logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "gemcor-logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
