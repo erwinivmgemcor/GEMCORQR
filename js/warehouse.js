@@ -1,5 +1,5 @@
 // ============================================================
-// WAREHOUSE CORE FUNCTIONS (with null checks)
+// WAREHOUSE CORE FUNCTIONS (with null checks & user login)
 // ============================================================
 
 function getCleanSheetId() {
@@ -58,7 +58,6 @@ async function selectModule(mod) {
     document.querySelectorAll('.module-btn').forEach(b => b.classList.remove('active'));
     const btn = document.querySelector('.module-btn[data-module="' + mod + '"]');
     if (btn) btn.classList.add('active');
-    // ─── Null check for moduleLabel ───
     var labelEl = document.getElementById('moduleLabel');
     if (labelEl) labelEl.textContent = mod;
     updateLabels();
@@ -466,7 +465,7 @@ async function submitTransaction(verifiedItems) {
     '&docType=' + encodeURIComponent(state.currentModule) +
     '&sheetId=' + encodeURIComponent(getCleanSheetId()) +
     '&items=' + itemsStr +
-    '&processedBy=' + encodeURIComponent(state.warehouseName || 'WAREHOUSE') +
+    '&processedBy=' + encodeURIComponent(state.currentUser || state.warehouseName || 'WAREHOUSE') +
     '&_t=' + Date.now();
   console.log('[Submit] URL length:', url.length);
   console.log('[Submit] URL:', url);
