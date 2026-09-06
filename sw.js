@@ -53,7 +53,6 @@ self.addEventListener('fetch', event => {
         );
       })
       .catch(() => {
-        // Offline fallback – show a basic offline page
         return new Response('You are offline. Please reconnect.', {
           status: 503,
           statusText: 'Service Unavailable'
