@@ -2,8 +2,162 @@
 // MAIN - DOM Ready & Initialization
 // ============================================================
 
+// ─── Sidebar role handler (called from applyRoleUI) ───
+window.applySidebarRole = function(role) {
+  var isProduction = (role === 'production');
+  var sidebarRole = document.getElementById('sidebarRole');
+  if (sidebarRole) {
+    sidebarRole.textContent = isProduction ? 'Production Mode' : 'Warehouse Mode';
+  }
+
+  var warehouseNavItems = ['dashboard', 'releasing', 'receiving', 'returns', 'inventory'];
+  document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+    var section = el.dataset.section;
+    if (warehouseNavItems.indexOf(section) !== -1) {
+      el.style.display = isProduction ? 'none' : 'flex';
+    } else {
+      el.style.display = 'flex';
+    }
+  });
+
+  if (isProduction) {
+    navigateTo('myrequests');
+  } else {
+    navigateTo('dashboard');
+  }
+};
+
+// ─── Navigation ────────────────────────────────────────────────
+function navigateTo(sectionId) {
+  document.querySelectorAll('.section-page').forEach(function(el) {
+    el.classList.remove('active');
+  });
+  var target = document.getElementById('section-' + sectionId);
+  if (target) target.classList.add('active');
+
+  document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
+    el.classList.remove('active');
+    if (el.dataset.section === sectionId) el.classList.add('active');
+  });
+
+  toggleSidebar(false);
+
+  // Module-specific actions
+  if (sectionId === 'releasing' || sectionId === 'receiving' || sectionId === 'returns') {
+    var modMap = { releasing: 'MRIF', receiving: 'MRR', returns: 'MRS' };
+    var mod = modMap[sectionId];
+    if (mod) {
+      state.currentModule = mod;
+      var labelEl = document.getElementById('moduleLabel');
+      if (labelEl) labelEl.textContent = mod;
+      var mrifCard = document.getElementById('mrifListCard');
+      var mrrCard = document.getElementById('mrrListCard');
+      var mrsCard = document.getElementById('mrsListCard');
+      if (mrifCard) mrifCard.classList.toggle('d-none', mod !== 'MRIF');
+      if (mrrCard) mrrCard.classList.toggle('d-none', mod !== 'MRR');
+      if (mrsCard) mrsCard.classList.toggle('d-none', mod !== 'MRS');
+      fetchPendingDocs();
+    }
+  }
+
+  if (sectionId === 'dashboard') {
+    var role = localStorage.getItem('ivm_userRole');
+    if (role === 'warehouse' && !window.analyticsLoaded) {
+      setTimeout(loadAnalytics, 300);
+    }
+  }
+}
+
+function toggleSidebar(open) {
+  var sidebar = document.getElementById('sidebar');
+  var backdrop = document.getElementById('sidebarBackdrop');
+  if (open) {
+    if (sidebar) sidebar.classList.add('open');
+    if (backdrop) backdrop.classList.add('show');
+  } else {
+    if (sidebar) sidebar.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('show');
+  }
+}
+
+// ─── Override renderMyRequests ──────────────────────────────────
+var originalRenderMyRequests = window.renderMyRequests || function() {};
+
+window.renderMyRequests = function(requests) {
+  if (typeof originalRenderMyRequests === 'function') {
+    try { originalRenderMyRequests(requests); } catch(e) { console.warn('[renderMyRequests] Original error:', e); }
+  }
+
+  var container = document.getElementById('myRequestsListPage');
+  if (!container) return;
+  container.innerHTML = '';
+  if (!requests || requests.length === 0) {
+    container.innerHTML = '<div class="list-group-item text-muted text-center">No requests found</div>';
+    return;
+  }
+
+  var readyCount = 0;
+  requests.forEach(function(req) {
+    var status = req.status || 'PENDING';
+    if (status !== 'PENDING') readyCount++;
+  });
+  var badge1 = document.getElementById('myRequestsBadgeSidebar');
+  var badge2 = document.getElementById('myRequestsBadgePage');
+  if (badge1) { badge1.textContent = readyCount; badge1.classList.toggle('d-none', readyCount === 0); }
+  if (badge2) { badge2.textContent = readyCount; badge2.classList.toggle('d-none', readyCount === 0); }
+
+  requests.forEach(function(req) {
+    var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
+    var status = req.status || 'PENDING';
+    var isCompleted = (status === 'COMPLETED');
+    var isPartial = (status === 'PARTIAL');
+    var badgeClass = isCompleted ? 'success' : (isPartial ? 'info' : 'warning');
+    var statusText = isCompleted ? 'COMPLETED' : (isPartial ? 'PARTIAL' : 'PENDING');
+    var icon = isCompleted ? 'bi-check-circle-fill' : (isPartial ? 'bi-hourglass-split' : 'bi-clock');
+    var docNo = req.docNo || '';
+    var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + '" data-docno="' + docNo + '" style="cursor:pointer;">' +
+      '<div class="d-flex justify-content-between align-items-start">' +
+      '<div>' +
+      '<div class="fw-bold">' + docNo + ' <span class="badge bg-secondary">' + (req.type || '') + '</span></div>' +
+      '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
+      '</div>' +
+      '<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + statusText + '</span>' +
+      '</div>' +
+      '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
+      '<div class="small text-muted mt-1"><i class="bi bi-qr-code me-1"></i> Click to re-open QR</div>' +
+      '</div>';
+    container.innerHTML += html;
+  });
+
+  container.querySelectorAll('.request-card').forEach(function(el) {
+    el.addEventListener('click', function(e) {
+      var docNo = this.getAttribute('data-docno');
+      if (docNo) showRequestQr(docNo, docNo);
+    });
+  });
+};
+
+// ─── Override loadMyRequests ────────────────────────────────────
+var originalLoadMyRequests = window.loadMyRequests || function() {};
+
+window.loadMyRequests = function() {
+  if (typeof originalLoadMyRequests === 'function') {
+    try { originalLoadMyRequests(); } catch(e) { console.warn('[loadMyRequests] Original error:', e); }
+  }
+};
+
+// ─── Override updateWarehouseKPIs ──────────────────────────────
+var originalUpdateWarehouseKPIs = window.updateWarehouseKPIs || function() {};
+
+window.updateWarehouseKPIs = function() {
+  if (typeof originalUpdateWarehouseKPIs === 'function') {
+    try { originalUpdateWarehouseKPIs(); } catch(e) { console.warn('[updateWarehouseKPIs] Original error:', e); }
+  }
+};
+
+// ─── Test connection ─────────────────────────────────────────────
 async function testConnection() {
-  const resultDiv = document.getElementById('testResult');
+  var resultDiv = document.getElementById('testResult');
   if (!resultDiv) return;
   resultDiv.classList.remove('d-none');
   resultDiv.textContent = 'Testing...';
@@ -36,6 +190,7 @@ async function testConnection() {
   }
 }
 
+// ─── URL doc parameter ──────────────────────────────────────────
 function checkUrlDocParam() {
   var params = new URLSearchParams(window.location.search);
   var docNo = params.get('doc');
@@ -71,230 +226,18 @@ function checkUrlDocParam() {
   }
 }
 
-// ============================================================
-// SIDEBAR NAVIGATION – SAFE OVERRIDES
-// ============================================================
-
-function navigateTo(sectionId) {
-  // Hide all sections
-  document.querySelectorAll('.section-page').forEach(function(el) {
-    el.classList.remove('active');
-  });
-  // Show target section
-  var target = document.getElementById('section-' + sectionId);
-  if (target) target.classList.add('active');
-
-  // Update sidebar active state
-  document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
-    el.classList.remove('active');
-    if (el.dataset.section === sectionId) el.classList.add('active');
-  });
-
-  // Close sidebar on mobile
-  toggleSidebar(false);
-
-  // Handle module-specific actions when navigating to a module section
-  if (sectionId === 'releasing' || sectionId === 'receiving' || sectionId === 'returns') {
-    var modMap = { releasing: 'MRIF', receiving: 'MRR', returns: 'MRS' };
-    var mod = modMap[sectionId];
-    if (mod) {
-      state.currentModule = mod;
-      // Update labels if they exist
-      var labelEl = document.getElementById('moduleLabel');
-      if (labelEl) labelEl.textContent = mod;
-      // Show the appropriate list card
-      var mrifCard = document.getElementById('mrifListCard');
-      var mrrCard = document.getElementById('mrrListCard');
-      var mrsCard = document.getElementById('mrsListCard');
-      if (mrifCard) mrifCard.classList.toggle('d-none', mod !== 'MRIF');
-      if (mrrCard) mrrCard.classList.toggle('d-none', mod !== 'MRR');
-      if (mrsCard) mrsCard.classList.toggle('d-none', mod !== 'MRS');
-      // Fetch documents for this module
-      fetchPendingDocs();
-    }
-  }
-
-  // Dashboard – load analytics if not loaded
-  if (sectionId === 'dashboard') {
-    var role = localStorage.getItem('ivm_userRole');
-    if (role === 'warehouse' && !window.analyticsLoaded) {
-      setTimeout(loadAnalytics, 300);
-    }
-  }
-}
-
-function toggleSidebar(open) {
-  var sidebar = document.getElementById('sidebar');
-  var backdrop = document.getElementById('sidebarBackdrop');
-  if (open) {
-    if (sidebar) sidebar.classList.add('open');
-    if (backdrop) backdrop.classList.add('show');
-  } else {
-    if (sidebar) sidebar.classList.remove('open');
-    if (backdrop) backdrop.classList.remove('show');
-  }
-}
-
-// ─── SAFE OVERRIDE: applyRoleUI – handle missing elements ───
-var originalApplyRoleUI = window.applyRoleUI || function() {};
-
-window.applyRoleUI = function() {
-  // Call original if it exists, but safely
-  if (typeof originalApplyRoleUI === 'function') {
-    try {
-      originalApplyRoleUI();
-    } catch(e) {
-      console.warn('[applyRoleUI] Original function error:', e);
-    }
-  }
-
-  var role = localStorage.getItem('ivm_userRole');
-  var isProduction = (role === 'production');
-
-  // Update sidebar role display
-  var sidebarRole = document.getElementById('sidebarRole');
-  if (sidebarRole) {
-    sidebarRole.textContent = isProduction ? 'Production Mode' : 'Warehouse Mode';
-  }
-
-  // Show/hide warehouse-only nav items
-  var warehouseNavItems = ['dashboard', 'releasing', 'receiving', 'returns', 'inventory'];
-  document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
-    var section = el.dataset.section;
-    if (warehouseNavItems.indexOf(section) !== -1) {
-      el.style.display = isProduction ? 'none' : 'flex';
-    } else {
-      el.style.display = 'flex';
-    }
-  });
-
-  // Navigate to appropriate default section
-  if (isProduction) {
-    navigateTo('myrequests');
-  } else {
-    navigateTo('dashboard');
-  }
-};
-
-// ─── SAFE OVERRIDE: renderMyRequests – populate both containers ───
-var originalRenderMyRequests = window.renderMyRequests || function() {};
-
-window.renderMyRequests = function(requests) {
-  // Call original if it exists
-  if (typeof originalRenderMyRequests === 'function') {
-    try {
-      originalRenderMyRequests(requests);
-    } catch(e) {
-      console.warn('[renderMyRequests] Original function error:', e);
-    }
-  }
-
-  // Populate the standalone page container
-  var container = document.getElementById('myRequestsListPage');
-  if (!container) return;
-
-  container.innerHTML = '';
-  if (!requests || requests.length === 0) {
-    container.innerHTML = '<div class="list-group-item text-muted text-center">No requests found</div>';
-    return;
-  }
-
-  // Update badges
-  var readyCount = 0;
-  requests.forEach(function(req) {
-    var status = req.status || 'PENDING';
-    if (status !== 'PENDING') readyCount++;
-  });
-  var badge1 = document.getElementById('myRequestsBadgeSidebar');
-  var badge2 = document.getElementById('myRequestsBadgePage');
-  if (badge1) {
-    badge1.textContent = readyCount;
-    badge1.classList.toggle('d-none', readyCount === 0);
-  }
-  if (badge2) {
-    badge2.textContent = readyCount;
-    badge2.classList.toggle('d-none', readyCount === 0);
-  }
-
-  requests.forEach(function(req) {
-    var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
-    var status = req.status || 'PENDING';
-    var isCompleted = (status === 'COMPLETED');
-    var isPartial = (status === 'PARTIAL');
-    var badgeClass = isCompleted ? 'success' : (isPartial ? 'info' : 'warning');
-    var statusText = isCompleted ? 'COMPLETED' : (isPartial ? 'PARTIAL' : 'PENDING');
-    var icon = isCompleted ? 'bi-check-circle-fill' : (isPartial ? 'bi-hourglass-split' : 'bi-clock');
-    var docNo = req.docNo || '';
-    var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + '" data-docno="' + docNo + '" style="cursor:pointer;">' +
-      '<div class="d-flex justify-content-between align-items-start">' +
-      '<div>' +
-      '<div class="fw-bold">' + docNo + ' <span class="badge bg-secondary">' + (req.type || '') + '</span></div>' +
-      '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
-      '</div>' +
-      '<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + statusText + '</span>' +
-      '</div>' +
-      '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
-      '<div class="small text-muted mt-1"><i class="bi bi-qr-code me-1"></i> Click to re-open QR</div>' +
-      '</div>';
-    container.innerHTML += html;
-  });
-
-  container.querySelectorAll('.request-card').forEach(function(el) {
-    el.addEventListener('click', function(e) {
-      var docNo = this.getAttribute('data-docno');
-      if (docNo) {
-        showRequestQr(docNo, docNo);
-      }
-    });
-  });
-};
-
-// ─── SAFE OVERRIDE: loadMyRequests – trigger with badge update ───
-var originalLoadMyRequests = window.loadMyRequests || function() {};
-
-window.loadMyRequests = function() {
-  if (typeof originalLoadMyRequests === 'function') {
-    try {
-      originalLoadMyRequests();
-    } catch(e) {
-      console.warn('[loadMyRequests] Original function error:', e);
-    }
-  }
-  // Badge will be updated via renderMyRequests override above
-};
-
-// ─── SAFE OVERRIDE: updateWarehouseKPIs – handle missing elements ───
-var originalUpdateWarehouseKPIs = window.updateWarehouseKPIs || function() {};
-
-window.updateWarehouseKPIs = function() {
-  if (typeof originalUpdateWarehouseKPIs === 'function') {
-    try {
-      originalUpdateWarehouseKPIs();
-    } catch(e) {
-      console.warn('[updateWarehouseKPIs] Original function error:', e);
-    }
-  }
-};
-
-// ============================================================
-// DOM READY
-// ============================================================
-
+// ─── DOM Ready ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
-  // Initialize modals (safe check)
-  var modalIds = [
-    'qtyModal', 'successModal', 'settingsModal', 'newRequestModal',
+  // Initialize modals safely
+  var modalIds = ['qtyModal', 'successModal', 'settingsModal', 'newRequestModal',
     'requestSuccessModal', 'whNotifModal', 'mrifListModal', 'mrifPrintModal',
     'pendingMrifModal', 'mrrListModal', 'mrrPrintModal', 'mrsListModal',
     'mrsPrintModal', 'quickScanModal', 'roleModal', 'productionNameModal',
-    'batchVerifyModal', 'qrZoomModal', 'poScanModal', 'poItemsModal'
-  ];
+    'batchVerifyModal', 'qrZoomModal', 'poScanModal', 'poItemsModal'];
+
   modalIds.forEach(function(id) {
     var el = document.getElementById(id);
     if (el) {
-      // Assign to global variable if needed
-      var varName = id.charAt(0).toLowerCase() + id.slice(1) + 'Modal';
-      // For special names, map correctly
       if (id === 'qtyModal') qtyModal = new bootstrap.Modal(el);
       else if (id === 'successModal') successModal = new bootstrap.Modal(el);
       else if (id === 'settingsModal') settingsModal = new bootstrap.Modal(el);
