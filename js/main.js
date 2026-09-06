@@ -5,12 +5,13 @@
 // ─── Sidebar role handler (called from applyRoleUI) ───
 window.applySidebarRole = function(role) {
   var isProduction = (role === 'production');
+  var isWarehouse = (role === 'warehouse');
   var sidebarRole = document.getElementById('sidebarRole');
   if (sidebarRole) {
-    sidebarRole.textContent = isProduction ? 'Production Mode' : 'Warehouse Mode';
+    sidebarRole.textContent = isProduction ? 'Production Mode' : (state.currentUser ? state.currentUserFullname : 'Warehouse');
   }
 
-  // ─── Inventory is now visible for both roles ──────────────
+  // ─── Inventory visible for both roles ──────────────────────
   var warehouseNavItems = ['dashboard', 'releasing', 'receiving', 'returns'];
   document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
     var section = el.dataset.section;
@@ -20,6 +21,12 @@ window.applySidebarRole = function(role) {
       el.style.display = 'flex';
     }
   });
+
+  // ─── Show/hide logout button ────────────────────────────────
+  var logoutItem = document.getElementById('logoutNavItem');
+  if (logoutItem) {
+    logoutItem.style.display = (isWarehouse && state.currentUser) ? 'flex' : 'none';
+  }
 
   if (isProduction) {
     navigateTo('myrequests');
@@ -59,11 +66,6 @@ function navigateTo(sectionId) {
       if (mrsCard) mrsCard.classList.toggle('d-none', mod !== 'MRS');
       fetchPendingDocs();
     }
-  }
-
-  // Inventory – nothing special, just show the page
-  if (sectionId === 'inventory') {
-    // The inventory browser button is on the page
   }
 
   if (sectionId === 'dashboard') {
@@ -239,7 +241,7 @@ document.addEventListener('DOMContentLoaded', function() {
     'requestSuccessModal', 'whNotifModal', 'mrifListModal', 'mrifPrintModal',
     'pendingMrifModal', 'mrrListModal', 'mrrPrintModal', 'mrsListModal',
     'mrsPrintModal', 'quickScanModal', 'roleModal', 'productionNameModal',
-    'batchVerifyModal', 'qrZoomModal', 'poScanModal', 'poItemsModal'];
+    'batchVerifyModal', 'qrZoomModal', 'poScanModal', 'poItemsModal', 'loginModal'];
 
   modalIds.forEach(function(id) {
     var el = document.getElementById(id);
@@ -264,6 +266,7 @@ document.addEventListener('DOMContentLoaded', function() {
       else if (id === 'qrZoomModal') qrZoomModal = new bootstrap.Modal(el);
       else if (id === 'poScanModal') state.poScanModal = new bootstrap.Modal(el);
       else if (id === 'poItemsModal') state.poItemsModal = new bootstrap.Modal(el);
+      else if (id === 'loginModal') window.loginModalEl = el; // store for later
     }
   });
 
@@ -285,7 +288,7 @@ document.addEventListener('DOMContentLoaded', function() {
   setTimeout(function() {
     var role = localStorage.getItem('ivm_userRole');
     console.log('[Main] Role detected:', role);
-    if (role === 'warehouse') {
+    if (role === 'warehouse' && state.currentUser) {
       setTimeout(loadAnalytics, 800);
     }
   }, 1500);
