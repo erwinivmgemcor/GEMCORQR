@@ -25,19 +25,20 @@ const state = {
   pinBuffer: '',
   pinAttempts: 0,
   isLoading: false,
-  warehouseName: localStorage.getItem('ivm_warehouseName') || ''
+  warehouseName: localStorage.getItem('ivm_warehouseName') || '',
+  currentUser: localStorage.getItem('ivm_username') || null,
+  currentUserFullname: localStorage.getItem('ivm_userFullname') || ''
 };
 
 let lastQrDocNo = '';
 let lastQrTicketNo = '';
 let lastQrImageData = '';
 
-// ─── Modal references (initialized in main.js) ───
+// ─── Modal references ───
 var qtyModal, successModal, settingsModal, newRequestModal, requestSuccessModal;
 var whNotifModal, mrifListModal, mrifPrintModal, pendingMrifModal;
 var mrrListModal, mrrPrintModal, mrsListModal, mrsPrintModal;
 var quickScanModal, roleModal, productionNameModal, batchVerifyModal, qrZoomModal;
 
-// ─── Manual MRIF Modal ───
 var manualMrifModal = null;
 var manualMrifItems = [];
