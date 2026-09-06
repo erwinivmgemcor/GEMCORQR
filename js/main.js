@@ -95,11 +95,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
   initRole();
 
-  // ─── Load analytics for warehouse mode ────────────
+  // ─── Load analytics for warehouse mode ────────────────
   setTimeout(function() {
     var role = localStorage.getItem('ivm_userRole');
+    console.log('[Main] Role detected:', role);
     if (role === 'warehouse') {
-      loadAnalytics();
+      setTimeout(loadAnalytics, 800);
     }
   }, 1500);
 
