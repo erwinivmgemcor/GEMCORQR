@@ -309,6 +309,9 @@
       <div class="nav-item" data-section="settings" onclick="navigateTo('settings')">
         <i class="bi bi-gear"></i> Settings
       </div>
+      <div class="nav-item" data-section="logout" onclick="logoutUser()" style="display:none;" id="logoutNavItem">
+        <i class="bi bi-box-arrow-right"></i> Logout
+      </div>
     </nav>
     <div class="sidebar-footer">
       <div id="appVersion">v2.1.0</div>
@@ -455,7 +458,7 @@
     </div>
 
     <!-- ================================================================ -->
-    <!-- SECTION: RELEASING (MRIF) – Full feature set -->
+    <!-- SECTION: RELEASING (MRIF) -->
     <!-- ================================================================ -->
     <div id="section-releasing" class="section-page">
       <div id="mrifModuleContainer">
@@ -608,7 +611,6 @@
     <!-- ================================================================ -->
     <div id="section-receiving" class="section-page">
       <div id="mrrModuleContainer">
-        <!-- Quick Scan -->
         <div id="mrrQuickScan" class="card mb-4 border-0 shadow-sm">
           <div class="card-body text-center py-4">
             <button class="btn btn-primary quick-scan-btn w-100 mb-3" onclick="openQuickScan()">
@@ -628,7 +630,6 @@
           </div>
         </div>
 
-        <!-- MRR List & Manual MRR -->
         <div id="mrrListCard" class="card mb-4 border-0 shadow-sm d-none">
           <div class="card-body text-center py-3">
             <button class="btn btn-success w-100 mb-2" onclick="openMrrList()">
@@ -663,26 +664,26 @@
     </div>
 
     <!-- ================================================================ -->
-<!-- SECTION: NEW REQUEST -->
-<!-- ================================================================ -->
-<div id="section-requests" class="section-page">
-  <div class="card">
-    <div class="card-body text-center py-5">
-      <i class="bi bi-plus-circle" style="font-size:3rem;color:var(--gemcor-blue);"></i>
-      <h4 class="mt-3">Create New Request</h4>
-      <p class="text-muted">Start a new material request or return slip.</p>
-      <button class="btn btn-primary btn-lg" onclick="openNewRequest()">
-        <i class="bi bi-plus-lg me-2"></i>New Request
-      </button>
-      <hr class="my-4">
-      <h6><i class="bi bi-box-seam me-2"></i>Need to find an item?</h6>
-      <p class="text-muted small">Browse the inventory catalog to search for item codes and descriptions.</p>
-      <button class="btn btn-outline-primary" onclick="openInventoryBrowser()">
-        <i class="bi bi-search me-2"></i>Browse Inventory
-      </button>
+    <!-- SECTION: NEW REQUEST -->
+    <!-- ================================================================ -->
+    <div id="section-requests" class="section-page">
+      <div class="card">
+        <div class="card-body text-center py-5">
+          <i class="bi bi-plus-circle" style="font-size:3rem;color:var(--gemcor-blue);"></i>
+          <h4 class="mt-3">Create New Request</h4>
+          <p class="text-muted">Start a new material request or return slip.</p>
+          <button class="btn btn-primary btn-lg" onclick="openNewRequest()">
+            <i class="bi bi-plus-lg me-2"></i>New Request
+          </button>
+          <hr class="my-4">
+          <h6><i class="bi bi-box-seam me-2"></i>Need to find an item?</h6>
+          <p class="text-muted small">Browse the inventory catalog to search for item codes and descriptions.</p>
+          <button class="btn btn-outline-primary" onclick="openInventoryBrowser()">
+            <i class="bi bi-search me-2"></i>Browse Inventory
+          </button>
+        </div>
+      </div>
     </div>
-  </div>
-</div>
 
     <!-- ================================================================ -->
     <!-- SECTION: MY REQUESTS -->
@@ -738,7 +739,7 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════
-     MODALS — All original modals preserved (full list)
+     MODALS
      ═══════════════════════════════════════════════════════════════════════ -->
 
 <!-- Qty Modal -->
@@ -891,16 +892,17 @@
             </div>
           </div>
           <div class="col-12">
-            <div class="card role-card p-4 text-center" onclick="showPinEntry()">
+            <div class="card role-card p-4 text-center" onclick="selectRole('warehouse')">
               <i class="bi bi-shield-check text-success" style="font-size:2.5rem"></i>
               <h5 class="mt-2 mb-1">Warehouse Staff</h5>
               <small class="text-muted">Full access to all modules</small>
             </div>
           </div>
         </div>
+        <!-- PIN entry (fallback) -->
         <div id="pinEntrySection" class="d-none mt-3 text-center">
           <hr>
-          <label class="form-label fw-bold">Enter Warehouse PIN</label>
+          <label class="form-label fw-bold">Enter Warehouse PIN (admin fallback)</label>
           <div class="pin-dots mb-2">
             <span id="pinDot1" class="pin-dot"></span>
             <span id="pinDot2" class="pin-dot"></span>
@@ -924,6 +926,32 @@
           <button class="btn btn-success w-100 mt-2" onclick="verifyPin()">Unlock</button>
           <div id="pinError" class="text-danger small mt-2 d-none">Incorrect PIN. Try again.</div>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Login Modal -->
+<div class="modal fade" id="loginModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="bi bi-shield-lock me-2"></i>Warehouse Login</h5>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Username</label>
+          <input type="text" id="loginUsername" class="form-control" placeholder="Enter username" autocomplete="username">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Password</label>
+          <input type="password" id="loginPassword" class="form-control" placeholder="Enter password" autocomplete="current-password" onkeypress="if(event.key==='Enter')loginUser()">
+        </div>
+        <div id="loginError" class="alert alert-danger d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="loginBtn" onclick="loginUser()">Login</button>
       </div>
     </div>
   </div>
