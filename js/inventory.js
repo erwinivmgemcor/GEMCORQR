@@ -6,6 +6,15 @@ var inventoryBrowserModal = null;
 var inventoryItemsCache = [];
 var inventoryBrowserFiltered = [];
 
+// ─── Fallback QR image (data URI for a barcode placeholder) ───
+var QR_PLACEHOLDER = "data:image/svg+xml," + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" viewBox="0 0 50 50">' +
+  '<rect width="50" height="50" fill="#f0f0f0" rx="4"/>' +
+  '<text x="25" y="27" font-family="Arial" font-size="12" fill="#999" text-anchor="middle">QR</text>' +
+  '<text x="25" y="40" font-family="Arial" font-size="7" fill="#ccc" text-anchor="middle">❌</text>' +
+  '</svg>'
+);
+
 function openInventoryBrowser() {
   if (!inventoryBrowserModal) {
     inventoryBrowserModal = new bootstrap.Modal(document.getElementById('inventoryBrowserModal'));
@@ -15,22 +24,27 @@ function openInventoryBrowser() {
   fetchInventoryItems();
 }
 
+// ─── QR Zoom Modal ───
 function openQrZoom(item) {
   if (!qrZoomModal) {
     qrZoomModal = new bootstrap.Modal(document.getElementById('qrZoomModal'));
   }
   document.getElementById('qrZoomCode').textContent = item.inventoryId || item.code || '';
   document.getElementById('qrZoomDesc').textContent = item.description || '';
-  
+
   var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(item.inventoryId || item.code || '');
-  document.getElementById('qrZoomImg').src = qrUrl;
-  document.getElementById('qrZoomImg').onerror = function() {
-    this.style.display = 'none';
+  var img = document.getElementById('qrZoomImg');
+  img.src = qrUrl;
+  img.onerror = function() {
+    // Fallback to placeholder
+    this.onerror = null;
+    this.src = QR_PLACEHOLDER;
     document.getElementById('qrZoomFallback').classList.remove('d-none');
+    document.getElementById('qrZoomFallback').textContent = 'QR unavailable for: ' + (item.inventoryId || item.code);
   };
   document.getElementById('qrZoomFallback').classList.add('d-none');
-  document.getElementById('qrZoomImg').style.display = 'block';
-  
+  img.style.display = 'block';
+
   qrZoomModal.show();
 }
 
@@ -47,7 +61,7 @@ async function fetchInventoryItems() {
     var text = await res.text();
     console.log('[fetchInventoryItems] Raw response:', text.substring(0, 500));
     var data;
-    try { data = JSON.parse(text); } catch(e) { 
+    try { data = JSON.parse(text); } catch(e) {
       console.error('[fetchInventoryItems] JSON parse error:', e);
       throw new Error('Invalid response from server');
     }
@@ -64,7 +78,8 @@ async function fetchInventoryItems() {
     }
   } catch(err) {
     console.error('[fetchInventoryItems] Error:', err);
-    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-3">Failed to load inventory: ' + err.message + '</td></tr>';
+    // Silent fail – don't show a toast on dashboard load
+    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Could not load inventory. Please try again.</td></tr>';
   }
 }
 
@@ -80,13 +95,19 @@ function renderInventoryItems() {
   var html = '';
   for (var i = 0; i < inventoryBrowserFiltered.length; i++) {
     var it = inventoryBrowserFiltered[i];
-    var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(it.inventoryId);
-    var safeCode = it.inventoryId.replace(/'/g, "\\'");
-    var safeDesc = it.description.replace(/'/g, "\\'");
+    var code = it.inventoryId || it.code || '';
+    var desc = it.description || '';
+    // QR URL with onerror fallback
+    var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
+    var safeCode = code.replace(/'/g, "\\'");
+    var safeDesc = desc.replace(/'/g, "\\'");
+
     html += '<tr class="inventory-row" style="cursor:pointer;" onclick="openQrZoom({inventoryId:\'' + safeCode + '\', code:\'' + safeCode + '\', description:\'' + safeDesc + '\'})">' +
-      '<td class="align-middle text-center"><img src="' + qrUrl + '" style="width:40px;height:40px;" alt="QR"></td>' +
-      '<td class="align-middle"><code>' + it.inventoryId + '</code></td>' +
-      '<td class="align-middle">' + it.description + '</td>' +
+      '<td class="align-middle text-center">' +
+        '<img src="' + qrUrl + '" style="width:40px;height:40px;" alt="QR" onerror="this.onerror=null;this.src=\'' + QR_PLACEHOLDER + '\';">' +
+      '</td>' +
+      '<td class="align-middle"><code>' + code + '</code></td>' +
+      '<td class="align-middle">' + desc + '</td>' +
       '</tr>';
   }
   tbody.innerHTML = html;
