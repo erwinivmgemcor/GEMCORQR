@@ -11,18 +11,31 @@ async function loadAnalytics() {
   var container = document.getElementById('analyticsSection');
   if (!container) return;
 
-  // Show loading, hide content
-  document.getElementById('analyticsLoading').classList.remove('d-none');
-  document.getElementById('analyticsContent').classList.add('d-none');
-  document.getElementById('analyticsError').classList.add('d-none');
+  // Only load if dashboard is active
+  var dashboard = document.getElementById('section-dashboard');
+  if (!dashboard || !dashboard.classList.contains('active')) {
+    console.log('[Analytics] Dashboard not active, skipping load.');
+    return;
+  }
+
+  // Show loading, hide content and error
+  var loadingEl = document.getElementById('analyticsLoading');
+  var contentEl = document.getElementById('analyticsContent');
+  var errorEl = document.getElementById('analyticsError');
+  if (loadingEl) loadingEl.classList.remove('d-none');
+  if (contentEl) contentEl.classList.add('d-none');
+  if (errorEl) errorEl.classList.add('d-none');
 
   // ─── Safety timeout ──────────────────────────────────────
   var timeoutId = setTimeout(function() {
     console.warn('[Analytics] Load timeout – forcing hide.');
-    document.getElementById('analyticsLoading').classList.add('d-none');
-    document.getElementById('analyticsContent').classList.add('d-none');
-    document.getElementById('analyticsError').classList.remove('d-none');
-    document.getElementById('analyticsErrorText').textContent = 'Analytics took too long to load. Click "Refresh" to try again.';
+    if (loadingEl) loadingEl.classList.add('d-none');
+    if (contentEl) contentEl.classList.add('d-none');
+    if (errorEl) {
+      errorEl.classList.remove('d-none');
+      var errText = document.getElementById('analyticsErrorText');
+      if (errText) errText.textContent = 'Analytics took too long to load. Click "Refresh" to try again.';
+    }
   }, 10000);
 
   try {
@@ -39,43 +52,64 @@ async function loadAnalytics() {
       throw new Error(data.error || 'Unknown error');
     }
 
-    // Update KPI cards
-    if (data.totals) {
-      document.getElementById('kpiActiveDocs').textContent = data.totals.total || 0;
-      document.getElementById('kpiPending').textContent = data.totals.pending || 0;
-      document.getElementById('kpiCompleted').textContent = data.totals.completed || 0;
-      document.getElementById('kpiNotifications').textContent = data.totals.pending || 0;
+    // ─── Update KPI cards (with null checks) ──────────────
+    var kpis = {
+      'kpiActiveDocs': data.totals ? data.totals.total : 0,
+      'kpiPending': data.totals ? data.totals.pending : 0,
+      'kpiCompleted': data.totals ? data.totals.completed : 0,
+      'kpiNotifications': data.totals ? data.totals.pending : 0
+    };
+    for (var id in kpis) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = kpis[id];
     }
 
-    // ─── Render charts ──────────────────────────────────────
-    renderDailyChart(data.dailyRequests || []);
-    renderTopItemsChart(data.topItems || []);
-    renderStaffChart(data.staffPerformance || []);
-    document.getElementById('avgProcessingTime').textContent = data.avgProcessingTime ? data.avgProcessingTime.toFixed(1) + ' days' : 'N/A';
+    // ─── Render charts (only if canvases exist) ────────────
+    var dailyCanvas = document.getElementById('dailyChart');
+    var topItemsCanvas = document.getElementById('topItemsChart');
+    var staffCanvas = document.getElementById('staffChart');
 
-    document.getElementById('analyticsLoading').classList.add('d-none');
-    document.getElementById('analyticsContent').classList.remove('d-none');
-    document.getElementById('analyticsError').classList.add('d-none');
+    if (dailyCanvas) renderDailyChart(data.dailyRequests || []);
+    else console.warn('[Analytics] dailyChart canvas not found');
+
+    if (topItemsCanvas) renderTopItemsChart(data.topItems || []);
+    else console.warn('[Analytics] topItemsChart canvas not found');
+
+    if (staffCanvas) renderStaffChart(data.staffPerformance || []);
+    else console.warn('[Analytics] staffChart canvas not found');
+
+    var avgEl = document.getElementById('avgProcessingTime');
+    if (avgEl) avgEl.textContent = data.avgProcessingTime ? data.avgProcessingTime.toFixed(1) + ' days' : 'N/A';
+
+    if (loadingEl) loadingEl.classList.add('d-none');
+    if (contentEl) contentEl.classList.remove('d-none');
+    if (errorEl) errorEl.classList.add('d-none');
     analyticsLoaded = true;
     analyticsRetryCount = 0;
   } catch(err) {
     console.error('[Analytics] Error:', err);
     clearTimeout(timeoutId);
-    document.getElementById('analyticsLoading').classList.add('d-none');
-    document.getElementById('analyticsContent').classList.add('d-none');
-    document.getElementById('analyticsError').classList.remove('d-none');
-    document.getElementById('analyticsErrorText').textContent = 'Failed to load analytics: ' + err.message;
+    if (loadingEl) loadingEl.classList.add('d-none');
+    if (contentEl) contentEl.classList.add('d-none');
+    if (errorEl) {
+      errorEl.classList.remove('d-none');
+      var errText = document.getElementById('analyticsErrorText');
+      if (errText) errText.textContent = 'Failed to load analytics: ' + err.message;
+    }
     analyticsRetryCount++;
   }
 }
 
 function renderDailyChart(dailyData) {
-  var ctx = document.getElementById('dailyChart').getContext('2d');
+  var canvas = document.getElementById('dailyChart');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
   var labels = dailyData.map(function(d) { return d.date; });
   var counts = dailyData.map(function(d) { return d.count; });
 
+  var container = document.getElementById('dailyChartContainer');
   if (labels.length === 0) {
-    document.getElementById('dailyChartContainer').innerHTML = '<div class="text-center text-muted py-4">No data for the last 30 days</div>';
+    if (container) container.innerHTML = '<div class="text-center text-muted py-4">No data for the last 30 days</div>';
     return;
   }
 
@@ -109,12 +143,15 @@ function renderDailyChart(dailyData) {
 }
 
 function renderTopItemsChart(topItems) {
-  var ctx = document.getElementById('topItemsChart').getContext('2d');
+  var canvas = document.getElementById('topItemsChart');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
   var labels = topItems.map(function(d) { return d.itemCode; });
   var counts = topItems.map(function(d) { return d.count; });
 
+  var container = document.getElementById('topItemsChartContainer');
   if (labels.length === 0) {
-    document.getElementById('topItemsChartContainer').innerHTML = '<div class="text-center text-muted py-4">No item data yet</div>';
+    if (container) container.innerHTML = '<div class="text-center text-muted py-4">No item data yet</div>';
     return;
   }
 
@@ -144,12 +181,15 @@ function renderTopItemsChart(topItems) {
 }
 
 function renderStaffChart(staffData) {
-  var ctx = document.getElementById('staffChart').getContext('2d');
+  var canvas = document.getElementById('staffChart');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
   var labels = staffData.map(function(d) { return d.name; });
   var counts = staffData.map(function(d) { return d.count; });
 
+  var container = document.getElementById('staffChartContainer');
   if (labels.length === 0) {
-    document.getElementById('staffChartContainer').innerHTML = '<div class="text-center text-muted py-4">No staff data yet</div>';
+    if (container) container.innerHTML = '<div class="text-center text-muted py-4">No staff data yet</div>';
     return;
   }
 
