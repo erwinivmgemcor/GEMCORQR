@@ -4,6 +4,7 @@
 
 async function testConnection() {
   const resultDiv = document.getElementById('testResult');
+  if (!resultDiv) return;
   resultDiv.classList.remove('d-none');
   resultDiv.textContent = 'Testing...';
   try {
@@ -71,7 +72,7 @@ function checkUrlDocParam() {
 }
 
 // ============================================================
-// SIDEBAR NAVIGATION
+// SIDEBAR NAVIGATION – SAFE OVERRIDES
 // ============================================================
 
 function navigateTo(sectionId) {
@@ -92,7 +93,28 @@ function navigateTo(sectionId) {
   // Close sidebar on mobile
   toggleSidebar(false);
 
-  // If we navigate to dashboard, load analytics if not loaded
+  // Handle module-specific actions when navigating to a module section
+  if (sectionId === 'releasing' || sectionId === 'receiving' || sectionId === 'returns') {
+    var modMap = { releasing: 'MRIF', receiving: 'MRR', returns: 'MRS' };
+    var mod = modMap[sectionId];
+    if (mod) {
+      state.currentModule = mod;
+      // Update labels if they exist
+      var labelEl = document.getElementById('moduleLabel');
+      if (labelEl) labelEl.textContent = mod;
+      // Show the appropriate list card
+      var mrifCard = document.getElementById('mrifListCard');
+      var mrrCard = document.getElementById('mrrListCard');
+      var mrsCard = document.getElementById('mrsListCard');
+      if (mrifCard) mrifCard.classList.toggle('d-none', mod !== 'MRIF');
+      if (mrrCard) mrrCard.classList.toggle('d-none', mod !== 'MRR');
+      if (mrsCard) mrsCard.classList.toggle('d-none', mod !== 'MRS');
+      // Fetch documents for this module
+      fetchPendingDocs();
+    }
+  }
+
+  // Dashboard – load analytics if not loaded
   if (sectionId === 'dashboard') {
     var role = localStorage.getItem('ivm_userRole');
     if (role === 'warehouse' && !window.analyticsLoaded) {
@@ -113,13 +135,17 @@ function toggleSidebar(open) {
   }
 }
 
-// ─── Override applyRoleUI to handle sidebar items ───
+// ─── SAFE OVERRIDE: applyRoleUI – handle missing elements ───
 var originalApplyRoleUI = window.applyRoleUI || function() {};
 
 window.applyRoleUI = function() {
-  // Call the original function if it exists in auth.js
+  // Call original if it exists, but safely
   if (typeof originalApplyRoleUI === 'function') {
-    originalApplyRoleUI();
+    try {
+      originalApplyRoleUI();
+    } catch(e) {
+      console.warn('[applyRoleUI] Original function error:', e);
+    }
   }
 
   var role = localStorage.getItem('ivm_userRole');
@@ -150,16 +176,20 @@ window.applyRoleUI = function() {
   }
 };
 
-// ─── Override renderMyRequests to populate both containers ───
+// ─── SAFE OVERRIDE: renderMyRequests – populate both containers ───
 var originalRenderMyRequests = window.renderMyRequests || function() {};
 
 window.renderMyRequests = function(requests) {
   // Call original if it exists
   if (typeof originalRenderMyRequests === 'function') {
-    originalRenderMyRequests(requests);
+    try {
+      originalRenderMyRequests(requests);
+    } catch(e) {
+      console.warn('[renderMyRequests] Original function error:', e);
+    }
   }
 
-  // Also populate the standalone page container
+  // Populate the standalone page container
   var container = document.getElementById('myRequestsListPage');
   if (!container) return;
 
@@ -169,7 +199,7 @@ window.renderMyRequests = function(requests) {
     return;
   }
 
-  // Update badge on sidebar and page
+  // Update badges
   var readyCount = 0;
   requests.forEach(function(req) {
     var status = req.status || 'PENDING';
@@ -219,25 +249,31 @@ window.renderMyRequests = function(requests) {
   });
 };
 
-// ─── Override loadMyRequests to update page badge ───
+// ─── SAFE OVERRIDE: loadMyRequests – trigger with badge update ───
 var originalLoadMyRequests = window.loadMyRequests || function() {};
 
 window.loadMyRequests = function() {
-  // Call original if it exists
   if (typeof originalLoadMyRequests === 'function') {
-    originalLoadMyRequests();
+    try {
+      originalLoadMyRequests();
+    } catch(e) {
+      console.warn('[loadMyRequests] Original function error:', e);
+    }
   }
-  // The badge will be updated via renderMyRequests override above
+  // Badge will be updated via renderMyRequests override above
 };
 
-// ─── Override updateWarehouseKPIs to update sidebar badge ───
+// ─── SAFE OVERRIDE: updateWarehouseKPIs – handle missing elements ───
 var originalUpdateWarehouseKPIs = window.updateWarehouseKPIs || function() {};
 
 window.updateWarehouseKPIs = function() {
   if (typeof originalUpdateWarehouseKPIs === 'function') {
-    originalUpdateWarehouseKPIs();
+    try {
+      originalUpdateWarehouseKPIs();
+    } catch(e) {
+      console.warn('[updateWarehouseKPIs] Original function error:', e);
+    }
   }
-  // The KPI values are already updated by the original function
 };
 
 // ============================================================
@@ -245,29 +281,44 @@ window.updateWarehouseKPIs = function() {
 // ============================================================
 
 document.addEventListener('DOMContentLoaded', function() {
-  // Initialize modals
-  qtyModal = new bootstrap.Modal(document.getElementById('qtyModal'));
-  successModal = new bootstrap.Modal(document.getElementById('successModal'));
-  settingsModal = new bootstrap.Modal(document.getElementById('settingsModal'));
-  newRequestModal = new bootstrap.Modal(document.getElementById('newRequestModal'));
-  requestSuccessModal = new bootstrap.Modal(document.getElementById('requestSuccessModal'));
-  whNotifModal = document.getElementById('whNotifModal') ? new bootstrap.Modal(document.getElementById('whNotifModal')) : null;
-  mrifListModal = document.getElementById('mrifListModal') ? new bootstrap.Modal(document.getElementById('mrifListModal')) : null;
-  mrifPrintModal = document.getElementById('mrifPrintModal') ? new bootstrap.Modal(document.getElementById('mrifPrintModal')) : null;
-  pendingMrifModal = document.getElementById('pendingMrifModal') ? new bootstrap.Modal(document.getElementById('pendingMrifModal')) : null;
-  mrrListModal = document.getElementById('mrrListModal') ? new bootstrap.Modal(document.getElementById('mrrListModal')) : null;
-  mrrPrintModal = document.getElementById('mrrPrintModal') ? new bootstrap.Modal(document.getElementById('mrrPrintModal')) : null;
-  mrsListModal = document.getElementById('mrsListModal') ? new bootstrap.Modal(document.getElementById('mrsListModal')) : null;
-  mrsPrintModal = document.getElementById('mrsPrintModal') ? new bootstrap.Modal(document.getElementById('mrsPrintModal')) : null;
-  quickScanModal = new bootstrap.Modal(document.getElementById('quickScanModal'));
-  roleModal = new bootstrap.Modal(document.getElementById('roleModal'));
-  productionNameModal = new bootstrap.Modal(document.getElementById('productionNameModal'));
-  batchVerifyModal = new bootstrap.Modal(document.getElementById('batchVerifyModal'));
-  qrZoomModal = new bootstrap.Modal(document.getElementById('qrZoomModal'));
-  state.poScanModal = new bootstrap.Modal(document.getElementById('poScanModal'));
-  state.poItemsModal = new bootstrap.Modal(document.getElementById('poItemsModal'));
+  // Initialize modals (safe check)
+  var modalIds = [
+    'qtyModal', 'successModal', 'settingsModal', 'newRequestModal',
+    'requestSuccessModal', 'whNotifModal', 'mrifListModal', 'mrifPrintModal',
+    'pendingMrifModal', 'mrrListModal', 'mrrPrintModal', 'mrsListModal',
+    'mrsPrintModal', 'quickScanModal', 'roleModal', 'productionNameModal',
+    'batchVerifyModal', 'qrZoomModal', 'poScanModal', 'poItemsModal'
+  ];
+  modalIds.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) {
+      // Assign to global variable if needed
+      var varName = id.charAt(0).toLowerCase() + id.slice(1) + 'Modal';
+      // For special names, map correctly
+      if (id === 'qtyModal') qtyModal = new bootstrap.Modal(el);
+      else if (id === 'successModal') successModal = new bootstrap.Modal(el);
+      else if (id === 'settingsModal') settingsModal = new bootstrap.Modal(el);
+      else if (id === 'newRequestModal') newRequestModal = new bootstrap.Modal(el);
+      else if (id === 'requestSuccessModal') requestSuccessModal = new bootstrap.Modal(el);
+      else if (id === 'whNotifModal') whNotifModal = new bootstrap.Modal(el);
+      else if (id === 'mrifListModal') mrifListModal = new bootstrap.Modal(el);
+      else if (id === 'mrifPrintModal') mrifPrintModal = new bootstrap.Modal(el);
+      else if (id === 'pendingMrifModal') pendingMrifModal = new bootstrap.Modal(el);
+      else if (id === 'mrrListModal') mrrListModal = new bootstrap.Modal(el);
+      else if (id === 'mrrPrintModal') mrrPrintModal = new bootstrap.Modal(el);
+      else if (id === 'mrsListModal') mrsListModal = new bootstrap.Modal(el);
+      else if (id === 'mrsPrintModal') mrsPrintModal = new bootstrap.Modal(el);
+      else if (id === 'quickScanModal') quickScanModal = new bootstrap.Modal(el);
+      else if (id === 'roleModal') roleModal = new bootstrap.Modal(el);
+      else if (id === 'productionNameModal') productionNameModal = new bootstrap.Modal(el);
+      else if (id === 'batchVerifyModal') batchVerifyModal = new bootstrap.Modal(el);
+      else if (id === 'qrZoomModal') qrZoomModal = new bootstrap.Modal(el);
+      else if (id === 'poScanModal') state.poScanModal = new bootstrap.Modal(el);
+      else if (id === 'poItemsModal') state.poItemsModal = new bootstrap.Modal(el);
+    }
+  });
 
-  // ─── Register service worker ───
+  // Register service worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/GEMCORQR/sw.js')
       .then(function(registration) {
@@ -278,10 +329,10 @@ document.addEventListener('DOMContentLoaded', function() {
       });
   }
 
-  // ─── Initialize role ───
+  // Initialize role
   initRole();
 
-  // ─── Load analytics for warehouse mode ────────────────
+  // Load analytics for warehouse mode
   setTimeout(function() {
     var role = localStorage.getItem('ivm_userRole');
     console.log('[Main] Role detected:', role);
@@ -290,14 +341,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }, 1500);
 
-  // ─── Set receiving date default ───
+  // Set receiving date default
   var dateInput = document.getElementById('mrrReceivingDate');
   if (dateInput) dateInput.valueAsDate = new Date();
 
-  // ─── Check URL doc parameter ───
+  // Check URL doc parameter
   setTimeout(checkUrlDocParam, 1500);
 
-  // ─── Close sidebar when clicking outside on mobile ───
+  // Close sidebar on outside click (mobile)
   document.addEventListener('click', function(e) {
     var sidebar = document.getElementById('sidebar');
     var toggleBtn = document.querySelector('.sidebar-toggle');
