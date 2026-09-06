@@ -94,6 +94,15 @@ document.addEventListener('DOMContentLoaded', function() {
   state.poItemsModal = new bootstrap.Modal(document.getElementById('poItemsModal'));
 
   initRole();
+
+  // ─── Load analytics for warehouse mode ────────────
+  setTimeout(function() {
+    var role = localStorage.getItem('ivm_userRole');
+    if (role === 'warehouse') {
+      loadAnalytics();
+    }
+  }, 1500);
+
   document.getElementById('mrrReceivingDate').valueAsDate = new Date();
   setTimeout(checkUrlDocParam, 1500);
 });
