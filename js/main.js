@@ -10,7 +10,8 @@ window.applySidebarRole = function(role) {
     sidebarRole.textContent = isProduction ? 'Production Mode' : 'Warehouse Mode';
   }
 
-  var warehouseNavItems = ['dashboard', 'releasing', 'receiving', 'returns', 'inventory'];
+  // ─── Inventory is now visible for both roles ──────────────
+  var warehouseNavItems = ['dashboard', 'releasing', 'receiving', 'returns'];
   document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
     var section = el.dataset.section;
     if (warehouseNavItems.indexOf(section) !== -1) {
@@ -58,6 +59,11 @@ function navigateTo(sectionId) {
       if (mrsCard) mrsCard.classList.toggle('d-none', mod !== 'MRS');
       fetchPendingDocs();
     }
+  }
+
+  // Inventory – nothing special, just show the page
+  if (sectionId === 'inventory') {
+    // The inventory browser button is on the page
   }
 
   if (sectionId === 'dashboard') {
