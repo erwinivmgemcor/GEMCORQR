@@ -1,5 +1,5 @@
 // ============================================================
-// WAREHOUSE CORE FUNCTIONS
+// WAREHOUSE CORE FUNCTIONS (with null checks)
 // ============================================================
 
 function getCleanSheetId() {
@@ -32,9 +32,9 @@ async function syncModuleLinks() {
       const MRIF = links.MRIF || links.mrif || '';
       const MRR = links.MRR || links.mrr || '';
       const MRS = links.MRS || links.mrs || '';
-      if (MRIF) { localStorage.setItem('sheetId_MRIF', extractSheetId(MRIF)); document.getElementById('sheetId_MRIF').value = extractSheetId(MRIF); }
-      if (MRR) { localStorage.setItem('sheetId_MRR', extractSheetId(MRR)); document.getElementById('sheetId_MRR').value = extractSheetId(MRR); }
-      if (MRS) { localStorage.setItem('sheetId_MRS', extractSheetId(MRS)); document.getElementById('sheetId_MRS').value = extractSheetId(MRS); }
+      if (MRIF) { localStorage.setItem('sheetId_MRIF', extractSheetId(MRIF)); var el = document.getElementById('sheetId_MRIF'); if (el) el.value = extractSheetId(MRIF); }
+      if (MRR) { localStorage.setItem('sheetId_MRR', extractSheetId(MRR)); var el2 = document.getElementById('sheetId_MRR'); if (el2) el2.value = extractSheetId(MRR); }
+      if (MRS) { localStorage.setItem('sheetId_MRS', extractSheetId(MRS)); var el3 = document.getElementById('sheetId_MRS'); if (el3) el3.value = extractSheetId(MRS); }
       showToast('Module IDs synced!', 'success');
       if (state.currentModule) selectModule(state.currentModule);
     } else {
@@ -58,7 +58,9 @@ async function selectModule(mod) {
     document.querySelectorAll('.module-btn').forEach(b => b.classList.remove('active'));
     const btn = document.querySelector('.module-btn[data-module="' + mod + '"]');
     if (btn) btn.classList.add('active');
-    document.getElementById('moduleLabel').textContent = mod;
+    // ─── Null check for moduleLabel ───
+    var labelEl = document.getElementById('moduleLabel');
+    if (labelEl) labelEl.textContent = mod;
     updateLabels();
     changeDocument();
     await fetchPendingDocs();
@@ -68,6 +70,8 @@ async function selectModule(mod) {
     if (mrrCard) mrrCard.classList.toggle('d-none', mod !== 'MRR');
     var mrsCard = document.getElementById('mrsListCard');
     if (mrsCard) mrsCard.classList.toggle('d-none', mod !== 'MRS');
+  } catch(err) {
+    console.error('[selectModule] Error:', err);
   } finally {
     hideLoading();
   }
@@ -76,8 +80,10 @@ async function selectModule(mod) {
 function updateLabels() {
   const isMRR = state.currentModule === 'MRR';
   const isMRS = state.currentModule === 'MRS';
-  document.getElementById('headerExpected').textContent = isMRR ? 'REC. QTY' : (isMRS ? 'QTY RETURNED' : 'Req. Qty');
-  document.getElementById('headerInput').textContent = isMRR ? 'ATL QTY' : (isMRS ? 'ATL QTY (Actual)' : 'Issued Qty');
+  var el1 = document.getElementById('headerExpected');
+  var el2 = document.getElementById('headerInput');
+  if (el1) el1.textContent = isMRR ? 'REC. QTY' : (isMRS ? 'QTY RETURNED' : 'Req. Qty');
+  if (el2) el2.textContent = isMRR ? 'ATL QTY' : (isMRS ? 'ATL QTY (Actual)' : 'Issued Qty');
 }
 
 async function fetchPendingDocs() {
@@ -111,6 +117,7 @@ async function fetchPendingDocs() {
 
 function populateDocSelect(docs) {
   const sel = document.getElementById('docSelect');
+  if (!sel) return;
   sel.innerHTML = '<option value="">-- Select Document --</option>';
   state.docList = docs;
   docs.forEach(d => {
@@ -123,8 +130,9 @@ function populateDocSelect(docs) {
 }
 
 function filterDocs() {
-  const term = document.getElementById('docSearch').value.toLowerCase();
+  const term = document.getElementById('docSearch') ? document.getElementById('docSearch').value.toLowerCase() : '';
   const sel = document.getElementById('docSelect');
+  if (!sel) return;
   sel.innerHTML = '<option value="">-- Select Document --</option>';
   if (!state.docList) return;
   state.docList.forEach(d => {
@@ -146,16 +154,21 @@ async function onDocSelect(docNo) {
     clearErrorAlert();
     resetDocumentState();
     state.currentDoc = docNo;
-    document.getElementById('docPickerSection').classList.add('d-none');
-    document.getElementById('activeTransactionSection').classList.remove('d-none');
-    document.getElementById('docTitle').textContent = cleanDocNo(docNo);
+    var picker = document.getElementById('docPickerSection');
+    if (picker) picker.classList.add('d-none');
+    var active = document.getElementById('activeTransactionSection');
+    if (active) active.classList.remove('d-none');
+    var title = document.getElementById('docTitle');
+    if (title) title.textContent = cleanDocNo(docNo);
     await fetchDocItems(docNo, state.currentModule);
     checkForProgress();
   } catch(err) {
     console.error('[onDocSelect] Error:', err);
     showToast('Failed to load document: ' + err.message, 'danger');
-    document.getElementById('docPickerSection').classList.remove('d-none');
-    document.getElementById('activeTransactionSection').classList.add('d-none');
+    var picker = document.getElementById('docPickerSection');
+    if (picker) picker.classList.remove('d-none');
+    var active = document.getElementById('activeTransactionSection');
+    if (active) active.classList.add('d-none');
   } finally {
     hideLoading();
   }
@@ -169,15 +182,21 @@ function changeDocument() {
   state.currentDoc = null;
   resetDocumentState();
   stopScanner();
-  document.getElementById('docPickerSection').classList.remove('d-none');
-  document.getElementById('activeTransactionSection').classList.add('d-none');
-  document.getElementById('docSelect').value = '';
-  document.getElementById('resumeBanner').classList.add('d-none');
+  var picker = document.getElementById('docPickerSection');
+  if (picker) picker.classList.remove('d-none');
+  var active = document.getElementById('activeTransactionSection');
+  if (active) active.classList.add('d-none');
+  var sel = document.getElementById('docSelect');
+  if (sel) sel.value = '';
+  var banner = document.getElementById('resumeBanner');
+  if (banner) banner.classList.add('d-none');
 }
 
 function hideScannerSection() {
-  document.getElementById('activeTransactionSection').classList.add('d-none');
+  var active = document.getElementById('activeTransactionSection');
+  if (active) active.classList.add('d-none');
 }
+
 function resetDocumentState() {
   state.items = [];
   renderItems();
@@ -196,16 +215,20 @@ function saveDocProgress() {
     }
   }
 }
+
 function clearDocProgress(docNo) {
   if (docNo) localStorage.removeItem('ivm_progress_' + docNo);
 }
+
 function checkForProgress() {
   if (!state.currentDoc) return;
   var saved = localStorage.getItem('ivm_progress_' + state.currentDoc);
   if (saved) {
-    document.getElementById('resumeBanner').classList.remove('d-none');
+    var banner = document.getElementById('resumeBanner');
+    if (banner) banner.classList.remove('d-none');
   }
 }
+
 function resumeProgress() {
   if (!state.currentDoc) return;
   var saved = localStorage.getItem('ivm_progress_' + state.currentDoc);
@@ -219,7 +242,8 @@ function resumeProgress() {
       }
     } catch(e) {}
   }
-  document.getElementById('resumeBanner').classList.add('d-none');
+  var banner = document.getElementById('resumeBanner');
+  if (banner) banner.classList.add('d-none');
 }
 
 async function fetchDocItems(docNo, docType) {
@@ -273,6 +297,7 @@ async function fetchDocItems(docNo, docType) {
 // ─── ITEM RENDERING & BATCH VERIFY ──────────────────────────────
 function renderItems() {
   const tbody = document.getElementById('itemsTable');
+  if (!tbody) return;
   tbody.innerHTML = '';
   let verified = 0;
   state.items.forEach((item, idx) => {
@@ -288,7 +313,8 @@ function renderItems() {
       '<td>' + getStatusBadge(item) + '</td>';
     tbody.appendChild(tr);
   });
-  document.getElementById('verifyCount').textContent = verified + '/' + state.items.length + ' Verified';
+  var countEl = document.getElementById('verifyCount');
+  if (countEl) countEl.textContent = verified + '/' + state.items.length + ' Verified';
   updateSubmitButton(verified, state.items.length);
 }
 
@@ -301,7 +327,7 @@ function getStatusBadge(item) {
 }
 
 function filterItems() {
-  const term = document.getElementById('itemFilter').value.toLowerCase();
+  const term = document.getElementById('itemFilter') ? document.getElementById('itemFilter').value.toLowerCase() : '';
   document.querySelectorAll('#itemsTable tr').forEach(tr => {
     const text = tr.textContent.toLowerCase();
     tr.style.display = text.includes(term) ? '' : 'none';
@@ -311,6 +337,7 @@ function filterItems() {
 function updateSubmitButton(verified, total) {
   const btn = document.getElementById('submitBtn');
   const txt = document.getElementById('submitBtnText');
+  if (!btn || !txt) return;
   if (total === 0) { btn.disabled = true; txt.textContent = 'No Items'; return; }
   btn.disabled = false;
   if (verified === total) {
@@ -322,24 +349,34 @@ function updateSubmitButton(verified, total) {
   }
 }
 
+function toggleSelectAll(checked) {
+  document.querySelectorAll('#itemsTable .item-select').forEach(cb => cb.checked = checked);
+}
+
 function openBatchVerify() {
   const selected = document.querySelectorAll('#itemsTable .item-select:checked');
   if (selected.length === 0) {
     showToast('Please select at least one item', 'warning');
     return;
   }
-  document.getElementById('batchCount').textContent = selected.length;
+  var countEl = document.getElementById('batchCount');
+  var unitEl = document.getElementById('batchUnit');
+  var qtyEl = document.getElementById('batchQtyInput');
+  if (countEl) countEl.textContent = selected.length;
   const firstRow = selected[0].closest('tr');
-  const unitCell = firstRow.querySelector('td:nth-child(5)');
+  const unitCell = firstRow ? firstRow.querySelector('td:nth-child(5)') : null;
   const unit = unitCell ? unitCell.textContent.trim() : 'PIECE';
-  document.getElementById('batchUnit').textContent = unit;
-  document.getElementById('batchQtyInput').value = '';
-  document.getElementById('batchQtyInput').dataset.unit = unit;
-  batchVerifyModal.show();
+  if (unitEl) unitEl.textContent = unit;
+  if (qtyEl) {
+    qtyEl.value = '';
+    qtyEl.dataset.unit = unit;
+  }
+  if (batchVerifyModal) batchVerifyModal.show();
 }
 
 function confirmBatchVerify() {
   const qtyInput = document.getElementById('batchQtyInput');
+  if (!qtyInput) return;
   const qtyVal = parseInt(qtyInput.value, 10);
   if (isNaN(qtyVal) || qtyVal < 0) {
     showToast('Please enter a valid quantity', 'warning');
@@ -360,7 +397,7 @@ function confirmBatchVerify() {
     item.unit = unit;
     item.verified = true;
   });
-  batchVerifyModal.hide();
+  if (batchVerifyModal) batchVerifyModal.hide();
   renderItems();
   showToast('Batch verify completed', 'success');
 }
@@ -407,7 +444,7 @@ async function onSubmit() {
         showToast('Warning: Status update failed', 'danger');
       }
       clearDocProgress(state.currentDoc);
-      successModal.show();
+      if (successModal) successModal.show();
       setTimeout(() => location.reload(), 2000);
     } else {
       showToast('Error: ' + (result.error || 'Submission failed'), 'danger');
@@ -444,10 +481,14 @@ async function submitTransaction(verifiedItems) {
 
 // ─── PO ITEMS & MRR CREATION ─────────────────────────────────────
 function renderPoItems() {
-  document.getElementById('poDisplayNo').textContent = state.currentPoNo;
-  document.getElementById('poDisplayPrf').textContent = state.currentPoPrf || '-';
-  document.getElementById('poDisplayClient').textContent = state.currentPoSupplier || state.currentPoClient || '-';
+  var noEl = document.getElementById('poDisplayNo');
+  var prfEl = document.getElementById('poDisplayPrf');
+  var clientEl = document.getElementById('poDisplayClient');
+  if (noEl) noEl.textContent = state.currentPoNo;
+  if (prfEl) prfEl.textContent = state.currentPoPrf || '-';
+  if (clientEl) clientEl.textContent = state.currentPoSupplier || state.currentPoClient || '-';
   const list = document.getElementById('poItemsList');
+  if (!list) return;
   list.innerHTML = state.poItemsData.map((item, idx) => `
 <div class="card mb-2 po-item-card" id="po-card-${idx}">
 <div class="card-body py-2 px-3">
@@ -478,30 +519,34 @@ function renderPoItems() {
 </div>
 `).join('');
 }
+
 function togglePoCard(idx) {
-  const checked = document.getElementById('po-check-' + idx).checked;
+  const checked = document.getElementById('po-check-' + idx) ? document.getElementById('po-check-' + idx).checked : false;
   const card = document.getElementById('po-card-' + idx);
-  if (checked) {
-    card.classList.remove('opacity-50');
-  } else {
-    card.classList.add('opacity-50');
+  if (card) {
+    if (checked) card.classList.remove('opacity-50');
+    else card.classList.add('opacity-50');
   }
 }
+
 function selectAllPoItems(select) {
   state.poItemsData.forEach((_, idx) => {
-    document.getElementById('po-check-' + idx).checked = select;
+    var cb = document.getElementById('po-check-' + idx);
+    if (cb) cb.checked = select;
     togglePoCard(idx);
   });
 }
+
 function closePoItemsModal() {
   if (state.poItemsModal) state.poItemsModal.hide();
 }
+
 async function createMrrFromPo() {
   const selected = [];
   state.poItemsData.forEach((item, idx) => {
-    if (document.getElementById('po-check-' + idx).checked) {
-      const atlQty = parseFloat(document.getElementById('po-atl-' + idx).value) || 0;
-      const unit = document.getElementById('po-unit-' + idx).value || 'PCS';
+    if (document.getElementById('po-check-' + idx) && document.getElementById('po-check-' + idx).checked) {
+      const atlQty = parseFloat(document.getElementById('po-atl-' + idx) ? document.getElementById('po-atl-' + idx).value : 0) || 0;
+      const unit = document.getElementById('po-unit-' + idx) ? document.getElementById('po-unit-' + idx).value : 'PCS';
       selected.push({
         inventoryId: item.inventoryId || item.itemCode || '',
         description: item.description || '',
@@ -515,8 +560,8 @@ async function createMrrFromPo() {
     showToast('Please select at least one item', 'warning');
     return;
   }
-  const drNo = document.getElementById('mrrDrNo').value.trim();
-  const receivingDate = document.getElementById('mrrReceivingDate').value;
+  const drNo = document.getElementById('mrrDrNo') ? document.getElementById('mrrDrNo').value.trim() : '';
+  const receivingDate = document.getElementById('mrrReceivingDate') ? document.getElementById('mrrReceivingDate').value : '';
   showLoading('Creating MRR...');
   try {
     const payload = {
@@ -551,6 +596,7 @@ async function createMrrFromPo() {
     hideLoading();
   }
 }
+
 async function lookupPoFromScan(poNo) {
   try {
     const url = API_URL + '?action=getPoItems&poNo=' + encodeURIComponent(poNo) + '&_t=' + Date.now();
@@ -563,10 +609,11 @@ async function lookupPoFromScan(poNo) {
     return null;
   }
 }
+
 async function manualPoLookup() {
-  const poNo = document.getElementById('manualPoInput').value.trim();
+  const poNo = document.getElementById('manualPoInput') ? document.getElementById('manualPoInput').value.trim() : '';
   if (!poNo) { showToast('Please enter a PO number', 'warning'); return; }
-  document.getElementById('manualPoInput').value = '';
+  if (document.getElementById('manualPoInput')) document.getElementById('manualPoInput').value = '';
   showLoading('Looking up PO...');
   try {
     const poResult = await lookupPoFromScan(poNo);
@@ -578,7 +625,7 @@ async function manualPoLookup() {
       state.currentPoSupplier = poResult.supplier || poResult.client || '';
       state.poItemsData = poResult.items;
       renderPoItems();
-      state.poItemsModal.show();
+      if (state.poItemsModal) state.poItemsModal.show();
     } else {
       showToast((poResult && poResult.error) || 'No items found for PO: ' + poNo, 'warning');
     }
@@ -591,32 +638,42 @@ async function manualPoLookup() {
 
 // ─── QTY MODAL ────────────────────────────────────────────────────
 let currentModalItem = null;
+
 function openQtyModal(item) {
   currentModalItem = item;
   const isMRR = state.currentModule === 'MRR';
   const isMRS = state.currentModule === 'MRS';
-  document.getElementById('modalItemCode').textContent = item.inventoryId;
-  document.getElementById('modalItemDesc').textContent = item.description;
-  document.getElementById('modalExpectedLabel').textContent = isMRR ? 'REC. QTY' : (isMRS ? 'QTY RETURNED' : 'Requested Qty');
-  document.getElementById('modalExpectedQty').value = item.qty;
-  document.getElementById('modalInputLabel').textContent = isMRR ? 'ATL QTY (Received)' : (isMRS ? 'ATL QTY (Actual Returned)' : 'Enter Issued Qty');
-  document.getElementById('modalInputQty').value = item.qty;
-
+  var codeEl = document.getElementById('modalItemCode');
+  var descEl = document.getElementById('modalItemDesc');
+  var labelEl = document.getElementById('modalExpectedLabel');
+  var qtyEl = document.getElementById('modalExpectedQty');
+  var inputLabelEl = document.getElementById('modalInputLabel');
+  var inputQtyEl = document.getElementById('modalInputQty');
   var unitSelect = document.getElementById('modalUnit');
-  unitSelect.innerHTML = buildUnitOptions(item.unit || 'PIECE');
-
-  document.getElementById('modalHint').textContent = isMRR ? 'MRR Mode: You may receive any quantity.' : (isMRS ? 'MRS Mode: Returned qty cannot exceed expected.' : 'MRIF Mode: Issued qty cannot exceed requested.');
-  document.getElementById('modalInputQty').classList.remove('is-invalid');
-  qtyModal.show();
+  var hintEl = document.getElementById('modalHint');
+  if (codeEl) codeEl.textContent = item.inventoryId;
+  if (descEl) descEl.textContent = item.description;
+  if (labelEl) labelEl.textContent = isMRR ? 'REC. QTY' : (isMRS ? 'QTY RETURNED' : 'Requested Qty');
+  if (qtyEl) qtyEl.value = item.qty;
+  if (inputLabelEl) inputLabelEl.textContent = isMRR ? 'ATL QTY (Received)' : (isMRS ? 'ATL QTY (Actual Returned)' : 'Enter Issued Qty');
+  if (inputQtyEl) inputQtyEl.value = item.qty;
+  if (unitSelect) unitSelect.innerHTML = buildUnitOptions(item.unit || 'PIECE');
+  if (hintEl) hintEl.textContent = isMRR ? 'MRR Mode: You may receive any quantity.' : (isMRS ? 'MRS Mode: Returned qty cannot exceed expected.' : 'MRIF Mode: Issued qty cannot exceed requested.');
+  if (inputQtyEl) inputQtyEl.classList.remove('is-invalid');
+  if (qtyModal) qtyModal.show();
 }
+
 function onQtyInput() {
   clearErrorAlert();
-  document.getElementById('modalInputQty').classList.remove('is-invalid');
+  var el = document.getElementById('modalInputQty');
+  if (el) el.classList.remove('is-invalid');
 }
+
 function confirmQty() {
   if (state.isLoading) return;
   if (!currentModalItem) return;
   const input = document.getElementById('modalInputQty');
+  if (!input) return;
   const qtyVal = parseInt(input.value, 10);
   if (isNaN(qtyVal) || qtyVal < 0) {
     input.classList.add('is-invalid');
@@ -636,31 +693,37 @@ function confirmQty() {
     return;
   }
   var unitSelect = document.getElementById('modalUnit');
-  var selectedUnit = unitSelect.value || 'PIECE';
+  var selectedUnit = unitSelect ? unitSelect.value : 'PIECE';
 
   currentModalItem.issuedQty = qtyVal;
   currentModalItem.unit = selectedUnit;
   currentModalItem.verified = true;
   saveDocProgress();
   renderItems();
-  qtyModal.hide();
+  if (qtyModal) qtyModal.hide();
   playSuccessBeep();
 }
 
 function showMismatchAlert(code) {
   const alert = document.getElementById('mismatchAlert');
-  document.getElementById('mismatchText').textContent = 'Item "' + code + '" not found in this document.';
+  const text = document.getElementById('mismatchText');
+  if (!alert || !text) return;
+  text.textContent = 'Item "' + code + '" not found in this document.';
   alert.classList.remove('d-none');
   clearTimeout(state.errorTimer);
   state.errorTimer = setTimeout(() => clearErrorAlert(), 4000);
 }
+
 function showExceedError(msg) {
   const alert = document.getElementById('exceedErrorAlert');
-  document.getElementById('exceedText').textContent = 'Error: ' + msg;
+  const text = document.getElementById('exceedText');
+  if (!alert || !text) return;
+  text.textContent = 'Error: ' + msg;
   alert.classList.remove('d-none');
   clearTimeout(state.errorTimer);
   state.errorTimer = setTimeout(() => clearErrorAlert(), 4000);
 }
+
 function clearErrorAlert() {
   const a1 = document.getElementById('mismatchAlert');
   const a2 = document.getElementById('exceedErrorAlert');
@@ -692,10 +755,9 @@ async function loadRequestorList() {
     try { data = JSON.parse(text); } catch(e) { data = {}; }
 
     const sel = document.getElementById('reqRequestor');
-    sel.innerHTML = '<option value="">-- Select Requestor --</option>';
-
     const sel3 = document.getElementById('step3Requestor');
-    sel3.innerHTML = '<option value="">-- Select Requestor --</option>';
+    if (sel) sel.innerHTML = '<option value="">-- Select Requestor --</option>';
+    if (sel3) sel3.innerHTML = '<option value="">-- Select Requestor --</option>';
 
     if (data.success && data.requestors) {
       state.requestorList = data.requestors;
@@ -704,13 +766,13 @@ async function loadRequestorList() {
         opt.value = r.name;
         opt.textContent = r.name;
         opt.dataset.department = r.department;
-        sel.appendChild(opt);
+        if (sel) sel.appendChild(opt);
 
         var opt3 = document.createElement('option');
         opt3.value = r.name;
         opt3.textContent = r.name;
         opt3.dataset.department = r.department;
-        sel3.appendChild(opt3);
+        if (sel3) sel3.appendChild(opt3);
       });
     }
   } catch(err) {
@@ -720,13 +782,15 @@ async function loadRequestorList() {
 
 function onRequestorChange() {
   const sel = document.getElementById('reqRequestor');
+  if (!sel) return;
   const selected = sel.options[sel.selectedIndex];
   const dept = selected ? selected.dataset.department : '';
-  document.getElementById('reqDepartment').value = dept || '';
+  var deptEl = document.getElementById('reqDepartment');
+  if (deptEl) deptEl.value = dept || '';
 }
 
 async function lookupSofData() {
-  const joNo = document.getElementById('reqJoNo').value.trim();
+  const joNo = document.getElementById('reqJoNo') ? document.getElementById('reqJoNo').value.trim() : '';
   if (!joNo) return;
   showLoading('Looking up JO No....');
   try {
@@ -736,14 +800,20 @@ async function lookupSofData() {
     let data;
     try { data = JSON.parse(text); } catch(e) { data = {}; }
     if (data.success) {
-      document.getElementById('reqGemSoNo').value = data.gemSoNo || '';
-      document.getElementById('reqClientName').value = data.clientName || '';
-      document.getElementById('reqProject').value = data.project || '';
+      var gemEl = document.getElementById('reqGemSoNo');
+      var clientEl = document.getElementById('reqClientName');
+      var projEl = document.getElementById('reqProject');
+      if (gemEl) gemEl.value = data.gemSoNo || '';
+      if (clientEl) clientEl.value = data.clientName || '';
+      if (projEl) projEl.value = data.project || '';
       showToast('JO No. found! Auto-filled SO data.', 'success');
     } else {
-      document.getElementById('reqGemSoNo').value = '';
-      document.getElementById('reqClientName').value = '';
-      document.getElementById('reqProject').value = '';
+      var gemEl2 = document.getElementById('reqGemSoNo');
+      var clientEl2 = document.getElementById('reqClientName');
+      var projEl2 = document.getElementById('reqProject');
+      if (gemEl2) gemEl2.value = '';
+      if (clientEl2) clientEl2.value = '';
+      if (projEl2) projEl2.value = '';
       showToast('JO No. not found in SOF Monitoring. You can still submit.', 'warning');
     }
   } catch(err) {
@@ -761,11 +831,16 @@ function openManualMrrModal() {
   if (!manualMrrModal) {
     manualMrrModal = new bootstrap.Modal(document.getElementById('manualMrrModal'));
   }
-  document.getElementById('manualMrrPoNo').value = '';
-  document.getElementById('manualMrrDrNo').value = '';
-  document.getElementById('manualMrrVendor').value = '';
-  document.getElementById('manualMrrSite').value = 'GEMCOR CATMON';
-  document.getElementById('manualMrrPreparedBy').value = '';
+  var poEl = document.getElementById('manualMrrPoNo');
+  var drEl = document.getElementById('manualMrrDrNo');
+  var vendorEl = document.getElementById('manualMrrVendor');
+  var siteEl = document.getElementById('manualMrrSite');
+  var prepEl = document.getElementById('manualMrrPreparedBy');
+  if (poEl) poEl.value = '';
+  if (drEl) drEl.value = '';
+  if (vendorEl) vendorEl.value = '';
+  if (siteEl) siteEl.value = 'GEMCOR CATMON';
+  if (prepEl) prepEl.value = '';
   manualMrrItems = [];
   renderManualMrrItems();
   updateManualMrrSubmitButton();
@@ -855,9 +930,9 @@ function updateManualMrrSubmitButton() {
   var btn = document.getElementById('btnSubmitManualMrr');
   if (!btn) return;
 
-  var drNo = document.getElementById('manualMrrDrNo').value.trim();
-  var vendor = document.getElementById('manualMrrVendor').value.trim();
-  var site = document.getElementById('manualMrrSite').value.trim();
+  var drNo = document.getElementById('manualMrrDrNo') ? document.getElementById('manualMrrDrNo').value.trim() : '';
+  var vendor = document.getElementById('manualMrrVendor') ? document.getElementById('manualMrrVendor').value.trim() : '';
+  var site = document.getElementById('manualMrrSite') ? document.getElementById('manualMrrSite').value.trim() : '';
 
   var hasValidItems = false;
   for (var i = 0; i < manualMrrItems.length; i++) {
@@ -872,12 +947,12 @@ function updateManualMrrSubmitButton() {
 }
 
 async function submitManualMrr() {
-  var poNo = document.getElementById('manualMrrPoNo').value.trim();
-  var drNo = document.getElementById('manualMrrDrNo').value.trim();
-  var vendor = document.getElementById('manualMrrVendor').value.trim();
-  var site = document.getElementById('manualMrrSite').value.trim();
-  var receivingDate = document.getElementById('manualMrrDate').value;
-  var preparedBy = document.getElementById('manualMrrPreparedBy').value.trim();
+  var poNo = document.getElementById('manualMrrPoNo') ? document.getElementById('manualMrrPoNo').value.trim() : '';
+  var drNo = document.getElementById('manualMrrDrNo') ? document.getElementById('manualMrrDrNo').value.trim() : '';
+  var vendor = document.getElementById('manualMrrVendor') ? document.getElementById('manualMrrVendor').value.trim() : '';
+  var site = document.getElementById('manualMrrSite') ? document.getElementById('manualMrrSite').value.trim() : '';
+  var receivingDate = document.getElementById('manualMrrDate') ? document.getElementById('manualMrrDate').value : '';
+  var preparedBy = document.getElementById('manualMrrPreparedBy') ? document.getElementById('manualMrrPreparedBy').value.trim() : '';
 
   var items = [];
   for (var i = 0; i < manualMrrItems.length; i++) {
