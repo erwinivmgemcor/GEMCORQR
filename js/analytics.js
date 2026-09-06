@@ -3,24 +3,40 @@
 // ============================================================
 
 var analyticsLoaded = false;
+var analyticsRetryCount = 0;
+var MAX_ANALYTICS_RETRIES = 3;
 
 async function loadAnalytics() {
   if (state.isLoading) return;
   var container = document.getElementById('analyticsSection');
   if (!container) return;
+
+  // Show loading, hide content
   document.getElementById('analyticsLoading').classList.remove('d-none');
   document.getElementById('analyticsContent').classList.add('d-none');
+  document.getElementById('analyticsError').classList.add('d-none');
+
+  // ─── Safety timeout ──────────────────────────────────────
+  var timeoutId = setTimeout(function() {
+    console.warn('[Analytics] Load timeout – forcing hide.');
+    document.getElementById('analyticsLoading').classList.add('d-none');
+    document.getElementById('analyticsContent').classList.add('d-none');
+    document.getElementById('analyticsError').classList.remove('d-none');
+    document.getElementById('analyticsErrorText').textContent = 'Analytics took too long to load. Click "Refresh" to try again.';
+  }, 10000);
 
   try {
     var url = API_URL + '?action=getDashboardAnalytics&_t=' + Date.now();
+    console.log('[Analytics] Fetching:', url);
     var res = await fetch(url, { redirect: 'follow' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     var data = await res.json();
     console.log('[Analytics] Response:', data);
 
+    clearTimeout(timeoutId);
+
     if (!data.success) {
-      showToast('Failed to load analytics: ' + (data.error || 'Unknown error'), 'danger');
-      document.getElementById('analyticsLoading').classList.add('d-none');
-      return;
+      throw new Error(data.error || 'Unknown error');
     }
 
     // Update KPI cards
@@ -31,7 +47,7 @@ async function loadAnalytics() {
       document.getElementById('kpiNotifications').textContent = data.totals.pending || 0;
     }
 
-    // ─── Render charts ──────────────────────────────
+    // ─── Render charts ──────────────────────────────────────
     renderDailyChart(data.dailyRequests || []);
     renderTopItemsChart(data.topItems || []);
     renderStaffChart(data.staffPerformance || []);
@@ -39,11 +55,17 @@ async function loadAnalytics() {
 
     document.getElementById('analyticsLoading').classList.add('d-none');
     document.getElementById('analyticsContent').classList.remove('d-none');
+    document.getElementById('analyticsError').classList.add('d-none');
     analyticsLoaded = true;
+    analyticsRetryCount = 0;
   } catch(err) {
     console.error('[Analytics] Error:', err);
-    showToast('Failed to load analytics: ' + err.message, 'danger');
+    clearTimeout(timeoutId);
     document.getElementById('analyticsLoading').classList.add('d-none');
+    document.getElementById('analyticsContent').classList.add('d-none');
+    document.getElementById('analyticsError').classList.remove('d-none');
+    document.getElementById('analyticsErrorText').textContent = 'Failed to load analytics: ' + err.message;
+    analyticsRetryCount++;
   }
 }
 
