@@ -303,15 +303,33 @@ function renderItems() {
     if (item.verified) verified++;
     const tr = document.createElement('tr');
     tr.className = 'item-row' + (item.verified ? ' verified' : '');
+    tr.setAttribute('data-index', idx);
+    tr.style.cursor = 'pointer';
+    // Build row with clickable functionality (ignore checkbox/button clicks)
     tr.innerHTML =
-      '<td><input type="checkbox" class="item-select" data-index="' + idx + '" ' + (item.selected ? 'checked' : '') + '></td>' +
+      '<td><input type="checkbox" class="item-select" data-index="' + idx + '" ' + (item.selected ? 'checked' : '') + ' onclick="event.stopPropagation();"></td>' +
       '<td><div class="fw-bold small">' + item.inventoryId + '</div><div class="text-muted small">' + item.description + '</div></td>' +
       '<td class="text-center">' + item.qty + '</td>' +
       '<td class="text-center fw-bold">' + (item.verified ? item.issuedQty : '-') + '</td>' +
       '<td class="text-center">' + (item.unit || 'PIECE') + '</td>' +
       '<td>' + getStatusBadge(item) + '</td>';
+    
+    // Click handler – open quantity modal for this item
+    tr.addEventListener('click', function(e) {
+      // Ignore clicks on checkboxes or buttons
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+        return;
+      }
+      const index = parseInt(this.getAttribute('data-index'), 10);
+      const item = state.items[index];
+      if (item) {
+        openQtyModal(item);
+      }
+    });
+    
     tbody.appendChild(tr);
   });
+  
   var countEl = document.getElementById('verifyCount');
   if (countEl) countEl.textContent = verified + '/' + state.items.length + ' Verified';
   updateSubmitButton(verified, state.items.length);
@@ -465,7 +483,6 @@ async function submitTransaction(verifiedItems) {
     '&docType=' + encodeURIComponent(state.currentModule) +
     '&sheetId=' + encodeURIComponent(getCleanSheetId()) +
     '&items=' + itemsStr +
-    // ─── Use logged‑in user for audit trail ───
     '&processedBy=' + encodeURIComponent(state.currentUser || state.warehouseName || 'WAREHOUSE') +
     '&_t=' + Date.now();
   console.log('[Submit] URL length:', url.length);
