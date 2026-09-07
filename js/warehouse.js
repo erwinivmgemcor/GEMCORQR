@@ -1,5 +1,5 @@
 // ============================================================
-// WAREHOUSE CORE FUNCTIONS (with null checks & user login)
+// WAREHOUSE CORE FUNCTIONS (with User Login Integration)
 // ============================================================
 
 function getCleanSheetId() {
@@ -465,6 +465,7 @@ async function submitTransaction(verifiedItems) {
     '&docType=' + encodeURIComponent(state.currentModule) +
     '&sheetId=' + encodeURIComponent(getCleanSheetId()) +
     '&items=' + itemsStr +
+    // ─── Use logged‑in user for audit trail ───
     '&processedBy=' + encodeURIComponent(state.currentUser || state.warehouseName || 'WAREHOUSE') +
     '&_t=' + Date.now();
   console.log('[Submit] URL length:', url.length);
