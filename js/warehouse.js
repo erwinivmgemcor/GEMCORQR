@@ -614,29 +614,49 @@ async function createMrrFromPo() {
   }
 }
 
+// ─── UPDATED: lookupPoFromScan with better error handling ───
 async function lookupPoFromScan(poNo) {
   try {
     const url = API_URL + '?action=getPoItems&poNo=' + encodeURIComponent(poNo) + '&_t=' + Date.now();
+    console.log('[lookupPoFromScan] URL:', url);
     const res = await fetch(url, { redirect: 'follow' });
+    if (!res.ok) {
+      throw new Error('HTTP ' + res.status + ' - ' + res.statusText);
+    }
     const text = await res.text();
+    console.log('[lookupPoFromScan] Raw response:', text.substring(0, 500));
     let data;
-    try { data = JSON.parse(text); } catch(e) { return null; }
+    try { data = JSON.parse(text); } catch(e) {
+      console.error('[lookupPoFromScan] JSON parse error:', e);
+      return null;
+    }
     return (data && data.success) ? data : null;
   } catch(err) {
-    return null;
+    console.error('[lookupPoFromScan] Error:', err);
+    throw err;
   }
 }
 
+// ─── UPDATED: manualPoLookup with better error handling ───
 async function manualPoLookup() {
   const poNo = document.getElementById('manualPoInput') ? document.getElementById('manualPoInput').value.trim() : '';
-  if (!poNo) { showToast('Please enter a PO number', 'warning'); return; }
+  const mrrPoNo = document.getElementById('mrrManualPoInput') ? document.getElementById('mrrManualPoInput').value.trim() : '';
+  const finalPo = poNo || mrrPoNo;
+  
+  if (!finalPo) { showToast('Please enter a PO number', 'warning'); return; }
+  
+  // Clear the input fields
   if (document.getElementById('manualPoInput')) document.getElementById('manualPoInput').value = '';
+  if (document.getElementById('mrrManualPoInput')) document.getElementById('mrrManualPoInput').value = '';
+  
   showLoading('Looking up PO...');
   try {
-    const poResult = await lookupPoFromScan(poNo);
+    const poResult = await lookupPoFromScan(finalPo);
+    console.log('[manualPoLookup] Result:', poResult);
+    
     if (poResult && poResult.success) {
       playSuccessBeep();
-      state.currentPoNo = poNo;
+      state.currentPoNo = finalPo;
       state.currentPoPrf = poResult.prfNo || '';
       state.currentPoClient = poResult.client || '';
       state.currentPoSupplier = poResult.supplier || poResult.client || '';
@@ -644,9 +664,11 @@ async function manualPoLookup() {
       renderPoItems();
       if (state.poItemsModal) state.poItemsModal.show();
     } else {
-      showToast((poResult && poResult.error) || 'No items found for PO: ' + poNo, 'warning');
+      const errorMsg = (poResult && poResult.error) ? poResult.error : 'No items found for PO: ' + finalPo;
+      showToast('⚠️ ' + errorMsg, 'warning');
     }
   } catch(err) {
+    console.error('[manualPoLookup] Error:', err);
     showToast('Error: ' + err.message, 'danger');
   } finally {
     hideLoading();
