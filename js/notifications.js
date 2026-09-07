@@ -62,14 +62,17 @@ async function loadWarehouseNotifications() {
         showToast(diff + ' new request(s) received!', 'warning');
       }
 
+      // ─── Update notification badge ──────────────────────────
       var badge = document.getElementById('whNotifBadge');
-      var btn = document.getElementById('whNotifBtn');
-      if (badge && btn) {
+      if (badge) {
         badge.textContent = newCount;
         badge.classList.toggle('d-none', newCount === 0);
-        btn.classList.toggle('d-none', false);
+        console.log('[WH Notifications] Badge updated:', newCount);
+      } else {
+        console.warn('[WH Notifications] Badge element #whNotifBadge not found');
       }
 
+      // The button is always visible; no need to toggle it
       updateWarehouseKPIs();
       renderWarehouseNotifications(filtered);
     }
