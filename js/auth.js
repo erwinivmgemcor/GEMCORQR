@@ -25,6 +25,8 @@ function initRole() {
           setTimeout(() => { if (settingsModal) settingsModal.show(); }, 500);
         }
         selectModule('MRIF');
+        setTimeout(loadAnalytics, 500);
+        loadWarehouseNotifications();
       }
     } else {
       checkProductionName();
@@ -40,9 +42,23 @@ function selectRole(role) {
     showToast('Production mode activated', 'success');
     checkProductionName();
   } else if (role === 'warehouse') {
-    if (roleModal) roleModal.hide();
-    // Show login modal instead of PIN prompt
-    showLoginModal();
+    // If already logged in, switch immediately
+    if (state.currentUser) {
+      localStorage.setItem('ivm_userRole', 'warehouse');
+      if (roleModal) roleModal.hide();
+      applyRoleUI();
+      showToast('Warehouse mode activated', 'success');
+      if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
+        setTimeout(() => { if (settingsModal) settingsModal.show(); }, 500);
+      }
+      selectModule('MRIF');
+      loadWarehouseNotifications();
+      setTimeout(loadAnalytics, 500);
+    } else {
+      // Not logged in – show login modal
+      if (roleModal) roleModal.hide();
+      showLoginModal();
+    }
   }
 }
 
@@ -112,6 +128,7 @@ async function loginUser() {
       state.currentUserFullname = data.fullname || data.username;
       localStorage.setItem('ivm_username', state.currentUser);
       localStorage.setItem('ivm_userFullname', state.currentUserFullname);
+      localStorage.setItem('ivm_userRole', 'warehouse'); // Ensure role is warehouse
       // Close login modal
       var loginModal = document.getElementById('loginModal');
       if (loginModal) {
@@ -119,12 +136,12 @@ async function loginUser() {
         if (modal) modal.hide();
       }
       showToast('Welcome, ' + state.currentUserFullname + '!', 'success');
-      // Update UI and load modules
       applyRoleUI();
       if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
         setTimeout(() => { if (settingsModal) settingsModal.show(); }, 500);
       }
       selectModule('MRIF');
+      loadWarehouseNotifications();
       setTimeout(loadAnalytics, 500);
     } else {
       if (errorField) {
@@ -151,6 +168,7 @@ function logoutUser() {
     state.currentUserFullname = '';
     localStorage.removeItem('ivm_username');
     localStorage.removeItem('ivm_userFullname');
+    localStorage.removeItem('ivm_userRole');
     location.reload();
   }
 }
@@ -259,6 +277,23 @@ function applyRoleUI() {
     logoutItem.style.display = (isWarehouse && state.currentUser) ? 'flex' : 'none';
   }
 
+  // ─── Update sidebar role display ─────────────────────────────
+  var sidebarRole = document.getElementById('sidebarRole');
+  if (sidebarRole) {
+    if (isProduction) {
+      sidebarRole.textContent = 'Production Mode';
+    } else {
+      sidebarRole.textContent = state.currentUserFullname || 'Warehouse';
+    }
+  }
+
+  // ─── Update current role display in settings ──────────────────
+  var roleDisplay = document.getElementById('currentRoleDisplay');
+  if (roleDisplay) {
+    roleDisplay.textContent = role === 'warehouse' ? 'Warehouse Staff' : 'Production Staff';
+    roleDisplay.className = role === 'warehouse' ? 'badge bg-success' : 'badge bg-primary';
+  }
+
   // ─── Handle intervals ────────────────────────────────────────
   if (isProduction) {
     var active = document.getElementById('activeTransactionSection');
@@ -285,6 +320,13 @@ function applyRoleUI() {
   // ─── Call sidebar role handler ──────────────────────────────
   if (typeof window.applySidebarRole === 'function') {
     window.applySidebarRole(role);
+  }
+  
+  // ─── Force navigation to correct page ──────────────────────
+  if (isProduction) {
+    navigateTo('myrequests');
+  } else {
+    navigateTo('dashboard');
   }
 }
 
