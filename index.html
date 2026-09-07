@@ -1186,14 +1186,30 @@
           </div>
         </div>
 
-        <!-- Step 5 -->
+        <!-- Step 5: Items with Scanner -->
         <div class="wizard-panel" id="step5">
           <div class="text-center mb-4">
             <div class="step-icon"><i class="bi bi-box-seam"></i></div>
             <h5>Add Items</h5>
+            <p class="text-muted small">Scan QR codes or type to search inventory.</p>
           </div>
+
+          <!-- Scanner Overlay (hidden by default) -->
+          <div id="wizardScannerOverlay" class="d-none" style="position:relative; background:#000; border-radius:12px; overflow:hidden; margin-bottom:12px;">
+            <div id="wizardReader" style="width:100%; max-height:300px;"></div>
+            <div class="scanner-overlay">
+              <div class="scanner-frame"><div class="scan-line"></div></div>
+            </div>
+            <div class="text-center text-white p-2" style="background:rgba(0,0,0,0.6);">
+              <button class="btn btn-sm btn-danger" onclick="closeWizardScanner()">
+                <i class="bi bi-x-circle"></i> Cancel Scan
+              </button>
+            </div>
+          </div>
+
           <div id="step5ItemsContainer"></div>
           <button class="btn btn-outline-primary w-100 mt-2" onclick="addStep5ItemRow()"><i class="bi bi-plus-lg"></i> Add Another Item</button>
+
           <div class="wizard-nav mt-4">
             <button class="btn btn-outline-secondary" onclick="goToStep(4)">Back</button>
             <button class="btn btn-primary" id="btnStep5Next" onclick="goToStep(6)" disabled>Next</button>
