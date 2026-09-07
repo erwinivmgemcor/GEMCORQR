@@ -1,5 +1,5 @@
 // ============================================================
-// WAREHOUSE NOTIFICATIONS
+// WAREHOUSE NOTIFICATIONS (with direct document loading)
 // ============================================================
 
 async function updateWarehouseKPIs() {
@@ -68,11 +68,8 @@ async function loadWarehouseNotifications() {
         badge.textContent = newCount;
         badge.classList.toggle('d-none', newCount === 0);
         console.log('[WH Notifications] Badge updated:', newCount);
-      } else {
-        console.warn('[WH Notifications] Badge element #whNotifBadge not found');
       }
 
-      // The button is always visible; no need to toggle it
       updateWarehouseKPIs();
       renderWarehouseNotifications(filtered);
     }
@@ -193,37 +190,45 @@ async function loadAndRenderWhModal() {
   }
 }
 
+// ─── FIXED: Directly load document from notification ───────────
 async function processRequestFromNotification(docNo, docType) {
   console.log('[WH] Processing request:', docNo, docType);
+  
+  // 1. Navigate to the releasing section
+  if (typeof navigateTo === 'function') {
+    navigateTo('releasing');
+  } else {
+    console.warn('[WH] navigateTo not available, switching via selectModule');
+    await selectModule(docType);
+  }
+  
+  // 2. Wait a moment for the UI to update
+  await new Promise(resolve => setTimeout(resolve, 300));
+  
+  // 3. Ensure the module is set correctly
   state.currentModule = docType;
   updateLabels();
-  await fetchPendingDocs();
-  var select = document.getElementById('docSelect');
-  if (select) {
-    for (var i = 0; i < select.options.length; i++) {
-      if (select.options[i].value === docNo) {
-        select.selectedIndex = i;
-        onDocSelect(docNo);
-        showToast('Loading ' + cleanDocNo(docNo) + '...', 'info');
-        return;
-      }
+  
+  // 4. Check if the sheet ID is available; if not, try to sync
+  var sheetId = getCleanSheetId();
+  if (!sheetId) {
+    showToast('⚠️ No Sheet ID for ' + docType + '. Attempting to sync...', 'warning');
+    await syncModuleLinks();
+    sheetId = getCleanSheetId();
+    if (!sheetId) {
+      showToast('Still missing Sheet ID. Please set it manually in Settings.', 'danger');
+      return;
     }
   }
-  showToast('Document not in current list. Refreshing...', 'warning');
-  await fetchPendingDocs();
-  setTimeout(function() {
-    var select2 = document.getElementById('docSelect');
-    if (select2) {
-      for (var i = 0; i < select2.options.length; i++) {
-        if (select2.options[i].value === docNo) {
-          select2.selectedIndex = i;
-          onDocSelect(docNo);
-          return;
-        }
-      }
-    }
-    showToast('Could not find ' + cleanDocNo(docNo) + '. It may have been processed.', 'danger');
-  }, 1000);
+  
+  // 5. Load the document directly (bypass dropdown)
+  try {
+    await onDocSelect(docNo);
+    showToast('Loaded ' + cleanDocNo(docNo), 'success');
+  } catch(err) {
+    console.error('[WH] Error loading document:', err);
+    showToast('Failed to load document: ' + err.message, 'danger');
+  }
 }
 
 function clearWhNotifications() {
