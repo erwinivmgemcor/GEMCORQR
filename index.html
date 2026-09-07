@@ -458,6 +458,34 @@
           </div>
         </div>
 
+        <!-- ─── QUICK ACTIONS CARD (new) ─── -->
+        <div class="row g-3 mb-4">
+          <div class="col-12">
+            <div class="card">
+              <div class="card-header bg-primary text-white">
+                <i class="bi bi-lightning-fill me-2"></i> Quick Actions
+              </div>
+              <div class="card-body">
+                <div class="d-flex flex-wrap gap-2">
+                  <button class="btn btn-warning" onclick="quickProcessPending()">
+                    <i class="bi bi-arrow-right-circle me-1"></i> Process Next Pending
+                  </button>
+                  <button class="btn btn-success" onclick="quickNewMrr()">
+                    <i class="bi bi-box-arrow-in-down me-1"></i> Quick New MRR
+                  </button>
+                  <button class="btn btn-outline-primary" onclick="quickNewMrif()">
+                    <i class="bi bi-box-arrow-up me-1"></i> Quick New MRIF
+                  </button>
+                  <button class="btn btn-outline-secondary" onclick="openQuickScan()">
+                    <i class="bi bi-qr-code-scan me-1"></i> Quick Scan
+                  </button>
+                </div>
+                <div id="quickActionStatus" class="mt-2 small text-muted"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Analytics -->
         <div id="analyticsSection" class="mt-4">
           <div class="d-flex justify-content-between align-items-center mb-2">
@@ -1348,9 +1376,9 @@
           <span class="badge bg-secondary">Ticket: <span id="requestTicketNo"></span></span><br>
           <span class="badge bg-primary">Doc: <span id="requestDocNo"></span></span>
         </div>
-     <div class="my-3 d-flex justify-content-center">
-  <img id="requestQrImg" src="" alt="QR" style="max-width:280px;width:100%;border:1px solid #ddd;border-radius:8px;padding:8px;">
-</div>
+        <div class="my-3 d-flex justify-content-center">
+          <img id="requestQrImg" src="" alt="QR" style="max-width:280px;width:100%;border:1px solid #ddd;border-radius:8px;padding:8px;">
+        </div>
         <div id="qrFallback" class="d-none alert alert-warning"></div>
         <p class="text-muted small">Show this QR code to the warehouse team.</p>
       </div>
