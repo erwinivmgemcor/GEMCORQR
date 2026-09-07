@@ -33,14 +33,12 @@ function resetWizard() {
   addStep5ItemRow();
   document.getElementById('btnStep5Next').disabled = true;
 
-  // Close scanner if open
   closeWizardScanner();
 
   goToStep(1);
 }
 
 function goToStep(step) {
-  // Close scanner when moving away from step 5
   closeWizardScanner();
 
   document.querySelectorAll('.wizard-step').forEach(function(el) {
@@ -282,7 +280,6 @@ var wizardScanner = null;
 var wizardScannerRowIndex = null;
 
 function openWizardScanner(rowIndex) {
-  // Close any existing scanner
   closeWizardScanner();
   
   wizardScannerRowIndex = rowIndex;
@@ -290,7 +287,6 @@ function openWizardScanner(rowIndex) {
   if (!overlay) return;
   overlay.classList.remove('d-none');
   
-  // Start the scanner
   if (!wizardScanner) {
     wizardScanner = new Html5Qrcode('wizardReader');
   }
@@ -324,16 +320,13 @@ function closeWizardScanner() {
 }
 
 function onWizardScanSuccess(decodedText) {
-  // Stop scanner and close overlay
   closeWizardScanner();
   
   var idx = wizardScannerRowIndex;
   if (idx === null) return;
   
-  // Try to find the item in the inventory list
   var matchedItem = null;
   var code = decodedText.trim();
-  // First, try exact match on inventoryId
   for (var i = 0; i < state.requestInventoryList.length; i++) {
     var it = state.requestInventoryList[i];
     if (it.inventoryId === code || it.code === code) {
@@ -341,7 +334,6 @@ function onWizardScanSuccess(decodedText) {
       break;
     }
   }
-  // If not found, try partial match
   if (!matchedItem) {
     var lowerCode = code.toLowerCase();
     for (var i = 0; i < state.requestInventoryList.length; i++) {
@@ -381,7 +373,6 @@ function onWizardScanSuccess(decodedText) {
     playSuccessBeep();
     showToast('Item scanned: ' + matchedItem.inventoryId, 'success');
   } else {
-    // Not found – fill only the code
     if (searchInput) searchInput.value = code;
     if (codeInput) codeInput.value = code;
     checkStep5Items();
@@ -389,7 +380,6 @@ function onWizardScanSuccess(decodedText) {
   }
 }
 
-// Auto-close scanner when modal is hidden
 document.addEventListener('hidden.bs.modal', function (event) {
   if (event.target.id === 'newRequestModal') {
     closeWizardScanner();
@@ -465,7 +455,7 @@ async function submitNewRequest() {
   }
 }
 
-// ─── QR DOWNLOAD / SHARE (unchanged) ────────────────────────────
+// ─── QR DOWNLOAD / SHARE ──────────────────────────────────────────
 function downloadRequestQr() {
   if (!lastQrDocNo || !lastQrTicketNo) {
     showToast('No QR to download', 'warning');
@@ -575,6 +565,138 @@ function showRequestQr(ticketNo, docNo) {
   requestSuccessModal.show();
 }
 
+// ─── REQUEST DETAILS ──────────────────────────────────────────────
+async function openRequestDetails(docNo, docType) {
+  if (!docNo) return;
+  
+  var modal = document.getElementById('requestDetailsModal');
+  if (!modal) return;
+  
+  var content = document.getElementById('requestDetailsContent');
+  content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading request details...</div></div>';
+  
+  var bsModal = new bootstrap.Modal(modal);
+  bsModal.show();
+  
+  try {
+    var sheetKey = 'sheetId_' + (docType || 'MRIF');
+    var sheetIdVal = localStorage.getItem(sheetKey);
+    var sheetIdClean = sheetIdVal ? extractSheetId(sheetIdVal) : '';
+    
+    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
+              '&docType=' + (docType || 'MRIF') +
+              '&sheetId=' + encodeURIComponent(sheetIdClean) +
+              '&_t=' + Date.now();
+    console.log('[openRequestDetails] URL:', url);
+    var res = await fetch(url, { redirect: 'follow' });
+    var text = await res.text();
+    console.log('[openRequestDetails] Raw response:', text.substring(0, 500));
+    var data;
+    try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to load request');
+    }
+    
+    var info = data.info || {};
+    var items = data.items || [];
+    
+    var html = buildRequestDetailsHtml(docNo, docType, info, items);
+    content.innerHTML = html;
+    
+  } catch(err) {
+    console.error('[openRequestDetails] Error:', err);
+    content.innerHTML = '<div class="alert alert-danger">Failed to load request details: ' + err.message + '</div>';
+  }
+}
+
+function buildRequestDetailsHtml(docNo, docType, info, items) {
+  var requestor = info.Requestor || info.requestor || info.requestorName || '—';
+  var department = info.Department || info.department || info.dept || '—';
+  var dateRaw = info.Date || info.date || info['Date Prepared'] || info.datePrepared || '';
+  var gemSo = info['GEM SO No.'] || info.gemSoNo || info.gemSo || '—';
+  var joNo = info['JO No.'] || info.joNo || '—';
+  var client = info['Client Name'] || info.clientName || info.client || '—';
+  var project = info.Project || info.project || '—';
+  var poNo = info['PO No.'] || info.poNo || '—';
+  var vendor = info['Vendor/Client'] || info.vendor || info.client || '—';
+  var drNo = info['DR No.'] || info.drNo || '—';
+  var receivingDate = info['Receiving Date'] || info.receivingDate || '—';
+  var receivingSite = info['Receiving Site'] || info.receivingSite || '—';
+  var preparedBy = info['Prepared By'] || info.preparedBy || '—';
+
+  var dateStr = dateRaw;
+  try {
+    var d = new Date(dateRaw);
+    if (!isNaN(d.getTime()) && d.getFullYear() > 2000) {
+      var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      dateStr = months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+    }
+  } catch(e) {}
+
+  var itemsHtml = '';
+  if (items && items.length > 0) {
+    items.forEach(function(it, idx) {
+      var code = it.inventoryId || it.itemCode || it.code || '';
+      var desc = it.description || it.desc || '';
+      var qty = it.expectedQty || it.qty || it.requestedQty || 0;
+      var issued = it.actualQty || it.issuedQty || it.atlQty || 0;
+      var unit = it.unit || 'PIECE';
+      var remarks = it.remarks || 'PENDING';
+      itemsHtml += '<tr>' +
+        '<td>' + (idx + 1) + '</td>' +
+        '<td><code>' + code + '</code></td>' +
+        '<td>' + desc + '</td>' +
+        '<td class="text-center">' + qty + '</td>' +
+        '<td class="text-center">' + issued + '</td>' +
+        '<td class="text-center">' + unit + '</td>' +
+        '<td><span class="badge ' + (remarks === 'COMPLETE' ? 'bg-success' : remarks === 'PARTIAL' ? 'bg-warning' : 'bg-secondary') + '">' + remarks + '</span></td>' +
+        '</tr>';
+    });
+  } else {
+    itemsHtml = '<tr><td colspan="7" class="text-center text-muted py-3">No items found</td></tr>';
+  }
+
+  var isMRR = (docType === 'MRR');
+  
+  return '<div class="request-details">' +
+    '<div class="row g-2 mb-3">' +
+      '<div class="col-md-6"><strong>Document:</strong> ' + docNo + '</div>' +
+      '<div class="col-md-6"><strong>Type:</strong> <span class="badge bg-primary">' + (docType || 'MRIF') + '</span></div>' +
+      (requestor !== '—' ? '<div class="col-md-6"><strong>Requestor:</strong> ' + requestor + '</div>' : '') +
+      (department !== '—' ? '<div class="col-md-6"><strong>Department:</strong> ' + department + '</div>' : '') +
+      (dateStr !== '—' ? '<div class="col-md-6"><strong>Date:</strong> ' + dateStr + '</div>' : '') +
+      (isMRR ? '<div class="col-md-6"><strong>Receiving Site:</strong> ' + receivingSite + '</div>' : '') +
+      (isMRR ? '<div class="col-md-6"><strong>PO No.:</strong> ' + poNo + '</div>' : '') +
+      (isMRR ? '<div class="col-md-6"><strong>Vendor:</strong> ' + vendor + '</div>' : '') +
+      (isMRR ? '<div class="col-md-6"><strong>DR No.:</strong> ' + drNo + '</div>' : '') +
+      (isMRR ? '<div class="col-md-6"><strong>Receiving Date:</strong> ' + receivingDate + '</div>' : '') +
+      (isMRR ? '<div class="col-md-6"><strong>Prepared By:</strong> ' + preparedBy + '</div>' : '') +
+      (!isMRR && gemSo !== '—' ? '<div class="col-md-6"><strong>GEM SO No.:</strong> ' + gemSo + '</div>' : '') +
+      (!isMRR && joNo !== '—' ? '<div class="col-md-6"><strong>JO No.:</strong> ' + joNo + '</div>' : '') +
+      (!isMRR && client !== '—' ? '<div class="col-md-6"><strong>Client:</strong> ' + client + '</div>' : '') +
+      (!isMRR && project !== '—' ? '<div class="col-md-6"><strong>Project:</strong> ' + project + '</div>' : '') +
+    '</div>' +
+    '<hr>' +
+    '<div class="table-responsive">' +
+      '<table class="table table-sm table-bordered">' +
+        '<thead class="table-light">' +
+          '<tr>' +
+            '<th>#</th>' +
+            '<th>Item Code</th>' +
+            '<th>Description</th>' +
+            '<th class="text-center">' + (isMRR ? 'Rec. Qty' : 'Req. Qty') + '</th>' +
+            '<th class="text-center">' + (isMRR ? 'ATL Qty' : 'Issued Qty') + '</th>' +
+            '<th class="text-center">Unit</th>' +
+            '<th>Status</th>' +
+          '</tr>' +
+        '</thead>' +
+        '<tbody>' + itemsHtml + '</tbody>' +
+      '</table>' +
+    '</div>' +
+  '</div>';
+}
+
 // ─── MY REQUESTS ──────────────────────────────────────────────────
 async function loadMyRequests() {
   var requestor = localStorage.getItem('ivm_requestorName');
@@ -618,6 +740,12 @@ async function loadMyRequests() {
         badge.classList.toggle('d-none', readyCount === 0);
         console.log('[loadMyRequests] Badge count:', readyCount);
       }
+      // Update sidebar badge
+      var badgeSidebar = document.getElementById('myRequestsBadgeSidebar');
+      if (badgeSidebar) {
+        badgeSidebar.textContent = readyCount;
+        badgeSidebar.classList.toggle('d-none', readyCount === 0);
+      }
       renderMyRequests(data.requests);
       var kpiActive = document.getElementById('kpiActiveDocs');
       var kpiPending = document.getElementById('kpiPending');
@@ -641,13 +769,15 @@ async function loadMyRequests() {
   finally { hideLoading(); }
 }
 
+// ─── Updated renderMyRequests with action buttons ──────────────
 function renderMyRequests(requests) {
   var container = document.getElementById('myRequestsList');
   container.innerHTML = '';
-  if (requests.length === 0) {
+  if (!requests || requests.length === 0) {
     container.innerHTML = '<div class="list-group-item text-muted text-center">No requests found</div>';
     return;
   }
+  
   requests.forEach(function(req) {
     var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
     var status = req.status || 'PENDING';
@@ -657,27 +787,25 @@ function renderMyRequests(requests) {
     var statusText = isCompleted ? 'COMPLETED' : (isPartial ? 'PARTIAL' : 'PENDING');
     var icon = isCompleted ? 'bi-check-circle-fill' : (isPartial ? 'bi-hourglass-split' : 'bi-clock');
     var docNo = req.docNo || '';
-    var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + '" data-docno="' + docNo + '" style="cursor:pointer;">' +
+    var docType = req.type || 'MRIF';
+    
+    var html = '<div class="list-group-item">' +
       '<div class="d-flex justify-content-between align-items-start">' +
-      '<div>' +
-      '<div class="fw-bold">' + docNo + ' <span class="badge bg-secondary">' + (req.type || '') + '</span></div>' +
-      '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
+        '<div class="flex-grow-1">' +
+          '<div class="fw-bold">' + docNo + ' <span class="badge bg-secondary">' + docType + '</span></div>' +
+          '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
+          '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
+        '</div>' +
+        '<div class="d-flex flex-column align-items-end gap-1">' +
+          '<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + statusText + '</span>' +
+          '<div class="btn-group btn-group-sm" role="group">' +
+            '<button class="btn btn-outline-primary" onclick="openRequestDetails(\'' + docNo + '\', \'' + docType + '\')" title="View Details"><i class="bi bi-eye"></i></button>' +
+            '<button class="btn btn-outline-secondary" onclick="showRequestQr(\'' + docNo + '\', \'' + docNo + '\')" title="Show QR"><i class="bi bi-qr-code"></i></button>' +
+          '</div>' +
+        '</div>' +
       '</div>' +
-      '<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + statusText + '</span>' +
-      '</div>' +
-      '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
-      '<div class="small text-muted mt-1"><i class="bi bi-qr-code me-1"></i> Click to re-open QR</div>' +
-      '</div>';
+    '</div>';
     container.innerHTML += html;
-  });
-
-  container.querySelectorAll('.request-card').forEach(function(el) {
-    el.addEventListener('click', function(e) {
-      var docNo = this.getAttribute('data-docno');
-      if (docNo) {
-        showRequestQr(docNo, docNo);
-      }
-    });
   });
 }
 
