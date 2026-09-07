@@ -218,3 +218,43 @@ async function onQuickScanSuccess(decodedText) {
   playErrorBuzz();
   showToast('Not recognized: ' + decodedText + '. Scan a Document QR, PO QR, or Item QR.', 'danger');
 }
+
+// ─── Upload QR Image (Desktop) ─────────────────────────────────────
+// Call this function from the file input's onchange event.
+// It reads the selected image file, decodes the QR code using html5-qrcode,
+// and then processes the result as if it were a live scan.
+function handleQrFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  // Reset the input so the same file can be re-uploaded
+  event.target.value = '';
+  
+  showLoading('Decoding QR image...');
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const imageData = e.target.result;
+    
+    // Create a temporary scanner instance to decode the image
+    // We don't need a renderer element, so we pass an empty string.
+    const scanner = new Html5Qrcode('');
+    scanner.decodeFromImage(imageData, null)
+      .then(function(decodedText) {
+        hideLoading();
+        console.log('[QR Upload] Decoded:', decodedText);
+        // Process the decoded text as a successful scan
+        onScanSuccess(decodedText);
+      })
+      .catch(function(err) {
+        hideLoading();
+        console.error('[QR Upload] Decode error:', err);
+        showToast('Failed to decode QR from image. Please ensure it is a valid QR code.', 'danger');
+      });
+  };
+  reader.onerror = function() {
+    hideLoading();
+    showToast('Failed to read the image file.', 'danger');
+  };
+  reader.readAsDataURL(file);
+}
