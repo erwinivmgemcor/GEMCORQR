@@ -99,6 +99,55 @@
   }
   .section-page.active { display: block; }
 
+  /* ─── TOP BAR ─── */
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #fff;
+    padding: 8px 16px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border: 1px solid var(--gemcor-border);
+  }
+  .top-bar .left { display: flex; align-items: center; gap: 12px; }
+  .top-bar .right { display: flex; align-items: center; gap: 12px; }
+  .top-bar .btn-icon {
+    background: transparent;
+    border: none;
+    font-size: 1.4rem;
+    color: var(--gemcor-gray);
+    position: relative;
+    padding: 4px 8px;
+    transition: color 0.2s;
+  }
+  .top-bar .btn-icon:hover { color: var(--gemcor-blue); }
+  .top-bar .btn-icon .badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    font-size: 0.6rem;
+    padding: 3px 6px;
+    background: var(--gemcor-red);
+    color: #fff;
+    border-radius: 50%;
+  }
+  .top-bar .upload-btn {
+    background: var(--gemcor-blue);
+    color: #fff;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.2s;
+  }
+  .top-bar .upload-btn:hover { background: var(--gemcor-blue-light); }
+
   .sidebar-toggle {
     display: none;
     background: var(--gemcor-blue);
@@ -130,6 +179,8 @@
     .sidebar-backdrop.show { display: block; }
     .sidebar-toggle { display: inline-block; }
     .main-content { padding: 12px; }
+    .top-bar { flex-wrap: wrap; gap: 8px; }
+    .top-bar .left { flex: 1; }
   }
 
   @keyframes fadeIn {
@@ -263,6 +314,9 @@
   .review-row:last-child { border-bottom: none; }
   .review-label { font-weight: 600; color: #495057; }
   .review-value { color: #212529; }
+
+  /* Hidden file input for QR upload */
+  #qrFileInput { display: none; }
 </style>
 </head>
 <body>
@@ -326,6 +380,26 @@
     <button class="sidebar-toggle" onclick="toggleSidebar(true)">
       <i class="bi bi-list"></i>
     </button>
+
+    <!-- ─── TOP BAR (Notification Bell + Upload QR) ─── -->
+    <div class="top-bar">
+      <div class="left">
+        <span class="fw-bold" id="pageTitle">Dashboard</span>
+      </div>
+      <div class="right">
+        <!-- Upload QR Button (for desktop) -->
+        <button class="upload-btn" onclick="document.getElementById('qrFileInput').click();" title="Upload a QR code image (PNG/JPG) to process">
+          <i class="bi bi-upload"></i> Upload QR
+        </button>
+        <!-- Hidden file input -->
+        <input type="file" id="qrFileInput" accept="image/*" onchange="handleQrFileUpload(event)">
+        <!-- Notification Bell -->
+        <button class="btn-icon" onclick="openWhNotifications()" title="View pending requests">
+          <i class="bi bi-bell-fill"></i>
+          <span class="badge d-none" id="whNotifBadge">0</span>
+        </button>
+      </div>
+    </div>
 
     <!-- ================================================================ -->
     <!-- SECTION: DASHBOARD -->
