@@ -614,7 +614,6 @@ async function createMrrFromPo() {
   }
 }
 
-// ─── UPDATED: lookupPoFromScan with better error handling ───
 async function lookupPoFromScan(poNo) {
   try {
     const url = API_URL + '?action=getPoItems&poNo=' + encodeURIComponent(poNo) + '&_t=' + Date.now();
@@ -637,7 +636,6 @@ async function lookupPoFromScan(poNo) {
   }
 }
 
-// ─── UPDATED: manualPoLookup with better error handling ───
 async function manualPoLookup() {
   const poNo = document.getElementById('manualPoInput') ? document.getElementById('manualPoInput').value.trim() : '';
   const mrrPoNo = document.getElementById('mrrManualPoInput') ? document.getElementById('mrrManualPoInput').value.trim() : '';
@@ -645,7 +643,6 @@ async function manualPoLookup() {
   
   if (!finalPo) { showToast('Please enter a PO number', 'warning'); return; }
   
-  // Clear the input fields
   if (document.getElementById('manualPoInput')) document.getElementById('manualPoInput').value = '';
   if (document.getElementById('mrrManualPoInput')) document.getElementById('mrrManualPoInput').value = '';
   
@@ -1052,4 +1049,67 @@ async function submitManualMrr() {
   } finally {
     hideLoading();
   }
+}
+
+// ─── QUICK ACTIONS ────────────────────────────────────────────────
+
+/**
+ * Process Next Pending: Find the oldest pending MRIF document
+ * and load it for processing.
+ */
+async function quickProcessPending() {
+  if (state.isLoading) return;
+  
+  var statusEl = document.getElementById('quickActionStatus');
+  if (statusEl) statusEl.textContent = '⏳ Looking for next pending...';
+  
+  try {
+    await selectModule('MRIF');
+    var docs = await fetchPendingDocs();
+    
+    if (!docs || docs.length === 0) {
+      if (statusEl) statusEl.textContent = '✅ No pending MRIF documents found.';
+      showToast('No pending MRIF documents', 'info');
+      return;
+    }
+    
+    var docNo = typeof docs[0] === 'string' ? docs[0] : (docs[0].docNo || docs[0].name);
+    if (!docNo) {
+      if (statusEl) statusEl.textContent = '❌ Could not determine document name.';
+      return;
+    }
+    
+    await onDocSelect(docNo);
+    if (statusEl) statusEl.textContent = '📄 Loaded: ' + cleanDocNo(docNo);
+    showToast('Loading ' + cleanDocNo(docNo) + '...', 'success');
+    
+  } catch(err) {
+    console.error('[quickProcessPending] Error:', err);
+    if (statusEl) statusEl.textContent = '❌ Error: ' + err.message;
+    showToast('Error: ' + err.message, 'danger');
+  }
+}
+
+/**
+ * Quick New MRR: Open the PO lookup modal.
+ */
+function quickNewMrr() {
+  selectModule('MRR').then(() => {
+    var poInput = document.getElementById('manualPoInput');
+    if (poInput) {
+      poInput.focus();
+      showToast('Enter PO number to create MRR', 'info');
+    } else {
+      openQuickScan();
+    }
+  }).catch(err => {
+    showToast('Error switching to MRR: ' + err.message, 'danger');
+  });
+}
+
+/**
+ * Quick New MRIF: Open the manual MRIF creation modal.
+ */
+function quickNewMrif() {
+  openManualMrifModal();
 }
