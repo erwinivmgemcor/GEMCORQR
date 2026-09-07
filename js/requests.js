@@ -1,5 +1,5 @@
 // ============================================================
-// NEW REQUEST FUNCTIONS (with Item Scanner)
+// NEW REQUEST FUNCTIONS (with Item Scanner & Request Details)
 // ============================================================
 
 function openNewRequest() {
