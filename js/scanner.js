@@ -236,9 +236,9 @@ function handleQrFileUpload(event) {
   reader.onload = function(e) {
     const imageData = e.target.result;
     
-    // Create a temporary scanner instance to decode the image
-    // We don't need a renderer element, so we pass an empty string.
-    const scanner = new Html5Qrcode('');
+    // Use a hidden container as a dummy element for the decoder
+    // This container must exist in the DOM (added to index.html)
+    const scanner = new Html5Qrcode('qrImageDecoder');
     scanner.decodeFromImage(imageData, null)
       .then(function(decodedText) {
         hideLoading();
