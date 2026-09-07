@@ -1,5 +1,5 @@
 // ============================================================
-// NEW REQUEST FUNCTIONS
+// NEW REQUEST FUNCTIONS (with Item Scanner)
 // ============================================================
 
 function openNewRequest() {
@@ -33,10 +33,16 @@ function resetWizard() {
   addStep5ItemRow();
   document.getElementById('btnStep5Next').disabled = true;
 
+  // Close scanner if open
+  closeWizardScanner();
+
   goToStep(1);
 }
 
 function goToStep(step) {
+  // Close scanner when moving away from step 5
+  closeWizardScanner();
+
   document.querySelectorAll('.wizard-step').forEach(function(el) {
     var s = parseInt(el.getAttribute('data-step'));
     el.classList.remove('active', 'completed');
@@ -158,35 +164,42 @@ function populateReviewData() {
   document.getElementById('reviewDepartment').textContent = dept || '-';
 }
 
+// ─── Item row with scanner button ────────────────────────────────
 function addStep5ItemRow() {
   var container = document.getElementById('step5ItemsContainer');
   var idx = container.children.length;
   var div = document.createElement('div');
   div.className = 'step5-item-row';
-  div.innerHTML = '<div class="row g-2 align-items-end">' +
-    '<div class="col-12 col-md-4">' +
-      '<label class="form-label small">Item</label>' +
-      '<input type="text" class="form-control req-item-search" placeholder="Type to search..." oninput="filterStep5Items(this,' + idx + ')" onfocus="filterStep5Items(this,' + idx + ')">' +
-      '<div class="list-group position-absolute z-3 d-none req-dropdown" style="max-height:150px;overflow-y:auto;width:90%;" id="step5Dropdown' + idx + '"></div>' +
-      '<input type="hidden" class="req-item-code" id="step5Code' + idx + '">' +
-      '<input type="hidden" class="req-item-desc" id="step5Desc' + idx + '">' +
-    '</div>' +
-    '<div class="col-3 col-md-2">' +
-      '<label class="form-label small">Qty</label>' +
-      '<input type="number" class="form-control req-qty" min="1" value="1">' +
-    '</div>' +
-    '<div class="col-3 col-md-3">' +
-      '<label class="form-label small">Unit</label>' +
-      '<select class="form-select req-unit">' +
-        buildUnitOptions('PIECE') +
-      '</select>' +
-    '</div>' +
-    '<div class="col-2 col-md-3">' +
-      '<button class="btn btn-outline-danger btn-sm w-100" onclick="this.closest(\'.step5-item-row\').remove(); checkStep5Items();">' +
-        '<i class="bi bi-trash"></i> Remove' +
-      '</button>' +
-    '</div>' +
-  '</div>';
+  div.innerHTML =
+    '<div class="row g-2 align-items-end">' +
+      '<div class="col-8 col-md-5">' +
+        '<label class="form-label small">Item</label>' +
+        '<div class="input-group">' +
+          '<input type="text" class="form-control req-item-search" placeholder="Type to search or scan..." oninput="filterStep5Items(this,' + idx + ')" onfocus="filterStep5Items(this,' + idx + ')">' +
+          '<button class="btn btn-outline-secondary scan-wizard-btn" type="button" onclick="openWizardScanner(' + idx + ')" title="Scan QR Code">' +
+            '<i class="bi bi-qr-code-scan"></i>' +
+          '</button>' +
+        '</div>' +
+        '<div class="list-group position-absolute z-3 d-none req-dropdown" style="max-height:150px;overflow-y:auto;width:90%;" id="step5Dropdown' + idx + '"></div>' +
+        '<input type="hidden" class="req-item-code" id="step5Code' + idx + '">' +
+        '<input type="hidden" class="req-item-desc" id="step5Desc' + idx + '">' +
+      '</div>' +
+      '<div class="col-2 col-md-2">' +
+        '<label class="form-label small">Qty</label>' +
+        '<input type="number" class="form-control req-qty" min="1" value="1">' +
+      '</div>' +
+      '<div class="col-2 col-md-3">' +
+        '<label class="form-label small">Unit</label>' +
+        '<select class="form-select req-unit">' +
+          buildUnitOptions('PIECE') +
+        '</select>' +
+      '</div>' +
+      '<div class="col-2 col-md-2">' +
+        '<button class="btn btn-outline-danger btn-sm w-100" onclick="this.closest(\'.step5-item-row\').remove(); checkStep5Items();">' +
+          '<i class="bi bi-trash"></i>' +
+        '</button>' +
+      '</div>' +
+    '</div>';
   container.appendChild(div);
   checkStep5Items();
 }
@@ -264,6 +277,126 @@ function populateFinalReview() {
   });
 }
 
+// ─── Wizard Scanner Functions ────────────────────────────────────
+var wizardScanner = null;
+var wizardScannerRowIndex = null;
+
+function openWizardScanner(rowIndex) {
+  // Close any existing scanner
+  closeWizardScanner();
+  
+  wizardScannerRowIndex = rowIndex;
+  var overlay = document.getElementById('wizardScannerOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('d-none');
+  
+  // Start the scanner
+  if (!wizardScanner) {
+    wizardScanner = new Html5Qrcode('wizardReader');
+  }
+  
+  Html5Qrcode.getCameras().then(function(cameras) {
+    if (cameras.length === 0) {
+      showToast('No cameras found', 'warning');
+      closeWizardScanner();
+      return;
+    }
+    var camId = cameras.find(function(c) { return c.label.toLowerCase().includes('back'); })?.id || cameras[0].id;
+    wizardScanner.start(camId, { fps: 10, qrbox: { width: 200, height: 200 } }, onWizardScanSuccess, function() {})
+      .catch(function(err) {
+        showToast('Camera error: ' + err, 'danger');
+        closeWizardScanner();
+      });
+  }).catch(function(err) {
+    showToast('Camera access denied', 'danger');
+    closeWizardScanner();
+  });
+}
+
+function closeWizardScanner() {
+  if (wizardScanner) {
+    wizardScanner.stop().catch(function() {});
+    wizardScanner = null;
+  }
+  var overlay = document.getElementById('wizardScannerOverlay');
+  if (overlay) overlay.classList.add('d-none');
+  wizardScannerRowIndex = null;
+}
+
+function onWizardScanSuccess(decodedText) {
+  // Stop scanner and close overlay
+  closeWizardScanner();
+  
+  var idx = wizardScannerRowIndex;
+  if (idx === null) return;
+  
+  // Try to find the item in the inventory list
+  var matchedItem = null;
+  var code = decodedText.trim();
+  // First, try exact match on inventoryId
+  for (var i = 0; i < state.requestInventoryList.length; i++) {
+    var it = state.requestInventoryList[i];
+    if (it.inventoryId === code || it.code === code) {
+      matchedItem = it;
+      break;
+    }
+  }
+  // If not found, try partial match
+  if (!matchedItem) {
+    var lowerCode = code.toLowerCase();
+    for (var i = 0; i < state.requestInventoryList.length; i++) {
+      var it = state.requestInventoryList[i];
+      if (it.inventoryId.toLowerCase().indexOf(lowerCode) !== -1 || 
+          it.code.toLowerCase().indexOf(lowerCode) !== -1) {
+        matchedItem = it;
+        break;
+      }
+    }
+  }
+  
+  var row = document.querySelector('#step5ItemsContainer .step5-item-row:nth-child(' + (idx+1) + ')');
+  if (!row) return;
+  
+  var searchInput = row.querySelector('.req-item-search');
+  var codeInput = document.getElementById('step5Code' + idx);
+  var descInput = document.getElementById('step5Desc' + idx);
+  var unitSelect = row.querySelector('.req-unit');
+  var dropdown = document.getElementById('step5Dropdown' + idx);
+  if (dropdown) dropdown.classList.add('d-none');
+  
+  if (matchedItem) {
+    if (searchInput) searchInput.value = matchedItem.inventoryId + ' - ' + matchedItem.description;
+    if (codeInput) codeInput.value = matchedItem.inventoryId || matchedItem.code;
+    if (descInput) descInput.value = matchedItem.description || '';
+    if (unitSelect) {
+      var unit = matchedItem.unit || 'PIECE';
+      for (var opt = 0; opt < unitSelect.options.length; opt++) {
+        if (unitSelect.options[opt].value === unit) {
+          unitSelect.selectedIndex = opt;
+          break;
+        }
+      }
+    }
+    checkStep5Items();
+    playSuccessBeep();
+    showToast('Item scanned: ' + matchedItem.inventoryId, 'success');
+  } else {
+    // Not found – fill only the code
+    if (searchInput) searchInput.value = code;
+    if (codeInput) codeInput.value = code;
+    checkStep5Items();
+    showToast('Scanned code: ' + code + ' (not in inventory, you can edit manually)', 'warning');
+  }
+}
+
+// Auto-close scanner when modal is hidden
+document.addEventListener('hidden.bs.modal', function (event) {
+  if (event.target.id === 'newRequestModal') {
+    closeWizardScanner();
+  }
+});
+
+// ─── Submit Request ──────────────────────────────────────────────
 async function submitNewRequest() {
   if (state.isLoading) return;
   const docType = document.getElementById('reqDocType').value;
@@ -285,20 +418,6 @@ async function submitNewRequest() {
     const qty = parseInt(row.querySelector('.req-qty').value, 10);
     const unit = row.querySelector('.req-unit').value || 'PIECE';
     if (code && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty, unit: unit });
-  });
-
-  document.querySelectorAll('#requestItemsContainer .row').forEach(function(row) {
-    const code = row.querySelector('.req-item-code');
-    const desc = row.querySelector('.req-item-desc');
-    const qty = row.querySelector('.req-qty');
-    const unit = row.querySelector('.req-unit');
-    if (code && desc && qty) {
-      var c = code.value;
-      var d = desc.value;
-      var q = parseInt(qty.value, 10);
-      var u = unit ? unit.value : 'PIECE';
-      if (c && q > 0) items.push({ inventoryId: c, description: d, qty: q, unit: u });
-    }
   });
 
   if (items.length === 0) {
@@ -346,7 +465,7 @@ async function submitNewRequest() {
   }
 }
 
-// ─── QR DOWNLOAD / SHARE ─────────────────────────────────────────
+// ─── QR DOWNLOAD / SHARE (unchanged) ────────────────────────────
 function downloadRequestQr() {
   if (!lastQrDocNo || !lastQrTicketNo) {
     showToast('No QR to download', 'warning');
