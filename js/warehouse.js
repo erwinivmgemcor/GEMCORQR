@@ -1,7 +1,18 @@
 // ============================================================
-// WAREHOUSE CORE FUNCTIONS (with caching & parallel loading)
+// WAREHOUSE CORE FUNCTIONS (with User Login Integration)
 // ============================================================
 
+// ─── Fallback cache functions if cache.js is not loaded ──────
+(function() {
+  if (typeof getCache === 'undefined') {
+    window.getCache = function(key) { return null; };
+    window.setCache = function(key, data, ttl) { /* no-op */ };
+    window.clearCache = function(key) { /* no-op */ };
+    console.warn('⚠️ cache.js not loaded – caching disabled.');
+  }
+})();
+
+// ─── Force all functions to be globally accessible ──────────────
 (function() {
   "use strict";
 
@@ -89,7 +100,7 @@
     if (el2) el2.textContent = isMRR ? 'ATL QTY' : (isMRS ? 'ATL QTY (Actual)' : 'Issued Qty');
   };
 
-  // ─── FETCH PENDING DOCS WITH CACHE ──────────────────────────────
+  // ─── FETCH PENDING DOCS WITH CACHE (fallback) ──────────────────
   window.fetchPendingDocs = async function(forceRefresh) {
     const sheetId = getCleanSheetId();
     if (!sheetId) {
@@ -120,7 +131,7 @@
         return [];
       }
       const docs = Array.isArray(data) ? data : (data.docs || data.documents || []);
-      setCache(cacheKey, docs, CACHE_TTL.PENDING_DOCS);
+      setCache(cacheKey, docs, 60000); // 1 minute cache
       populateDocSelect(docs);
       return docs;
     } catch(err) {
@@ -962,7 +973,7 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
       try { data = JSON.parse(text); } catch(e) { data = {}; }
       const inv = data.inventory || data.items || [];
       state.requestInventoryList = inv;
-      setCache(cacheKey, inv, CACHE_TTL.INVENTORY);
+      setCache(cacheKey, inv, 300000); // 5 minutes
       return inv;
     } catch(err) {
       state.requestInventoryList = [];
@@ -988,7 +999,7 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
       try { data = JSON.parse(text); } catch(e) { data = {}; }
       const list = data.requestors || [];
       state.requestorList = list;
-      setCache(cacheKey, list, CACHE_TTL.REQUESTORS);
+      setCache(cacheKey, list, 600000); // 10 minutes
       populateRequestorSelect(list);
       return list;
     } catch(err) {
@@ -1037,7 +1048,7 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
       var data = await res.json();
       if (data.success && data.vendors) {
         state.vendorList = data.vendors;
-        setCache(cacheKey, data.vendors, CACHE_TTL.VENDORS);
+        setCache(cacheKey, data.vendors, 600000);
         populateDatalist('vendorDatalist', data.vendors);
         return data.vendors;
       }
@@ -1061,12 +1072,24 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
       var data = await res.json();
       if (data.success && data.members) {
         state.ivmTeamList = data.members;
-        setCache(cacheKey, data.members, CACHE_TTL.IVM_TEAM);
+        setCache(cacheKey, data.members, 600000);
         populateDatalist('ivmTeamDatalist', data.members);
         return data.members;
       }
       return [];
     } catch(e) { return []; }
+  };
+
+  // ─── DATALIST POPULATE ────────────────────────────────────────────
+  window.populateDatalist = function(datalistId, items) {
+    var datalist = document.getElementById(datalistId);
+    if (!datalist) return;
+    datalist.innerHTML = '';
+    items.forEach(function(item) {
+      var option = document.createElement('option');
+      option.value = item;
+      datalist.appendChild(option);
+    });
   };
 
   // ─── MANUAL MRR FUNCTIONS ────────────────────────────────────────
@@ -1403,6 +1426,6 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
     openManualMrifModal();
   };
 
-  console.log('✅ warehouse.js loaded (with caching)');
+  console.log('✅ warehouse.js loaded (with caching fallback)');
 
 })(); // end IIFE
