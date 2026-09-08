@@ -145,6 +145,24 @@ function filterDocs() {
   });
 }
 
+// ─── FIX: Check if already processed ─────────────────────────────
+function checkIfAlreadyProcessed() {
+  if (state.items.length === 0) return;
+  var allProcessed = state.items.every(function(item) {
+    var remarks = item.remarks || '';
+    return remarks === 'SERVED' || remarks === 'COMPLETE' || remarks.indexOf('SERVED') !== -1 || remarks.indexOf('COMPLETE') !== -1;
+  });
+  
+  if (allProcessed) {
+    var btn = document.getElementById('submitBtn');
+    var txt = document.getElementById('submitBtnText');
+    if (btn) { btn.disabled = true; btn.classList.add('opacity-50'); }
+    if (txt) txt.textContent = '✅ Already Processed';
+    showToast('This document has already been fully processed.', 'info');
+  }
+}
+
+// ─── onDocSelect ──────────────────────────────────────────────────
 async function onDocSelect(docNo) {
   if (state.isLoading) return;
   if (!docNo) { hideScannerSection(); return; }
@@ -161,6 +179,8 @@ async function onDocSelect(docNo) {
     if (title) title.textContent = cleanDocNo(docNo);
     await fetchDocItems(docNo, state.currentModule);
     checkForProgress();
+    // ─── Check if already processed ──────────────────────────
+    checkIfAlreadyProcessed();
   } catch(err) {
     console.error('[onDocSelect] Error:', err);
     showToast('Failed to load document: ' + err.message, 'danger');
@@ -283,7 +303,8 @@ async function fetchDocItems(docNo, docType) {
       unit: it.unit || 'PIECE',
       rowIndex: it.rowIndex || (idx + 13),
       verified: false,
-      selected: false
+      selected: false,
+      remarks: it.remarks || ''
     }));
     renderItems();
     startScanner();
@@ -416,58 +437,78 @@ function confirmBatchVerify() {
   showToast('Batch verify completed', 'success');
 }
 
+// ─── Submit with duplicate prevention ────────────────────────────
+var isSubmitting = false;
+
 async function onSubmit() {
-  if (state.isLoading) return;
+  if (state.isLoading || isSubmitting) return;
+  
   const verifiedItems = state.items.filter(i => i.verified);
   const total = state.items.length;
   const verified = verifiedItems.length;
+  
   if (verified === 0) {
     showToast('No items verified. Scan or enter items first.', 'warning');
     return;
   }
+  
   if (verified < total) {
     if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly scanned/entered items will be sent.')) {
       return;
     }
   }
+  
+  const btn = document.getElementById('submitBtn');
+  const txt = document.getElementById('submitBtnText');
+  if (btn) { btn.disabled = true; btn.classList.add('opacity-50'); }
+  if (txt) txt.textContent = 'Submitting...';
+  isSubmitting = true;
+  
   showLoading('Submitting...');
   try {
     const result = await submitTransaction(verifiedItems);
     console.log('[Submit] Result:', result);
+    
     if (result && result.success === true) {
+      var allComplete = true;
+      var anyProcessed = false;
+      state.items.forEach(function(it) {
+        if (!it.verified) { allComplete = false; }
+        else { anyProcessed = true; if (it.issuedQty < it.qty) allComplete = false; }
+      });
+      var newStatus = allComplete && anyProcessed ? 'COMPLETED' : (anyProcessed ? 'PARTIAL' : 'PENDING');
+      
+      // Update DOCLINKS status (silent)
       try {
-        var allComplete = true;
-        var anyProcessed = false;
-        state.items.forEach(function(it) {
-          if (!it.verified) { allComplete = false; }
-          else { anyProcessed = true; if (it.issuedQty < it.qty) allComplete = false; }
-        });
-        var newStatus = allComplete && anyProcessed ? 'COMPLETED' : (anyProcessed ? 'PARTIAL' : 'PENDING');
         var statusUrl = API_URL + '?action=updateDocStatus&docNo=' + encodeURIComponent(state.currentDoc) + '&status=' + newStatus + '&_t=' + Date.now();
-        console.log('[Submit] Updating DOCLINKS status:', newStatus);
         var statusRes = await fetch(statusUrl, { redirect: 'follow' });
         var statusData = await statusRes.json();
         console.log('[Submit] DOCLINKS update:', statusData);
-        if (statusData && statusData.success) {
-          showToast('Request status updated to ' + newStatus, 'success');
-        } else {
-          showToast('Warning: Could not update status. Error: ' + (statusData.error || 'Unknown'), 'warning');
-        }
       } catch(statusErr) {
         console.error('[Submit] DOCLINKS update error:', statusErr);
-        showToast('Warning: Status update failed', 'danger');
       }
+      
       clearDocProgress(state.currentDoc);
       if (successModal) successModal.show();
-      setTimeout(() => location.reload(), 2000);
+      setTimeout(function() {
+        location.reload();
+      }, 2000);
     } else {
       showToast('Error: ' + (result.error || 'Submission failed'), 'danger');
+      if (btn) { btn.disabled = false; btn.classList.remove('opacity-50'); }
+      if (txt) txt.textContent = 'Confirm & Submit';
+      isSubmitting = false;
     }
   } catch(err) {
     console.error('[Submit] Error:', err);
     showToast('Submit error: ' + err.message, 'danger');
+    if (btn) { btn.disabled = false; btn.classList.remove('opacity-50'); }
+    if (txt) txt.textContent = 'Confirm & Submit';
+    isSubmitting = false;
   } finally {
-    hideLoading();
+    if (!isSubmitting) {
+      hideLoading();
+    }
   }
 }
 
@@ -914,8 +955,7 @@ function openManualMrrModal() {
   renderManualMrrItems();
   updateManualMrrSubmitButton();
   manualMrrModal.show();
-  // Load lists for datalist
-  loadRequestInventory();   // loads inventory codes and populates state.requestInventoryList
+  loadRequestInventory();
   loadVendorList();
   loadIvmTeamList();
 }
@@ -1050,12 +1090,10 @@ function filterManualMrrItems(input, idx) {
 }
 
 function selectManualMrrItem(idx, code, desc, unit) {
-  // Update the item data
   manualMrrItems[idx].inventoryId = code;
   manualMrrItems[idx].description = desc;
   manualMrrItems[idx].unit = unit || 'PIECE';
 
-  // Update the search input
   var row = document.querySelector('#manualMrrItemsBody tr:nth-child(' + (idx + 1) + ')');
   if (row) {
     var searchInput = row.querySelector('.manual-mrr-search');
@@ -1071,7 +1109,6 @@ function selectManualMrrItem(idx, code, desc, unit) {
         }
       }
     }
-    // Update hidden fields
     var codeHidden = document.getElementById('manualMrrCode' + idx);
     var descHidden = document.getElementById('manualMrrDesc' + idx);
     if (codeHidden) codeHidden.value = code;
