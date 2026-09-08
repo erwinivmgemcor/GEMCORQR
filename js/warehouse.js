@@ -1,6 +1,5 @@
 // ============================================================
 // WAREHOUSE CORE FUNCTIONS (with User Login Integration)
-// Includes: Manual MRR with Remarks, PO items display, duplicate prevention
 // ============================================================
 
 function getCleanSheetId() {
@@ -144,22 +143,6 @@ function filterDocs() {
       sel.appendChild(opt);
     }
   });
-}
-
-function checkIfAlreadyProcessed() {
-  if (state.items.length === 0) return;
-  var allProcessed = state.items.every(function(item) {
-    var remarks = item.remarks || '';
-    return remarks === 'SERVED' || remarks === 'COMPLETE' || remarks.indexOf('SERVED') !== -1 || remarks.indexOf('COMPLETE') !== -1;
-  });
-  
-  if (allProcessed) {
-    var btn = document.getElementById('submitBtn');
-    var txt = document.getElementById('submitBtnText');
-    if (btn) { btn.disabled = true; btn.classList.add('opacity-50'); }
-    if (txt) txt.textContent = '✅ Already Processed';
-    showToast('This document has already been fully processed.', 'info');
-  }
 }
 
 async function onDocSelect(docNo) {
@@ -309,6 +292,22 @@ async function fetchDocItems(docNo, docType) {
   } catch(err) {
     console.error('[fetchDocItems] Error:', err);
     throw err;
+  }
+}
+
+function checkIfAlreadyProcessed() {
+  if (state.items.length === 0) return;
+  var allProcessed = state.items.every(function(item) {
+    var remarks = item.remarks || '';
+    return remarks === 'SERVED' || remarks === 'COMPLETE' || remarks.indexOf('SERVED') !== -1 || remarks.indexOf('COMPLETE') !== -1;
+  });
+  
+  if (allProcessed) {
+    var btn = document.getElementById('submitBtn');
+    var txt = document.getElementById('submitBtnText');
+    if (btn) { btn.disabled = true; btn.classList.add('opacity-50'); }
+    if (txt) txt.textContent = '✅ Already Processed';
+    showToast('This document has already been fully processed.', 'info');
   }
 }
 
@@ -481,11 +480,6 @@ async function onSubmit() {
         var statusRes = await fetch(statusUrl, { redirect: 'follow' });
         var statusData = await statusRes.json();
         console.log('[Submit] DOCLINKS update:', statusData);
-        if (statusData && statusData.success) {
-          showToast('Status updated to ' + newStatus, 'success');
-        } else {
-          console.warn('[Submit] DOCLINKS update returned error:', statusData);
-        }
       } catch(statusErr) {
         console.error('[Submit] DOCLINKS update error:', statusErr);
       }
@@ -540,7 +534,7 @@ async function submitTransaction(verifiedItems) {
   return result;
 }
 
-// ─── PO ITEMS & MRR CREATION ─────────────────────────────────────
+// ─── PO ITEMS & MRR CREATION (with remarks and validation) ──────
 function renderPoItems() {
   var noEl = document.getElementById('poDisplayNo');
   var prfEl = document.getElementById('poDisplayPrf');
@@ -550,19 +544,40 @@ function renderPoItems() {
   if (clientEl) clientEl.textContent = state.currentPoSupplier || state.currentPoClient || '-';
   const list = document.getElementById('poItemsList');
   if (!list) return;
-  list.innerHTML = state.poItemsData.map((item, idx) => `
-<div class="card mb-2 po-item-card" id="po-card-${idx}">
+  
+  // Check for missing items
+  var hasMissing = false;
+  state.poItemsData.forEach(function(item) {
+    if (item.hasMissing || !item.inventoryId || !item.description) hasMissing = true;
+  });
+  
+  // Show/hide warning banner
+  var warning = document.getElementById('poIncompleteWarning');
+  if (warning) {
+    if (hasMissing) {
+      warning.classList.remove('d-none');
+    } else {
+      warning.classList.add('d-none');
+    }
+  }
+  
+  list.innerHTML = state.poItemsData.map((item, idx) => {
+    var isMissing = item.hasMissing || !item.inventoryId || !item.description;
+    var missingClass = isMissing ? 'border border-danger' : '';
+    return `
+<div class="card mb-2 po-item-card ${missingClass}" id="po-card-${idx}">
 <div class="card-body py-2 px-3">
 <div class="d-flex align-items-center gap-2">
 <div class="form-check m-0">
-<input class="form-check-input po-check" type="checkbox" id="po-check-${idx}" checked onchange="togglePoCard(${idx})">
+<input class="form-check-input po-check" type="checkbox" id="po-check-${idx}" ${isMissing ? '' : 'checked'} onchange="togglePoCard(${idx})">
 </div>
 <div class="flex-grow-1" style="min-width:0">
-<div class="fw-bold small text-truncate">${item.inventoryId || item.itemCode || ''}</div>
-<div class="text-muted small text-truncate">${item.description || ''}</div>
+<div class="fw-bold small text-truncate">${item.inventoryId || 'MISSING ITEM CODE'}</div>
+<div class="text-muted small text-truncate">${item.description || 'MISSING DESCRIPTION'}</div>
 <div class="d-flex gap-2 mt-1">
 <small class="text-muted">PO Qty: <strong>${item.qty || 0}</strong></small>
 <small class="text-muted">Unit: <strong>${item.unit || 'PCS'}</strong></small>
+${isMissing ? '<span class="badge bg-danger">Incomplete</span>' : ''}
 </div>
 </div>
 <div style="min-width:90px">
@@ -575,10 +590,65 @@ function renderPoItems() {
   ${buildUnitOptions(item.unit || 'PCS')}
 </select>
 </div>
+<div style="min-width:120px">
+<label class="form-label mb-0 small">Remarks</label>
+<input type="text" class="form-control form-control-sm" id="po-remarks-${idx}" placeholder="Optional note..." maxlength="200">
 </div>
 </div>
 </div>
-`).join('');
+</div>
+`;
+  }).join('');
+  
+  // Update Create MRR button state
+  updateCreateMrrButton();
+  
+  // Add event listeners to checkboxes to update button
+  document.querySelectorAll('.po-check').forEach(function(cb) {
+    cb.addEventListener('change', updateCreateMrrButton);
+  });
+}
+
+function updateCreateMrrButton() {
+  var btn = document.querySelector('#poItemsModal .btn-success');
+  if (!btn) return;
+  
+  var selected = getSelectedPoItems();
+  var hasMissingSelected = selected.some(function(item) {
+    return !item.inventoryId || !item.inventoryId.trim();
+  });
+  
+  if (hasMissingSelected) {
+    btn.disabled = true;
+    btn.title = 'Cannot create MRR: Selected items are missing Item Code';
+  } else if (selected.length === 0) {
+    btn.disabled = true;
+    btn.title = 'Please select at least one item';
+  } else {
+    btn.disabled = false;
+    btn.title = '';
+  }
+}
+
+function getSelectedPoItems() {
+  var selected = [];
+  state.poItemsData.forEach(function(item, idx) {
+    var cb = document.getElementById('po-check-' + idx);
+    if (cb && cb.checked) {
+      var atlQty = parseFloat(document.getElementById('po-atl-' + idx) ? document.getElementById('po-atl-' + idx).value : 0) || 0;
+      var unit = document.getElementById('po-unit-' + idx) ? document.getElementById('po-unit-' + idx).value : 'PCS';
+      var remarks = document.getElementById('po-remarks-' + idx) ? document.getElementById('po-remarks-' + idx).value : '';
+      selected.push({
+        inventoryId: item.inventoryId || '',
+        description: item.description || '',
+        qty: item.qty || 0,
+        unit: unit,
+        atlQty: atlQty,
+        remarks: remarks
+      });
+    }
+  });
+  return selected;
 }
 
 function togglePoCard(idx) {
@@ -588,10 +658,11 @@ function togglePoCard(idx) {
     if (checked) card.classList.remove('opacity-50');
     else card.classList.add('opacity-50');
   }
+  updateCreateMrrButton();
 }
 
 function selectAllPoItems(select) {
-  state.poItemsData.forEach((_, idx) => {
+  state.poItemsData.forEach(function(_, idx) {
     var cb = document.getElementById('po-check-' + idx);
     if (cb) cb.checked = select;
     togglePoCard(idx);
@@ -603,26 +674,24 @@ function closePoItemsModal() {
 }
 
 async function createMrrFromPo() {
-  const selected = [];
-  state.poItemsData.forEach((item, idx) => {
-    if (document.getElementById('po-check-' + idx) && document.getElementById('po-check-' + idx).checked) {
-      const atlQty = parseFloat(document.getElementById('po-atl-' + idx) ? document.getElementById('po-atl-' + idx).value : 0) || 0;
-      const unit = document.getElementById('po-unit-' + idx) ? document.getElementById('po-unit-' + idx).value : 'PCS';
-      selected.push({
-        inventoryId: item.inventoryId || item.itemCode || '',
-        description: item.description || '',
-        qty: item.qty || 0,
-        unit: unit,
-        atlQty: atlQty
-      });
-    }
-  });
+  var selected = getSelectedPoItems();
   if (selected.length === 0) {
     showToast('Please select at least one item', 'warning');
     return;
   }
+  
+  // Check if any selected item is missing inventory ID
+  var hasMissing = selected.some(function(item) {
+    return !item.inventoryId || !item.inventoryId.trim();
+  });
+  if (hasMissing) {
+    showToast('Cannot create MRR: Selected items are missing Item Code. Please uncheck incomplete items or use Manual MRR.', 'danger');
+    return;
+  }
+  
   const drNo = document.getElementById('mrrDrNo') ? document.getElementById('mrrDrNo').value.trim() : '';
   const receivingDate = document.getElementById('mrrReceivingDate') ? document.getElementById('mrrReceivingDate').value : '';
+  
   showLoading('Creating MRR...');
   try {
     const payload = {
@@ -658,62 +727,46 @@ async function createMrrFromPo() {
   }
 }
 
-async function lookupPoFromScan(poNo) {
-  try {
-    const url = API_URL + '?action=getPoItems&poNo=' + encodeURIComponent(poNo) + '&_t=' + Date.now();
-    console.log('[lookupPoFromScan] URL:', url);
-    const res = await fetch(url, { redirect: 'follow' });
-    if (!res.ok) {
-      throw new Error('HTTP ' + res.status + ' - ' + res.statusText);
-    }
-    const text = await res.text();
-    console.log('[lookupPoFromScan] Raw response:', text.substring(0, 500));
-    let data;
-    try { data = JSON.parse(text); } catch(e) {
-      console.error('[lookupPoFromScan] JSON parse error:', e);
-      return null;
-    }
-    return (data && data.success) ? data : null;
-  } catch(err) {
-    console.error('[lookupPoFromScan] Error:', err);
-    throw err;
+// ─── PO Lookup ────────────────────────────────────────────────────
+async function lookupPoItems() {
+  var poInput = document.getElementById('poNumberInput');
+  if (!poInput) return;
+  var poNo = poInput.value.trim();
+  if (!poNo) {
+    showToast('Please enter a PO number', 'warning');
+    return;
   }
-}
-
-async function manualPoLookup() {
-  const poNo = document.getElementById('manualPoInput') ? document.getElementById('manualPoInput').value.trim() : '';
-  const mrrPoNo = document.getElementById('mrrManualPoInput') ? document.getElementById('mrrManualPoInput').value.trim() : '';
-  const finalPo = poNo || mrrPoNo;
-  
-  if (!finalPo) { showToast('Please enter a PO number', 'warning'); return; }
-  
-  if (document.getElementById('manualPoInput')) document.getElementById('manualPoInput').value = '';
-  if (document.getElementById('mrrManualPoInput')) document.getElementById('mrrManualPoInput').value = '';
   
   showLoading('Looking up PO...');
   try {
-    const poResult = await lookupPoFromScan(finalPo);
-    console.log('[manualPoLookup] Result:', poResult);
+    var url = API_URL + '?action=getPoItems&poNo=' + encodeURIComponent(poNo) + '&_t=' + Date.now();
+    var res = await fetch(url, { redirect: 'follow' });
+    var text = await res.text();
+    var data;
+    try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
     
-    if (poResult && poResult.success) {
-      playSuccessBeep();
-      state.currentPoNo = finalPo;
-      state.currentPoPrf = poResult.prfNo || '';
-      state.currentPoClient = poResult.client || '';
-      state.currentPoSupplier = poResult.supplier || poResult.client || '';
-      state.poItemsData = poResult.items;
+    if (data.success && data.items && data.items.length > 0) {
+      state.currentPoNo = poNo;
+      state.currentPoPrf = data.prfNo || '';
+      state.currentPoClient = data.client || '';
+      state.currentPoSupplier = data.supplier || data.client || '';
+      state.poItemsData = data.items;
       renderPoItems();
+      // Close scan modal, show items modal
+      if (state.poScanModal) state.poScanModal.hide();
       if (state.poItemsModal) state.poItemsModal.show();
     } else {
-      const errorMsg = (poResult && poResult.error) ? poResult.error : 'No items found for PO: ' + finalPo;
-      showToast('⚠️ ' + errorMsg, 'warning');
+      showToast((data && data.error) || 'No items found for PO: ' + poNo, 'warning');
     }
   } catch(err) {
-    console.error('[manualPoLookup] Error:', err);
     showToast('Error: ' + err.message, 'danger');
   } finally {
     hideLoading();
   }
+}
+
+function closePoScanModal() {
+  if (state.poScanModal) state.poScanModal.hide();
 }
 
 // ─── QTY MODAL ────────────────────────────────────────────────────
@@ -939,7 +992,7 @@ async function loadIvmTeamList() {
   } catch(e) { console.error('Failed to load IVM team list', e); }
 }
 
-// ─── MANUAL MRR FUNCTIONS (with custom searchable dropdown & remarks) ──
+// ─── MANUAL MRR FUNCTIONS (with custom searchable dropdown) ──────────────
 var manualMrrModal = null;
 var manualMrrItems = [];
 
@@ -1048,10 +1101,10 @@ function renderManualMrrItems() {
         'onchange="updateManualMrrItem(' + i + ', \'unit\', this.value)">' +
         buildUnitOptions(it.unit || 'PIECE') +
       '</select></td>' +
-      '<td><input type="text" class="form-control form-control-sm manual-mrr-remarks" ' +
+      '<td><input type="text" class="form-control form-control-sm" ' +
         'value="' + (it.remarks || '') + '" ' +
         'onchange="updateManualMrrItem(' + i + ', \'remarks\', this.value)" ' +
-        'placeholder="Optional note..."></td>' +
+        'placeholder="Remarks" maxlength="200"></td>' +
       '<td class="align-middle text-center">' +
         '<button class="btn btn-sm btn-outline-danger" onclick="removeManualMrrItem(' + i + ')" title="Remove">' +
           '<i class="bi bi-trash"></i>' +
@@ -1216,6 +1269,48 @@ async function submitManualMrr() {
   } catch(err) {
     showToast('Error: ' + err.message, 'danger');
   } finally {
+    hideLoading();
+  }
+}
+
+// ─── PO Lookup wrapper ────────────────────────────────────────────
+function lookupPoItems() {
+  var poInput = document.getElementById('poNumberInput');
+  if (!poInput) return;
+  var poNo = poInput.value.trim();
+  if (!poNo) {
+    showToast('Please enter a PO number', 'warning');
+    return;
+  }
+  
+  showLoading('Looking up PO...');
+  try {
+    var url = API_URL + '?action=getPoItems&poNo=' + encodeURIComponent(poNo) + '&_t=' + Date.now();
+    fetch(url)
+      .then(function(res) { return res.text(); })
+      .then(function(text) {
+        var data;
+        try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+        if (data.success && data.items && data.items.length > 0) {
+          state.currentPoNo = poNo;
+          state.currentPoPrf = data.prfNo || '';
+          state.currentPoClient = data.client || '';
+          state.currentPoSupplier = data.supplier || data.client || '';
+          state.poItemsData = data.items;
+          renderPoItems();
+          if (state.poScanModal) state.poScanModal.hide();
+          if (state.poItemsModal) state.poItemsModal.show();
+        } else {
+          showToast((data && data.error) || 'No items found for PO: ' + poNo, 'warning');
+        }
+        hideLoading();
+      })
+      .catch(function(err) {
+        showToast('Error: ' + err.message, 'danger');
+        hideLoading();
+      });
+  } catch(err) {
+    showToast('Error: ' + err.message, 'danger');
     hideLoading();
   }
 }
