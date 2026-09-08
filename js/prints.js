@@ -148,7 +148,15 @@ async function printSelectedDocs() {
       throw new Error('No document data returned');
     }
     
-    renderBulkPrintPreview(data.documents, docType);
+    // If only one document, use the original render function for better compatibility
+    if (data.documents.length === 1) {
+      var docData = data.documents[0];
+      if (docType === 'MRIF') renderMrifPrint(docData.docNo, docData.info, docData.items);
+      else if (docType === 'MRR') renderMrrPrint(docData.docNo, docData.info, docData.items);
+      else if (docType === 'MRS') renderMrsPrint(docData.docNo, docData.info, docData.items);
+    } else {
+      renderBulkPrintPreview(data.documents, docType);
+    }
     
     // Close the list modal
     if (docType === 'MRIF' && mrifListModal) mrifListModal.hide();
@@ -187,11 +195,11 @@ function renderBulkPrintPreview(documents, docType) {
     var items = docData.items || [];
     
     if (docType === 'MRIF') {
-      combinedHtml += renderSingleMrifPrint(docNo, info, items);
+      combinedHtml += buildSingleMrifHtml(docNo, info, items);
     } else if (docType === 'MRR') {
-      combinedHtml += renderSingleMrrPrint(docNo, info, items);
+      combinedHtml += buildSingleMrrHtml(docNo, info, items);
     } else if (docType === 'MRS') {
-      combinedHtml += renderSingleMrsPrint(docNo, info, items);
+      combinedHtml += buildSingleMrsHtml(docNo, info, items);
     }
     
     if (index < documents.length - 1) {
@@ -203,8 +211,8 @@ function renderBulkPrintPreview(documents, docType) {
   console.log('[renderBulkPrintPreview] Rendered ' + documents.length + ' documents');
 }
 
-// ─── Individual renderers for bulk print ──────────────────────
-function renderSingleMrifPrint(docNo, info, items) {
+// ─── Build single MRIF HTML (for bulk print) ──────────────────
+function buildSingleMrifHtml(docNo, info, items) {
   var requestor = info.Requestor || info.requestor || info.requestorName || '';
   var department = info.Department || info.department || info.dept || '';
   var dateRaw = info.Date || info.date || info['Date Prepared'] || info.datePrepared || '';
@@ -315,8 +323,8 @@ function renderSingleMrifPrint(docNo, info, items) {
   '</div>';
 }
 
-function renderSingleMrrPrint(docNo, info, items) {
-  // Reuse MRR print logic
+// ─── Build single MRR HTML (for bulk print) ──────────────────
+function buildSingleMrrHtml(docNo, info, items) {
   var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
   var vendor = info['Vendor/Client'] || info.vendor || info.client || '';
   var datePrepared = info['Date Prepared'] || info.datePrepared || '';
@@ -354,8 +362,6 @@ function renderSingleMrrPrint(docNo, info, items) {
       var receivedQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
       var unit = it.unit || it.uom || 'PIECE';
       var remarks = it.remarks || it.status || it.note || '';
-      var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code || 'blank');
-
       itemsHtml += '<tr>' +
         '<td class="td-center" style="width:5%">' + (idx + 1) + '</td>' +
         '<td class="td-center" style="width:16%">' + code + '</td>' +
@@ -455,7 +461,8 @@ function renderSingleMrrPrint(docNo, info, items) {
   '</div>';
 }
 
-function renderSingleMrsPrint(docNo, info, items) {
+// ─── Build single MRS HTML (for bulk print) ──────────────────
+function buildSingleMrsHtml(docNo, info, items) {
   var requestor = info.Requestor || info.requestor || info.requestorName || '';
   var department = info.Department || info.department || info.dept || '';
   var dateRaw = info.Date || info.date || info['Date Prepared'] || info.datePrepared || '';
@@ -566,58 +573,7 @@ function renderSingleMrsPrint(docNo, info, items) {
   '</div>';
 }
 
-// ─── MRIF List ────────────────────────────────────────────────────
-async function openMrifList() {
-  if (state.isLoading) return;
-  if (mrifListModal) mrifListModal.show();
-  var container = document.getElementById('mrifListContainer');
-  if (container) {
-    container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRIF documents...</div></div>';
-  }
-  try {
-    var docs = await loadDocumentListForModule('MRIF');
-    renderDocumentList(container, docs, 'MRIF');
-  } catch(err) {
-    if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + err.message + '</div>';
-  }
-}
-
-// ─── MRR List ────────────────────────────────────────────────────
-async function openMrrList() {
-  if (state.isLoading) return;
-  if (mrrListModal) mrrListModal.show();
-  var container = document.getElementById('mrrListContainer');
-  if (container) {
-    container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRR documents...</div></div>';
-  }
-  try {
-    var docs = await loadDocumentListForModule('MRR');
-    renderDocumentList(container, docs, 'MRR');
-  } catch(err) {
-    if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + err.message + '</div>';
-  }
-}
-
-// ─── MRS List ────────────────────────────────────────────────────
-async function openMrsList() {
-  if (state.isLoading) return;
-  if (mrsListModal) mrsListModal.show();
-  var container = document.getElementById('mrsListContainer');
-  if (container) {
-    container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRS documents...</div></div>';
-  }
-  try {
-    var docs = await loadDocumentListForModule('MRS');
-    renderDocumentList(container, docs, 'MRS');
-  } catch(err) {
-    if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + err.message + '</div>';
-  }
-}
-
-// ─── Original single print functions (keep existing) ──────────
-// These are the original functions that work with single documents.
-// They are unchanged but use the render functions above when needed.
-
+// ─── Single document print functions ────────────────────────────
 async function openMrifPrint(docNo) {
   if (state.isLoading) return;
   showLoading('Loading ' + cleanDocNo(docNo) + '...');
@@ -643,15 +599,9 @@ async function openMrifPrint(docNo) {
     }
     if (!data.items || data.items.length === 0) {
       console.warn('[openMrifPrint] No items found for ' + docNo, data.debug);
-      showToast('Warning: No items found in this document', 'warning');
+      // Still render with "no items" message
     }
-    // Use renderBulkPrintPreview for a single document as well
-    var docs = [{
-      docNo: docNo,
-      info: data.info || {},
-      items: data.items || []
-    }];
-    renderBulkPrintPreview(docs, 'MRIF');
+    renderMrifPrint(docNo, data.info || {}, data.items || []);
     if (mrifListModal) mrifListModal.hide();
     setTimeout(function() {
       if (mrifPrintModal) mrifPrintModal.show();
@@ -687,16 +637,7 @@ async function openMrrPrint(docNo) {
       showToast('Error: ' + (data.error || 'Failed to load document'), 'danger');
       return;
     }
-    if (!data.items || data.items.length === 0) {
-      console.warn('[openMrrPrint] No items found for ' + docNo, data.debug);
-      showToast('Warning: No items found in this document', 'warning');
-    }
-    var docs = [{
-      docNo: docNo,
-      info: data.info || {},
-      items: data.items || []
-    }];
-    renderBulkPrintPreview(docs, 'MRR');
+    renderMrrPrint(docNo, data.info || {}, data.items || []);
     if (mrrListModal) mrrListModal.hide();
     setTimeout(function() {
       if (mrrPrintModal) mrrPrintModal.show();
@@ -732,16 +673,7 @@ async function openMrsPrint(docNo) {
       showToast('Error: ' + (data.error || 'Failed to load document'), 'danger');
       return;
     }
-    if (!data.items || data.items.length === 0) {
-      console.warn('[openMrsPrint] No items found for ' + docNo, data.debug);
-      showToast('Warning: No items found in this document', 'warning');
-    }
-    var docs = [{
-      docNo: docNo,
-      info: data.info || {},
-      items: data.items || []
-    }];
-    renderBulkPrintPreview(docs, 'MRS');
+    renderMrsPrint(docNo, data.info || {}, data.items || []);
     if (mrsListModal) mrsListModal.hide();
     setTimeout(function() {
       if (mrsPrintModal) mrsPrintModal.show();
@@ -752,6 +684,28 @@ async function openMrsPrint(docNo) {
   } finally {
     hideLoading();
   }
+}
+
+// ─── Direct render functions (used by openMrifPrint, openMrrPrint, openMrsPrint) ───
+function renderMrifPrint(docNo, info, items) {
+  var container = document.getElementById('mrifPrintContent');
+  if (!container) return;
+  container.innerHTML = buildSingleMrifHtml(docNo, info, items);
+  console.log('[renderMrifPrint] Rendered MRIF:', docNo);
+}
+
+function renderMrrPrint(docNo, info, items) {
+  var container = document.getElementById('mrrPrintContent');
+  if (!container) return;
+  container.innerHTML = buildSingleMrrHtml(docNo, info, items);
+  console.log('[renderMrrPrint] Rendered MRR:', docNo);
+}
+
+function renderMrsPrint(docNo, info, items) {
+  var container = document.getElementById('mrsPrintContent');
+  if (!container) return;
+  container.innerHTML = buildSingleMrsHtml(docNo, info, items);
+  console.log('[renderMrsPrint] Rendered MRS:', docNo);
 }
 
 // ─── Print functions ────────────────────────────────────────────
@@ -771,11 +725,10 @@ function printWithIframe(containerId, title) {
     return;
   }
 
-  var printStyles =
+  var printStyles = 
     '@page { size: letter portrait; margin: 0.25in; }' +
     '* { box-sizing: border-box; }' +
     'body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #000; line-height: 1.3; }' +
-    // Include all print styles from style.css
     '.mrif-print-sheet { width: 100%; max-width: 8in; margin: 0 auto; background: #fff; padding: 0.2in; }' +
     '.mrr-print-sheet { width: 100%; max-width: 8in; margin: 0 auto; background: #fff; padding: 0.2in; }' +
     '.mrif-header, .mrr-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }' +
@@ -851,4 +804,52 @@ function closeMrrPrint() {
 }
 function closeMrsPrint() {
   if (mrsPrintModal) mrsPrintModal.hide();
+}
+
+// ─── MRIF List ────────────────────────────────────────────────────
+async function openMrifList() {
+  if (state.isLoading) return;
+  if (mrifListModal) mrifListModal.show();
+  var container = document.getElementById('mrifListContainer');
+  if (container) {
+    container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRIF documents...</div></div>';
+  }
+  try {
+    var docs = await loadDocumentListForModule('MRIF');
+    renderDocumentList(container, docs, 'MRIF');
+  } catch(err) {
+    if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + err.message + '</div>';
+  }
+}
+
+// ─── MRR List ────────────────────────────────────────────────────
+async function openMrrList() {
+  if (state.isLoading) return;
+  if (mrrListModal) mrrListModal.show();
+  var container = document.getElementById('mrrListContainer');
+  if (container) {
+    container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRR documents...</div></div>';
+  }
+  try {
+    var docs = await loadDocumentListForModule('MRR');
+    renderDocumentList(container, docs, 'MRR');
+  } catch(err) {
+    if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + err.message + '</div>';
+  }
+}
+
+// ─── MRS List ────────────────────────────────────────────────────
+async function openMrsList() {
+  if (state.isLoading) return;
+  if (mrsListModal) mrsListModal.show();
+  var container = document.getElementById('mrsListContainer');
+  if (container) {
+    container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRS documents...</div></div>';
+  }
+  try {
+    var docs = await loadDocumentListForModule('MRS');
+    renderDocumentList(container, docs, 'MRS');
+  } catch(err) {
+    if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + err.message + '</div>';
+  }
 }
