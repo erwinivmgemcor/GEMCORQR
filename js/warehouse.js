@@ -978,7 +978,7 @@ function renderManualMrrItems() {
             'onfocus="filterManualMrrItems(this, ' + i + ')" ' +
             'autocomplete="off">' +
           '<div class="list-group position-absolute z-3 d-none manual-mrr-dropdown" ' +
-            'style="max-height:150px;overflow-y:auto;width:100%;background:#fff;border:1px solid #ddd;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,0.15);" ' +
+            'style="max-height:250px;overflow-y:auto;width:100%;background:#fff;border:1px solid #ced4da;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,0.15);position:absolute;top:100%;left:0;z-index:1050;" ' +
             'id="manualMrrDropdown' + i + '"></div>' +
           '<input type="hidden" class="manual-mrr-code" id="manualMrrCode' + i + '" value="' + (it.inventoryId || '') + '">' +
           '<input type="hidden" class="manual-mrr-desc" id="manualMrrDesc' + i + '" value="' + (it.description || '') + '">' +
