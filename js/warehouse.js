@@ -774,8 +774,6 @@ async function loadRequestInventory() {
     try { data = JSON.parse(text); } catch(e) { data = {}; }
     const inv = data.inventory || data.items || [];
     state.requestInventoryList = inv;
-    // Populate item code datalist
-    populateDatalist('itemCodeDatalist', inv.map(function(it) { return it.code; }));
   } catch(err) {
     state.requestInventoryList = [];
   }
@@ -894,7 +892,7 @@ async function loadIvmTeamList() {
   } catch(e) { console.error('Failed to load IVM team list', e); }
 }
 
-// ─── MANUAL MRR FUNCTIONS (with datalist support) ──────────────
+// ─── MANUAL MRR FUNCTIONS (with custom searchable dropdown) ──────────────
 var manualMrrModal = null;
 var manualMrrItems = [];
 
@@ -917,7 +915,7 @@ function openManualMrrModal() {
   updateManualMrrSubmitButton();
   manualMrrModal.show();
   // Load lists for datalist
-  loadRequestInventory();   // loads inventory codes and populates itemCodeDatalist
+  loadRequestInventory();   // loads inventory codes and populates state.requestInventoryList
   loadVendorList();
   loadIvmTeamList();
 }
@@ -933,7 +931,7 @@ function addManualMrrItem() {
   renderManualMrrItems();
   updateManualMrrSubmitButton();
   setTimeout(function() {
-    var inputs = document.querySelectorAll('.manual-mrr-code');
+    var inputs = document.querySelectorAll('.manual-mrr-search');
     if (inputs.length > 0) {
       inputs[inputs.length - 1].focus();
     }
@@ -972,14 +970,22 @@ function renderManualMrrItems() {
     html += '<tr>' +
       '<td class="align-middle text-center">' + (i + 1) + '</td>' +
       '<td>' +
-        '<input type="text" class="form-control form-control-sm manual-mrr-code" ' +
-          'list="itemCodeDatalist" ' +
-          'value="' + (it.inventoryId || '') + '" ' +
-          'onchange="onManualMrrCodeChange(' + i + ', this.value)" ' +
-          'placeholder="Item code" autocomplete="off">' +
+        '<div style="position:relative;">' +
+          '<input type="text" class="form-control form-control-sm manual-mrr-search" ' +
+            'placeholder="Type to search..." ' +
+            'value="' + (it.inventoryId ? it.inventoryId + ' - ' + it.description : '') + '" ' +
+            'oninput="filterManualMrrItems(this, ' + i + ')" ' +
+            'onfocus="filterManualMrrItems(this, ' + i + ')" ' +
+            'autocomplete="off">' +
+          '<div class="list-group position-absolute z-3 d-none manual-mrr-dropdown" ' +
+            'style="max-height:150px;overflow-y:auto;width:100%;background:#fff;border:1px solid #ddd;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,0.15);" ' +
+            'id="manualMrrDropdown' + i + '"></div>' +
+          '<input type="hidden" class="manual-mrr-code" id="manualMrrCode' + i + '" value="' + (it.inventoryId || '') + '">' +
+          '<input type="hidden" class="manual-mrr-desc" id="manualMrrDesc' + i + '" value="' + (it.description || '') + '">' +
+        '</div>' +
       '</td>' +
-      '<td><input type="text" class="form-control form-control-sm manual-mrr-desc" ' +
-        'id="manualMrrDesc' + i + '" ' +
+      '<td><input type="text" class="form-control form-control-sm manual-mrr-desc-text" ' +
+        'id="manualMrrDescText' + i + '" ' +
         'value="' + (it.description || '') + '" ' +
         'onchange="updateManualMrrItem(' + i + ', \'description\', this.value)" ' +
         'placeholder="Description"></td>' +
@@ -1005,32 +1011,75 @@ function renderManualMrrItems() {
   tbody.innerHTML = html;
 }
 
-function onManualMrrCodeChange(index, code) {
-  var item = state.requestInventoryList.find(function(it) { return it.code === code || it.inventoryId === code; });
-  if (item) {
-    manualMrrItems[index].inventoryId = item.code || item.inventoryId;
-    manualMrrItems[index].description = item.description || '';
-    // Update the description field
-    var descField = document.getElementById('manualMrrDesc' + index);
-    if (descField) descField.value = item.description || '';
-    // Set unit if available
-    if (item.unit) {
-      manualMrrItems[index].unit = item.unit;
-      var row = descField ? descField.closest('tr') : null;
-      if (row) {
-        var unitSelect = row.querySelector('.manual-mrr-unit');
-        if (unitSelect) {
-          for (var opt = 0; opt < unitSelect.options.length; opt++) {
-            if (unitSelect.options[opt].value === item.unit) {
-              unitSelect.selectedIndex = opt;
-              break;
-            }
-          }
+// ─── Custom dropdown filter for Manual MRR ──────────────────────
+function filterManualMrrItems(input, idx) {
+  var term = input.value.toLowerCase();
+  var dropdown = document.getElementById('manualMrrDropdown' + idx);
+  dropdown.innerHTML = '';
+
+  if (!term) {
+    dropdown.classList.add('d-none');
+    return;
+  }
+
+  var matches = state.requestInventoryList.filter(function(it) {
+    var code = (it.code || it.inventoryId || '').toLowerCase();
+    var desc = (it.description || '').toLowerCase();
+    return code.includes(term) || desc.includes(term);
+  }).slice(0, 15);
+
+  if (matches.length === 0) {
+    dropdown.innerHTML = '<div class="list-group-item text-muted">No matches found</div>';
+  } else {
+    matches.forEach(function(it) {
+      var code = it.code || it.inventoryId || '';
+      var desc = it.description || '';
+      var unit = it.unit || 'PIECE';
+      var el = document.createElement('div');
+      el.className = 'list-group-item list-group-item-action';
+      el.style.cssText = 'padding:6px 10px;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f0f0f0;';
+      el.innerHTML = '<div class="fw-bold small">' + code + '</div><div class="small text-muted">' + desc + '</div>';
+      el.onclick = function() {
+        selectManualMrrItem(idx, code, desc, unit);
+        dropdown.classList.add('d-none');
+      };
+      dropdown.appendChild(el);
+    });
+  }
+  dropdown.classList.remove('d-none');
+}
+
+function selectManualMrrItem(idx, code, desc, unit) {
+  // Update the item data
+  manualMrrItems[idx].inventoryId = code;
+  manualMrrItems[idx].description = desc;
+  manualMrrItems[idx].unit = unit || 'PIECE';
+
+  // Update the search input
+  var row = document.querySelector('#manualMrrItemsBody tr:nth-child(' + (idx + 1) + ')');
+  if (row) {
+    var searchInput = row.querySelector('.manual-mrr-search');
+    if (searchInput) searchInput.value = code + ' - ' + desc;
+    var descInput = row.querySelector('.manual-mrr-desc-text');
+    if (descInput) descInput.value = desc;
+    var unitSelect = row.querySelector('.manual-mrr-unit');
+    if (unitSelect) {
+      for (var opt = 0; opt < unitSelect.options.length; opt++) {
+        if (unitSelect.options[opt].value === unit) {
+          unitSelect.selectedIndex = opt;
+          break;
         }
       }
     }
-    updateManualMrrSubmitButton();
+    // Update hidden fields
+    var codeHidden = document.getElementById('manualMrrCode' + idx);
+    var descHidden = document.getElementById('manualMrrDesc' + idx);
+    if (codeHidden) codeHidden.value = code;
+    if (descHidden) descHidden.value = desc;
   }
+
+  updateManualMrrSubmitButton();
+  playSuccessBeep();
 }
 
 function updateManualMrrSubmitButton() {
