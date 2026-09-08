@@ -934,7 +934,7 @@
   </div>
 </div>
 
-<!-- PO Items Modal -->
+<!-- PO Items Modal (with remarks and warning) -->
 <div class="modal fade" id="poItemsModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -952,6 +952,15 @@
             </div>
           </div>
         </div>
+        
+        <!-- Warning banner for incomplete PO items -->
+        <div id="poIncompleteWarning" class="alert alert-warning d-none">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i>
+          <strong>Warning:</strong> Some items in this PO are missing <strong>Item Code</strong> or <strong>Description</strong>. 
+          You can still create an MRR, but you may need to manually enter missing details. 
+          Consider using <strong>Manual MRR</strong> if the PO data is incomplete.
+        </div>
+
         <div class="d-flex justify-content-between align-items-center mb-2">
           <small class="text-muted"><i class="bi bi-info-circle me-1"></i>Check items that arrived</small>
           <button class="btn btn-sm btn-outline-primary" onclick="selectAllPoItems(true)">All</button>
@@ -1542,7 +1551,7 @@
   </div>
 </div>
 
-<!-- Manual MRR Modal -->
+<!-- ─── UPDATED MANUAL MRR MODAL (with Remarks) ─── -->
 <div class="modal fade" id="manualMrrModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -1553,7 +1562,7 @@
       <div class="modal-body">
         <div class="alert alert-info small"><i class="bi bi-info-circle me-1"></i>Use this for materials without existing PO.</div>
 
-        <!-- Vendor and IVM Team datalists (still used for text inputs) -->
+        <!-- Vendor and IVM Team datalists -->
         <datalist id="vendorDatalist"></datalist>
         <datalist id="ivmTeamDatalist"></datalist>
 
@@ -1593,11 +1602,12 @@
             <thead class="table-light">
               <tr>
                 <th style="width:5%">#</th>
-                <th style="width:25%">Item Code <span class="text-danger">*</span></th>
-                <th style="width:30%">Description <span class="text-danger">*</span></th>
+                <th style="width:20%">Item Code <span class="text-danger">*</span></th>
+                <th style="width:25%">Description <span class="text-danger">*</span></th>
                 <th style="width:10%">Rec. Qty <span class="text-danger">*</span></th>
                 <th style="width:10%">ATL Qty</th>
-                <th style="width:15%">Unit</th>
+                <th style="width:12%">Unit</th>
+                <th style="width:18%">Remarks</th>
                 <th style="width:6%"></th>
               </tr>
             </thead>
@@ -1613,6 +1623,7 @@
     </div>
   </div>
 </div>
+
 <!-- Manual MRIF Modal -->
 <div class="modal fade" id="manualMrifModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -1709,7 +1720,7 @@
   </div>
 </div>
 
-<!-- ========== REQUEST DETAILS MODAL (NEW) ========== -->
+<!-- Request Details Modal -->
 <div class="modal fade" id="requestDetailsModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -1740,7 +1751,7 @@
 <div id="qrImageDecoder" style="display:none;"></div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════
-     SCRIPTS (with cache-busting version)
+     SCRIPTS (with cache-busting)
      ═══════════════════════════════════════════════════════════════════════ -->
 <script src="/GEMCORQR/js/config.js?v=2.2.0"></script>
 <script src="/GEMCORQR/js/utils.js?v=2.2.0"></script>
