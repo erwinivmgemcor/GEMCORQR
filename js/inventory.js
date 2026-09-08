@@ -1,12 +1,11 @@
 // ============================================================
-// INVENTORY BROWSER
+// INVENTORY BROWSER (with caching)
 // ============================================================
 
 var inventoryBrowserModal = null;
 var inventoryItemsCache = [];
 var inventoryBrowserFiltered = [];
 
-// ─── Fallback QR image (data URI for a barcode placeholder) ───
 var QR_PLACEHOLDER = "data:image/svg+xml," + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" viewBox="0 0 50 50">' +
   '<rect width="50" height="50" fill="#f0f0f0" rx="4"/>' +
@@ -24,7 +23,6 @@ function openInventoryBrowser() {
   fetchInventoryItems();
 }
 
-// ─── QR Zoom Modal ───
 function openQrZoom(item) {
   if (!qrZoomModal) {
     qrZoomModal = new bootstrap.Modal(document.getElementById('qrZoomModal'));
@@ -36,7 +34,6 @@ function openQrZoom(item) {
   var img = document.getElementById('qrZoomImg');
   img.src = qrUrl;
   img.onerror = function() {
-    // Fallback to placeholder
     this.onerror = null;
     this.src = QR_PLACEHOLDER;
     document.getElementById('qrZoomFallback').classList.remove('d-none');
@@ -48,9 +45,23 @@ function openQrZoom(item) {
   qrZoomModal.show();
 }
 
-async function fetchInventoryItems() {
+// ─── Fetch with cache ──────────────────────────────────────────────
+async function fetchInventoryItems(forceRefresh) {
   var tbody = document.getElementById('inventoryBrowserBody');
   if (!tbody) return;
+  
+  const cacheKey = 'inventoryItems';
+  if (!forceRefresh) {
+    const cached = getCache(cacheKey);
+    if (cached) {
+      inventoryItemsCache = cached;
+      inventoryBrowserFiltered = cached;
+      renderInventoryItems();
+      console.log('[Inventory] Loaded from cache:', cached.length);
+      return;
+    }
+  }
+
   tbody.innerHTML = '<tr><td colspan="3" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading inventory...</td></tr>';
 
   try {
@@ -69,6 +80,7 @@ async function fetchInventoryItems() {
     if (data.success && data.items && data.items.length > 0) {
       inventoryItemsCache = data.items;
       inventoryBrowserFiltered = data.items;
+      setCache(cacheKey, data.items, CACHE_TTL.INVENTORY);
       renderInventoryItems();
       console.log('[fetchInventoryItems] Loaded ' + data.items.length + ' items');
     } else {
@@ -78,7 +90,6 @@ async function fetchInventoryItems() {
     }
   } catch(err) {
     console.error('[fetchInventoryItems] Error:', err);
-    // Silent fail – don't show a toast on dashboard load
     tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Could not load inventory. Please try again.</td></tr>';
   }
 }
@@ -97,7 +108,6 @@ function renderInventoryItems() {
     var it = inventoryBrowserFiltered[i];
     var code = it.inventoryId || it.code || '';
     var desc = it.description || '';
-    // QR URL with onerror fallback
     var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
     var safeCode = code.replace(/'/g, "\\'");
     var safeDesc = desc.replace(/'/g, "\\'");
