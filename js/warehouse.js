@@ -100,7 +100,7 @@
     if (el2) el2.textContent = isMRR ? 'ATL QTY' : (isMRS ? 'ATL QTY (Actual)' : 'Issued Qty');
   };
 
-  // ─── FETCH PENDING DOCS WITH CACHE (fallback) ──────────────────
+  // ─── FETCH PENDING DOCS WITH CACHE ─────────────────────────────
   window.fetchPendingDocs = async function(forceRefresh) {
     const sheetId = getCleanSheetId();
     if (!sheetId) {
@@ -1095,11 +1095,13 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
   // ─── MANUAL MRR FUNCTIONS (IMPROVED DROPDOWN) ──────────────────
   var manualMrrModal = null;
   var manualMrrItems = [];
+  var _manualMrrLoading = false;
 
   window.openManualMrrModal = function() {
     if (!manualMrrModal) {
       manualMrrModal = new bootstrap.Modal(document.getElementById('manualMrrModal'));
     }
+    // Reset fields
     var poEl = document.getElementById('manualMrrPoNo');
     var drEl = document.getElementById('manualMrrDrNo');
     var vendorEl = document.getElementById('manualMrrVendor');
@@ -1114,10 +1116,42 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
     renderManualMrrItems();
     updateManualMrrSubmitButton();
     manualMrrModal.show();
-    // Load lists from cache (already loaded)
-    if (state.requestInventoryList.length === 0) loadRequestInventory();
-    if (state.vendorList.length === 0) loadVendorList();
-    if (state.ivmTeamList.length === 0) loadIvmTeamList();
+
+    // ─── Ensure all lists are loaded ──────────────────────────────
+    if (_manualMrrLoading) {
+      showToast('Loading data...', 'info');
+      return;
+    }
+    _manualMrrLoading = true;
+
+    // Show loading indicators in dropdowns
+    var dropdowns = document.querySelectorAll('.manual-mrr-dropdown');
+    dropdowns.forEach(function(d) {
+      d.innerHTML = '<div class="list-group-item text-muted">Loading items...</div>';
+      d.classList.remove('d-none');
+    });
+
+    // Load inventory, vendors, IVM team with forced refresh if cache is stale
+    Promise.all([
+      loadRequestInventory(false).then(function() {
+        // After inventory loaded, update dropdowns
+        document.querySelectorAll('.manual-mrr-dropdown').forEach(function(d) {
+          d.classList.add('d-none');
+        });
+      }),
+      loadVendorList(false).then(function() {
+        populateDatalist('vendorDatalist', state.vendorList || []);
+      }),
+      loadIvmTeamList(false).then(function() {
+        populateDatalist('ivmTeamDatalist', state.ivmTeamList || []);
+      })
+    ]).then(function() {
+      _manualMrrLoading = false;
+      console.log('[Manual MRR] All lists loaded');
+    }).catch(function(err) {
+      console.warn('[Manual MRR] Some lists failed:', err);
+      _manualMrrLoading = false;
+    });
   };
 
   window.addManualMrrItem = function() {
@@ -1229,11 +1263,18 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
       return;
     }
 
+    // If inventory list is still loading, show loading message
+    if (state.requestInventoryList.length === 0) {
+      dropdown.innerHTML = '<div class="list-group-item text-muted" style="padding:8px 12px;">Loading inventory...</div>';
+      dropdown.classList.remove('d-none');
+      return;
+    }
+
     var matches = state.requestInventoryList.filter(function(it) {
       var code = (it.code || it.inventoryId || '').toLowerCase();
       var desc = (it.description || '').toLowerCase();
       return code.includes(term) || desc.includes(term);
-    }).slice(0, 20); // Show more items
+    }).slice(0, 20);
 
     if (matches.length === 0) {
       dropdown.innerHTML = '<div class="list-group-item text-muted" style="padding:8px 12px;">No matches found</div>';
@@ -1433,6 +1474,6 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
     openManualMrifModal();
   };
 
-  console.log('✅ warehouse.js loaded (with caching fallback)');
+  console.log('✅ warehouse.js loaded (with preload improvements)');
 
 })(); // end IIFE
