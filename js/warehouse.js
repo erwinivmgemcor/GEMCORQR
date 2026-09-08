@@ -641,12 +641,12 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
     });
   };
 
-  // ─── Update a PO item when user edits missing fields ────────────
+  // ─── Update a PO item when user edits missing fields (no full re-render) ───
   window.updatePoItem = function(idx, field, value) {
     if (state.poItemsData[idx]) {
       state.poItemsData[idx][field] = value.trim();
-      // Re-render the list to reflect changes (update missing status)
-      renderPoItems();
+      // Only update the button state – do NOT re-render the whole list
+      updateCreateMrrButton();
     }
   };
 
