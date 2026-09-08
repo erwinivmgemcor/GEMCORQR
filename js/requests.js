@@ -1,5 +1,5 @@
 // ============================================================
-// NEW REQUEST FUNCTIONS (with Item Scanner & Request Details)
+// NEW REQUEST FUNCTIONS (with Item Scanner & Remarks)
 // ============================================================
 
 function openNewRequest() {
@@ -162,7 +162,7 @@ function populateReviewData() {
   document.getElementById('reviewDepartment').textContent = dept || '-';
 }
 
-// ─── Item row with scanner button ────────────────────────────────
+// ─── Item row with scanner button and remarks ──────────────────
 function addStep5ItemRow() {
   var container = document.getElementById('step5ItemsContainer');
   var idx = container.children.length;
@@ -170,7 +170,7 @@ function addStep5ItemRow() {
   div.className = 'step5-item-row';
   div.innerHTML =
     '<div class="row g-2 align-items-end">' +
-      '<div class="col-8 col-md-5">' +
+      '<div class="col-8 col-md-4">' +
         '<label class="form-label small">Item</label>' +
         '<div class="input-group">' +
           '<input type="text" class="form-control req-item-search" placeholder="Type to search or scan..." oninput="filterStep5Items(this,' + idx + ')" onfocus="filterStep5Items(this,' + idx + ')">' +
@@ -186,13 +186,17 @@ function addStep5ItemRow() {
         '<label class="form-label small">Qty</label>' +
         '<input type="number" class="form-control req-qty" min="1" value="1">' +
       '</div>' +
-      '<div class="col-2 col-md-3">' +
+      '<div class="col-2 col-md-2">' +
         '<label class="form-label small">Unit</label>' +
         '<select class="form-select req-unit">' +
           buildUnitOptions('PIECE') +
         '</select>' +
       '</div>' +
-      '<div class="col-2 col-md-2">' +
+      '<div class="col-3 col-md-3">' +
+        '<label class="form-label small">Remarks</label>' +
+        '<input type="text" class="form-control req-remarks" placeholder="Optional note..." maxlength="200">' +
+      '</div>' +
+      '<div class="col-1 col-md-1">' +
         '<button class="btn btn-outline-danger btn-sm w-100" onclick="this.closest(\'.step5-item-row\').remove(); checkStep5Items();">' +
           '<i class="bi bi-trash"></i>' +
         '</button>' +
@@ -268,9 +272,10 @@ function populateFinalReview() {
     var desc = row.querySelector('.req-item-desc').value;
     var qty = row.querySelector('.req-qty').value;
     var unit = row.querySelector('.req-unit').value;
+    var remarks = row.querySelector('.req-remarks').value || '';
     if (code) {
       count++;
-      tbody.innerHTML += '<tr><td>' + count + '</td><td>' + code + '</td><td>' + desc + '</td><td>' + qty + '</td><td>' + unit + '</td></tr>';
+      tbody.innerHTML += '<tr><td>' + count + '</td><td>' + code + '</td><td>' + desc + '</td><td>' + qty + '</td><td>' + unit + '</td><td>' + remarks + '</td></tr>';
     }
   });
 }
@@ -386,7 +391,7 @@ document.addEventListener('hidden.bs.modal', function (event) {
   }
 });
 
-// ─── Submit Request ──────────────────────────────────────────────
+// ─── Submit Request (with remarks) ─────────────────────────────
 async function submitNewRequest() {
   if (state.isLoading) return;
   const docType = document.getElementById('reqDocType').value;
@@ -407,7 +412,14 @@ async function submitNewRequest() {
     const desc = row.querySelector('.req-item-desc').value;
     const qty = parseInt(row.querySelector('.req-qty').value, 10);
     const unit = row.querySelector('.req-unit').value || 'PIECE';
-    if (code && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty, unit: unit });
+    const remarks = row.querySelector('.req-remarks').value || '';
+    if (code && qty > 0) items.push({ 
+      inventoryId: code, 
+      description: desc, 
+      qty: qty, 
+      unit: unit,
+      remarks: remarks 
+    });
   });
 
   if (items.length === 0) {
@@ -650,7 +662,7 @@ function buildRequestDetailsHtml(docNo, docType, info, items) {
         '<td class="text-center">' + qty + '</td>' +
         '<td class="text-center">' + issued + '</td>' +
         '<td class="text-center">' + unit + '</td>' +
-        '<td><span class="badge ' + (remarks === 'COMPLETE' ? 'bg-success' : remarks === 'PARTIAL' ? 'bg-warning' : 'bg-secondary') + '">' + remarks + '</span></td>' +
+        '<td>' + remarks + '</td>' +
         '</tr>';
     });
   } else {
@@ -688,7 +700,7 @@ function buildRequestDetailsHtml(docNo, docType, info, items) {
             '<th class="text-center">' + (isMRR ? 'Rec. Qty' : 'Req. Qty') + '</th>' +
             '<th class="text-center">' + (isMRR ? 'ATL Qty' : 'Issued Qty') + '</th>' +
             '<th class="text-center">Unit</th>' +
-            '<th>Status</th>' +
+            '<th>Remarks</th>' +
           '</tr>' +
         '</thead>' +
         '<tbody>' + itemsHtml + '</tbody>' +
