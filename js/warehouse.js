@@ -1,5 +1,6 @@
 // ============================================================
 // WAREHOUSE CORE FUNCTIONS (with User Login Integration)
+// Includes: Manual MRR with Remarks, PO items display, duplicate prevention
 // ============================================================
 
 function getCleanSheetId() {
@@ -145,7 +146,6 @@ function filterDocs() {
   });
 }
 
-// ─── FIX: Check if already processed ─────────────────────────────
 function checkIfAlreadyProcessed() {
   if (state.items.length === 0) return;
   var allProcessed = state.items.every(function(item) {
@@ -162,7 +162,6 @@ function checkIfAlreadyProcessed() {
   }
 }
 
-// ─── onDocSelect ──────────────────────────────────────────────────
 async function onDocSelect(docNo) {
   if (state.isLoading) return;
   if (!docNo) { hideScannerSection(); return; }
@@ -179,7 +178,6 @@ async function onDocSelect(docNo) {
     if (title) title.textContent = cleanDocNo(docNo);
     await fetchDocItems(docNo, state.currentModule);
     checkForProgress();
-    // ─── Check if already processed ──────────────────────────
     checkIfAlreadyProcessed();
   } catch(err) {
     console.error('[onDocSelect] Error:', err);
@@ -438,7 +436,6 @@ function confirmBatchVerify() {
 }
 
 // ─── Submit with duplicate prevention ────────────────────────────
-// ─── Submit with status update and immediate notification refresh ───
 var isSubmitting = false;
 
 async function onSubmit() {
@@ -471,7 +468,6 @@ async function onSubmit() {
     console.log('[Submit] Result:', result);
     
     if (result && result.success === true) {
-      // ─── Determine overall status ──────────────────────────
       var allComplete = true;
       var anyProcessed = false;
       state.items.forEach(function(it) {
@@ -480,7 +476,6 @@ async function onSubmit() {
       });
       var newStatus = allComplete && anyProcessed ? 'COMPLETED' : (anyProcessed ? 'PARTIAL' : 'PENDING');
       
-      // ─── Update DOCLINKS status and wait for response ──────
       try {
         var statusUrl = API_URL + '?action=updateDocStatus&docNo=' + encodeURIComponent(state.currentDoc) + '&status=' + newStatus + '&_t=' + Date.now();
         var statusRes = await fetch(statusUrl, { redirect: 'follow' });
@@ -493,13 +488,10 @@ async function onSubmit() {
         }
       } catch(statusErr) {
         console.error('[Submit] DOCLINKS update error:', statusErr);
-        // Continue even if status update fails – the document sheet is already updated.
       }
       
-      // ─── Clear progress and refresh notifications ──────────
       clearDocProgress(state.currentDoc);
       if (typeof loadWarehouseNotifications === 'function') {
-        // Immediately refresh the pending notifications list
         loadWarehouseNotifications();
       }
       
@@ -947,7 +939,7 @@ async function loadIvmTeamList() {
   } catch(e) { console.error('Failed to load IVM team list', e); }
 }
 
-// ─── MANUAL MRR FUNCTIONS (with custom searchable dropdown) ──────────────
+// ─── MANUAL MRR FUNCTIONS (with custom searchable dropdown & remarks) ──
 var manualMrrModal = null;
 var manualMrrItems = [];
 
@@ -980,7 +972,8 @@ function addManualMrrItem() {
     description: '',
     qty: 1,
     atlQty: 0,
-    unit: 'PIECE'
+    unit: 'PIECE',
+    remarks: ''
   });
   renderManualMrrItems();
   updateManualMrrSubmitButton();
@@ -1055,6 +1048,10 @@ function renderManualMrrItems() {
         'onchange="updateManualMrrItem(' + i + ', \'unit\', this.value)">' +
         buildUnitOptions(it.unit || 'PIECE') +
       '</select></td>' +
+      '<td><input type="text" class="form-control form-control-sm manual-mrr-remarks" ' +
+        'value="' + (it.remarks || '') + '" ' +
+        'onchange="updateManualMrrItem(' + i + ', \'remarks\', this.value)" ' +
+        'placeholder="Optional note..."></td>' +
       '<td class="align-middle text-center">' +
         '<button class="btn btn-sm btn-outline-danger" onclick="removeManualMrrItem(' + i + ')" title="Remove">' +
           '<i class="bi bi-trash"></i>' +
@@ -1170,7 +1167,8 @@ async function submitManualMrr() {
         description: it.description.trim(),
         qty: it.qty,
         atlQty: it.atlQty || 0,
-        unit: it.unit || 'PIECE'
+        unit: it.unit || 'PIECE',
+        remarks: it.remarks || ''
       });
     }
   }
