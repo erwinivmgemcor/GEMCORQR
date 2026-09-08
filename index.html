@@ -1758,7 +1758,42 @@
 <script src="/GEMCORQR/js/state.js?v=2.2.0"></script>
 <script src="/GEMCORQR/js/auth.js?v=2.2.0"></script>
 <script src="/GEMCORQR/js/scanner.js?v=2.2.0"></script>
-<script src="/GEMCORQR/js/warehouse.js?v=2.2.0"></script>
+<script src="/GEMCORQR/js/warehouse.js?v=2.3.0"></script>
+  <!-- Ensure all warehouse functions are defined (fallback) -->
+<script>
+  (function() {
+    // List of functions that must exist
+    var requiredFunctions = [
+      'manualPoLookup',
+      'lookupPoItems',
+      'renderPoItems',
+      'createMrrFromPo',
+      'selectAllPoItems',
+      'togglePoCard',
+      'closePoItemsModal',
+      'openManualMrrModal',
+      'submitManualMrr',
+      'quickProcessPending',
+      'quickNewMrr',
+      'quickNewMrif'
+    ];
+    var missing = [];
+    requiredFunctions.forEach(function(fn) {
+      if (typeof window[fn] === 'undefined') {
+        missing.push(fn);
+        window[fn] = function() {
+          console.error('Function "' + fn + '" is not defined. Please refresh the page.');
+          showToast('Error: ' + fn + ' is not available. Please refresh the page.', 'danger');
+        };
+      }
+    });
+    if (missing.length > 0) {
+      console.warn('[Fallback] Defined fallbacks for:', missing.join(', '));
+    } else {
+      console.log('[Fallback] All warehouse functions are defined.');
+    }
+  })();
+</script>
 <script src="/GEMCORQR/js/requests.js?v=2.2.0"></script>
 <script src="/GEMCORQR/js/inventory.js?v=2.2.0"></script>
 <script src="/GEMCORQR/js/prints.js?v=2.2.0"></script>
