@@ -16,11 +16,11 @@ function initRole() {
   } else {
     applyRoleUI();
     if (role === 'warehouse') {
-      // If user not logged in, show login modal
+      // ─── Preload lists for warehouse ──────────────────────
       if (!state.currentUser) {
         setTimeout(showLoginModal, 300);
       } else {
-        // User already logged in, load modules
+        preloadWarehouseLists();
         if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
           setTimeout(() => { if (settingsModal) settingsModal.show(); }, 500);
         }
@@ -31,6 +31,20 @@ function initRole() {
     } else {
       checkProductionName();
     }
+  }
+}
+
+// ─── Preload lists (inventory, vendors, IVM team) ──────────────
+async function preloadWarehouseLists() {
+  try {
+    await Promise.all([
+      loadRequestInventory(false),
+      loadVendorList(false),
+      loadIvmTeamList(false)
+    ]);
+    console.log('[Preload] Warehouse lists loaded');
+  } catch(e) {
+    console.warn('[Preload] Some lists failed to load:', e);
   }
 }
 
@@ -48,6 +62,7 @@ function selectRole(role) {
       if (roleModal) roleModal.hide();
       applyRoleUI();
       showToast('Warehouse mode activated', 'success');
+      preloadWarehouseLists();
       if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
         setTimeout(() => { if (settingsModal) settingsModal.show(); }, 500);
       }
@@ -137,6 +152,7 @@ async function loginUser() {
       }
       showToast('Welcome, ' + state.currentUserFullname + '!', 'success');
       applyRoleUI();
+      preloadWarehouseLists();
       if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
         setTimeout(() => { if (settingsModal) settingsModal.show(); }, 500);
       }
@@ -221,6 +237,7 @@ function verifyPin() {
     if (!state.currentUser) {
       setTimeout(showLoginModal, 300);
     } else {
+      preloadWarehouseLists();
       if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
         setTimeout(() => { if (settingsModal) settingsModal.show(); }, 500);
       }
