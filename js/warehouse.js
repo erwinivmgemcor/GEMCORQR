@@ -438,6 +438,7 @@ function confirmBatchVerify() {
 }
 
 // ─── Submit with duplicate prevention ────────────────────────────
+// ─── Submit with status update and immediate notification refresh ───
 var isSubmitting = false;
 
 async function onSubmit() {
@@ -470,6 +471,7 @@ async function onSubmit() {
     console.log('[Submit] Result:', result);
     
     if (result && result.success === true) {
+      // ─── Determine overall status ──────────────────────────
       var allComplete = true;
       var anyProcessed = false;
       state.items.forEach(function(it) {
@@ -478,17 +480,29 @@ async function onSubmit() {
       });
       var newStatus = allComplete && anyProcessed ? 'COMPLETED' : (anyProcessed ? 'PARTIAL' : 'PENDING');
       
-      // Update DOCLINKS status (silent)
+      // ─── Update DOCLINKS status and wait for response ──────
       try {
         var statusUrl = API_URL + '?action=updateDocStatus&docNo=' + encodeURIComponent(state.currentDoc) + '&status=' + newStatus + '&_t=' + Date.now();
         var statusRes = await fetch(statusUrl, { redirect: 'follow' });
         var statusData = await statusRes.json();
         console.log('[Submit] DOCLINKS update:', statusData);
+        if (statusData && statusData.success) {
+          showToast('Status updated to ' + newStatus, 'success');
+        } else {
+          console.warn('[Submit] DOCLINKS update returned error:', statusData);
+        }
       } catch(statusErr) {
         console.error('[Submit] DOCLINKS update error:', statusErr);
+        // Continue even if status update fails – the document sheet is already updated.
       }
       
+      // ─── Clear progress and refresh notifications ──────────
       clearDocProgress(state.currentDoc);
+      if (typeof loadWarehouseNotifications === 'function') {
+        // Immediately refresh the pending notifications list
+        loadWarehouseNotifications();
+      }
+      
       if (successModal) successModal.show();
       setTimeout(function() {
         location.reload();
