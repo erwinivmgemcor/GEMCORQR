@@ -238,6 +238,7 @@ function buildSingleMrifHtml(docNo, info, items) {
       var desc = it.description || it.desc || '';
       var qty = it.expectedQty || it.qty || it.requestedQty || 0;
       var issued = it.actualQty || it.issuedQty || it.atlQty || 0;
+var issuedDisplay = (issued === 0) ? '' : issued;
       var unit = it.unit || 'PIECE';
       var remarks = it.remarks || '';
       var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
