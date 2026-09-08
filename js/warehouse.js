@@ -1092,7 +1092,7 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
     });
   };
 
-  // ─── MANUAL MRR FUNCTIONS ────────────────────────────────────────
+  // ─── MANUAL MRR FUNCTIONS (IMPROVED DROPDOWN) ──────────────────
   var manualMrrModal = null;
   var manualMrrItems = [];
 
@@ -1171,15 +1171,17 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
       html += '<tr>' +
         '<td class="align-middle text-center">' + (i + 1) + '</td>' +
         '<td>' +
-          '<div style="position:relative;">' +
+          '<div style="position:relative;width:100%;">' +
             '<input type="text" class="form-control form-control-sm manual-mrr-search" ' +
               'placeholder="Type to search..." ' +
               'value="' + (it.inventoryId ? it.inventoryId + ' - ' + it.description : '') + '" ' +
               'oninput="filterManualMrrItems(this, ' + i + ')" ' +
               'onfocus="filterManualMrrItems(this, ' + i + ')" ' +
-              'autocomplete="off">' +
+              'onclick="this.select();filterManualMrrItems(this, ' + i + ')" ' +
+              'autocomplete="off" ' +
+              'style="width:100%;min-width:150px;">' +
             '<div class="list-group position-absolute z-3 d-none manual-mrr-dropdown" ' +
-              'style="max-height:250px;overflow-y:auto;width:100%;background:#fff;border:1px solid #ced4da;border-radius:4px;box-shadow:0 4px 12px rgba(0,0,0,0.15);position:absolute;top:100%;left:0;z-index:1050;" ' +
+              'style="max-height:300px;overflow-y:auto;width:100%;min-width:250px;background:#fff;border:1px solid #ced4da;border-radius:4px;box-shadow:0 6px 20px rgba(0,0,0,0.18);position:absolute;top:100%;left:0;z-index:9999;margin-top:2px;padding:4px 0;" ' +
               'id="manualMrrDropdown' + i + '"></div>' +
             '<input type="hidden" class="manual-mrr-code" id="manualMrrCode' + i + '" value="' + (it.inventoryId || '') + '">' +
             '<input type="hidden" class="manual-mrr-desc" id="manualMrrDesc' + i + '" value="' + (it.description || '') + '">' +
@@ -1189,23 +1191,23 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
           'id="manualMrrDescText' + i + '" ' +
           'value="' + (it.description || '') + '" ' +
           'onchange="updateManualMrrItem(' + i + ', \'description\', this.value)" ' +
-          'placeholder="Description"></td>' +
+          'placeholder="Description" style="min-width:120px;"></td>' +
         '<td><input type="number" class="form-control form-control-sm text-center" ' +
           'value="' + (it.qty || 0) + '" ' +
           'onchange="updateManualMrrItem(' + i + ', \'qty\', parseFloat(this.value)||0)" ' +
-          'min="0" step="0.01"></td>' +
+          'min="0" step="0.01" style="width:70px;"></td>' +
         '<td><input type="number" class="form-control form-control-sm text-center" ' +
           'value="' + (it.atlQty || 0) + '" ' +
           'onchange="updateManualMrrItem(' + i + ', \'atlQty\', parseFloat(this.value)||0)" ' +
-          'min="0" step="0.01"></td>' +
+          'min="0" step="0.01" style="width:70px;"></td>' +
         '<td><select class="form-select form-select-sm manual-mrr-unit" ' +
-          'onchange="updateManualMrrItem(' + i + ', \'unit\', this.value)">' +
+          'onchange="updateManualMrrItem(' + i + ', \'unit\', this.value)" style="width:85px;">' +
           buildUnitOptions(it.unit || 'PIECE') +
         '</select></td>' +
         '<td><input type="text" class="form-control form-control-sm" ' +
           'value="' + (it.remarks || '') + '" ' +
           'onchange="updateManualMrrItem(' + i + ', \'remarks\', this.value)" ' +
-          'placeholder="Remarks" maxlength="200"></td>' +
+          'placeholder="Remarks" maxlength="200" style="min-width:100px;"></td>' +
         '<td class="align-middle text-center">' +
           '<button class="btn btn-sm btn-outline-danger" onclick="removeManualMrrItem(' + i + ')" title="Remove">' +
             '<i class="bi bi-trash"></i>' +
@@ -1216,7 +1218,7 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
     tbody.innerHTML = html;
   };
 
-  // ─── Custom dropdown filter for Manual MRR ──────────────────────
+  // ─── Custom dropdown filter for Manual MRR (improved) ──────────
   window.filterManualMrrItems = function(input, idx) {
     var term = input.value.toLowerCase();
     var dropdown = document.getElementById('manualMrrDropdown' + idx);
@@ -1231,10 +1233,10 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
       var code = (it.code || it.inventoryId || '').toLowerCase();
       var desc = (it.description || '').toLowerCase();
       return code.includes(term) || desc.includes(term);
-    }).slice(0, 15);
+    }).slice(0, 20); // Show more items
 
     if (matches.length === 0) {
-      dropdown.innerHTML = '<div class="list-group-item text-muted">No matches found</div>';
+      dropdown.innerHTML = '<div class="list-group-item text-muted" style="padding:8px 12px;">No matches found</div>';
     } else {
       matches.forEach(function(it) {
         var code = it.code || it.inventoryId || '';
@@ -1242,8 +1244,10 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
         var unit = it.unit || 'PIECE';
         var el = document.createElement('div');
         el.className = 'list-group-item list-group-item-action';
-        el.style.cssText = 'padding:6px 10px;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f0f0f0;';
-        el.innerHTML = '<div class="fw-bold small">' + code + '</div><div class="small text-muted">' + desc + '</div>';
+        el.style.cssText = 'padding:8px 14px;cursor:pointer;font-size:0.9rem;border-bottom:1px solid #f0f0f0;transition:background 0.15s;';
+        el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div><div class="text-muted small">' + desc + ' <span class="badge bg-light text-dark">' + unit + '</span></div>';
+        el.onmouseover = function() { this.style.background = '#e8f0fe'; };
+        el.onmouseout = function() { this.style.background = ''; };
         el.onclick = function() {
           selectManualMrrItem(idx, code, desc, unit);
           dropdown.classList.add('d-none');
@@ -1282,6 +1286,9 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
 
     updateManualMrrSubmitButton();
     playSuccessBeep();
+    // Close dropdown
+    var dropdown = document.getElementById('manualMrrDropdown' + idx);
+    if (dropdown) dropdown.classList.add('d-none');
   };
 
   window.updateManualMrrSubmitButton = function() {
