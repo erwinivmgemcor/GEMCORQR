@@ -305,7 +305,6 @@ function renderItems() {
     tr.className = 'item-row' + (item.verified ? ' verified' : '');
     tr.setAttribute('data-index', idx);
     tr.style.cursor = 'pointer';
-    // Build row with clickable functionality (ignore checkbox/button clicks)
     tr.innerHTML =
       '<td><input type="checkbox" class="item-select" data-index="' + idx + '" ' + (item.selected ? 'checked' : '') + ' onclick="event.stopPropagation();"></td>' +
       '<td><div class="fw-bold small">' + item.inventoryId + '</div><div class="text-muted small">' + item.description + '</div></td>' +
@@ -314,9 +313,7 @@ function renderItems() {
       '<td class="text-center">' + (item.unit || 'PIECE') + '</td>' +
       '<td>' + getStatusBadge(item) + '</td>';
     
-    // Click handler – open quantity modal for this item
     tr.addEventListener('click', function(e) {
-      // Ignore clicks on checkboxes or buttons
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('button')) {
         return;
       }
@@ -777,6 +774,8 @@ async function loadRequestInventory() {
     try { data = JSON.parse(text); } catch(e) { data = {}; }
     const inv = data.inventory || data.items || [];
     state.requestInventoryList = inv;
+    // Populate item code datalist
+    populateDatalist('itemCodeDatalist', inv.map(function(it) { return it.code; }));
   } catch(err) {
     state.requestInventoryList = [];
   }
@@ -859,7 +858,43 @@ async function lookupSofData() {
   }
 }
 
-// ─── MANUAL MRR FUNCTIONS ────────────────────────────────────────
+// ─── DATALIST HELPERS ─────────────────────────────────────────────
+function populateDatalist(datalistId, items) {
+  var datalist = document.getElementById(datalistId);
+  if (!datalist) return;
+  datalist.innerHTML = '';
+  items.forEach(function(item) {
+    var option = document.createElement('option');
+    option.value = item;
+    datalist.appendChild(option);
+  });
+}
+
+async function loadVendorList() {
+  try {
+    var url = API_URL + '?action=getVendorList&_t=' + Date.now();
+    var res = await fetch(url);
+    var data = await res.json();
+    if (data.success && data.vendors) {
+      state.vendorList = data.vendors;
+      populateDatalist('vendorDatalist', state.vendorList);
+    }
+  } catch(e) { console.error('Failed to load vendor list', e); }
+}
+
+async function loadIvmTeamList() {
+  try {
+    var url = API_URL + '?action=getIvmTeamList&_t=' + Date.now();
+    var res = await fetch(url);
+    var data = await res.json();
+    if (data.success && data.members) {
+      state.ivmTeamList = data.members;
+      populateDatalist('ivmTeamDatalist', state.ivmTeamList);
+    }
+  } catch(e) { console.error('Failed to load IVM team list', e); }
+}
+
+// ─── MANUAL MRR FUNCTIONS (with datalist support) ──────────────
 var manualMrrModal = null;
 var manualMrrItems = [];
 
@@ -881,6 +916,10 @@ function openManualMrrModal() {
   renderManualMrrItems();
   updateManualMrrSubmitButton();
   manualMrrModal.show();
+  // Load lists for datalist
+  loadRequestInventory();   // loads inventory codes and populates itemCodeDatalist
+  loadVendorList();
+  loadIvmTeamList();
 }
 
 function addManualMrrItem() {
@@ -932,11 +971,15 @@ function renderManualMrrItems() {
     var it = manualMrrItems[i];
     html += '<tr>' +
       '<td class="align-middle text-center">' + (i + 1) + '</td>' +
-      '<td><input type="text" class="form-control form-control-sm manual-mrr-code" ' +
-        'value="' + (it.inventoryId || '') + '" ' +
-        'onchange="updateManualMrrItem(' + i + ', \'inventoryId\', this.value)" ' +
-        'placeholder="Item code"></td>' +
-      '<td><input type="text" class="form-control form-control-sm" ' +
+      '<td>' +
+        '<input type="text" class="form-control form-control-sm manual-mrr-code" ' +
+          'list="itemCodeDatalist" ' +
+          'value="' + (it.inventoryId || '') + '" ' +
+          'onchange="onManualMrrCodeChange(' + i + ', this.value)" ' +
+          'placeholder="Item code" autocomplete="off">' +
+      '</td>' +
+      '<td><input type="text" class="form-control form-control-sm manual-mrr-desc" ' +
+        'id="manualMrrDesc' + i + '" ' +
         'value="' + (it.description || '') + '" ' +
         'onchange="updateManualMrrItem(' + i + ', \'description\', this.value)" ' +
         'placeholder="Description"></td>' +
@@ -960,6 +1003,34 @@ function renderManualMrrItems() {
       '</tr>';
   }
   tbody.innerHTML = html;
+}
+
+function onManualMrrCodeChange(index, code) {
+  var item = state.requestInventoryList.find(function(it) { return it.code === code || it.inventoryId === code; });
+  if (item) {
+    manualMrrItems[index].inventoryId = item.code || item.inventoryId;
+    manualMrrItems[index].description = item.description || '';
+    // Update the description field
+    var descField = document.getElementById('manualMrrDesc' + index);
+    if (descField) descField.value = item.description || '';
+    // Set unit if available
+    if (item.unit) {
+      manualMrrItems[index].unit = item.unit;
+      var row = descField ? descField.closest('tr') : null;
+      if (row) {
+        var unitSelect = row.querySelector('.manual-mrr-unit');
+        if (unitSelect) {
+          for (var opt = 0; opt < unitSelect.options.length; opt++) {
+            if (unitSelect.options[opt].value === item.unit) {
+              unitSelect.selectedIndex = opt;
+              break;
+            }
+          }
+        }
+      }
+    }
+    updateManualMrrSubmitButton();
+  }
 }
 
 function updateManualMrrSubmitButton() {
@@ -1052,11 +1123,6 @@ async function submitManualMrr() {
 }
 
 // ─── QUICK ACTIONS ────────────────────────────────────────────────
-
-/**
- * Process Next Pending: Find the oldest pending MRIF document
- * and load it for processing.
- */
 async function quickProcessPending() {
   if (state.isLoading) return;
   
@@ -1090,9 +1156,6 @@ async function quickProcessPending() {
   }
 }
 
-/**
- * Quick New MRR: Open the PO lookup modal.
- */
 function quickNewMrr() {
   selectModule('MRR').then(() => {
     var poInput = document.getElementById('manualPoInput');
@@ -1107,9 +1170,6 @@ function quickNewMrr() {
   });
 }
 
-/**
- * Quick New MRIF: Open the manual MRIF creation modal.
- */
 function quickNewMrif() {
   openManualMrifModal();
 }
