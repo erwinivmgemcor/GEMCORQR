@@ -1,8 +1,17 @@
 // ============================================================
-// WAREHOUSE NOTIFICATIONS (with caching)
+// WAREHOUSE NOTIFICATIONS (with caching fallback)
 // ============================================================
 
-// ─── Force all functions to be globally accessible ──────────────
+// ─── Fallback cache functions if cache.js is not loaded ──────
+(function() {
+  if (typeof getCache === 'undefined') {
+    window.getCache = function(key) { return null; };
+    window.setCache = function(key, data, ttl) { /* no-op */ };
+    window.clearCache = function(key) { /* no-op */ };
+    console.warn('⚠️ cache.js not loaded – caching disabled for notifications.');
+  }
+})();
+
 (function() {
   "use strict";
 
@@ -85,10 +94,10 @@
       if (cached) {
         console.log('[WH Notifications] Loaded from cache:', cached.length);
         processNotifications(cached);
-        // Still refresh in background after 1 second (stale-while-revalidate)
+        // Stale-while-revalidate: refresh in background after 2s
         setTimeout(function() {
           refreshNotifications();
-        }, 1000);
+        }, 2000);
         return;
       }
     }
@@ -103,7 +112,6 @@
       var data = await res.json();
       console.log('[WH Notifications] Response:', data);
       if (data.success && data.requests) {
-        // Cache for 30 seconds
         setCache('pendingRequests', data.requests, 30 * 1000);
         processNotifications(data.requests);
       } else {
@@ -235,7 +243,6 @@
   window.processRequestFromNotification = async function(docNo, docType) {
     console.log('[WH] Processing request:', docNo, docType);
     
-    // 1. Navigate to the releasing section
     if (typeof navigateTo === 'function') {
       navigateTo('releasing');
     } else {
@@ -243,14 +250,11 @@
       await selectModule(docType);
     }
     
-    // 2. Wait a moment for the UI to update
     await new Promise(resolve => setTimeout(resolve, 300));
     
-    // 3. Ensure the module is set correctly
     state.currentModule = docType;
     updateLabels();
     
-    // 4. Check if the sheet ID is available; if not, try to sync
     var sheetId = getCleanSheetId();
     if (!sheetId) {
       showToast('⚠️ No Sheet ID for ' + docType + '. Attempting to sync...', 'warning');
@@ -262,7 +266,6 @@
       }
     }
     
-    // 5. Load the document directly (bypass dropdown)
     try {
       await onDocSelect(docNo);
       showToast('Loaded ' + cleanDocNo(docNo), 'success');
@@ -278,7 +281,6 @@
     localStorage.setItem('ivm_whNotifCount', '0');
     var badge = document.getElementById('whNotifBadge');
     if (badge) badge.classList.add('d-none');
-    // Also clear cache
     clearCache('pendingRequests');
     showToast('Notifications cleared', 'info');
   };
@@ -288,9 +290,7 @@
     if (window._whPollInterval) {
       clearInterval(window._whPollInterval);
     }
-    // Initial load
     loadWarehouseNotifications();
-    // Poll every 30 seconds
     window._whPollInterval = setInterval(function() {
       if (!state.isLoading) {
         loadWarehouseNotifications();
@@ -308,6 +308,6 @@
     }
   };
 
-  console.log('✅ notifications.js loaded (with caching)');
+  console.log('✅ notifications.js loaded (with caching fallback)');
 
-})(); // end IIFE
+})();
