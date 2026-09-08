@@ -934,7 +934,7 @@
   </div>
 </div>
 
-<!-- PO Items Modal (with remarks and warning) -->
+<!-- PO Items Modal (with editable missing fields) -->
 <div class="modal fade" id="poItemsModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -956,9 +956,7 @@
         <!-- Warning banner for incomplete PO items -->
         <div id="poIncompleteWarning" class="alert alert-warning d-none">
           <i class="bi bi-exclamation-triangle-fill me-2"></i>
-          <strong>Warning:</strong> Some items in this PO are missing <strong>Item Code</strong> or <strong>Description</strong>. 
-          You can still create an MRR, but you may need to manually enter missing details. 
-          Consider using <strong>Manual MRR</strong> if the PO data is incomplete.
+          <strong>Some items are incomplete.</strong> Please fill in the missing Item Code and Description below, or uncheck items that you cannot complete.
         </div>
 
         <div class="d-flex justify-content-between align-items-center mb-2">
@@ -1551,7 +1549,7 @@
   </div>
 </div>
 
-<!-- ─── UPDATED MANUAL MRR MODAL (with Remarks) ─── -->
+<!-- Manual MRR Modal (with Remarks) -->
 <div class="modal fade" id="manualMrrModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -1753,53 +1751,19 @@
 <!-- ═══════════════════════════════════════════════════════════════════════
      SCRIPTS (with cache-busting)
      ═══════════════════════════════════════════════════════════════════════ -->
-<script src="/GEMCORQR/js/config.js?v=2.2.0"></script>
-<script src="/GEMCORQR/js/utils.js?v=2.2.0"></script>
-<script src="/GEMCORQR/js/state.js?v=2.2.0"></script>
-<script src="/GEMCORQR/js/auth.js?v=2.2.0"></script>
-<script src="/GEMCORQR/js/scanner.js?v=2.2.0"></script>
+<script src="/GEMCORQR/js/config.js?v=2.3.0"></script>
+<script src="/GEMCORQR/js/cache.js?v=2.3.0"></script>
+<script src="/GEMCORQR/js/utils.js?v=2.3.0"></script>
+<script src="/GEMCORQR/js/state.js?v=2.3.0"></script>
+<script src="/GEMCORQR/js/auth.js?v=2.3.0"></script>
+<script src="/GEMCORQR/js/scanner.js?v=2.3.0"></script>
 <script src="/GEMCORQR/js/warehouse.js?v=2.3.0"></script>
-  <!-- Ensure all warehouse functions are defined (fallback) -->
-<script>
-  (function() {
-    // List of functions that must exist
-    var requiredFunctions = [
-      'manualPoLookup',
-      'lookupPoItems',
-      'renderPoItems',
-      'createMrrFromPo',
-      'selectAllPoItems',
-      'togglePoCard',
-      'closePoItemsModal',
-      'openManualMrrModal',
-      'submitManualMrr',
-      'quickProcessPending',
-      'quickNewMrr',
-      'quickNewMrif'
-    ];
-    var missing = [];
-    requiredFunctions.forEach(function(fn) {
-      if (typeof window[fn] === 'undefined') {
-        missing.push(fn);
-        window[fn] = function() {
-          console.error('Function "' + fn + '" is not defined. Please refresh the page.');
-          showToast('Error: ' + fn + ' is not available. Please refresh the page.', 'danger');
-        };
-      }
-    });
-    if (missing.length > 0) {
-      console.warn('[Fallback] Defined fallbacks for:', missing.join(', '));
-    } else {
-      console.log('[Fallback] All warehouse functions are defined.');
-    }
-  })();
-</script>
-<script src="/GEMCORQR/js/requests.js?v=2.2.0"></script>
-<script src="/GEMCORQR/js/inventory.js?v=2.2.0"></script>
-<script src="/GEMCORQR/js/prints.js?v=2.2.0"></script>
-<script src="/GEMCORQR/js/notifications.js?v=2.2.0"></script>
-<script src="/GEMCORQR/js/analytics.js?v=2.2.0"></script>
-<script src="/GEMCORQR/js/main.js?v=2.2.0"></script>
+<script src="/GEMCORQR/js/requests.js?v=2.3.0"></script>
+<script src="/GEMCORQR/js/inventory.js?v=2.3.0"></script>
+<script src="/GEMCORQR/js/prints.js?v=2.3.0"></script>
+<script src="/GEMCORQR/js/notifications.js?v=2.3.0"></script>
+<script src="/GEMCORQR/js/analytics.js?v=2.3.0"></script>
+<script src="/GEMCORQR/js/main.js?v=2.3.0"></script>
 
 </body>
 </html>
