@@ -539,7 +539,7 @@
     return result;
   };
 
-  // ─── PO ITEMS & MRR CREATION (with remarks and validation) ──────
+  // ─── PO ITEMS & MRR CREATION (with editable missing fields) ──────
   window.renderPoItems = function() {
     var noEl = document.getElementById('poDisplayNo');
     var prfEl = document.getElementById('poDisplayPrf');
@@ -550,55 +550,82 @@
     const list = document.getElementById('poItemsList');
     if (!list) return;
     
-    // Check for missing items
+    // Check for missing items and update warning
     var hasMissing = false;
     state.poItemsData.forEach(function(item) {
-      if (item.hasMissing || !item.inventoryId || !item.description) hasMissing = true;
+      if (!item.inventoryId || !item.inventoryId.trim() || !item.description || !item.description.trim()) {
+        hasMissing = true;
+      }
     });
     
-    // Show/hide warning banner
+    // Show/hide warning banner with updated message
     var warning = document.getElementById('poIncompleteWarning');
     if (warning) {
       if (hasMissing) {
         warning.classList.remove('d-none');
+        warning.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i>' +
+          '<strong>Some items are incomplete.</strong> Please fill in the missing Item Code and Description below, or uncheck items that you cannot complete.';
       } else {
         warning.classList.add('d-none');
       }
     }
     
     list.innerHTML = state.poItemsData.map((item, idx) => {
-      var isMissing = item.hasMissing || !item.inventoryId || !item.description;
+      var isMissing = !item.inventoryId || !item.inventoryId.trim() || !item.description || !item.description.trim();
       var missingClass = isMissing ? 'border border-danger' : '';
+      var codeVal = item.inventoryId || '';
+      var descVal = item.description || '';
+      
       return `
 <div class="card mb-2 po-item-card ${missingClass}" id="po-card-${idx}">
 <div class="card-body py-2 px-3">
-<div class="d-flex align-items-center gap-2">
+<div class="d-flex align-items-center gap-2 flex-wrap">
 <div class="form-check m-0">
 <input class="form-check-input po-check" type="checkbox" id="po-check-${idx}" ${isMissing ? '' : 'checked'} onchange="togglePoCard(${idx})">
 </div>
-<div class="flex-grow-1" style="min-width:0">
-<div class="fw-bold small text-truncate">${item.inventoryId || 'MISSING ITEM CODE'}</div>
-<div class="text-muted small text-truncate">${item.description || 'MISSING DESCRIPTION'}</div>
-<div class="d-flex gap-2 mt-1">
-<small class="text-muted">PO Qty: <strong>${item.qty || 0}</strong></small>
-<small class="text-muted">Unit: <strong>${item.unit || 'PCS'}</strong></small>
-${isMissing ? '<span class="badge bg-danger">Incomplete</span>' : ''}
+<div class="flex-grow-1" style="min-width:120px;">
+  <div class="row g-1">
+    <div class="col-12 col-md-4">
+      <label class="form-label mb-0 small">Item Code</label>
+      ${isMissing ? 
+        `<input type="text" class="form-control form-control-sm po-edit-code" id="po-code-${idx}" value="${codeVal}" placeholder="Enter Item Code" oninput="updatePoItem(${idx}, 'inventoryId', this.value)">` :
+        `<div class="fw-bold small">${codeVal}</div>`
+      }
+    </div>
+    <div class="col-12 col-md-4">
+      <label class="form-label mb-0 small">Description</label>
+      ${isMissing ?
+        `<input type="text" class="form-control form-control-sm po-edit-desc" id="po-desc-${idx}" value="${descVal}" placeholder="Enter Description" oninput="updatePoItem(${idx}, 'description', this.value)">` :
+        `<div class="text-muted small">${descVal}</div>`
+      }
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label mb-0 small">PO Qty</label>
+      <div class="fw-bold small">${item.qty || 0}</div>
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label mb-0 small">Unit</label>
+      <div class="fw-bold small">${item.unit || 'PCS'}</div>
+    </div>
+  </div>
+  <div class="d-flex gap-2 mt-1 flex-wrap">
+    <div style="min-width:80px;">
+      <label class="form-label mb-0 small">ATL Qty</label>
+      <input type="number" class="form-control form-control-sm" id="po-atl-${idx}" value="${item.qty || 0}" min="0" style="width:80px">
+    </div>
+    <div style="min-width:80px;">
+      <label class="form-label mb-0 small">Unit (Override)</label>
+      <select class="form-select form-select-sm" id="po-unit-${idx}" style="width:90px;">
+        ${buildUnitOptions(item.unit || 'PCS')}
+      </select>
+    </div>
+    <div style="min-width:120px; flex:1;">
+      <label class="form-label mb-0 small">Remarks</label>
+      <input type="text" class="form-control form-control-sm" id="po-remarks-${idx}" placeholder="Optional note..." maxlength="200">
+    </div>
+  </div>
 </div>
-</div>
-<div style="min-width:90px">
-<label class="form-label mb-0 small">ATL Qty</label>
-<input type="number" class="form-control form-control-sm" id="po-atl-${idx}" value="${item.qty || 0}" min="0" style="width:80px">
-</div>
-<div style="min-width:100px">
-<label class="form-label mb-0 small">Unit</label>
-<select class="form-select form-select-sm" id="po-unit-${idx}">
-  ${buildUnitOptions(item.unit || 'PCS')}
-</select>
-</div>
-<div style="min-width:120px">
-<label class="form-label mb-0 small">Remarks</label>
-<input type="text" class="form-control form-control-sm" id="po-remarks-${idx}" placeholder="Optional note..." maxlength="200">
-</div>
+${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
 </div>
 </div>
 </div>
@@ -614,18 +641,27 @@ ${isMissing ? '<span class="badge bg-danger">Incomplete</span>' : ''}
     });
   };
 
+  // ─── Update a PO item when user edits missing fields ────────────
+  window.updatePoItem = function(idx, field, value) {
+    if (state.poItemsData[idx]) {
+      state.poItemsData[idx][field] = value.trim();
+      // Re-render the list to reflect changes (update missing status)
+      renderPoItems();
+    }
+  };
+
   window.updateCreateMrrButton = function() {
     var btn = document.querySelector('#poItemsModal .btn-success');
     if (!btn) return;
     
     var selected = getSelectedPoItems();
     var hasMissingSelected = selected.some(function(item) {
-      return !item.inventoryId || !item.inventoryId.trim();
+      return !item.inventoryId || !item.inventoryId.trim() || !item.description || !item.description.trim();
     });
     
     if (hasMissingSelected) {
       btn.disabled = true;
-      btn.title = 'Cannot create MRR: Selected items are missing Item Code';
+      btn.title = 'Cannot create MRR: Selected items are missing Item Code or Description';
     } else if (selected.length === 0) {
       btn.disabled = true;
       btn.title = 'Please select at least one item';
@@ -685,12 +721,12 @@ ${isMissing ? '<span class="badge bg-danger">Incomplete</span>' : ''}
       return;
     }
     
-    // Check if any selected item is missing inventory ID
+    // Check if any selected item is missing inventory ID or description
     var hasMissing = selected.some(function(item) {
-      return !item.inventoryId || !item.inventoryId.trim();
+      return !item.inventoryId || !item.inventoryId.trim() || !item.description || !item.description.trim();
     });
     if (hasMissing) {
-      showToast('Cannot create MRR: Selected items are missing Item Code. Please uncheck incomplete items or use Manual MRR.', 'danger');
+      showToast('Cannot create MRR: Selected items are missing Item Code or Description. Please fill in missing details or uncheck incomplete items.', 'danger');
       return;
     }
     
@@ -769,18 +805,15 @@ ${isMissing ? '<span class="badge bg-danger">Incomplete</span>' : ''}
   };
 
   window.manualPoLookup = function() {
-    // This handles both the manualPoInput and mrrManualPoInput
     const poNo = document.getElementById('manualPoInput') ? document.getElementById('manualPoInput').value.trim() : '';
     const mrrPoNo = document.getElementById('mrrManualPoInput') ? document.getElementById('mrrManualPoInput').value.trim() : '';
     const finalPo = poNo || mrrPoNo;
     
     if (!finalPo) { showToast('Please enter a PO number', 'warning'); return; }
     
-    // Clear inputs
     if (document.getElementById('manualPoInput')) document.getElementById('manualPoInput').value = '';
     if (document.getElementById('mrrManualPoInput')) document.getElementById('mrrManualPoInput').value = '';
     
-    // Use the same logic as lookupPoItems but with the PO number
     showLoading('Looking up PO...');
     fetch(API_URL + '?action=getPoItems&poNo=' + encodeURIComponent(finalPo) + '&_t=' + Date.now(), { redirect: 'follow' })
       .then(function(res) { return res.text(); })
