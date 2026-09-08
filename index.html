@@ -1552,13 +1552,37 @@
       </div>
       <div class="modal-body">
         <div class="alert alert-info small"><i class="bi bi-info-circle me-1"></i>Use this for materials without existing PO.</div>
+
+        <!-- Datalists for auto‑suggest -->
+        <datalist id="vendorDatalist"></datalist>
+        <datalist id="ivmTeamDatalist"></datalist>
+        <datalist id="itemCodeDatalist"></datalist>
+
         <div class="row g-3 mb-3">
-          <div class="col-md-6"><label class="form-label small fw-bold">P.O. No. <span class="text-muted">(optional)</span></label><input type="text" class="form-control" id="manualMrrPoNo" placeholder="Enter PO No."></div>
-          <div class="col-md-6"><label class="form-label small fw-bold">D.R. No. <span class="text-danger">*</span></label><input type="text" class="form-control" id="manualMrrDrNo" placeholder="Enter DR No."></div>
-          <div class="col-md-6"><label class="form-label small fw-bold">Vendor <span class="text-danger">*</span></label><input type="text" class="form-control" id="manualMrrVendor" placeholder="e.g. Shopee"></div>
-          <div class="col-md-6"><label class="form-label small fw-bold">Receiving Site <span class="text-danger">*</span></label><input type="text" class="form-control" id="manualMrrSite" value="GEMCOR CATMON"></div>
-          <div class="col-md-6"><label class="form-label small fw-bold">Receiving Date <span class="text-danger">*</span></label><input type="date" class="form-control" id="manualMrrDate"></div>
-          <div class="col-md-6"><label class="form-label small fw-bold">Prepared By</label><input type="text" class="form-control" id="manualMrrPreparedBy" placeholder="Your name"></div>
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">P.O. No. <span class="text-muted">(optional)</span></label>
+            <input type="text" class="form-control" id="manualMrrPoNo" placeholder="Enter PO No.">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">D.R. No. <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="manualMrrDrNo" placeholder="Enter DR No.">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Vendor <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="manualMrrVendor" list="vendorDatalist" placeholder="e.g. Shopee" autocomplete="off">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Receiving Site <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="manualMrrSite" value="GEMCOR CATMON">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Receiving Date <span class="text-danger">*</span></label>
+            <input type="date" class="form-control" id="manualMrrDate">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Prepared By</label>
+            <input type="text" class="form-control" id="manualMrrPreparedBy" list="ivmTeamDatalist" placeholder="Your name" autocomplete="off">
+          </div>
         </div>
         <hr>
         <div class="d-flex justify-content-between align-items-center mb-2">
@@ -1568,7 +1592,15 @@
         <div class="table-responsive">
           <table class="table table-sm table-bordered" id="manualMrrItemsTable">
             <thead class="table-light">
-              <tr><th style="width:5%">#</th><th style="width:20%">Item Code <span class="text-danger">*</span></th><th style="width:30%">Description <span class="text-danger">*</span></th><th style="width:10%">Rec. Qty <span class="text-danger">*</span></th><th style="width:10%">ATL Qty</th><th style="width:15%">Unit</th><th style="width:6%"></th></tr>
+              <tr>
+                <th style="width:5%">#</th>
+                <th style="width:20%">Item Code <span class="text-danger">*</span></th>
+                <th style="width:30%">Description <span class="text-danger">*</span></th>
+                <th style="width:10%">Rec. Qty <span class="text-danger">*</span></th>
+                <th style="width:10%">ATL Qty</th>
+                <th style="width:15%">Unit</th>
+                <th style="width:6%"></th>
+              </tr>
             </thead>
             <tbody id="manualMrrItemsBody"></tbody>
           </table>
@@ -1582,7 +1614,6 @@
     </div>
   </div>
 </div>
-
 <!-- Manual MRIF Modal -->
 <div class="modal fade" id="manualMrifModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
