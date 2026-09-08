@@ -238,7 +238,8 @@ function buildSingleMrifHtml(docNo, info, items) {
       var desc = it.description || it.desc || '';
       var qty = it.expectedQty || it.qty || it.requestedQty || 0;
       var issued = it.actualQty || it.issuedQty || it.atlQty || 0;
-var issuedDisplay = (issued === 0) ? '' : issued;
+      // ─── FIX: Show blank if issued is 0 ────────────────────
+      var issuedDisplay = (issued === 0 || issued === '') ? '' : issued;
       var unit = it.unit || 'PIECE';
       var remarks = it.remarks || '';
       var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
@@ -248,7 +249,7 @@ var issuedDisplay = (issued === 0) ? '' : issued;
         '<td class="td-center"><img src="' + qrUrl + '" style="width:32px;height:32px;display:block;margin:0 auto;" alt=""></td>' +
         '<td class="td-left">' + desc + '</td>' +
         '<td class="td-center">' + qty + '</td>' +
-        '<td class="td-center">' + issued + '</td>' +
+        '<td class="td-center">' + issuedDisplay + '</td>' +
         '<td class="td-center">' + unit + '</td>' +
         '<td class="td-center">' + remarks + '</td>' +
         '</tr>';
@@ -361,6 +362,8 @@ function buildSingleMrrHtml(docNo, info, items) {
       var desc = it.description || it.desc || it.itemDescription || '';
       var requestedQty = it.recQty || it.expectedQty || it.qty || it.quantity || 0;
       var receivedQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
+      // ─── FIX: Show blank if receivedQty is 0 ──────────────
+      var receivedDisplay = (receivedQty === 0 || receivedQty === '') ? '' : receivedQty;
       var unit = it.unit || it.uom || 'PIECE';
       var remarks = it.remarks || it.status || it.note || '';
       itemsHtml += '<tr>' +
@@ -368,7 +371,7 @@ function buildSingleMrrHtml(docNo, info, items) {
         '<td class="td-center" style="width:16%">' + code + '</td>' +
         '<td class="td-left" style="width:35%">' + desc + '</td>' +
         '<td class="td-center" style="width:10%">' + requestedQty + '</td>' +
-        '<td class="td-center" style="width:10%">' + receivedQty + '</td>' +
+        '<td class="td-center" style="width:10%">' + receivedDisplay + '</td>' +
         '<td class="td-center" style="width:8%">' + unit + '</td>' +
         '<td class="td-center" style="width:16%">' + remarks + '</td>' +
         '</tr>';
@@ -489,6 +492,8 @@ function buildSingleMrsHtml(docNo, info, items) {
       var desc = it.description || it.desc || '';
       var qtyReturned = it.expectedQty || it.qty || it.requestedQty || 0;
       var actualReturned = it.actualQty || it.issuedQty || it.atlQty || 0;
+      // ─── FIX: Show blank if actualReturned is 0 ──────────────
+      var actualDisplay = (actualReturned === 0 || actualReturned === '') ? '' : actualReturned;
       var unit = it.unit || 'PIECE';
       var remarks = it.remarks || '';
       var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
@@ -498,7 +503,7 @@ function buildSingleMrsHtml(docNo, info, items) {
         '<td class="td-center"><img src="' + qrUrl + '" style="width:32px;height:32px;display:block;margin:0 auto;" alt=""></td>' +
         '<td class="td-left">' + desc + '</td>' +
         '<td class="td-center">' + qtyReturned + '</td>' +
-        '<td class="td-center">' + actualReturned + '</td>' +
+        '<td class="td-center">' + actualDisplay + '</td>' +
         '<td class="td-center">' + unit + '</td>' +
         '<td class="td-center">' + remarks + '</td>' +
         '</tr>';
@@ -600,7 +605,6 @@ async function openMrifPrint(docNo) {
     }
     if (!data.items || data.items.length === 0) {
       console.warn('[openMrifPrint] No items found for ' + docNo, data.debug);
-      // Still render with "no items" message
     }
     renderMrifPrint(docNo, data.info || {}, data.items || []);
     if (mrifListModal) mrifListModal.hide();
@@ -687,7 +691,7 @@ async function openMrsPrint(docNo) {
   }
 }
 
-// ─── Direct render functions (used by openMrifPrint, openMrrPrint, openMrsPrint) ───
+// ─── Direct render functions ──────────────────────────────────
 function renderMrifPrint(docNo, info, items) {
   var container = document.getElementById('mrifPrintContent');
   if (!container) return;
@@ -807,7 +811,7 @@ function closeMrsPrint() {
   if (mrsPrintModal) mrsPrintModal.hide();
 }
 
-// ─── MRIF List ────────────────────────────────────────────────────
+// ─── List modals ──────────────────────────────────────────────────
 async function openMrifList() {
   if (state.isLoading) return;
   if (mrifListModal) mrifListModal.show();
@@ -823,7 +827,6 @@ async function openMrifList() {
   }
 }
 
-// ─── MRR List ────────────────────────────────────────────────────
 async function openMrrList() {
   if (state.isLoading) return;
   if (mrrListModal) mrrListModal.show();
@@ -839,7 +842,6 @@ async function openMrrList() {
   }
 }
 
-// ─── MRS List ────────────────────────────────────────────────────
 async function openMrsList() {
   if (state.isLoading) return;
   if (mrsListModal) mrsListModal.show();
