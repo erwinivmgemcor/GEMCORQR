@@ -363,7 +363,7 @@
       <div class="nav-item" data-section="settings" onclick="navigateTo('settings')">
         <i class="bi bi-gear"></i> Settings
       </div>
-      <!-- ─── NEW ABOUT / INSTRUCTIONS ─── -->
+      <!-- ─── ABOUT / INSTRUCTIONS ─── -->
       <div class="nav-item" data-section="about" onclick="navigateTo('about')">
         <i class="bi bi-info-circle"></i> About / Instructions
       </div>
@@ -450,13 +450,14 @@
               </div>
             </div>
           </div>
+          <!-- ─── PARTIAL ITEMS CARD (replaces Notifications) ─── -->
           <div class="col-6 col-md-3">
-            <div class="kpi-card">
-              <div class="kpi-icon red"><i class="bi bi-bell"></i></div>
+            <div class="kpi-card kpi-clickable" onclick="openPartialItemsModal()" title="Click to view partially issued items">
+              <div class="kpi-icon amber"><i class="bi bi-exclamation-triangle-fill"></i></div>
               <div>
-                <div class="kpi-label">Notifications</div>
-                <div class="kpi-value" id="kpiNotifications">0</div>
-                <div class="kpi-sub">Today's requests</div>
+                <div class="kpi-label">Partial Items</div>
+                <div class="kpi-value" id="kpiPartial">0</div>
+                <div class="kpi-sub">Awaiting completion</div>
               </div>
             </div>
           </div>
@@ -842,7 +843,7 @@
     </div>
 
     <!-- ================================================================ -->
-    <!-- SECTION: ABOUT / INSTRUCTIONS (NEW) -->
+    <!-- SECTION: ABOUT / INSTRUCTIONS -->
     <!-- ================================================================ -->
     <div id="section-about" class="section-page">
       <div class="card">
@@ -1884,6 +1885,26 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── PARTIAL ITEMS MODAL (NEW) ─── -->
+<div class="modal fade" id="partialItemsModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-amber text-dark">
+        <h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>Partially Issued Items</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div id="partialItemsList" class="list-group list-group-flush">
+          <div class="list-group-item text-center py-3 text-muted">Loading...</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
