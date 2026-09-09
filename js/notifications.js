@@ -16,6 +16,7 @@
   "use strict";
 
   // ─── Update KPIs ──────────────────────────────────────────────────
+    // ─── Update KPIs ──────────────────────────────────────────────────
   window.updateWarehouseKPIs = async function() {
     try {
       var sheetId = getCleanSheetId() || '';
@@ -39,6 +40,11 @@
       if (kpiCompleted) kpiCompleted.textContent = completedCount;
 
       console.log('[KPI] Total:', totalCount, 'Pending:', pendingCount, 'Completed:', completedCount);
+
+      // ─── Update partial count ──────────────────────────────────
+      if (typeof updatePartialCount === 'function') {
+        updatePartialCount();
+      }
     } catch(e) { console.error('[KPI] Error:', e); }
   };
 
