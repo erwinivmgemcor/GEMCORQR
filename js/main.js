@@ -35,7 +35,7 @@ window.applySidebarRole = function(role) {
   }
 };
 
-// ─── Navigation ────────────────────────────────────────────────
+// ─── Navigation (with page title update) ─────────────────────
 function navigateTo(sectionId) {
   document.querySelectorAll('.section-page').forEach(function(el) {
     el.classList.remove('active');
@@ -49,6 +49,23 @@ function navigateTo(sectionId) {
   });
 
   toggleSidebar(false);
+
+  // ─── Update page title ──────────────────────────────────────
+  var titles = {
+    dashboard: 'Dashboard',
+    releasing: 'Releasing (MRIF)',
+    receiving: 'Receiving (MRR)',
+    returns: 'Returns (MRS)',
+    requests: 'New Request',
+    myrequests: 'My Requests',
+    inventory: 'Inventory',
+    settings: 'Settings',
+    about: 'About / Instructions'
+  };
+  var titleEl = document.getElementById('pageTitle');
+  if (titleEl && titles[sectionId]) {
+    titleEl.textContent = titles[sectionId];
+  }
 
   // Module-specific actions
   if (sectionId === 'releasing' || sectionId === 'receiving' || sectionId === 'returns') {
