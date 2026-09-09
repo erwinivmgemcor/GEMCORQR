@@ -1474,6 +1474,96 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
     openManualMrifModal();
   };
 
-  console.log('✅ warehouse.js loaded (with preload improvements)');
+  // ─── PARTIAL ITEMS FUNCTIONS ────────────────────────────────────
+  window.fetchPartialItems = async function() {
+    try {
+      var url = API_URL + '?action=getPartialItems&_t=' + Date.now();
+      var res = await fetch(url, { redirect: 'follow' });
+      var data = await res.json();
+      console.log('[Partial Items] Response:', data);
+      if (data.success) {
+        return data.items || [];
+      } else {
+        console.warn('[Partial Items] Error:', data.error);
+        return [];
+      }
+    } catch(err) {
+      console.error('[Partial Items] Error:', err);
+      return [];
+    }
+  };
+
+  window.openPartialItemsModal = async function() {
+    var modalEl = document.getElementById('partialItemsModal');
+    if (!modalEl) {
+      showToast('Partial Items modal not found', 'danger');
+      return;
+    }
+    var modal = new bootstrap.Modal(modalEl);
+    var container = document.getElementById('partialItemsList');
+    if (container) {
+      container.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading partial items...</div></div>';
+    }
+    modal.show();
+
+    try {
+      var items = await fetchPartialItems();
+      if (container) {
+        if (items.length === 0) {
+          container.innerHTML = '<div class="list-group-item text-muted text-center py-4">No partial items found. All items are fully served or pending.</div>';
+        } else {
+          var html = '';
+          items.forEach(function(it, idx) {
+            var statusBadge = it.remarks || 'PARTIAL';
+            var badgeColor = 'warning';
+            if (statusBadge.indexOf('SERVED') !== -1) badgeColor = 'success';
+            else if (statusBadge.indexOf('PENDING') !== -1) badgeColor = 'secondary';
+            html += '<div class="list-group-item">' +
+              '<div class="d-flex justify-content-between align-items-start">' +
+                '<div>' +
+                  '<div class="fw-bold">' + it.docNo + '</div>' +
+                  '<div><code>' + it.itemCode + '</code> – ' + it.description + '</div>' +
+                  '<div class="small text-muted">Requested: ' + it.requestedQty + ' | Issued: ' + it.issuedQty + ' | Unit: ' + it.unit + '</div>' +
+                '</div>' +
+                '<span class="badge bg-' + badgeColor + '">' + statusBadge + '</span>' +
+              '</div>' +
+            '</div>';
+          });
+          container.innerHTML = html;
+          // Add click handler to open the document for each item
+          container.querySelectorAll('.list-group-item').forEach(function(el) {
+            el.style.cursor = 'pointer';
+            el.addEventListener('click', function() {
+              var docNo = this.querySelector('.fw-bold').textContent;
+              if (docNo) {
+                modal.hide();
+                selectModule('MRIF').then(function() {
+                  onDocSelect(docNo);
+                }).catch(function(err) {
+                  showToast('Error loading document: ' + err.message, 'danger');
+                });
+              }
+            });
+          });
+        }
+      }
+    } catch(err) {
+      if (container) container.innerHTML = '<div class="list-group-item text-danger text-center py-4">Failed to load partial items: ' + err.message + '</div>';
+    }
+  };
+
+  // ─── UPDATE PARTIAL COUNT ────────────────────────────────────────
+  window.updatePartialCount = async function() {
+    try {
+      var items = await fetchPartialItems();
+      var count = items.length;
+      var el = document.getElementById('kpiPartial');
+      if (el) el.textContent = count;
+    } catch(err) {
+      console.warn('[Partial Count] Error:', err);
+    }
+  };
+
+  console.log('✅ warehouse.js loaded (with preload improvements and partial items)');
 
 })(); // end IIFE
