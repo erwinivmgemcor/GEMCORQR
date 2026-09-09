@@ -15,8 +15,7 @@
 (function() {
   "use strict";
 
-  // ─── Update KPIs ──────────────────────────────────────────────────
-    // ─── Update KPIs ──────────────────────────────────────────────────
+  // ─── Update KPIs (including partial count) ──────────────────────
   window.updateWarehouseKPIs = async function() {
     try {
       var sheetId = getCleanSheetId() || '';
@@ -31,12 +30,12 @@
 
       var kpiActive = document.getElementById('kpiActiveDocs');
       var kpiPending = document.getElementById('kpiPending');
-      var kpiNotif = document.getElementById('kpiNotifications');
+      var kpiNotifications = document.getElementById('kpiNotifications');
       var kpiCompleted = document.getElementById('kpiCompleted');
 
       if (kpiActive) kpiActive.textContent = totalCount;
       if (kpiPending) kpiPending.textContent = pendingCount;
-      if (kpiNotif) kpiNotif.textContent = pendingCount;
+      if (kpiNotifications) kpiNotifications.textContent = pendingCount;
       if (kpiCompleted) kpiCompleted.textContent = completedCount;
 
       console.log('[KPI] Total:', totalCount, 'Pending:', pendingCount, 'Completed:', completedCount);
@@ -314,6 +313,6 @@
     }
   };
 
-  console.log('✅ notifications.js loaded (with caching fallback)');
+  console.log('✅ notifications.js loaded (with caching fallback and partial count support)');
 
 })();
