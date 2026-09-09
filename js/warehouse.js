@@ -561,7 +561,7 @@
     return result;
   };
 
-  // ─── PO ITEMS & MRR CREATION ──────────────────────────────────
+  // ─── PO ITEMS & MRR CREATION (with auto-suggest for missing codes) ──
   window.renderPoItems = function() {
     var noEl = document.getElementById('poDisplayNo');
     var prfEl = document.getElementById('poDisplayPrf');
@@ -571,6 +571,15 @@
     if (clientEl) clientEl.textContent = state.currentPoSupplier || state.currentPoClient || '-';
     const list = document.getElementById('poItemsList');
     if (!list) return;
+    
+    // ─── Ensure inventory list is loaded and populate datalist ───
+    if (state.requestInventoryList.length === 0) {
+      loadRequestInventory().then(function() {
+        populateInventoryDatalist();
+      });
+    } else {
+      populateInventoryDatalist();
+    }
     
     var hasMissing = false;
     state.poItemsData.forEach(function(item) {
@@ -608,7 +617,7 @@
     <div class="col-12 col-md-4">
       <label class="form-label mb-0 small">Item Code</label>
       ${isMissing ? 
-        `<input type="text" class="form-control form-control-sm po-edit-code" id="po-code-${idx}" value="${codeVal}" placeholder="Enter Item Code" oninput="updatePoItem(${idx}, 'inventoryId', this.value)">` :
+        `<input type="text" class="form-control form-control-sm po-edit-code" id="po-code-${idx}" value="${codeVal}" placeholder="Enter Item Code" list="inventoryCodeList" oninput="updatePoItem(${idx}, 'inventoryId', this.value)" onchange="autoFillPoDescription(${idx}, this.value)">` :
         `<div class="fw-bold small">${codeVal}</div>`
       }
     </div>
@@ -657,6 +666,48 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
     document.querySelectorAll('.po-check').forEach(function(cb) {
       cb.addEventListener('change', updateCreateMrrButton);
     });
+  };
+
+  // ─── Populate inventory datalist for PO modal ───────────────────
+  function populateInventoryDatalist() {
+    var datalist = document.getElementById('inventoryCodeList');
+    if (!datalist) return;
+    datalist.innerHTML = '';
+    var items = state.requestInventoryList || [];
+    items.forEach(function(it) {
+      var code = it.inventoryId || it.code || '';
+      if (code) {
+        var option = document.createElement('option');
+        option.value = code;
+        datalist.appendChild(option);
+      }
+    });
+    console.log('[POPULATE] Inventory datalist populated with ' + items.length + ' codes.');
+  }
+
+  // ─── Auto-fill description when a code is selected from datalist ──
+  window.autoFillPoDescription = function(idx, code) {
+    if (!code) return;
+    var match = state.requestInventoryList.find(function(it) {
+      return (it.inventoryId === code || it.code === code);
+    });
+    if (match) {
+      var descInput = document.getElementById('po-desc-' + idx);
+      if (descInput && !descInput.value) {
+        descInput.value = match.description || '';
+        updatePoItem(idx, 'description', descInput.value);
+      }
+      // Also update unit if available and not already set
+      var unitSelect = document.getElementById('po-unit-' + idx);
+      if (unitSelect && match.unit) {
+        for (var opt = 0; opt < unitSelect.options.length; opt++) {
+          if (unitSelect.options[opt].value === match.unit) {
+            unitSelect.selectedIndex = opt;
+            break;
+          }
+        }
+      }
+    }
   };
 
   window.updatePoItem = function(idx, field, value) {
@@ -783,7 +834,7 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
     }
   };
 
-  // ─── PO Lookup ────────────────────────────────────────────────────
+  // ─── PO Lookup (auto-suggest enabled) ────────────────────────────
   window.lookupPoItems = function() {
     var poInput = document.getElementById('poNumberInput');
     if (!poInput) return;
@@ -794,6 +845,11 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
     }
     
     showLoading('Looking up PO...');
+    // Ensure inventory list is loaded before showing modal
+    loadRequestInventory().then(function() {
+      populateInventoryDatalist();
+    }).catch(function() {});
+    
     fetch(API_URL + '?action=getPoItems&poNo=' + encodeURIComponent(poNo) + '&_t=' + Date.now(), { redirect: 'follow' })
       .then(function(res) { return res.text(); })
       .then(function(text) {
@@ -830,6 +886,11 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
     if (document.getElementById('mrrManualPoInput')) document.getElementById('mrrManualPoInput').value = '';
     
     showLoading('Looking up PO...');
+    // Ensure inventory list is loaded before showing modal
+    loadRequestInventory().then(function() {
+      populateInventoryDatalist();
+    }).catch(function() {});
+    
     fetch(API_URL + '?action=getPoItems&poNo=' + encodeURIComponent(finalPo) + '&_t=' + Date.now(), { redirect: 'follow' })
       .then(function(res) { return res.text(); })
       .then(function(text) {
@@ -1564,6 +1625,6 @@ ${isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : ''}
     }
   };
 
-  console.log('✅ warehouse.js loaded (with preload improvements and partial items)');
+  console.log('✅ warehouse.js loaded (with preload improvements, partial items, and PO auto-suggest)');
 
 })(); // end IIFE
