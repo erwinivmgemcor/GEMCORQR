@@ -34,7 +34,6 @@ function clearCache(key) {
   if (key) {
     localStorage.removeItem('ivm_cache_' + key);
   } else {
-    // Clear all ivm_cache_ keys
     Object.keys(localStorage).forEach(k => {
       if (k.startsWith('ivm_cache_')) localStorage.removeItem(k);
     });
