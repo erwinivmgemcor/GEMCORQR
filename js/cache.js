@@ -1,14 +1,7 @@
 // ============================================================
 // CACHE UTILITY – Simple localStorage caching with TTL
+// (Uses global CACHE_TTL from config.js)
 // ============================================================
-
-const CACHE_TTL = {
-  INVENTORY: 5 * 60 * 1000,    // 5 minutes
-  VENDORS: 10 * 60 * 1000,     // 10 minutes
-  IVM_TEAM: 10 * 60 * 1000,    // 10 minutes
-  PENDING_DOCS: 1 * 60 * 1000, // 1 minute
-  REQUESTORS: 10 * 60 * 1000,  // 10 minutes
-};
 
 function getCache(key) {
   try {
