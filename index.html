@@ -1053,7 +1053,7 @@
   </div>
 </div>
 
-<!-- PO Items Modal (with editable missing fields) -->
+<!-- PO Items Modal (with editable missing fields & auto-suggest) -->
 <div class="modal fade" id="poItemsModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -1072,10 +1072,16 @@
           </div>
         </div>
         
+        <!-- ─── NEW: Datalist for auto-suggest ─── -->
+        <datalist id="inventoryCodeList"></datalist>
+        
         <!-- Warning banner for incomplete PO items -->
         <div id="poIncompleteWarning" class="alert alert-warning d-none">
           <i class="bi bi-exclamation-triangle-fill me-2"></i>
           <strong>Some items are incomplete.</strong> Please fill in the missing Item Code and Description below, or uncheck items that you cannot complete.
+        </div>
+        <div class="alert alert-info small py-1">
+          <i class="bi bi-lightbulb me-1"></i> <strong>Tip:</strong> Start typing an Item Code – suggestions from the inventory master will appear automatically.
         </div>
 
         <div class="d-flex justify-content-between align-items-center mb-2">
