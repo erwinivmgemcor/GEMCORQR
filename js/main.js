@@ -90,6 +90,9 @@ function navigateTo(sectionId) {
     if (role === 'warehouse' && !window.analyticsLoaded) {
       setTimeout(loadAnalytics, 300);
     }
+    if (role === 'warehouse') {
+      setTimeout(updatePartialCount, 500);
+    }
   }
 }
 
@@ -301,12 +304,13 @@ document.addEventListener('DOMContentLoaded', function() {
   // Initialize role
   initRole();
 
-  // Load analytics for warehouse mode
+  // Load analytics and partial count for warehouse mode
   setTimeout(function() {
     var role = localStorage.getItem('ivm_userRole');
     console.log('[Main] Role detected:', role);
     if (role === 'warehouse' && state.currentUser) {
       setTimeout(loadAnalytics, 800);
+      setTimeout(updatePartialCount, 1000);
     }
   }, 1500);
 
