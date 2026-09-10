@@ -1,5 +1,6 @@
 // ============================================================
-// WAREHOUSE CORE FUNCTIONS (Optimized + Manual MRR Fix)
+// WAREHOUSE CORE FUNCTIONS (Optimized + Manual MRR Fix +
+// Button-level Loading Indicators)
 // ============================================================
 
 (function() {
@@ -79,7 +80,6 @@
     if (el2) el2.textContent = isMRR ? 'ATL QTY' : (isMRS ? 'ATL QTY (Actual)' : 'Issued Qty');
   };
 
-  // ─── FETCH PENDING DOCS ────────────────────────────────
   async function _fetchPendingDocsFromServer(sheetId) {
     var url = API_URL + '?action=getPendingDocs&docType=' + state.currentModule +
               '&sheetId=' + sheetId + '&_t=' + Date.now();
@@ -167,12 +167,15 @@
     if (active) active.classList.remove('d-none');
     var title = document.getElementById('docTitle');
     if (title) title.textContent = cleanDocNo(docNo);
+    showLoading('Loading document...');
     try {
       await fetchDocItems(docNo, state.currentModule);
       checkForProgress();
       checkIfAlreadyProcessed();
     } catch(err) {
       showToast('Failed to load document: ' + err.message, 'danger');
+    } finally {
+      hideLoading();
     }
   };
 
@@ -390,68 +393,60 @@
     showToast('Batch verify completed', 'success');
   };
 
-  // ─── SUBMIT (Optimistic) ───────────────────────────────
+  // ─── SUBMIT (Optimistic + button loading) ─────────────
   var isSubmitting = false;
 
-  window.onSubmit = async function() {
-    if (isSubmitting) return;
-    var verifiedItems = state.items.filter(function(i) { return i.verified; });
-    var total = state.items.length;
-    var verified = verifiedItems.length;
-    if (verified === 0) { showToast('No items verified.', 'warning'); return; }
-    if (verified < total) {
-      if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly verified items will be sent.')) return;
-    }
-
+  window.onSubmit = function() {
     var btn = document.getElementById('submitBtn');
-    var txt = document.getElementById('submitBtnText');
-    if (btn) { btn.disabled = true; btn.classList.add('opacity-50'); }
-    if (txt) txt.textContent = 'Submitting...';
-    isSubmitting = true;
 
-    showBlockingLoading('Submitting...');
-    try {
-      var result = await submitTransaction(verifiedItems);
-      if (result && result.success) {
-        var allComplete = true;
-        var anyProcessed = false;
-        state.items.forEach(function(it) {
-          if (!it.verified) { allComplete = false; }
-          else {
-            anyProcessed = true;
-            if (it.issuedQty < it.qty) allComplete = false;
-          }
-        });
-        var newStatus = allComplete && anyProcessed ? 'COMPLETED' : (anyProcessed ? 'PARTIAL' : 'PENDING');
-
-        var statusUrl = API_URL + '?action=updateDocStatus&docNo=' + encodeURIComponent(state.currentDoc) + '&status=' + newStatus + '&_t=' + Date.now();
-        fetch(statusUrl, { redirect: 'follow' }).catch(function() {});
-
-        clearDocProgress(state.currentDoc);
-        if (successModal) successModal.show();
-
-        setTimeout(function() {
-          if (successModal) successModal.hide();
-          changeDocument();
-          if (btn) { btn.disabled = false; btn.classList.remove('opacity-50'); }
-          if (txt) txt.textContent = 'Confirm & Submit';
-          isSubmitting = false;
-          if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
-          if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications();
-          if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
-          if (typeof updatePartialCount === 'function') updatePartialCount();
-        }, 1500);
-      } else {
-        throw new Error(result && result.error ? result.error : 'Submission failed');
+    return withButtonLoading(btn, async function() {
+      if (isSubmitting) return;
+      var verifiedItems = state.items.filter(function(i) { return i.verified; });
+      var total = state.items.length;
+      var verified = verifiedItems.length;
+      if (verified === 0) { showToast('No items verified.', 'warning'); return; }
+      if (verified < total) {
+        if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly verified items will be sent.')) return;
       }
-    } catch(err) {
-      showToast('Submit error: ' + err.message, 'danger');
-      isSubmitting = false;
-      if (btn) { btn.disabled = false; btn.classList.remove('opacity-50'); }
-      if (txt) txt.textContent = 'Confirm & Submit';
-    } finally {
-      hideLoading();
-    }
+
+      isSubmitting = true;
+      try {
+        var result = await submitTransaction(verifiedItems);
+        if (result && result.success) {
+          var allComplete = true;
+          var anyProcessed = false;
+          state.items.forEach(function(it) {
+            if (!it.verified) { allComplete = false; }
+            else {
+              anyProcessed = true;
+              if (it.issuedQty < it.qty) allComplete = false;
+            }
+          });
+          var newStatus = allComplete && anyProcessed ? 'COMPLETED' : (anyProcessed ? 'PARTIAL' : 'PENDING');
+
+          var statusUrl = API_URL + '?action=updateDocStatus&docNo=' + encodeURIComponent(state.currentDoc) + '&status=' + newStatus + '&_t=' + Date.now();
+          fetch(statusUrl, { redirect: 'follow' }).catch(function() {});
+
+          clearDocProgress(state.currentDoc);
+          if (successModal) successModal.show();
+
+          setTimeout(function() {
+            if (successModal) successModal.hide();
+            changeDocument();
+            isSubmitting = false;
+            if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
+            if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications();
+            if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
+            if (typeof updatePartialCount === 'function') updatePartialCount();
+          }, 1500);
+        } else {
+          throw new Error(result && result.error ? result.error : 'Submission failed');
+        }
+      } catch(err) {
+        showToast('Submit error: ' + err.message, 'danger');
+        isSubmitting = false;
+      }
+    }, 'Submitting...');
   };
 
   window.submitTransaction = async function(verifiedItems) {
@@ -643,50 +638,51 @@
 
   window.closePoItemsModal = function() { if (state.poItemsModal) state.poItemsModal.hide(); };
 
-  window.createMrrFromPo = async function() {
-    var selected = getSelectedPoItems();
-    if (selected.length === 0) { showToast('Please select at least one item', 'warning'); return; }
-    var hasMissing = selected.some(function(item) {
-      return !item.inventoryId || !item.inventoryId.trim() || !item.description || !item.description.trim();
-    });
-    if (hasMissing) { showToast('Fill missing details first', 'danger'); return; }
+  window.createMrrFromPo = function() {
+    var btn = document.querySelector('#poItemsModal .btn-success');
 
-    var drNo = document.getElementById('mrrDrNo') ? document.getElementById('mrrDrNo').value.trim() : '';
-    var receivingDate = document.getElementById('mrrReceivingDate') ? document.getElementById('mrrReceivingDate').value : '';
-
-    showBlockingLoading('Creating MRR...');
-    try {
-      var payload = {
-        action: 'createMrrRequest',
-        poNo: state.currentPoNo,
-        prfNo: state.currentPoPrf,
-        client: state.currentPoClient,
-        supplier: state.currentPoSupplier,
-        drNo: drNo,
-        receivingDate: receivingDate,
-        items: selected
-      };
-      var res = await fetch(API_URL, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        redirect: 'follow'
+    return withButtonLoading(btn, async function() {
+      var selected = getSelectedPoItems();
+      if (selected.length === 0) { showToast('Please select at least one item', 'warning'); return; }
+      var hasMissing = selected.some(function(item) {
+        return !item.inventoryId || !item.inventoryId.trim() || !item.description || !item.description.trim();
       });
-      var text = await res.text();
-      var data;
-      try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
-      if (data && data.success) {
-        closePoItemsModal();
-        showToast('MRR created: ' + data.docNo, 'success');
-        fetchPendingDocs(true);
-      } else {
-        showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
+      if (hasMissing) { showToast('Fill missing details first', 'danger'); return; }
+
+      var drNo = document.getElementById('mrrDrNo') ? document.getElementById('mrrDrNo').value.trim() : '';
+      var receivingDate = document.getElementById('mrrReceivingDate') ? document.getElementById('mrrReceivingDate').value : '';
+
+      try {
+        var payload = {
+          action: 'createMrrRequest',
+          poNo: state.currentPoNo,
+          prfNo: state.currentPoPrf,
+          client: state.currentPoClient,
+          supplier: state.currentPoSupplier,
+          drNo: drNo,
+          receivingDate: receivingDate,
+          items: selected
+        };
+        var res = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          redirect: 'follow'
+        });
+        var text = await res.text();
+        var data;
+        try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+        if (data && data.success) {
+          closePoItemsModal();
+          showToast('MRR created: ' + data.docNo, 'success');
+          fetchPendingDocs(true);
+        } else {
+          showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
+        }
+      } catch(err) {
+        showToast('Error: ' + err.message, 'danger');
       }
-    } catch(err) {
-      showToast('Error: ' + err.message, 'danger');
-    } finally {
-      hideLoading();
-    }
+    }, 'Creating MRR...');
   };
 
   window.lookupPoItems = function() {
@@ -696,6 +692,7 @@
     if (!poNo) { showToast('Please enter a PO number', 'warning'); return; }
 
     loadRequestInventory().then(populateInventoryDatalist).catch(function() {});
+    showLoading('Looking up PO...');
 
     fetch(API_URL + '?action=getPoItems&poNo=' + encodeURIComponent(poNo) + '&_t=' + Date.now(), { redirect: 'follow' })
       .then(function(res) { return res.text(); })
@@ -715,7 +712,8 @@
           showToast((data && data.error) || 'No items found for PO: ' + poNo, 'warning');
         }
       })
-      .catch(function(err) { showToast('Error: ' + err.message, 'danger'); });
+      .catch(function(err) { showToast('Error: ' + err.message, 'danger'); })
+      .finally(function() { hideLoading(); });
   };
 
   window.manualPoLookup = function() {
@@ -727,6 +725,7 @@
     if (document.getElementById('mrrManualPoInput')) document.getElementById('mrrManualPoInput').value = '';
 
     loadRequestInventory().then(populateInventoryDatalist).catch(function() {});
+    showLoading('Looking up PO...');
 
     fetch(API_URL + '?action=getPoItems&poNo=' + encodeURIComponent(finalPo) + '&_t=' + Date.now(), { redirect: 'follow' })
       .then(function(res) { return res.text(); })
@@ -747,7 +746,8 @@
           showToast((data && data.error) || 'No items found for PO: ' + finalPo, 'warning');
         }
       })
-      .catch(function(err) { showToast('Error: ' + err.message, 'danger'); });
+      .catch(function(err) { showToast('Error: ' + err.message, 'danger'); })
+      .finally(function() { hideLoading(); });
   };
 
   window.closePoScanModal = function() { if (state.poScanModal) state.poScanModal.hide(); };
@@ -856,7 +856,6 @@
       try { data = JSON.parse(text); } catch(e) { data = {}; }
       var inv = data.inventory || data.items || [];
 
-      // ─── Filter out header/total rows ──────────────────
       var skipPatterns = ['total', 'inventory codes', 'inventory id', 'item id', 'grand total', 'subtotal', 'sub-total'];
       inv = inv.filter(function(it) {
         var code = String(it.code || it.inventoryId || '').trim();
@@ -984,7 +983,6 @@
     updateManualMrrSubmitButton();
     manualMrrModal.show();
 
-    // Load lists silently (should be cached already)
     if (state.requestInventoryList.length === 0) {
       loadRequestInventory().catch(function() {});
     }
@@ -1082,7 +1080,6 @@
     if (!dropdown) return;
     dropdown.innerHTML = '';
 
-    // Sync typed value into hidden fields
     var hiddenCode = document.getElementById('manualMrrCode' + idx);
     var hiddenDesc = document.getElementById('manualMrrDesc' + idx);
     if (hiddenCode && hiddenDesc) {
@@ -1191,101 +1188,107 @@
     }
 
     btn.disabled = !(drNo && vendor && site && hasValidItems);
-    console.log('[Manual MRR] Button state:',
-      { drNo: !!drNo, vendor: !!vendor, site: !!site, hasValidItems: hasValidItems, disabled: btn.disabled });
   };
 
-  window.submitManualMrr = async function() {
-    var poNo = document.getElementById('manualMrrPoNo') ? document.getElementById('manualMrrPoNo').value.trim() : '';
-    var drNo = document.getElementById('manualMrrDrNo') ? document.getElementById('manualMrrDrNo').value.trim() : '';
-    var vendor = document.getElementById('manualMrrVendor') ? document.getElementById('manualMrrVendor').value.trim() : '';
-    var site = document.getElementById('manualMrrSite') ? document.getElementById('manualMrrSite').value.trim() : '';
-    var receivingDate = document.getElementById('manualMrrDate') ? document.getElementById('manualMrrDate').value : '';
-    var preparedBy = document.getElementById('manualMrrPreparedBy') ? document.getElementById('manualMrrPreparedBy').value.trim() : '';
+  window.submitManualMrr = function() {
+    var btn = document.getElementById('btnSubmitManualMrr');
 
-    var items = [];
-    for (var i = 0; i < manualMrrItems.length; i++) {
-      var it = manualMrrItems[i];
-      if (it.inventoryId && it.inventoryId.trim() && it.description && it.description.trim() && it.qty > 0) {
-        items.push({
-          inventoryId: it.inventoryId.trim(),
-          description: it.description.trim(),
-          qty: it.qty,
-          atlQty: it.atlQty || 0,
-          unit: it.unit || 'PIECE',
-          remarks: it.remarks || ''
+    return withButtonLoading(btn, async function() {
+      var poNo = document.getElementById('manualMrrPoNo') ? document.getElementById('manualMrrPoNo').value.trim() : '';
+      var drNo = document.getElementById('manualMrrDrNo') ? document.getElementById('manualMrrDrNo').value.trim() : '';
+      var vendor = document.getElementById('manualMrrVendor') ? document.getElementById('manualMrrVendor').value.trim() : '';
+      var site = document.getElementById('manualMrrSite') ? document.getElementById('manualMrrSite').value.trim() : '';
+      var receivingDate = document.getElementById('manualMrrDate') ? document.getElementById('manualMrrDate').value : '';
+      var preparedBy = document.getElementById('manualMrrPreparedBy') ? document.getElementById('manualMrrPreparedBy').value.trim() : '';
+
+      var items = [];
+      for (var i = 0; i < manualMrrItems.length; i++) {
+        var it = manualMrrItems[i];
+        if (it.inventoryId && it.inventoryId.trim() && it.description && it.description.trim() && it.qty > 0) {
+          items.push({
+            inventoryId: it.inventoryId.trim(),
+            description: it.description.trim(),
+            qty: it.qty,
+            atlQty: it.atlQty || 0,
+            unit: it.unit || 'PIECE',
+            remarks: it.remarks || ''
+          });
+        }
+      }
+      if (items.length === 0) { showToast('Please add at least one valid item', 'warning'); return; }
+
+      try {
+        var payload = {
+          action: 'createMrrRequest',
+          poNo: poNo || 'N/A',
+          prfNo: '',
+          client: vendor,
+          supplier: vendor,
+          drNo: drNo,
+          receivingDate: receivingDate,
+          receivingSite: site,
+          preparedBy: preparedBy,
+          items: items,
+          isManual: true
+        };
+        var res = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          redirect: 'follow'
         });
+        var text = await res.text();
+        var data;
+        try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+        if (data && data.success) {
+          if (manualMrrModal) manualMrrModal.hide();
+          showToast('Manual MRR created: ' + data.docNo, 'success');
+          fetchPendingDocs(true);
+          updateWarehouseKPIs();
+        } else {
+          showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
+        }
+      } catch(err) {
+        showToast('Error: ' + err.message, 'danger');
       }
-    }
-    if (items.length === 0) { showToast('Please add at least one valid item', 'warning'); return; }
-
-    showBlockingLoading('Creating Manual MRR...');
-    try {
-      var payload = {
-        action: 'createMrrRequest',
-        poNo: poNo || 'N/A',
-        prfNo: '',
-        client: vendor,
-        supplier: vendor,
-        drNo: drNo,
-        receivingDate: receivingDate,
-        receivingSite: site,
-        preparedBy: preparedBy,
-        items: items,
-        isManual: true
-      };
-      var res = await fetch(API_URL, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        redirect: 'follow'
-      });
-      var text = await res.text();
-      var data;
-      try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
-      if (data && data.success) {
-        if (manualMrrModal) manualMrrModal.hide();
-        showToast('Manual MRR created: ' + data.docNo, 'success');
-        fetchPendingDocs(true);
-        updateWarehouseKPIs();
-      } else {
-        showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
-      }
-    } catch(err) {
-      showToast('Error: ' + err.message, 'danger');
-    } finally {
-      hideLoading();
-    }
+    }, 'Creating MRR...');
   };
 
-  // ─── QUICK ACTIONS ─────────────────────────────────────
-  window.quickProcessPending = async function() {
-    var statusEl = document.getElementById('quickActionStatus');
-    if (statusEl) statusEl.textContent = '⏳ Looking for next pending...';
-    try {
-      await selectModule('MRIF');
-      var docs = await fetchPendingDocs(true);
-      if (!docs || docs.length === 0) {
-        if (statusEl) statusEl.textContent = '✅ No pending MRIF documents found.';
-        return;
+  // ─── QUICK ACTIONS (with button loading) ───────────────
+  window.quickProcessPending = function(btn) {
+    return withButtonLoading(btn, async function() {
+      var statusEl = document.getElementById('quickActionStatus');
+      if (statusEl) statusEl.textContent = '⏳ Looking for next pending...';
+      try {
+        await selectModule('MRIF');
+        var docs = await fetchPendingDocs(true);
+        if (!docs || docs.length === 0) {
+          if (statusEl) statusEl.textContent = '✅ No pending MRIF documents found.';
+          return;
+        }
+        var docNo = typeof docs[0] === 'string' ? docs[0] : (docs[0].docNo || docs[0].name);
+        if (!docNo) return;
+        await onDocSelect(docNo);
+        if (statusEl) statusEl.textContent = '📄 Loaded: ' + cleanDocNo(docNo);
+      } catch(err) {
+        if (statusEl) statusEl.textContent = '❌ Error: ' + err.message;
       }
-      var docNo = typeof docs[0] === 'string' ? docs[0] : (docs[0].docNo || docs[0].name);
-      if (!docNo) return;
-      await onDocSelect(docNo);
-      if (statusEl) statusEl.textContent = '📄 Loaded: ' + cleanDocNo(docNo);
-    } catch(err) {
-      if (statusEl) statusEl.textContent = '❌ Error: ' + err.message;
-    }
+    }, 'Processing...');
   };
 
-  window.quickNewMrr = function() {
-    selectModule('MRR').then(function() {
+  window.quickNewMrr = function(btn) {
+    return withButtonLoading(btn, async function() {
+      await selectModule('MRR');
       var poInput = document.getElementById('manualPoInput');
       if (poInput) { poInput.focus(); showToast('Enter PO number to create MRR', 'info'); }
-    });
+    }, 'Opening...');
   };
 
-  window.quickNewMrif = function() { openManualMrifModal(); };
+  window.quickNewMrif = function(btn) {
+    return withButtonLoading(btn, async function() {
+      openManualMrifModal();
+    }, 'Opening...');
+  };
 
   // ─── PARTIAL ITEMS ─────────────────────────────────────
   window.fetchPartialItems = async function() {
