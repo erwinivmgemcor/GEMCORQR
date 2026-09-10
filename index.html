@@ -435,20 +435,20 @@
                 <i class="bi bi-lightning-fill me-2"></i> Quick Actions
               </div>
               <div class="card-body">
-                <div class="d-flex flex-wrap gap-2">
-                  <button class="btn btn-warning" onclick="quickProcessPending()">
-                    <i class="bi bi-arrow-right-circle me-1"></i> Process Next Pending
-                  </button>
-                  <button class="btn btn-success" onclick="quickNewMrr()">
-                    <i class="bi bi-box-arrow-in-down me-1"></i> Quick New MRR
-                  </button>
-                  <button class="btn btn-outline-primary" onclick="quickNewMrif()">
-                    <i class="bi bi-box-arrow-up me-1"></i> Quick New MRIF
-                  </button>
-                  <button class="btn btn-outline-secondary" onclick="openQuickScan()">
-                    <i class="bi bi-qr-code-scan me-1"></i> Quick Scan
-                  </button>
-                </div>
+               <div class="d-flex flex-wrap gap-2">
+  <button class="btn btn-warning" onclick="quickProcessPending(this)">
+    <i class="bi bi-arrow-right-circle me-1"></i> Process Next Pending
+  </button>
+  <button class="btn btn-success" onclick="quickNewMrr(this)">
+    <i class="bi bi-box-arrow-in-down me-1"></i> Quick New MRR
+  </button>
+  <button class="btn btn-outline-primary" onclick="quickNewMrif(this)">
+    <i class="bi bi-box-arrow-up me-1"></i> Quick New MRIF
+  </button>
+  <button class="btn btn-outline-secondary" onclick="openQuickScan()">
+    <i class="bi bi-qr-code-scan me-1"></i> Quick Scan
+  </button>
+</div>
                 <div id="quickActionStatus" class="mt-2 small text-muted"></div>
               </div>
             </div>
