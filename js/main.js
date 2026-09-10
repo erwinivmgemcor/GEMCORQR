@@ -1,5 +1,6 @@
 // ============================================================
-// MAIN - DOM Ready & Initialization (Optimized)
+// MAIN - DOM Ready & Initialization
+// Handles openMyRequestDetails (QR + items) for production role
 // ============================================================
 
 window.applySidebarRole = function(role) {
@@ -73,19 +74,19 @@ function navigateTo(sectionId) {
       if (mrifCard) mrifCard.classList.toggle('d-none', mod !== 'MRIF');
       if (mrrCard) mrrCard.classList.toggle('d-none', mod !== 'MRR');
       if (mrsCard) mrsCard.classList.toggle('d-none', mod !== 'MRS');
-
       if (typeof fetchPendingDocs === 'function') fetchPendingDocs();
     }
   }
 
   if (sectionId === 'dashboard') {
     var role = localStorage.getItem('ivm_userRole');
-    if (role === 'warehouse' && !window.analyticsLoaded) {
-      setTimeout(loadAnalytics, 300);
-    }
-    if (role === 'warehouse' && typeof updatePartialCount === 'function') {
-      setTimeout(updatePartialCount, 500);
-    }
+    if (role === 'warehouse' && !window.analyticsLoaded) setTimeout(loadAnalytics, 300);
+    if (role === 'warehouse' && typeof updatePartialCount === 'function') setTimeout(updatePartialCount, 500);
+  }
+
+  // Ensure My Requests page is refreshed every time it's opened
+  if (sectionId === 'myrequests') {
+    if (typeof loadMyRequests === 'function') setTimeout(loadMyRequests, 100);
   }
 }
 
@@ -102,12 +103,22 @@ function toggleSidebar(open) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// OPEN MY REQUEST DETAILS — shows QR + item list for production
+// OPEN MY REQUEST DETAILS
+// Shows the QR code AND the requested items list (not just QR)
 // ══════════════════════════════════════════════════════════════
 window.openMyRequestDetails = async function(docNo, docType) {
   var modalEl = document.getElementById('myRequestDetailsModal');
-  if (!modalEl) { showToast('Details modal not found', 'danger'); return; }
-  var modal = new bootstrap.Modal(modalEl);
+  if (!modalEl) {
+    // Fallback to the older details modal if the new one is missing
+    if (typeof openRequestDetails === 'function') {
+      openRequestDetails(docNo, docType);
+      return;
+    }
+    showToast('Details modal not found', 'danger');
+    return;
+  }
+
+  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
   var content = document.getElementById('myRequestDetailsContent');
   if (!content) return;
 
@@ -119,13 +130,14 @@ window.openMyRequestDetails = async function(docNo, docType) {
   var qrData = appUrl + '?doc=' + encodeURIComponent(docNo);
   var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(qrData);
 
-  // Fetch items
   var itemsHtml = '';
   var metaHtml = '';
+
   try {
     var sheetKey = 'sheetId_' + (docType || 'MRIF');
     var sheetIdVal = localStorage.getItem(sheetKey);
     var sheetIdClean = sheetIdVal ? extractSheetId(sheetIdVal) : '';
+
     var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
               '&docType=' + (docType || 'MRIF') +
               '&sheetId=' + encodeURIComponent(sheetIdClean) +
@@ -133,37 +145,54 @@ window.openMyRequestDetails = async function(docNo, docType) {
     var res = await fetch(url, { redirect: 'follow' });
     var data = await res.json();
 
-    if (data.success) {
+    if (data && data.success) {
       var info = data.info || {};
       var items = data.items || [];
 
-      // Meta
       var requestor = info.Requestor || info.requestor || '';
       var dept = info.Department || info.department || '';
       var dateStr = info.Date || info.date || info['Date Prepared'] || '';
+      var joNo = info['JO No.'] || info.joNo || '';
+      var gemSo = info['GEM SO No.'] || info.gemSoNo || '';
+      var client = info['Client Name'] || info.clientName || '';
+      var project = info.Project || info.project || '';
+
       metaHtml = '<div class="row g-2 mb-3">' +
         (requestor ? '<div class="col-md-6"><strong>Requestor:</strong> ' + requestor + '</div>' : '') +
         (dept ? '<div class="col-md-6"><strong>Department:</strong> ' + dept + '</div>' : '') +
         (dateStr ? '<div class="col-md-6"><strong>Date:</strong> ' + dateStr + '</div>' : '') +
+        (joNo ? '<div class="col-md-6"><strong>JO No.:</strong> ' + joNo + '</div>' : '') +
+        (gemSo ? '<div class="col-md-6"><strong>GEM SO No.:</strong> ' + gemSo + '</div>' : '') +
+        (client ? '<div class="col-md-6"><strong>Client:</strong> ' + client + '</div>' : '') +
+        (project ? '<div class="col-md-6"><strong>Project:</strong> ' + project + '</div>' : '') +
         '<div class="col-md-6"><strong>Type:</strong> <span class="badge bg-secondary">' + (docType || 'MRIF') + '</span></div>' +
         '</div>';
 
-      // Items table
       if (items.length > 0) {
         itemsHtml = '<h6 class="mt-2"><i class="bi bi-box-seam me-1"></i>Requested Items (' + items.length + ')</h6>';
         itemsHtml += '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">';
-        itemsHtml += '<thead class="table-light"><tr><th style="width:5%">#</th><th style="width:22%">Item Code</th><th>Description</th><th class="text-center" style="width:10%">Qty</th><th class="text-center" style="width:10%">Unit</th></tr></thead><tbody>';
+        itemsHtml += '<thead class="table-light"><tr>' +
+          '<th style="width:5%">#</th>' +
+          '<th style="width:22%">Item Code</th>' +
+          '<th>Description</th>' +
+          '<th class="text-center" style="width:10%">Qty</th>' +
+          '<th class="text-center" style="width:10%">Unit</th>' +
+          '<th style="width:15%">Remarks</th>' +
+          '</tr></thead><tbody>';
+
         items.forEach(function(it, idx) {
           var code = it.inventoryId || it.itemCode || it.code || '';
           var desc = it.description || it.desc || '';
           var qty = it.expectedQty || it.qty || it.requestedQty || 0;
           var unit = it.unit || 'PIECE';
+          var remarks = it.remarks || 'PENDING';
           itemsHtml += '<tr>' +
             '<td>' + (idx + 1) + '</td>' +
             '<td><code>' + code + '</code></td>' +
             '<td>' + desc + '</td>' +
             '<td class="text-center">' + qty + '</td>' +
             '<td class="text-center">' + unit + '</td>' +
+            '<td>' + remarks + '</td>' +
             '</tr>';
         });
         itemsHtml += '</tbody></table></div>';
@@ -171,9 +200,10 @@ window.openMyRequestDetails = async function(docNo, docType) {
         itemsHtml = '<div class="alert alert-info">No items found in this request.</div>';
       }
     } else {
-      itemsHtml = '<div class="alert alert-warning">Could not load items: ' + (data.error || 'Unknown error') + '</div>';
+      itemsHtml = '<div class="alert alert-warning">Could not load items: ' + ((data && data.error) || 'Unknown error') + '</div>';
     }
   } catch(err) {
+    console.error('[openMyRequestDetails] Error:', err);
     itemsHtml = '<div class="alert alert-warning">Could not load items: ' + err.message + '</div>';
   }
 
@@ -189,7 +219,6 @@ window.openMyRequestDetails = async function(docNo, docType) {
     metaHtml +
     itemsHtml;
 
-  // Store for download
   window._myReqLastDocNo = docNo;
 };
 
@@ -223,15 +252,16 @@ window.downloadMyRequestQr = function() {
   qrImg.src = img.src;
 };
 
-// ─── Override renderMyRequests (clicks open the details modal) ──
+// ─── Override renderMyRequests (page list) ─────────────
 var originalRenderMyRequests = window.renderMyRequests || function() {};
 
 window.renderMyRequests = function(requests) {
-  // Also call the original (updates badges, embedded dashboard list)
+  // Call the requests.js version first (fills #myRequestsList for dashboard)
   if (typeof originalRenderMyRequests === 'function') {
     try { originalRenderMyRequests(requests); } catch(e) { console.warn('[renderMyRequests] Original error:', e); }
   }
 
+  // Now populate the full "My Requests" page container
   var container = document.getElementById('myRequestsListPage');
   if (!container) return;
   container.innerHTML = '';
@@ -265,14 +295,14 @@ window.renderMyRequests = function(requests) {
       'data-docno="' + docNo + '" data-doctype="' + docType + '" ' +
       'style="cursor:pointer;">' +
         '<div class="d-flex justify-content-between align-items-start">' +
-          '<div>' +
+          '<div class="flex-grow-1">' +
             '<div class="fw-bold">' + docNo + ' <span class="badge bg-secondary">' + docType + '</span></div>' +
             '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
             '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
+            '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i> Click to view QR &amp; requested items</div>' +
           '</div>' +
           '<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + statusText + '</span>' +
         '</div>' +
-        '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i> Click to view QR &amp; requested items</div>' +
       '</div>';
     container.innerHTML += html;
   });
@@ -287,6 +317,7 @@ window.renderMyRequests = function(requests) {
   });
 };
 
+// ─── Override loadMyRequests ──────────────────────────
 var originalLoadMyRequests = window.loadMyRequests || function() {};
 window.loadMyRequests = function() {
   if (typeof originalLoadMyRequests === 'function') {
@@ -294,6 +325,7 @@ window.loadMyRequests = function() {
   }
 };
 
+// ─── Override updateWarehouseKPIs ─────────────────────
 var originalUpdateWarehouseKPIs = window.updateWarehouseKPIs || function() {};
 window.updateWarehouseKPIs = function() {
   if (typeof originalUpdateWarehouseKPIs === 'function') {
@@ -301,6 +333,7 @@ window.updateWarehouseKPIs = function() {
   }
 };
 
+// ─── Test connection ──────────────────────────────────
 async function testConnection() {
   var resultDiv = document.getElementById('testResult');
   if (!resultDiv) return;
@@ -326,6 +359,7 @@ async function testConnection() {
   }
 }
 
+// ─── URL doc parameter ────────────────────────────────
 function checkUrlDocParam() {
   var params = new URLSearchParams(window.location.search);
   var docNo = params.get('doc');
@@ -351,6 +385,7 @@ function checkUrlDocParam() {
   }
 }
 
+// ─── DOM Ready ────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
   var modalIds = ['qtyModal', 'successModal', 'settingsModal', 'newRequestModal',
     'requestSuccessModal', 'whNotifModal', 'mrifListModal', 'mrifPrintModal',
