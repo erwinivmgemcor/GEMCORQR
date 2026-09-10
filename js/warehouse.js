@@ -1,6 +1,5 @@
 // ============================================================
-// WAREHOUSE CORE FUNCTIONS (Optimized + Manual MRR Fix +
-// Button-level Loading Indicators)
+// WAREHOUSE CORE FUNCTIONS (Optimized + Smart Dropdown)
 // ============================================================
 
 (function() {
@@ -841,6 +840,40 @@
     if (a2) a2.classList.add('d-none');
   };
 
+  // ─── SMART DROPDOWN POSITIONING ────────────────────────
+  // Positions the suggestion dropdown above the input if there's not enough
+  // space below it, so it's never clipped by the modal footer.
+  function _positionSuggestDropdown(dropdown, input) {
+    var inputRect = input.getBoundingClientRect();
+    var spaceBelow = window.innerHeight - inputRect.bottom;
+    var spaceAbove = inputRect.top;
+    var dropdownMinHeight = 200;
+    var dropdownMaxWidth = 360;
+
+    dropdown.style.position = 'fixed';
+    dropdown.style.left = inputRect.left + 'px';
+    dropdown.style.width = Math.max(inputRect.width, 280) + 'px';
+    dropdown.style.minWidth = Math.min(dropdownMaxWidth, Math.max(inputRect.width, 280)) + 'px';
+    dropdown.style.zIndex = '99999';
+
+    if (spaceBelow < dropdownMinHeight && spaceAbove > spaceBelow) {
+      // Flip above
+      dropdown.style.top = 'auto';
+      dropdown.style.bottom = (window.innerHeight - inputRect.top + 2) + 'px';
+      dropdown.style.marginTop = '0';
+      dropdown.style.marginBottom = '2px';
+      dropdown.style.maxHeight = Math.min(spaceAbove - 20, 340) + 'px';
+    } else {
+      // Show below
+      dropdown.style.bottom = 'auto';
+      dropdown.style.top = (inputRect.bottom + 2) + 'px';
+      dropdown.style.marginTop = '2px';
+      dropdown.style.marginBottom = '0';
+      dropdown.style.maxHeight = Math.min(spaceBelow - 20, 340) + 'px';
+    }
+  }
+  window._positionSuggestDropdown = _positionSuggestDropdown;
+
   // ─── CACHED LOADERS ────────────────────────────────────
   window.loadRequestInventory = async function(forceRefresh) {
     var cacheKey = 'inventoryList';
@@ -960,7 +993,7 @@
     datalist.innerHTML = html;
   };
 
-  // ─── MANUAL MRR (Fixed button + sync + filter) ─────────
+  // ─── MANUAL MRR ────────────────────────────────────────
   var manualMrrModal = null;
   var manualMrrItems = [];
 
@@ -1036,8 +1069,8 @@
             'onfocus="filterManualMrrItems(this, ' + i + ')" ' +
             'onblur="updateManualMrrSubmitButton()" ' +
             'autocomplete="off" style="width:100%;min-width:150px;">' +
-          '<div class="list-group position-absolute z-3 d-none manual-mrr-dropdown" ' +
-            'style="max-height:300px;overflow-y:auto;width:100%;min-width:250px;background:#fff;border:1px solid #ced4da;border-radius:4px;box-shadow:0 6px 20px rgba(0,0,0,0.18);position:absolute;top:100%;left:0;z-index:9999;margin-top:2px;padding:4px 0;" ' +
+          '<div class="list-group d-none manual-mrr-dropdown" ' +
+            'style="background:#fff;border:1px solid #ced4da;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.18);padding:4px 0;overflow-y:auto;" ' +
             'id="manualMrrDropdown' + i + '"></div>' +
           '<input type="hidden" class="manual-mrr-code" id="manualMrrCode' + i + '" value="' + (it.inventoryId || '') + '">' +
           '<input type="hidden" class="manual-mrr-desc" id="manualMrrDesc' + i + '" value="' + (it.description || '') + '">' +
@@ -1105,6 +1138,7 @@
 
     if (state.requestInventoryList.length === 0) {
       dropdown.innerHTML = '<div class="list-group-item text-muted" style="padding:8px 12px;">Loading inventory...</div>';
+      _positionSuggestDropdown(dropdown, input);
       dropdown.classList.remove('d-none');
       return;
     }
@@ -1116,7 +1150,7 @@
     }).slice(0, 20);
 
     if (matches.length === 0) {
-      dropdown.innerHTML = '<div class="list-group-item text-muted" style="padding:8px 12px;">No matches found — you can type the code and description manually.</div>';
+      dropdown.innerHTML = '<div class="list-group-item text-muted" style="padding:8px 12px;">No matches — you can type the code and description manually.</div>';
     } else {
       matches.forEach(function(it) {
         var code = it.code || it.inventoryId || '';
@@ -1124,16 +1158,19 @@
         var unit = it.unit || 'PIECE';
         var el = document.createElement('div');
         el.className = 'list-group-item list-group-item-action';
-        el.style.cssText = 'padding:8px 14px;cursor:pointer;font-size:0.9rem;border-bottom:1px solid #f0f0f0;';
+        el.style.cssText = 'padding:10px 14px;cursor:pointer;font-size:0.9rem;border-bottom:1px solid #f0f0f0;';
         el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div>' +
                        '<div class="text-muted small">' + desc + ' <span class="badge bg-light text-dark">' + unit + '</span></div>';
-        el.onclick = function() {
+        el.onmousedown = function(e) {
+          e.preventDefault();
           selectManualMrrItem(idx, code, desc, unit);
           dropdown.classList.add('d-none');
         };
         dropdown.appendChild(el);
       });
     }
+
+    _positionSuggestDropdown(dropdown, input);
     dropdown.classList.remove('d-none');
   };
 
@@ -1254,7 +1291,7 @@
     }, 'Creating MRR...');
   };
 
-  // ─── QUICK ACTIONS (with button loading) ───────────────
+  // ─── QUICK ACTIONS ─────────────────────────────────────
   window.quickProcessPending = function(btn) {
     return withButtonLoading(btn, async function() {
       var statusEl = document.getElementById('quickActionStatus');
@@ -1277,15 +1314,23 @@
   };
 
   window.quickNewMrr = function(btn) {
-  return withButtonLoading(btn, async function() {
-    // Open Manual MRR modal directly
-    openManualMrrModal();
-  }, 'Opening...');
-};
+    return withButtonLoading(btn, async function() {
+      // Opens Manual MRR modal directly
+      if (typeof openManualMrrModal === 'function') {
+        openManualMrrModal();
+      } else {
+        showToast('Manual MRR modal not available', 'danger');
+      }
+    }, 'Opening...');
+  };
 
   window.quickNewMrif = function(btn) {
     return withButtonLoading(btn, async function() {
-      openManualMrifModal();
+      if (typeof openManualMrifModal === 'function') {
+        openManualMrifModal();
+      } else {
+        showToast('Manual MRIF modal not available', 'danger');
+      }
     }, 'Opening...');
   };
 
