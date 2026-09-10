@@ -1,9 +1,8 @@
 // ============================================================
-// AUTHENTICATION & ROLE MANAGEMENT (with User Login)
+// AUTHENTICATION & ROLE MANAGEMENT (with Button Loading)
 // ============================================================
 
 function initRole() {
-  // Check if user already logged in (from localStorage)
   var savedUser = localStorage.getItem('ivm_username');
   if (savedUser) {
     state.currentUser = savedUser;
@@ -16,13 +15,12 @@ function initRole() {
   } else {
     applyRoleUI();
     if (role === 'warehouse') {
-      // ─── Preload lists for warehouse ──────────────────────
       if (!state.currentUser) {
         setTimeout(showLoginModal, 300);
       } else {
         preloadWarehouseLists();
         if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
-          setTimeout(() => { if (settingsModal) settingsModal.show(); }, 500);
+          setTimeout(function() { if (settingsModal) settingsModal.show(); }, 500);
         }
         selectModule('MRIF');
         setTimeout(loadAnalytics, 500);
@@ -34,18 +32,14 @@ function initRole() {
   }
 }
 
-// ─── Preload lists (inventory, vendors, IVM team) ──────────────
 async function preloadWarehouseLists() {
   console.log('[Preload] Starting background preload...');
   try {
-    // Fire everything in parallel – non-blocking
     Promise.allSettled([
       loadRequestInventory(false),
       loadVendorList(false),
       loadIvmTeamList(false)
     ]).then(function() {
-      console.log('[Preload] All lists done');
-      // Preload pending docs for each module
       var prev = state.currentModule;
       state.currentModule = 'MRIF'; fetchPendingDocs(false).catch(function() {});
       state.currentModule = 'MRR';  fetchPendingDocs(false).catch(function() {});
@@ -65,7 +59,6 @@ function selectRole(role) {
     showToast('Production mode activated', 'success');
     checkProductionName();
   } else if (role === 'warehouse') {
-    // If already logged in, switch immediately
     if (state.currentUser) {
       localStorage.setItem('ivm_userRole', 'warehouse');
       if (roleModal) roleModal.hide();
@@ -73,13 +66,12 @@ function selectRole(role) {
       showToast('Warehouse mode activated', 'success');
       preloadWarehouseLists();
       if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
-        setTimeout(() => { if (settingsModal) settingsModal.show(); }, 500);
+        setTimeout(function() { if (settingsModal) settingsModal.show(); }, 500);
       }
       selectModule('MRIF');
       loadWarehouseNotifications();
       setTimeout(loadAnalytics, 500);
     } else {
-      // Not logged in – show login modal
       if (roleModal) roleModal.hide();
       showLoginModal();
     }
@@ -97,21 +89,16 @@ function checkProductionName() {
 
 function saveProductionName() {
   var name = document.getElementById('productionNameInput') ? document.getElementById('productionNameInput').value.trim() : '';
-  if (!name) {
-    showToast('Please enter your name', 'warning');
-    return;
-  }
+  if (!name) { showToast('Please enter your name', 'warning'); return; }
   localStorage.setItem('ivm_requestorName', name);
   if (productionNameModal) productionNameModal.hide();
   localStorage.removeItem('ivm_requestStatuses');
   loadMyRequests();
 }
 
-// ─── User Login ──────────────────────────────────────────────────
 function showLoginModal() {
   var loginModal = document.getElementById('loginModal');
   if (!loginModal) return;
-  // Reset fields
   var userField = document.getElementById('loginUsername');
   var passField = document.getElementById('loginPassword');
   var errorField = document.getElementById('loginError');
@@ -120,71 +107,63 @@ function showLoginModal() {
   if (errorField) errorField.classList.add('d-none');
   var modal = new bootstrap.Modal(loginModal, { backdrop: 'static' });
   modal.show();
-  // Focus username
-  setTimeout(function() {
-    if (userField) userField.focus();
-  }, 300);
+  setTimeout(function() { if (userField) userField.focus(); }, 300);
 }
 
 async function loginUser() {
-  var username = document.getElementById('loginUsername').value.trim();
-  var password = document.getElementById('loginPassword').value.trim();
-  var errorField = document.getElementById('loginError');
-  var loginBtn = document.getElementById('loginBtn');
-  if (!username || !password) {
-    if (errorField) {
-      errorField.textContent = 'Please enter username and password';
-      errorField.classList.remove('d-none');
-    }
-    return;
-  }
-  // Show loading
-  if (loginBtn) {
-    loginBtn.disabled = true;
-    loginBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Checking...';
-  }
-  try {
-    var url = API_URL + '?action=verifyUser&username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password) + '&_t=' + Date.now();
-    var res = await fetch(url, { redirect: 'follow' });
-    var data = await res.json();
-    if (data.success) {
-      state.currentUser = data.username;
-      state.currentUserFullname = data.fullname || data.username;
-      localStorage.setItem('ivm_username', state.currentUser);
-      localStorage.setItem('ivm_userFullname', state.currentUserFullname);
-      localStorage.setItem('ivm_userRole', 'warehouse'); // Ensure role is warehouse
-      // Close login modal
-      var loginModal = document.getElementById('loginModal');
-      if (loginModal) {
-        var modal = bootstrap.Modal.getInstance(loginModal);
-        if (modal) modal.hide();
-      }
-      showToast('Welcome, ' + state.currentUserFullname + '!', 'success');
-      applyRoleUI();
-      preloadWarehouseLists();
-      if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
-        setTimeout(() => { if (settingsModal) settingsModal.show(); }, 500);
-      }
-      selectModule('MRIF');
-      loadWarehouseNotifications();
-      setTimeout(loadAnalytics, 500);
-    } else {
+  var btn = document.getElementById('loginBtn');
+
+  return withButtonLoading(btn, async function() {
+    var username = document.getElementById('loginUsername').value.trim();
+    var password = document.getElementById('loginPassword').value.trim();
+    var errorField = document.getElementById('loginError');
+
+    if (!username || !password) {
       if (errorField) {
-        errorField.textContent = data.error || 'Login failed';
+        errorField.textContent = 'Please enter username and password';
+        errorField.classList.remove('d-none');
+      }
+      return;
+    }
+
+    try {
+      var url = API_URL + '?action=verifyUser&username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password) + '&_t=' + Date.now();
+      var res = await fetch(url, { redirect: 'follow' });
+      var data = await res.json();
+      if (data.success) {
+        state.currentUser = data.username;
+        state.currentUserFullname = data.fullname || data.username;
+        localStorage.setItem('ivm_username', state.currentUser);
+        localStorage.setItem('ivm_userFullname', state.currentUserFullname);
+        localStorage.setItem('ivm_userRole', 'warehouse');
+
+        var loginModal = document.getElementById('loginModal');
+        if (loginModal) {
+          var modal = bootstrap.Modal.getInstance(loginModal);
+          if (modal) modal.hide();
+        }
+        showToast('Welcome, ' + state.currentUserFullname + '!', 'success');
+        applyRoleUI();
+        preloadWarehouseLists();
+        if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
+          setTimeout(function() { if (settingsModal) settingsModal.show(); }, 500);
+        }
+        selectModule('MRIF');
+        loadWarehouseNotifications();
+        setTimeout(loadAnalytics, 500);
+      } else {
+        if (errorField) {
+          errorField.textContent = data.error || 'Login failed';
+          errorField.classList.remove('d-none');
+        }
+      }
+    } catch(err) {
+      if (errorField) {
+        errorField.textContent = 'Network error: ' + err.message;
         errorField.classList.remove('d-none');
       }
     }
-  } catch(err) {
-    if (errorField) {
-      errorField.textContent = 'Network error: ' + err.message;
-      errorField.classList.remove('d-none');
-    }
-  } finally {
-    if (loginBtn) {
-      loginBtn.disabled = false;
-      loginBtn.innerHTML = 'Login';
-    }
-  }
+  }, 'Signing in...');
 }
 
 function logoutUser() {
@@ -198,7 +177,6 @@ function logoutUser() {
   }
 }
 
-// ─── PIN Entry (kept for admin fallback) ──────────────────────
 function showPinEntry() {
   var section = document.getElementById('pinEntrySection');
   if (section) section.classList.remove('d-none');
@@ -242,13 +220,12 @@ function verifyPin() {
     if (roleModal) roleModal.hide();
     applyRoleUI();
     showToast('Warehouse mode unlocked', 'success');
-    // Force login if not logged in
     if (!state.currentUser) {
       setTimeout(showLoginModal, 300);
     } else {
       preloadWarehouseLists();
       if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
-        setTimeout(() => { if (settingsModal) settingsModal.show(); }, 500);
+        setTimeout(function() { if (settingsModal) settingsModal.show(); }, 500);
       }
       selectModule('MRIF');
     }
@@ -265,13 +242,11 @@ function verifyPin() {
   }
 }
 
-// ─── Role UI ────────────────────────────────────────────────────
 function applyRoleUI() {
   const role = localStorage.getItem('ivm_userRole');
   const isProduction = (role === 'production');
   const isWarehouse = (role === 'warehouse');
 
-  // ─── Update UI elements ──────────────────────────────────────
   var btnMRR = document.getElementById('btnMRR');
   var btnMRIF = document.getElementById('btnMRIF');
   var btnMRS = document.getElementById('btnMRS');
@@ -297,30 +272,23 @@ function applyRoleUI() {
   var whBtn = document.getElementById('whNotifBtn');
   if (whBtn) whBtn.classList.toggle('d-none', isProduction);
 
-  // ─── Show/hide logout button ────────────────────────────────
   var logoutItem = document.getElementById('logoutNavItem');
   if (logoutItem) {
     logoutItem.style.display = (isWarehouse && state.currentUser) ? 'flex' : 'none';
   }
 
-  // ─── Update sidebar role display ─────────────────────────────
   var sidebarRole = document.getElementById('sidebarRole');
   if (sidebarRole) {
-    if (isProduction) {
-      sidebarRole.textContent = 'Production Mode';
-    } else {
-      sidebarRole.textContent = state.currentUserFullname || 'Warehouse';
-    }
+    if (isProduction) sidebarRole.textContent = 'Production Mode';
+    else sidebarRole.textContent = state.currentUserFullname || 'Warehouse';
   }
 
-  // ─── Update current role display in settings ──────────────────
   var roleDisplay = document.getElementById('currentRoleDisplay');
   if (roleDisplay) {
     roleDisplay.textContent = role === 'warehouse' ? 'Warehouse Staff' : 'Production Staff';
     roleDisplay.className = role === 'warehouse' ? 'badge bg-success' : 'badge bg-primary';
   }
 
-  // ─── Handle intervals ────────────────────────────────────────
   if (isProduction) {
     var active = document.getElementById('activeTransactionSection');
     if (active) active.classList.add('d-none');
@@ -343,12 +311,10 @@ function applyRoleUI() {
     updateWarehouseKPIs();
   }
 
-  // ─── Call sidebar role handler ──────────────────────────────
   if (typeof window.applySidebarRole === 'function') {
     window.applySidebarRole(role);
   }
-  
-  // ─── Force navigation to correct page ──────────────────────
+
   if (isProduction) {
     navigateTo('myrequests');
   } else {
