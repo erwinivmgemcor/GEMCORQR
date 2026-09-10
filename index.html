@@ -24,6 +24,7 @@
 <link rel="stylesheet" href="/GEMCORQR/style.css">
 
 <style>
+  /* ─── SIDEBAR ─── */
   .app-wrapper { display: flex; min-height: 100vh; }
   .sidebar {
     width: 260px;
@@ -80,6 +81,7 @@
   .section-page { display: none; animation: fadeIn 0.25s ease; }
   .section-page.active { display: block; }
 
+  /* ─── TOP BAR ─── */
   .top-bar {
     display: flex;
     align-items: center;
@@ -105,8 +107,7 @@
   .top-bar .btn-icon:hover { color: var(--gemcor-blue); }
   .top-bar .btn-icon .badge {
     position: absolute;
-    top: -4px;
-    right: -4px;
+    top: -4px; right: -4px;
     font-size: 0.6rem;
     padding: 3px 6px;
     background: var(--gemcor-red);
@@ -168,6 +169,7 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
+  /* ─── KPI / Cards ─── */
   .kpi-clickable { cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; }
   .kpi-clickable:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
   .bg-amber { background-color: #f59e0b !important; color: #1f2937 !important; }
@@ -243,6 +245,7 @@
   }
   .module-btn i { font-size: 1.4rem; }
 
+  /* ─── Scanner ─── */
   .scanner-container { position: relative; width: 100%; max-width: 400px; margin: 0 auto; border-radius: 12px; overflow: hidden; background: #000; }
   .scanner-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; border: 2px solid var(--gemcor-green); pointer-events: none; }
   .scanner-overlay::before { content: ''; position: absolute; top: 50%; left: 10%; right: 10%; height: 2px; background: var(--gemcor-green); animation: scanline 2s linear infinite; }
@@ -309,6 +312,7 @@
 <div id="sidebarBackdrop" class="sidebar-backdrop" onclick="toggleSidebar(false)"></div>
 
 <div class="app-wrapper">
+  <!-- ─── SIDEBAR ─── -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
       <i class="bi bi-box-seam"></i>
@@ -353,31 +357,35 @@
     </div>
   </aside>
 
+  <!-- ─── MAIN CONTENT ─── -->
   <main class="main-content">
 
     <button class="sidebar-toggle" onclick="toggleSidebar(true)">
       <i class="bi bi-list"></i>
     </button>
 
-    <!-- Top Bar -->
+    <!-- ─── TOP BAR ─── -->
     <div class="top-bar">
       <div class="left">
         <span class="fw-bold" id="pageTitle">Dashboard</span>
       </div>
       <div class="right">
-        <button class="upload-btn" onclick="document.getElementById('qrFileInput').click();">
+        <button class="upload-btn" onclick="document.getElementById('qrFileInput').click();" title="Upload a QR code image">
           <i class="bi bi-upload"></i> Upload QR
         </button>
         <input type="file" id="qrFileInput" accept="image/*" onchange="handleQrFileUpload(event)">
-        <button class="btn-icon" onclick="openWhNotifications()">
+        <button class="btn-icon" onclick="openWhNotifications()" title="View pending requests">
           <i class="bi bi-bell-fill"></i>
           <span class="badge d-none" id="whNotifBadge">0</span>
         </button>
       </div>
     </div>
 
+    <!-- ================================================================ -->
     <!-- SECTION: DASHBOARD -->
+    <!-- ================================================================ -->
     <div id="section-dashboard" class="section-page active">
+
       <div id="productionBanner" class="production-banner d-none">
         <i class="bi bi-person-badge"></i>
         <h5 class="mt-2 mb-1">Production Mode</h5>
@@ -428,6 +436,7 @@
           </div>
         </div>
 
+        <!-- ─── QUICK ACTIONS (Process Next Pending removed) ─── -->
         <div class="row g-3 mb-4">
           <div class="col-12">
             <div class="card">
@@ -435,26 +444,24 @@
                 <i class="bi bi-lightning-fill me-2"></i> Quick Actions
               </div>
               <div class="card-body">
-               <div class="d-flex flex-wrap gap-2">
-  <button class="btn btn-warning" onclick="quickProcessPending(this)">
-    <i class="bi bi-arrow-right-circle me-1"></i> Process Next Pending
-  </button>
-  <button class="btn btn-success" onclick="quickNewMrr(this)">
-    <i class="bi bi-box-arrow-in-down me-1"></i> Quick New MRR
-  </button>
-  <button class="btn btn-outline-primary" onclick="quickNewMrif(this)">
-    <i class="bi bi-box-arrow-up me-1"></i> Quick New MRIF
-  </button>
-  <button class="btn btn-outline-secondary" onclick="openQuickScan()">
-    <i class="bi bi-qr-code-scan me-1"></i> Quick Scan
-  </button>
-</div>
+                <div class="d-flex flex-wrap gap-2">
+                  <button class="btn btn-success" onclick="quickNewMrr(this)">
+                    <i class="bi bi-box-arrow-in-down me-1"></i> Quick New MRR
+                  </button>
+                  <button class="btn btn-outline-primary" onclick="quickNewMrif(this)">
+                    <i class="bi bi-box-arrow-up me-1"></i> Quick New MRIF
+                  </button>
+                  <button class="btn btn-outline-secondary" onclick="openQuickScan()">
+                    <i class="bi bi-qr-code-scan me-1"></i> Quick Scan
+                  </button>
+                </div>
                 <div id="quickActionStatus" class="mt-2 small text-muted"></div>
               </div>
             </div>
           </div>
         </div>
 
+        <!-- Analytics -->
         <div id="analyticsSection" class="mt-4">
           <div class="d-flex justify-content-between align-items-center mb-2">
             <h6 class="mb-0"><i class="bi bi-graph-up me-2"></i>Analytics Dashboard</h6>
@@ -526,7 +533,9 @@
       </div>
     </div>
 
+    <!-- ================================================================ -->
     <!-- SECTION: RELEASING (MRIF) -->
+    <!-- ================================================================ -->
     <div id="section-releasing" class="section-page">
       <div id="mrifModuleContainer">
         <div id="quickScanCard" class="card mb-4 border-0 shadow-sm">
@@ -669,7 +678,9 @@
       </div>
     </div>
 
+    <!-- ================================================================ -->
     <!-- SECTION: RECEIVING (MRR) -->
+    <!-- ================================================================ -->
     <div id="section-receiving" class="section-page">
       <div id="mrrModuleContainer">
         <div id="mrrQuickScan" class="card mb-4 border-0 shadow-sm">
@@ -707,7 +718,9 @@
       </div>
     </div>
 
+    <!-- ================================================================ -->
     <!-- SECTION: RETURNS (MRS) -->
+    <!-- ================================================================ -->
     <div id="section-returns" class="section-page">
       <div id="mrsModuleContainer">
         <div id="mrsListCard" class="card mb-4 border-0 shadow-sm d-none">
@@ -722,7 +735,9 @@
       </div>
     </div>
 
+    <!-- ================================================================ -->
     <!-- SECTION: NEW REQUEST -->
+    <!-- ================================================================ -->
     <div id="section-requests" class="section-page">
       <div class="card">
         <div class="card-body text-center py-5">
@@ -742,7 +757,9 @@
       </div>
     </div>
 
+    <!-- ================================================================ -->
     <!-- SECTION: MY REQUESTS -->
+    <!-- ================================================================ -->
     <div id="section-myrequests" class="section-page">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h5><i class="bi bi-clock-history me-2"></i>My Requests</h5>
@@ -757,7 +774,9 @@
       </div>
     </div>
 
+    <!-- ================================================================ -->
     <!-- SECTION: INVENTORY -->
+    <!-- ================================================================ -->
     <div id="section-inventory" class="section-page">
       <div class="card">
         <div class="card-body text-center py-5">
@@ -771,7 +790,9 @@
       </div>
     </div>
 
+    <!-- ================================================================ -->
     <!-- SECTION: SETTINGS -->
+    <!-- ================================================================ -->
     <div id="section-settings" class="section-page">
       <div class="card">
         <div class="card-header">Settings</div>
@@ -786,7 +807,9 @@
       </div>
     </div>
 
-    <!-- SECTION: ABOUT -->
+    <!-- ================================================================ -->
+    <!-- SECTION: ABOUT / INSTRUCTIONS -->
+    <!-- ================================================================ -->
     <div id="section-about" class="section-page">
       <div class="card">
         <div class="card-header bg-primary text-white">
@@ -795,26 +818,92 @@
         <div class="card-body" style="max-height: 70vh; overflow-y: auto;">
           <h5>Welcome to GEMCOR WMS</h5>
           <p>This system manages warehouse material transactions: <strong>MRIF</strong> (Releasing), <strong>MRR</strong> (Receiving), and <strong>MRS</strong> (Returns).</p>
+
           <hr>
           <h6><i class="bi bi-speedometer2"></i> Dashboard</h6>
           <ul>
             <li>Quick overview of <strong>Active Docs</strong>, <strong>Completed</strong>, <strong>Pending</strong>, and <strong>Partial Items</strong>.</li>
-            <li><strong>Quick Actions</strong> – process the next pending MRIF, create a new MRR or MRIF, or open the quick scanner.</li>
+            <li><strong>Quick Actions</strong> – create a new MRR, create a new MRIF, or open the quick scanner.</li>
+            <li>Analytics charts show processing times, request volume, and top items.</li>
           </ul>
+
           <h6><i class="bi bi-box-arrow-up"></i> Releasing (MRIF)</h6>
           <ul>
-            <li>Scan a <strong>Document QR</strong> to load a pending MRIF.</li>
+            <li>Scan a <strong>Document QR</strong> to load a pending MRIF, or type a <strong>PO number</strong> to create a new MRR from it.</li>
             <li>Scan <strong>Item QR</strong> codes to verify and issue quantities.</li>
+            <li>Use the <strong>Item Checklist</strong> to manually enter issued quantities, batch verify, and submit partial or full transactions.</li>
             <li>Create a <strong>Manual MRIF</strong> for releases without a JO.</li>
           </ul>
+
           <h6><i class="bi bi-box-arrow-in-down"></i> Receiving (MRR)</h6>
           <ul>
             <li>Scan a <strong>PO QR</strong> or enter a PO number to auto‑load ordered items.</li>
-            <li>Missing item codes auto‑suggest from the inventory list.</li>
-            <li>Create a <strong>Manual MRR</strong> for items without a PO.</li>
+            <li>Mark arrived items, adjust quantities, and add remarks.</li>
+            <li>Missing item codes auto-suggest from inventory.</li>
+            <li>Create a <strong>Manual MRR</strong> for items without a PO (Shopee, Lazada, etc.).</li>
           </ul>
+
+          <h6><i class="bi bi-arrow-counterclockwise"></i> Returns (MRS)</h6>
+          <ul>
+            <li>View and print existing MRS documents.</li>
+          </ul>
+
+          <h6><i class="bi bi-plus-circle"></i> New Request</h6>
+          <ul>
+            <li>Production staff can create new MRIF or MRS requests.</li>
+            <li>Wizard guides you through: Document Type → JO Number (auto‑lookup SOF data) → Requestor → Review → Add Items → Submit.</li>
+            <li>Items can be added by searching or scanning QR codes.</li>
+            <li>After submission, a QR code is generated for the warehouse to process.</li>
+          </ul>
+
+          <h6><i class="bi bi-clock-history"></i> My Requests</h6>
+          <ul>
+            <li>Production staff can track their own requests.</li>
+            <li>Click any request to view the <strong>QR code</strong> and the <strong>full list of requested items</strong>.</li>
+            <li>Download the QR code as PNG for printing.</li>
+          </ul>
+
+          <h6><i class="bi bi-box-seam"></i> Inventory</h6>
+          <ul>
+            <li>Browse the full inventory catalog with item codes, descriptions, and QR codes.</li>
+          </ul>
+
+          <h6><i class="bi bi-gear"></i> Settings</h6>
+          <ul>
+            <li>Sync Sheet IDs, change warehouse PIN, and test connection.</li>
+          </ul>
+
+          <hr>
+          <h6><i class="bi bi-qr-code"></i> QR Scanning & Upload</h6>
+          <ul>
+            <li><strong>Live QR Scan:</strong> Use the built‑in camera to scan document, PO, or item QR codes.</li>
+            <li><strong>Upload QR:</strong> Click “Upload QR” in the top bar to process an image of a QR code.</li>
+          </ul>
+
+          <hr>
+          <h6><i class="bi bi-printer"></i> Printing</h6>
+          <ul>
+            <li>From any module list (MRIF, MRR, MRS), select multiple documents and print them together.</li>
+          </ul>
+
+          <hr>
+          <h6><i class="bi bi-bell"></i> Notifications</h6>
+          <ul>
+            <li>Warehouse staff see a bell icon with a badge count of pending MRIF requests.</li>
+            <li>Click the bell to view today’s pending requests and load them directly.</li>
+          </ul>
+
+          <hr>
+          <h6><i class="bi bi-pencil"></i> Remarks & Auto‑Suggest</h6>
+          <ul>
+            <li>When processing transactions, you can add remarks to each item.</li>
+            <li>The system preserves your notes and appends the status (e.g., <em>"Urgent (SERVED)"</em>).</li>
+            <li>Item Code/Description fields have auto‑suggest dropdowns from the master inventory.</li>
+          </ul>
+
           <hr>
           <div class="text-center mt-4">
+            <p class="text-muted small">For support or questions, contact your system administrator.</p>
             <p class="mt-2">
               <strong>Developer:</strong>
               <a href="https://tinyurl.com/negosyowebph" target="_blank" rel="noopener noreferrer" style="color: #1e3a5f; font-weight: bold;">
@@ -906,11 +995,15 @@
         <div class="text-center mb-3">
           <i class="bi bi-box-seam text-success" style="font-size:2.5rem"></i>
           <h6 class="mt-2">Enter Purchase Order Number</h6>
+          <p class="text-muted small">Type the PO number from the QR code</p>
         </div>
         <div class="input-group input-group-lg mb-3">
           <span class="input-group-text"><i class="bi bi-hash"></i></span>
           <input type="text" id="poNumberInput" class="form-control" placeholder="e.g. 16820" onkeypress="if(event.key==='Enter')lookupPoItems()">
           <button class="btn btn-success" onclick="lookupPoItems()"><i class="bi bi-search"></i> Look Up</button>
+        </div>
+        <div id="poScanError" class="alert alert-danger d-none py-2">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i><span id="poScanErrorText"></span>
         </div>
       </div>
       <div class="modal-footer">
@@ -920,7 +1013,7 @@
   </div>
 </div>
 
-<!-- PO Items Modal -->
+<!-- PO Items Modal (with auto-suggest for missing codes) -->
 <div class="modal fade" id="poItemsModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -1131,6 +1224,7 @@
         <div class="card border-warning">
           <div class="card-header bg-warning text-dark"><strong><i class="bi bi-bug me-2"></i>Debug: Test Connection</strong></div>
           <div class="card-body">
+            <p class="small text-muted">Click to test if your GAS backend is responding correctly.</p>
             <button class="btn btn-warning w-100 mb-2" onclick="testConnection()">Test GAS Connection</button>
             <div id="testResult" class="test-result d-none"></div>
           </div>
@@ -1160,7 +1254,7 @@
   </div>
 </div>
 
-<!-- New Request Modal -->
+<!-- New Request Modal (full wizard) -->
 <div class="modal fade" id="newRequestModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -1186,6 +1280,7 @@
         <input type="hidden" id="reqClientName">
         <input type="hidden" id="reqProject">
 
+        <!-- Step 1 -->
         <div class="wizard-panel active" id="step1">
           <div class="text-center mb-4">
             <div class="step-icon"><i class="bi bi-file-earmark-text"></i></div>
@@ -1213,6 +1308,7 @@
           </div>
         </div>
 
+        <!-- Step 2 -->
         <div class="wizard-panel" id="step2">
           <div class="text-center mb-4">
             <div class="step-icon"><i class="bi bi-hash"></i></div>
@@ -1228,12 +1324,14 @@
               <div id="joNoStatus" class="mt-2 small"></div>
             </div>
           </div>
+          <div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>Click "Next" to auto-lookup SOF data.</div>
           <div class="wizard-nav mt-4">
             <button class="btn btn-outline-secondary" onclick="goToStep(1)">Back</button>
             <button class="btn btn-primary" id="btnStep2Next" onclick="doStep2Next()">Next</button>
           </div>
         </div>
 
+        <!-- Step 3 -->
         <div class="wizard-panel" id="step3">
           <div class="text-center mb-4">
             <div class="step-icon"><i class="bi bi-person"></i></div>
@@ -1257,6 +1355,7 @@
           </div>
         </div>
 
+        <!-- Step 4 -->
         <div class="wizard-panel" id="step4">
           <div class="text-center mb-4">
             <div class="step-icon"><i class="bi bi-clipboard-check"></i></div>
@@ -1271,33 +1370,43 @@
             <div class="review-row"><span class="review-label">Requestor</span><span class="review-value" id="reviewRequestor">-</span></div>
             <div class="review-row"><span class="review-label">Department</span><span class="review-value" id="reviewDepartment">-</span></div>
           </div>
+          <div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-2"></i>If wrong, click "Back" to correct.</div>
           <div class="wizard-nav mt-4">
             <button class="btn btn-outline-secondary" onclick="goToStep(3)">Back</button>
             <button class="btn btn-primary" onclick="goToStep(5)">Next</button>
           </div>
         </div>
 
+        <!-- Step 5: Items with Scanner -->
         <div class="wizard-panel" id="step5">
           <div class="text-center mb-4">
             <div class="step-icon"><i class="bi bi-box-seam"></i></div>
             <h5>Add Items</h5>
+            <p class="text-muted small">Scan QR codes or type to search inventory.</p>
           </div>
+
           <div id="wizardScannerOverlay" class="d-none" style="position:relative; background:#000; border-radius:12px; overflow:hidden; margin-bottom:12px;">
             <div id="wizardReader" style="width:100%; max-height:300px;"></div>
+            <div class="scanner-overlay">
+              <div class="scanner-frame"><div class="scan-line"></div></div>
+            </div>
             <div class="text-center text-white p-2" style="background:rgba(0,0,0,0.6);">
               <button class="btn btn-sm btn-danger" onclick="closeWizardScanner()">
                 <i class="bi bi-x-circle"></i> Cancel Scan
               </button>
             </div>
           </div>
+
           <div id="step5ItemsContainer"></div>
           <button class="btn btn-outline-primary w-100 mt-2" onclick="addStep5ItemRow()"><i class="bi bi-plus-lg"></i> Add Another Item</button>
+
           <div class="wizard-nav mt-4">
             <button class="btn btn-outline-secondary" onclick="goToStep(4)">Back</button>
             <button class="btn btn-primary" id="btnStep5Next" onclick="goToStep(6)" disabled>Next</button>
           </div>
         </div>
 
+        <!-- Step 6 -->
         <div class="wizard-panel" id="step6">
           <div class="text-center mb-4">
             <div class="step-icon"><i class="bi bi-check-circle"></i></div>
@@ -1318,6 +1427,7 @@
             <button class="btn btn-success btn-lg" onclick="submitNewRequest()"><i class="bi bi-check-circle me-2"></i>Submit Request</button>
           </div>
         </div>
+
       </div>
     </div>
   </div>
@@ -1718,7 +1828,7 @@
   </div>
 </div>
 
-<!-- Request Details Modal -->
+<!-- Request Details Modal (warehouse) -->
 <div class="modal fade" id="requestDetailsModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -1736,6 +1846,29 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── NEW: My Request Details Modal (Production) ─── -->
+<div class="modal fade" id="myRequestDetailsModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="bi bi-file-earmark-text me-2"></i>My Request Details</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="myRequestDetailsContent">
+          <div class="text-center py-4">
+            <div class="spinner-border text-primary"></div>
+            <div class="text-muted mt-2">Loading...</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
