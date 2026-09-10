@@ -1277,12 +1277,11 @@
   };
 
   window.quickNewMrr = function(btn) {
-    return withButtonLoading(btn, async function() {
-      await selectModule('MRR');
-      var poInput = document.getElementById('manualPoInput');
-      if (poInput) { poInput.focus(); showToast('Enter PO number to create MRR', 'info'); }
-    }, 'Opening...');
-  };
+  return withButtonLoading(btn, async function() {
+    // Open Manual MRR modal directly
+    openManualMrrModal();
+  }, 'Opening...');
+};
 
   window.quickNewMrif = function(btn) {
     return withButtonLoading(btn, async function() {
