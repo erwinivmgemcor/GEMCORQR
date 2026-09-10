@@ -786,12 +786,13 @@ async function loadMyRequests() {
 // ─── Updated renderMyRequests with action buttons ──────────────
 function renderMyRequests(requests) {
   var container = document.getElementById('myRequestsList');
+  if (!container) return;
   container.innerHTML = '';
   if (!requests || requests.length === 0) {
     container.innerHTML = '<div class="list-group-item text-muted text-center">No requests found</div>';
     return;
   }
-  
+
   requests.forEach(function(req) {
     var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
     var status = req.status || 'PENDING';
@@ -802,24 +803,32 @@ function renderMyRequests(requests) {
     var icon = isCompleted ? 'bi-check-circle-fill' : (isPartial ? 'bi-hourglass-split' : 'bi-clock');
     var docNo = req.docNo || '';
     var docType = req.type || 'MRIF';
-    
-    var html = '<div class="list-group-item">' +
-      '<div class="d-flex justify-content-between align-items-start">' +
-        '<div class="flex-grow-1">' +
-          '<div class="fw-bold">' + docNo + ' <span class="badge bg-secondary">' + docType + '</span></div>' +
-          '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
-          '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
-        '</div>' +
-        '<div class="d-flex flex-column align-items-end gap-1">' +
-          '<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + statusText + '</span>' +
-          '<div class="btn-group btn-group-sm" role="group">' +
-            '<button class="btn btn-outline-primary" onclick="openRequestDetails(\'' + docNo + '\', \'' + docType + '\')" title="View Details"><i class="bi bi-eye"></i></button>' +
-            '<button class="btn btn-outline-secondary" onclick="showRequestQr(\'' + docNo + '\', \'' + docNo + '\')" title="Show QR"><i class="bi bi-qr-code"></i></button>' +
+
+    var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + '" ' +
+      'data-docno="' + docNo + '" data-doctype="' + docType + '" ' +
+      'style="cursor:pointer;">' +
+        '<div class="d-flex justify-content-between align-items-start">' +
+          '<div class="flex-grow-1">' +
+            '<div class="fw-bold">' + docNo + ' <span class="badge bg-secondary">' + docType + '</span></div>' +
+            '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
+            '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
+            '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i> Click to view QR &amp; items</div>' +
           '</div>' +
+          '<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + statusText + '</span>' +
         '</div>' +
-      '</div>' +
-    '</div>';
+      '</div>';
     container.innerHTML += html;
+  });
+
+  // Whole card click → open details modal (QR + items)
+  container.querySelectorAll('.request-card').forEach(function(el) {
+    el.addEventListener('click', function() {
+      var docNo = this.getAttribute('data-docno');
+      var docType = this.getAttribute('data-doctype') || 'MRIF';
+      if (docNo && typeof window.openMyRequestDetails === 'function') {
+        window.openMyRequestDetails(docNo, docType);
+      }
+    });
   });
 }
 
