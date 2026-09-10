@@ -2,7 +2,6 @@
 // MAIN - DOM Ready & Initialization (Optimized)
 // ============================================================
 
-// ─── Sidebar role handler ─────────────────────────────
 window.applySidebarRole = function(role) {
   var isProduction = (role === 'production');
   var isWarehouse = (role === 'warehouse');
@@ -33,7 +32,6 @@ window.applySidebarRole = function(role) {
   }
 };
 
-// ─── Navigation (INSTANT – no spinner) ────────────────
 function navigateTo(sectionId) {
   document.querySelectorAll('.section-page').forEach(function(el) {
     el.classList.remove('active');
@@ -62,7 +60,6 @@ function navigateTo(sectionId) {
   var titleEl = document.getElementById('pageTitle');
   if (titleEl && titles[sectionId]) titleEl.textContent = titles[sectionId];
 
-  // Module-specific – fire and forget (no blocking)
   if (sectionId === 'releasing' || sectionId === 'receiving' || sectionId === 'returns') {
     var modMap = { releasing: 'MRIF', receiving: 'MRR', returns: 'MRS' };
     var mod = modMap[sectionId];
@@ -77,7 +74,6 @@ function navigateTo(sectionId) {
       if (mrrCard) mrrCard.classList.toggle('d-none', mod !== 'MRR');
       if (mrsCard) mrsCard.classList.toggle('d-none', mod !== 'MRS');
 
-      // Non-blocking background load
       if (typeof fetchPendingDocs === 'function') fetchPendingDocs();
     }
   }
@@ -105,11 +101,135 @@ function toggleSidebar(open) {
   }
 }
 
-// ─── Override renderMyRequests ────────────────────────
+// ══════════════════════════════════════════════════════════════
+// OPEN MY REQUEST DETAILS — shows QR + item list for production
+// ══════════════════════════════════════════════════════════════
+window.openMyRequestDetails = async function(docNo, docType) {
+  var modalEl = document.getElementById('myRequestDetailsModal');
+  if (!modalEl) { showToast('Details modal not found', 'danger'); return; }
+  var modal = new bootstrap.Modal(modalEl);
+  var content = document.getElementById('myRequestDetailsContent');
+  if (!content) return;
+
+  content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading request details...</div></div>';
+  modal.show();
+
+  // QR
+  var appUrl = window.location.origin + window.location.pathname;
+  var qrData = appUrl + '?doc=' + encodeURIComponent(docNo);
+  var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(qrData);
+
+  // Fetch items
+  var itemsHtml = '';
+  var metaHtml = '';
+  try {
+    var sheetKey = 'sheetId_' + (docType || 'MRIF');
+    var sheetIdVal = localStorage.getItem(sheetKey);
+    var sheetIdClean = sheetIdVal ? extractSheetId(sheetIdVal) : '';
+    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
+              '&docType=' + (docType || 'MRIF') +
+              '&sheetId=' + encodeURIComponent(sheetIdClean) +
+              '&_t=' + Date.now();
+    var res = await fetch(url, { redirect: 'follow' });
+    var data = await res.json();
+
+    if (data.success) {
+      var info = data.info || {};
+      var items = data.items || [];
+
+      // Meta
+      var requestor = info.Requestor || info.requestor || '';
+      var dept = info.Department || info.department || '';
+      var dateStr = info.Date || info.date || info['Date Prepared'] || '';
+      metaHtml = '<div class="row g-2 mb-3">' +
+        (requestor ? '<div class="col-md-6"><strong>Requestor:</strong> ' + requestor + '</div>' : '') +
+        (dept ? '<div class="col-md-6"><strong>Department:</strong> ' + dept + '</div>' : '') +
+        (dateStr ? '<div class="col-md-6"><strong>Date:</strong> ' + dateStr + '</div>' : '') +
+        '<div class="col-md-6"><strong>Type:</strong> <span class="badge bg-secondary">' + (docType || 'MRIF') + '</span></div>' +
+        '</div>';
+
+      // Items table
+      if (items.length > 0) {
+        itemsHtml = '<h6 class="mt-2"><i class="bi bi-box-seam me-1"></i>Requested Items (' + items.length + ')</h6>';
+        itemsHtml += '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">';
+        itemsHtml += '<thead class="table-light"><tr><th style="width:5%">#</th><th style="width:22%">Item Code</th><th>Description</th><th class="text-center" style="width:10%">Qty</th><th class="text-center" style="width:10%">Unit</th></tr></thead><tbody>';
+        items.forEach(function(it, idx) {
+          var code = it.inventoryId || it.itemCode || it.code || '';
+          var desc = it.description || it.desc || '';
+          var qty = it.expectedQty || it.qty || it.requestedQty || 0;
+          var unit = it.unit || 'PIECE';
+          itemsHtml += '<tr>' +
+            '<td>' + (idx + 1) + '</td>' +
+            '<td><code>' + code + '</code></td>' +
+            '<td>' + desc + '</td>' +
+            '<td class="text-center">' + qty + '</td>' +
+            '<td class="text-center">' + unit + '</td>' +
+            '</tr>';
+        });
+        itemsHtml += '</tbody></table></div>';
+      } else {
+        itemsHtml = '<div class="alert alert-info">No items found in this request.</div>';
+      }
+    } else {
+      itemsHtml = '<div class="alert alert-warning">Could not load items: ' + (data.error || 'Unknown error') + '</div>';
+    }
+  } catch(err) {
+    itemsHtml = '<div class="alert alert-warning">Could not load items: ' + err.message + '</div>';
+  }
+
+  content.innerHTML =
+    '<div class="text-center mb-3">' +
+      '<div class="fw-bold mb-2" style="font-size:1.1rem;">' + docNo + '</div>' +
+      '<img id="myRequestQrImg" src="' + qrUrl + '" alt="QR" style="max-width:220px;width:100%;border:1px solid #ddd;border-radius:8px;padding:8px;background:#fff;">' +
+      '<div class="mt-2">' +
+        '<button class="btn btn-sm btn-success" onclick="downloadMyRequestQr()"><i class="bi bi-download me-1"></i>Download QR</button>' +
+      '</div>' +
+    '</div>' +
+    '<hr>' +
+    metaHtml +
+    itemsHtml;
+
+  // Store for download
+  window._myReqLastDocNo = docNo;
+};
+
+window.downloadMyRequestQr = function() {
+  var img = document.getElementById('myRequestQrImg');
+  if (!img || !img.src) { showToast('No QR to download', 'warning'); return; }
+  var docNo = window._myReqLastDocNo || 'request';
+  var canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d');
+  var qrImg = new Image();
+  qrImg.crossOrigin = 'Anonymous';
+  qrImg.onload = function() {
+    var padding = 24;
+    var textHeight = 50;
+    canvas.width = qrImg.width + padding * 2;
+    canvas.height = qrImg.height + padding * 2 + textHeight;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 16px Arial, sans-serif';
+    ctx.fillText('Doc: ' + docNo, canvas.width / 2, 10);
+    ctx.drawImage(qrImg, padding, padding + textHeight);
+    var link = document.createElement('a');
+    link.download = 'QR-' + docNo + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  };
+  qrImg.onerror = function() { showToast('Failed to load QR image', 'danger'); };
+  qrImg.src = img.src;
+};
+
+// ─── Override renderMyRequests (clicks open the details modal) ──
 var originalRenderMyRequests = window.renderMyRequests || function() {};
+
 window.renderMyRequests = function(requests) {
+  // Also call the original (updates badges, embedded dashboard list)
   if (typeof originalRenderMyRequests === 'function') {
-    try { originalRenderMyRequests(requests); } catch(e) {}
+    try { originalRenderMyRequests(requests); } catch(e) { console.warn('[renderMyRequests] Original error:', e); }
   }
 
   var container = document.getElementById('myRequestsListPage');
@@ -139,29 +259,34 @@ window.renderMyRequests = function(requests) {
     var statusText = isCompleted ? 'COMPLETED' : (isPartial ? 'PARTIAL' : 'PENDING');
     var icon = isCompleted ? 'bi-check-circle-fill' : (isPartial ? 'bi-hourglass-split' : 'bi-clock');
     var docNo = req.docNo || '';
-    var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + '" data-docno="' + docNo + '" style="cursor:pointer;">' +
-      '<div class="d-flex justify-content-between align-items-start">' +
-      '<div>' +
-      '<div class="fw-bold">' + docNo + ' <span class="badge bg-secondary">' + (req.type || '') + '</span></div>' +
-      '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
-      '</div>' +
-      '<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + statusText + '</span>' +
-      '</div>' +
-      '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
-      '<div class="small text-muted mt-1"><i class="bi bi-qr-code me-1"></i> Click to re-open QR</div>' +
+    var docType = req.type || 'MRIF';
+
+    var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + '" ' +
+      'data-docno="' + docNo + '" data-doctype="' + docType + '" ' +
+      'style="cursor:pointer;">' +
+        '<div class="d-flex justify-content-between align-items-start">' +
+          '<div>' +
+            '<div class="fw-bold">' + docNo + ' <span class="badge bg-secondary">' + docType + '</span></div>' +
+            '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
+            '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
+          '</div>' +
+          '<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + statusText + '</span>' +
+        '</div>' +
+        '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i> Click to view QR &amp; requested items</div>' +
       '</div>';
     container.innerHTML += html;
   });
 
+  // Click → open details modal (QR + items)
   container.querySelectorAll('.request-card').forEach(function(el) {
     el.addEventListener('click', function() {
       var docNo = this.getAttribute('data-docno');
-      if (docNo) showRequestQr(docNo, docNo);
+      var docType = this.getAttribute('data-doctype') || 'MRIF';
+      if (docNo) openMyRequestDetails(docNo, docType);
     });
   });
 };
 
-// ─── Override loadMyRequests ──────────────────────────
 var originalLoadMyRequests = window.loadMyRequests || function() {};
 window.loadMyRequests = function() {
   if (typeof originalLoadMyRequests === 'function') {
@@ -169,7 +294,6 @@ window.loadMyRequests = function() {
   }
 };
 
-// ─── Override updateWarehouseKPIs ─────────────────────
 var originalUpdateWarehouseKPIs = window.updateWarehouseKPIs || function() {};
 window.updateWarehouseKPIs = function() {
   if (typeof originalUpdateWarehouseKPIs === 'function') {
@@ -177,7 +301,6 @@ window.updateWarehouseKPIs = function() {
   }
 };
 
-// ─── Test connection ───────────────────────────────────
 async function testConnection() {
   var resultDiv = document.getElementById('testResult');
   if (!resultDiv) return;
@@ -203,7 +326,6 @@ async function testConnection() {
   }
 }
 
-// ─── URL doc parameter ─────────────────────────────────
 function checkUrlDocParam() {
   var params = new URLSearchParams(window.location.search);
   var docNo = params.get('doc');
@@ -220,9 +342,7 @@ function checkUrlDocParam() {
   var role = localStorage.getItem('ivm_userRole');
   if (role === 'warehouse') {
     selectModule(docType).then(function() {
-      setTimeout(function() {
-        onDocSelect(docNo);
-      }, 300);
+      setTimeout(function() { onDocSelect(docNo); }, 300);
     }).catch(function() {
       showToast('Could not open document: ' + cleanDocNo(docNo), 'warning');
     });
@@ -231,7 +351,6 @@ function checkUrlDocParam() {
   }
 }
 
-// ─── DOM Ready ─────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
   var modalIds = ['qtyModal', 'successModal', 'settingsModal', 'newRequestModal',
     'requestSuccessModal', 'whNotifModal', 'mrifListModal', 'mrifPrintModal',
@@ -266,9 +385,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/GEMCORQR/sw.js')
-      .then(function() {})
-      .catch(function() {});
+    navigator.serviceWorker.register('/GEMCORQR/sw.js').catch(function() {});
   }
 
   initRole();
