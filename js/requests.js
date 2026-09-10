@@ -1,5 +1,6 @@
 // ============================================================
-// NEW REQUEST FUNCTIONS (with Item Scanner & Remarks)
+// NEW REQUEST FUNCTIONS (with Item Scanner, Remarks,
+// Double-click protection, and QR + items details modal)
 // ============================================================
 
 function openNewRequest() {
@@ -57,12 +58,8 @@ function goToStep(step) {
   var panel = document.getElementById('step' + step);
   if (panel) panel.classList.add('active');
 
-  if (step === 4) {
-    populateReviewData();
-  }
-  if (step === 6) {
-    populateFinalReview();
-  }
+  if (step === 4) populateReviewData();
+  if (step === 6) populateFinalReview();
 }
 
 function selectDocType(type) {
@@ -162,7 +159,6 @@ function populateReviewData() {
   document.getElementById('reviewDepartment').textContent = dept || '-';
 }
 
-// ─── Item row with scanner button and remarks ────────────
 function addStep5ItemRow() {
   var container = document.getElementById('step5ItemsContainer');
   var idx = container.children.length;
@@ -268,7 +264,7 @@ function populateFinalReview() {
   tbody.innerHTML = '';
   var rows = document.querySelectorAll('#step5ItemsContainer .step5-item-row');
   var count = 0;
-  rows.forEach(function(row, i) {
+  rows.forEach(function(row) {
     var code = row.querySelector('.req-item-code').value;
     var desc = row.querySelector('.req-item-desc').value;
     var qty = row.querySelector('.req-qty').value;
@@ -342,11 +338,11 @@ function onWizardScanSuccess(decodedText) {
   }
   if (!matchedItem) {
     var lowerCode = code.toLowerCase();
-    for (var i = 0; i < state.requestInventoryList.length; i++) {
-      var it = state.requestInventoryList[i];
-      if (it.inventoryId.toLowerCase().indexOf(lowerCode) !== -1 ||
-          it.code.toLowerCase().indexOf(lowerCode) !== -1) {
-        matchedItem = it;
+    for (var j = 0; j < state.requestInventoryList.length; j++) {
+      var it2 = state.requestInventoryList[j];
+      if (it2.inventoryId.toLowerCase().indexOf(lowerCode) !== -1 ||
+          it2.code.toLowerCase().indexOf(lowerCode) !== -1) {
+        matchedItem = it2;
         break;
       }
     }
@@ -393,43 +389,76 @@ document.addEventListener('hidden.bs.modal', function (event) {
 });
 
 // ─── Submit Request ──────────────────────────────────────
+// DOUBLE-CLICK PROTECTION: immediate synchronous guard + button disable
+var _isSubmittingNewRequest = false;
+
 async function submitNewRequest() {
-  if (state.isLoading) return;
-  const docType = document.getElementById('reqDocType').value;
-  const requestor = document.getElementById('reqRequestor').value.trim();
-  const department = document.getElementById('reqDepartment').value.trim();
-  const joNo = document.getElementById('reqJoNo').value.trim();
-  const gemSoNo = document.getElementById('reqGemSoNo').value.trim();
-  const clientName = document.getElementById('reqClientName').value.trim();
-  const project = document.getElementById('reqProject').value.trim();
-  if (!requestor) {
-    showToast('Select a requestor', 'warning');
+  // ─── Guard #1: flag check (synchronous, prevents race) ───
+  if (_isSubmittingNewRequest) {
+    console.log('[Submit] Blocked duplicate submit — already in progress');
     return;
   }
 
-  const items = [];
+  // ─── Guard #2: disable the actual button instantly ──────
+  var submitBtn = document.querySelector('#step6 .btn-success') ||
+                  document.querySelector('#newRequestModal .btn-success');
+  var origHtml = '';
+  if (submitBtn) {
+    if (submitBtn.disabled || submitBtn.dataset.loading === '1') return;
+    origHtml = submitBtn.innerHTML;
+    submitBtn.dataset.loading = '1';
+    submitBtn.disabled = true;
+    submitBtn.classList.add('btn-loading');
+    submitBtn.innerHTML = '<span class="btn-spinner"></span>Submitting...';
+  }
+
+  _isSubmittingNewRequest = true;
+
+  // ─── Guard #3: also block via global state ──────────────
+  state.isLoading = true;
+
+  // ─── Collect data ───────────────────────────────────────
+  var docType = document.getElementById('reqDocType').value;
+  var requestor = document.getElementById('reqRequestor').value.trim();
+  var department = document.getElementById('reqDepartment').value.trim();
+  var joNo = document.getElementById('reqJoNo').value.trim();
+  var gemSoNo = document.getElementById('reqGemSoNo').value.trim();
+  var clientName = document.getElementById('reqClientName').value.trim();
+  var project = document.getElementById('reqProject').value.trim();
+
+  if (!requestor) {
+    showToast('Select a requestor', 'warning');
+    _resetSubmitState(submitBtn, origHtml);
+    return;
+  }
+
+  var items = [];
   document.querySelectorAll('#step5ItemsContainer .step5-item-row').forEach(function(row) {
-    const code = row.querySelector('.req-item-code').value;
-    const desc = row.querySelector('.req-item-desc').value;
-    const qty = parseInt(row.querySelector('.req-qty').value, 10);
-    const unit = row.querySelector('.req-unit').value || 'PIECE';
-    const remarks = row.querySelector('.req-remarks').value || '';
-    if (code && qty > 0) items.push({
-      inventoryId: code,
-      description: desc,
-      qty: qty,
-      unit: unit,
-      remarks: remarks
-    });
+    var code = row.querySelector('.req-item-code').value;
+    var desc = row.querySelector('.req-item-desc').value;
+    var qty = parseInt(row.querySelector('.req-qty').value, 10);
+    var unit = row.querySelector('.req-unit').value || 'PIECE';
+    var remarks = row.querySelector('.req-remarks').value || '';
+    if (code && qty > 0) {
+      items.push({
+        inventoryId: code,
+        description: desc,
+        qty: qty,
+        unit: unit,
+        remarks: remarks
+      });
+    }
   });
 
   if (items.length === 0) {
     showToast('Add at least one item', 'warning');
+    _resetSubmitState(submitBtn, origHtml);
     return;
   }
+
   showLoading('Creating request...');
   try {
-    const payload = {
+    var payload = {
       action: 'createRequest',
       docType: docType,
       requestor: requestor,
@@ -441,15 +470,16 @@ async function submitNewRequest() {
       items: items,
       timestamp: new Date().toISOString()
     };
-    const res = await fetch(API_URL, {
+    var res = await fetch(API_URL, {
       method: 'POST',
       body: JSON.stringify(payload),
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       redirect: 'follow'
     });
-    const text = await res.text();
-    let data;
+    var text = await res.text();
+    var data;
     try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+
     if (data && data.success) {
       localStorage.setItem('ivm_requestorName', requestor);
       newRequestModal.hide();
@@ -464,7 +494,19 @@ async function submitNewRequest() {
   } catch(err) {
     showToast('Error: ' + err.message, 'danger');
   } finally {
-    hideLoading();
+    _resetSubmitState(submitBtn, origHtml);
+  }
+}
+
+function _resetSubmitState(btn, origHtml) {
+  _isSubmittingNewRequest = false;
+  state.isLoading = false;
+  hideLoading();
+  if (btn) {
+    btn.disabled = false;
+    btn.classList.remove('btn-loading');
+    btn.innerHTML = origHtml || '<i class="bi bi-check-circle me-2"></i>Submit Request';
+    delete btn.dataset.loading;
   }
 }
 
@@ -474,92 +516,69 @@ function downloadRequestQr() {
     showToast('No QR to download', 'warning');
     return;
   }
-  const img = document.getElementById('requestQrImg');
+  var img = document.getElementById('requestQrImg');
   if (!img || !img.src || img.src === '') {
     showToast('QR image not loaded', 'warning');
     return;
   }
 
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-
-  const qrImg = new Image();
+  var canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d');
+  var qrImg = new Image();
   qrImg.crossOrigin = 'Anonymous';
   qrImg.onload = function() {
-    const padding = 30;
-    const textHeight = 70;
-    const width = qrImg.width + padding * 2;
-    const height = qrImg.height + padding * 2 + textHeight;
-    canvas.width = width;
-    canvas.height = height;
-
+    var padding = 30;
+    var textHeight = 70;
+    canvas.width = qrImg.width + padding * 2;
+    canvas.height = qrImg.height + padding * 2 + textHeight;
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, width, height);
-
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillStyle = '#000000';
     ctx.font = 'bold 16px Arial, sans-serif';
-    ctx.fillText('Ticket: ' + lastQrTicketNo, width/2, 10);
+    ctx.fillText('Ticket: ' + lastQrTicketNo, canvas.width/2, 10);
     ctx.font = '14px Arial, sans-serif';
-    ctx.fillText('Doc: ' + lastQrDocNo, width/2, 32);
-
+    ctx.fillText('Doc: ' + lastQrDocNo, canvas.width/2, 32);
     ctx.drawImage(qrImg, padding, padding + textHeight);
-
-    const link = document.createElement('a');
+    var link = document.createElement('a');
     link.download = 'QR-' + lastQrDocNo + '.png';
     link.href = canvas.toDataURL('image/png');
     link.click();
   };
-  qrImg.onerror = function() {
-    showToast('Failed to load QR image for download', 'danger');
-  };
+  qrImg.onerror = function() { showToast('Failed to load QR image for download', 'danger'); };
   qrImg.src = img.src;
 }
 
 async function shareRequestQr() {
-  if (!navigator.share) {
-    showToast('Share not supported on this device', 'warning');
-    return;
-  }
-  if (!lastQrDocNo || !lastQrTicketNo) {
-    showToast('No QR to share', 'warning');
-    return;
-  }
-
-  const img = document.getElementById('requestQrImg');
-  if (!img || !img.src) {
-    showToast('QR image not loaded', 'warning');
-    return;
-  }
-
+  if (!navigator.share) { showToast('Share not supported on this device', 'warning'); return; }
+  if (!lastQrDocNo || !lastQrTicketNo) { showToast('No QR to share', 'warning'); return; }
+  var img = document.getElementById('requestQrImg');
+  if (!img || !img.src) { showToast('QR image not loaded', 'warning'); return; }
   try {
-    const response = await fetch(img.src);
-    const blob = await response.blob();
-    const file = new File([blob], 'QR-' + lastQrDocNo + '.png', { type: 'image/png' });
+    var response = await fetch(img.src);
+    var blob = await response.blob();
+    var file = new File([blob], 'QR-' + lastQrDocNo + '.png', { type: 'image/png' });
     await navigator.share({
       title: 'GEMCOR Request QR',
       text: 'Ticket: ' + lastQrTicketNo + '\nDoc: ' + lastQrDocNo,
       files: [file]
     });
   } catch(err) {
-    if (err.name !== 'AbortError') {
-      showToast('Share failed: ' + err.message, 'danger');
-    }
+    if (err.name !== 'AbortError') showToast('Share failed: ' + err.message, 'danger');
   }
 }
 
 function showRequestQr(ticketNo, docNo) {
   document.getElementById('requestTicketNo').textContent = ticketNo;
   document.getElementById('requestDocNo').textContent = docNo;
-
   lastQrTicketNo = ticketNo;
   lastQrDocNo = docNo;
 
   var appUrl = window.location.origin + window.location.pathname;
   var qrDataUrl = appUrl + '?doc=' + encodeURIComponent(docNo);
-  const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(qrDataUrl);
-  const img = document.getElementById('requestQrImg');
+  var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(qrDataUrl);
+  var img = document.getElementById('requestQrImg');
   img.src = qrUrl;
   img.style.display = 'block';
   img.onerror = function() {
@@ -568,26 +587,19 @@ function showRequestQr(ticketNo, docNo) {
     document.getElementById('qrFallback').innerHTML = '<strong>Doc No:</strong> ' + docNo;
   };
 
-  const shareBtn = document.getElementById('shareQrBtn');
-  if (navigator.share) {
-    shareBtn.style.display = 'inline-block';
-  } else {
-    shareBtn.style.display = 'none';
-  }
+  var shareBtn = document.getElementById('shareQrBtn');
+  if (shareBtn) shareBtn.style.display = navigator.share ? 'inline-block' : 'none';
 
   requestSuccessModal.show();
 }
 
-// ─── REQUEST DETAILS ──────────────────────────────────────
+// ─── REQUEST DETAILS (warehouse view) ────────────────────
 async function openRequestDetails(docNo, docType) {
   if (!docNo) return;
-
   var modal = document.getElementById('requestDetailsModal');
   if (!modal) return;
-
   var content = document.getElementById('requestDetailsContent');
   content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading request details...</div></div>';
-
   var bsModal = new bootstrap.Modal(modal);
   bsModal.show();
 
@@ -595,7 +607,6 @@ async function openRequestDetails(docNo, docType) {
     var sheetKey = 'sheetId_' + (docType || 'MRIF');
     var sheetIdVal = localStorage.getItem(sheetKey);
     var sheetIdClean = sheetIdVal ? extractSheetId(sheetIdVal) : '';
-
     var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
               '&docType=' + (docType || 'MRIF') +
               '&sheetId=' + encodeURIComponent(sheetIdClean) +
@@ -604,17 +615,10 @@ async function openRequestDetails(docNo, docType) {
     var text = await res.text();
     var data;
     try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
-
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to load request');
-    }
-
+    if (!data.success) throw new Error(data.error || 'Failed to load request');
     var info = data.info || {};
     var items = data.items || [];
-
-    var html = buildRequestDetailsHtml(docNo, docType, info, items);
-    content.innerHTML = html;
-
+    content.innerHTML = buildRequestDetailsHtml(docNo, docType, info, items);
   } catch(err) {
     console.error('[openRequestDetails] Error:', err);
     content.innerHTML = '<div class="alert alert-danger">Failed to load request details: ' + err.message + '</div>';
@@ -709,7 +713,7 @@ function buildRequestDetailsHtml(docNo, docType, info, items) {
   '</div>';
 }
 
-// ─── MY REQUESTS ──────────────────────────────────────────
+// ─── MY REQUESTS ─────────────────────────────────────────
 async function loadMyRequests() {
   var requestor = localStorage.getItem('ivm_requestorName');
   if (!requestor) return;
@@ -743,15 +747,9 @@ async function loadMyRequests() {
       });
       localStorage.setItem('ivm_requestStatuses', JSON.stringify(newStatuses));
       var badge = document.getElementById('myRequestsBadge');
-      if (badge) {
-        badge.textContent = readyCount;
-        badge.classList.toggle('d-none', readyCount === 0);
-      }
+      if (badge) { badge.textContent = readyCount; badge.classList.toggle('d-none', readyCount === 0); }
       var badgeSidebar = document.getElementById('myRequestsBadgeSidebar');
-      if (badgeSidebar) {
-        badgeSidebar.textContent = readyCount;
-        badgeSidebar.classList.toggle('d-none', readyCount === 0);
-      }
+      if (badgeSidebar) { badgeSidebar.textContent = readyCount; badgeSidebar.classList.toggle('d-none', readyCount === 0); }
       renderMyRequests(data.requests);
       var kpiActive = document.getElementById('kpiActiveDocs');
       var kpiPending = document.getElementById('kpiPending');
@@ -764,16 +762,17 @@ async function loadMyRequests() {
         showToast('Your request has been processed by the warehouse!', 'success');
       }
     } else {
-      document.getElementById('myRequestsList').innerHTML = '<div class="list-group-item text-muted text-center py-3">' + (data.error ? 'Error: ' + data.error : 'No requests found') + '</div>';
+      var listEl = document.getElementById('myRequestsList');
+      if (listEl) listEl.innerHTML = '<div class="list-group-item text-muted text-center py-3">' + (data.error ? 'Error: ' + data.error : 'No requests found') + '</div>';
     }
   } catch(e) {
     console.error('[loadMyRequests] Error:', e);
-    document.getElementById('myRequestsList').innerHTML = '<div class="list-group-item text-danger text-center py-3">Failed to load requests. Check your connection.</div>';
-  }
-  finally { hideLoading(); }
+    var listEl2 = document.getElementById('myRequestsList');
+    if (listEl2) listEl2.innerHTML = '<div class="list-group-item text-danger text-center py-3">Failed to load requests. Check your connection.</div>';
+  } finally { hideLoading(); }
 }
 
-// ─── Render My Requests (click → open details modal) ────
+// ─── Render My Requests (click → open QR + items modal) ──
 function renderMyRequests(requests) {
   var container = document.getElementById('myRequestsList');
   if (!container) return;
@@ -810,16 +809,16 @@ function renderMyRequests(requests) {
     container.innerHTML += html;
   });
 
+  // Click on card → open details modal (QR + items)
   container.querySelectorAll('.request-card').forEach(function(el) {
     el.addEventListener('click', function() {
       var docNo = this.getAttribute('data-docno');
       var docType = this.getAttribute('data-doctype') || 'MRIF';
-      if (docNo) {
-        if (typeof window.openMyRequestDetails === 'function') {
-          window.openMyRequestDetails(docNo, docType);
-        } else {
-          openRequestDetails(docNo, docType);
-        }
+      if (!docNo) return;
+      if (typeof window.openMyRequestDetails === 'function') {
+        window.openMyRequestDetails(docNo, docType);
+      } else if (typeof openRequestDetails === 'function') {
+        openRequestDetails(docNo, docType);
       }
     });
   });
@@ -846,21 +845,12 @@ function openManualMrifModal() {
 }
 
 function addManualMrifItem() {
-  manualMrifItems.push({
-    inventoryId: '',
-    description: '',
-    qty: 1,
-    atlQty: 0,
-    unit: 'PIECE',
-    remarks: ''
-  });
+  manualMrifItems.push({ inventoryId: '', description: '', qty: 1, atlQty: 0, unit: 'PIECE', remarks: '' });
   renderManualMrifItems();
   updateManualMrifSubmitButton();
   setTimeout(function() {
     var searches = document.querySelectorAll('.manual-mrif-search');
-    if (searches.length > 0) {
-      searches[searches.length - 1].focus();
-    }
+    if (searches.length > 0) searches[searches.length - 1].focus();
   }, 100);
 }
 
@@ -871,9 +861,7 @@ function removeManualMrifItem(index) {
 }
 
 function updateManualMrifItem(index, field, value) {
-  if (manualMrifItems[index]) {
-    manualMrifItems[index][field] = value;
-  }
+  if (manualMrifItems[index]) manualMrifItems[index][field] = value;
   updateManualMrifSubmitButton();
 }
 
@@ -881,13 +869,11 @@ function renderManualMrifItems() {
   var tbody = document.getElementById('manualMrifItemsBody');
   var emptyState = document.getElementById('manualMrifEmptyState');
   if (!tbody) return;
-
   if (manualMrifItems.length === 0) {
     tbody.innerHTML = '';
     if (emptyState) emptyState.style.display = 'block';
     return;
   }
-
   if (emptyState) emptyState.style.display = 'none';
 
   var html = '';
@@ -895,21 +881,19 @@ function renderManualMrifItems() {
     var it = manualMrifItems[i];
     html += '<tr>' +
       '<td class="align-middle text-center">' + (i + 1) + '</td>' +
-      '<td>' +
-        '<div style="position:relative;">' +
-          '<input type="text" class="form-control form-control-sm manual-mrif-search" ' +
-            'placeholder="Type to search..." ' +
-            'value="' + (it.inventoryId ? it.inventoryId + ' - ' + it.description : '') + '" ' +
-            'oninput="filterManualMrifItems(this, ' + i + ')" ' +
-            'onfocus="filterManualMrifItems(this, ' + i + ')" ' +
-            'autocomplete="off">' +
-          '<div class="list-group d-none manual-mrif-dropdown" ' +
-            'style="background:#fff;border:1px solid #ced4da;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.18);padding:4px 0;overflow-y:auto;" ' +
-            'id="manualMrifDropdown' + i + '"></div>' +
-          '<input type="hidden" class="manual-mrif-code" id="manualMrifCode' + i + '" value="' + (it.inventoryId || '') + '">' +
-          '<input type="hidden" class="manual-mrif-desc" id="manualMrifDesc' + i + '" value="' + (it.description || '') + '">' +
-        '</div>' +
-      '</td>' +
+      '<td><div style="position:relative;">' +
+        '<input type="text" class="form-control form-control-sm manual-mrif-search" ' +
+          'placeholder="Type to search..." ' +
+          'value="' + (it.inventoryId ? it.inventoryId + ' - ' + it.description : '') + '" ' +
+          'oninput="filterManualMrifItems(this, ' + i + ')" ' +
+          'onfocus="filterManualMrifItems(this, ' + i + ')" ' +
+          'autocomplete="off">' +
+        '<div class="list-group d-none manual-mrif-dropdown" ' +
+          'style="background:#fff;border:1px solid #ced4da;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.18);padding:4px 0;overflow-y:auto;" ' +
+          'id="manualMrifDropdown' + i + '"></div>' +
+        '<input type="hidden" class="manual-mrif-code" id="manualMrifCode' + i + '" value="' + (it.inventoryId || '') + '">' +
+        '<input type="hidden" class="manual-mrif-desc" id="manualMrifDesc' + i + '" value="' + (it.description || '') + '">' +
+      '</div></td>' +
       '<td><input type="text" class="form-control form-control-sm" ' +
         'value="' + (it.description || '') + '" ' +
         'onchange="updateManualMrifItem(' + i + ', \'description\', this.value)" ' +
@@ -940,7 +924,6 @@ function renderManualMrifItems() {
   tbody.innerHTML = html;
 }
 
-// ─── Smart dropdown positioning for MRIF (flips above when near bottom) ───
 function _positionMrifSuggestDropdown(dropdown, input) {
   var inputRect = input.getBoundingClientRect();
   var spaceBelow = window.innerHeight - inputRect.bottom;
@@ -953,12 +936,10 @@ function _positionMrifSuggestDropdown(dropdown, input) {
   dropdown.style.zIndex = '99999';
 
   if (spaceBelow < dropdownMinHeight && spaceAbove > spaceBelow) {
-    // Flip above
     dropdown.style.top = 'auto';
     dropdown.style.bottom = (window.innerHeight - inputRect.top + 2) + 'px';
     dropdown.style.maxHeight = Math.min(spaceAbove - 20, 340) + 'px';
   } else {
-    // Show below
     dropdown.style.bottom = 'auto';
     dropdown.style.top = (inputRect.bottom + 2) + 'px';
     dropdown.style.maxHeight = Math.min(spaceBelow - 20, 340) + 'px';
@@ -971,10 +952,7 @@ function filterManualMrifItems(input, idx) {
   if (!dropdown) return;
   dropdown.innerHTML = '';
 
-  if (!term) {
-    dropdown.classList.add('d-none');
-    return;
-  }
+  if (!term) { dropdown.classList.add('d-none'); return; }
 
   if (state.requestInventoryList.length === 0) {
     dropdown.innerHTML = '<div class="list-group-item text-muted" style="padding:8px 12px;">Loading inventory...</div>';
@@ -1034,9 +1012,7 @@ function filterManualMrifItems(input, idx) {
 function updateManualMrifSubmitButton() {
   var btn = document.getElementById('btnSubmitManualMrif');
   if (!btn) return;
-
   var requestor = document.getElementById('manualMrifRequestor').value.trim();
-
   var hasValidItems = false;
   for (var i = 0; i < manualMrifItems.length; i++) {
     var it = manualMrifItems[i];
@@ -1045,14 +1021,27 @@ function updateManualMrifSubmitButton() {
       break;
     }
   }
-
   btn.disabled = !(requestor && hasValidItems);
 }
 
-async function submitManualMrif() {
-  var btn = document.getElementById('btnSubmitManualMrif');
+// ─── Submit Manual MRIF (with double-click protection) ────
+var _isSubmittingManualMrif = false;
 
-  return withButtonLoading(btn, async function() {
+async function submitManualMrif() {
+  if (_isSubmittingManualMrif) return;
+
+  var btn = document.getElementById('btnSubmitManualMrif');
+  var origHtml = '';
+  if (btn) {
+    if (btn.disabled) return;
+    origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.classList.add('btn-loading');
+    btn.innerHTML = '<span class="btn-spinner"></span>Creating...';
+  }
+  _isSubmittingManualMrif = true;
+
+  try {
     var requestor = document.getElementById('manualMrifRequestor').value.trim();
     var department = document.getElementById('manualMrifDepartment').value.trim();
     var joNo = document.getElementById('manualMrifJoNo').value.trim();
@@ -1076,67 +1065,56 @@ async function submitManualMrif() {
       var unit = unitSelect ? unitSelect.value : 'PIECE';
       var remarks = remarksInput ? remarksInput.value.trim() : '';
       if (code && desc && qty > 0) {
-        items.push({
-          inventoryId: code,
-          description: desc,
-          qty: qty,
-          atlQty: atl,
-          unit: unit,
-          remarks: remarks
-        });
+        items.push({ inventoryId: code, description: desc, qty: qty, atlQty: atl, unit: unit, remarks: remarks });
       }
     }
 
-    if (items.length === 0) {
-      showToast('Please add at least one valid item', 'warning');
-      return;
+    if (items.length === 0) { showToast('Please add at least one valid item', 'warning'); return; }
+    if (!requestor) { showToast('Please enter a requestor name', 'warning'); return; }
+
+    var payload = {
+      action: 'createRequest',
+      docType: 'MRIF',
+      requestor: requestor,
+      department: department || '',
+      joNo: joNo || '',
+      gemSoNo: gemSoNo || '',
+      clientName: clientName || '',
+      project: project || '',
+      items: items,
+      timestamp: new Date().toISOString(),
+      isManual: true
+    };
+
+    var res = await fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      redirect: 'follow'
+    });
+
+    var text = await res.text();
+    var data;
+    try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid JSON response'); }
+
+    if (data && data.success) {
+      if (manualMrifModal) manualMrifModal.hide();
+      showToast('Manual MRIF created: ' + data.docNo, 'success');
+      await fetchPendingDocs();
+      await loadWarehouseNotifications();
+      await updateWarehouseKPIs();
+    } else {
+      showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
     }
-
-    if (!requestor) {
-      showToast('Please enter a requestor name', 'warning');
-      return;
+  } catch(err) {
+    console.error('[Manual MRIF] Error:', err);
+    showToast('Error: ' + err.message, 'danger');
+  } finally {
+    _isSubmittingManualMrif = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove('btn-loading');
+      btn.innerHTML = origHtml || '<i class="bi bi-check-circle me-1"></i>Create MRIF';
     }
-
-    try {
-      var payload = {
-        action: 'createRequest',
-        docType: 'MRIF',
-        requestor: requestor,
-        department: department || '',
-        joNo: joNo || '',
-        gemSoNo: gemSoNo || '',
-        clientName: clientName || '',
-        project: project || '',
-        items: items,
-        timestamp: new Date().toISOString(),
-        isManual: true
-      };
-
-      var res = await fetch(API_URL, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        redirect: 'follow'
-      });
-
-      var text = await res.text();
-      var data;
-      try { data = JSON.parse(text); } catch(e) {
-        throw new Error('Invalid JSON response from server');
-      }
-
-      if (data && data.success) {
-        if (manualMrifModal) manualMrifModal.hide();
-        showToast('Manual MRIF created: ' + data.docNo, 'success');
-        await fetchPendingDocs();
-        await loadWarehouseNotifications();
-        await updateWarehouseKPIs();
-      } else {
-        showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
-      }
-    } catch(err) {
-      console.error('[Manual MRIF] Error:', err);
-      showToast('Error: ' + err.message, 'danger');
-    }
-  }, 'Creating MRIF...');
+  }
 }
