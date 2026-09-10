@@ -1,8 +1,8 @@
 // ============================================================
-// MAIN - DOM Ready & Initialization
+// MAIN - DOM Ready & Initialization (Optimized)
 // ============================================================
 
-// ─── Sidebar role handler (called from applyRoleUI) ───
+// ─── Sidebar role handler ─────────────────────────────
 window.applySidebarRole = function(role) {
   var isProduction = (role === 'production');
   var isWarehouse = (role === 'warehouse');
@@ -11,7 +11,6 @@ window.applySidebarRole = function(role) {
     sidebarRole.textContent = isProduction ? 'Production Mode' : (state.currentUser ? state.currentUserFullname : 'Warehouse');
   }
 
-  // ─── Inventory visible for both roles ──────────────────────
   var warehouseNavItems = ['dashboard', 'releasing', 'receiving', 'returns'];
   document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
     var section = el.dataset.section;
@@ -22,7 +21,6 @@ window.applySidebarRole = function(role) {
     }
   });
 
-  // ─── Show/hide logout button ────────────────────────────────
   var logoutItem = document.getElementById('logoutNavItem');
   if (logoutItem) {
     logoutItem.style.display = (isWarehouse && state.currentUser) ? 'flex' : 'none';
@@ -35,7 +33,7 @@ window.applySidebarRole = function(role) {
   }
 };
 
-// ─── Navigation (with page title update) ─────────────────────
+// ─── Navigation (INSTANT – no spinner) ────────────────
 function navigateTo(sectionId) {
   document.querySelectorAll('.section-page').forEach(function(el) {
     el.classList.remove('active');
@@ -50,7 +48,6 @@ function navigateTo(sectionId) {
 
   toggleSidebar(false);
 
-  // ─── Update page title ──────────────────────────────────────
   var titles = {
     dashboard: 'Dashboard',
     releasing: 'Releasing (MRIF)',
@@ -63,11 +60,9 @@ function navigateTo(sectionId) {
     about: 'About / Instructions'
   };
   var titleEl = document.getElementById('pageTitle');
-  if (titleEl && titles[sectionId]) {
-    titleEl.textContent = titles[sectionId];
-  }
+  if (titleEl && titles[sectionId]) titleEl.textContent = titles[sectionId];
 
-  // Module-specific actions
+  // Module-specific – fire and forget (no blocking)
   if (sectionId === 'releasing' || sectionId === 'receiving' || sectionId === 'returns') {
     var modMap = { releasing: 'MRIF', receiving: 'MRR', returns: 'MRS' };
     var mod = modMap[sectionId];
@@ -81,7 +76,9 @@ function navigateTo(sectionId) {
       if (mrifCard) mrifCard.classList.toggle('d-none', mod !== 'MRIF');
       if (mrrCard) mrrCard.classList.toggle('d-none', mod !== 'MRR');
       if (mrsCard) mrsCard.classList.toggle('d-none', mod !== 'MRS');
-      fetchPendingDocs();
+
+      // Non-blocking background load
+      if (typeof fetchPendingDocs === 'function') fetchPendingDocs();
     }
   }
 
@@ -90,7 +87,7 @@ function navigateTo(sectionId) {
     if (role === 'warehouse' && !window.analyticsLoaded) {
       setTimeout(loadAnalytics, 300);
     }
-    if (role === 'warehouse') {
+    if (role === 'warehouse' && typeof updatePartialCount === 'function') {
       setTimeout(updatePartialCount, 500);
     }
   }
@@ -108,12 +105,11 @@ function toggleSidebar(open) {
   }
 }
 
-// ─── Override renderMyRequests ──────────────────────────────────
+// ─── Override renderMyRequests ────────────────────────
 var originalRenderMyRequests = window.renderMyRequests || function() {};
-
 window.renderMyRequests = function(requests) {
   if (typeof originalRenderMyRequests === 'function') {
-    try { originalRenderMyRequests(requests); } catch(e) { console.warn('[renderMyRequests] Original error:', e); }
+    try { originalRenderMyRequests(requests); } catch(e) {}
   }
 
   var container = document.getElementById('myRequestsListPage');
@@ -158,73 +154,60 @@ window.renderMyRequests = function(requests) {
   });
 
   container.querySelectorAll('.request-card').forEach(function(el) {
-    el.addEventListener('click', function(e) {
+    el.addEventListener('click', function() {
       var docNo = this.getAttribute('data-docno');
       if (docNo) showRequestQr(docNo, docNo);
     });
   });
 };
 
-// ─── Override loadMyRequests ────────────────────────────────────
+// ─── Override loadMyRequests ──────────────────────────
 var originalLoadMyRequests = window.loadMyRequests || function() {};
-
 window.loadMyRequests = function() {
   if (typeof originalLoadMyRequests === 'function') {
-    try { originalLoadMyRequests(); } catch(e) { console.warn('[loadMyRequests] Original error:', e); }
+    try { originalLoadMyRequests(); } catch(e) {}
   }
 };
 
-// ─── Override updateWarehouseKPIs ──────────────────────────────
+// ─── Override updateWarehouseKPIs ─────────────────────
 var originalUpdateWarehouseKPIs = window.updateWarehouseKPIs || function() {};
-
 window.updateWarehouseKPIs = function() {
   if (typeof originalUpdateWarehouseKPIs === 'function') {
-    try { originalUpdateWarehouseKPIs(); } catch(e) { console.warn('[updateWarehouseKPIs] Original error:', e); }
+    try { originalUpdateWarehouseKPIs(); } catch(e) {}
   }
 };
 
-// ─── Test connection ─────────────────────────────────────────────
+// ─── Test connection ───────────────────────────────────
 async function testConnection() {
   var resultDiv = document.getElementById('testResult');
   if (!resultDiv) return;
   resultDiv.classList.remove('d-none');
   resultDiv.textContent = 'Testing...';
   try {
-    const url = API_URL + '?action=ping&_t=' + Date.now();
-    console.log('[Test] URL:', url);
+    var url = API_URL + '?action=ping&_t=' + Date.now();
     resultDiv.textContent += '\nURL: ' + url.substring(0, 80) + '...';
-    const res = await fetch(url, { redirect: 'follow' });
-    console.log('[Test] Status:', res.status);
+    var res = await fetch(url, { redirect: 'follow' });
     resultDiv.textContent += '\nHTTP Status: ' + res.status;
-    const text = await res.text();
-    console.log('[Test] Response:', text);
+    var text = await res.text();
     resultDiv.textContent += '\nRaw Response: ' + text.substring(0, 200);
     try {
-      const data = JSON.parse(text);
+      var data = JSON.parse(text);
       resultDiv.textContent += '\nParsed: ' + JSON.stringify(data, null, 2);
-      if (data.success) {
-        resultDiv.textContent += '\n✅ CONNECTION OK - GAS is responding!';
-      } else {
-        resultDiv.textContent += '\n⚠️ GAS responded but reported error: ' + data.error;
-      }
+      if (data.success) resultDiv.textContent += '\n✅ CONNECTION OK';
+      else resultDiv.textContent += '\n⚠️ Error: ' + data.error;
     } catch(e) {
       resultDiv.textContent += '\n❌ Response is not valid JSON!';
     }
   } catch(err) {
-    console.error('[Test] Error:', err);
     resultDiv.textContent += '\n❌ FETCH FAILED: ' + err.message;
-    resultDiv.textContent += '\n\nThis means CORS is blocking the request OR the URL is wrong.';
-    resultDiv.textContent += '\nMake sure you deployed the NEW Master.gs and updated the URL above.';
   }
 }
 
-// ─── URL doc parameter ──────────────────────────────────────────
+// ─── URL doc parameter ─────────────────────────────────
 function checkUrlDocParam() {
   var params = new URLSearchParams(window.location.search);
   var docNo = params.get('doc');
   if (!docNo) return;
-
-  console.log('[QR Scan] Detected doc parameter:', docNo);
 
   var docType = 'MRIF';
   if (docNo.indexOf('MRR') === 0) docType = 'MRR';
@@ -234,29 +217,22 @@ function checkUrlDocParam() {
     window.history.replaceState({}, document.title, window.location.pathname);
   }
 
-  showLoading('Opening ' + cleanDocNo(docNo) + '...');
-
   var role = localStorage.getItem('ivm_userRole');
   if (role === 'warehouse') {
     selectModule(docType).then(function() {
       setTimeout(function() {
         onDocSelect(docNo);
-        hideLoading();
-      }, 500);
-    }).catch(function(err) {
-      console.error('[QR Scan] Error:', err);
-      hideLoading();
+      }, 300);
+    }).catch(function() {
       showToast('Could not open document: ' + cleanDocNo(docNo), 'warning');
     });
   } else {
-    hideLoading();
     showToast('Document ' + cleanDocNo(docNo) + ' scanned. Switch to Warehouse mode to process.', 'info');
   }
 }
 
-// ─── DOM Ready ──────────────────────────────────────────────────
+// ─── DOM Ready ─────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
-  // Initialize modals safely
   var modalIds = ['qtyModal', 'successModal', 'settingsModal', 'newRequestModal',
     'requestSuccessModal', 'whNotifModal', 'mrifListModal', 'mrifPrintModal',
     'pendingMrifModal', 'mrrListModal', 'mrrPrintModal', 'mrsListModal',
@@ -265,71 +241,57 @@ document.addEventListener('DOMContentLoaded', function() {
 
   modalIds.forEach(function(id) {
     var el = document.getElementById(id);
-    if (el) {
-      if (id === 'qtyModal') qtyModal = new bootstrap.Modal(el);
-      else if (id === 'successModal') successModal = new bootstrap.Modal(el);
-      else if (id === 'settingsModal') settingsModal = new bootstrap.Modal(el);
-      else if (id === 'newRequestModal') newRequestModal = new bootstrap.Modal(el);
-      else if (id === 'requestSuccessModal') requestSuccessModal = new bootstrap.Modal(el);
-      else if (id === 'whNotifModal') whNotifModal = new bootstrap.Modal(el);
-      else if (id === 'mrifListModal') mrifListModal = new bootstrap.Modal(el);
-      else if (id === 'mrifPrintModal') mrifPrintModal = new bootstrap.Modal(el);
-      else if (id === 'pendingMrifModal') pendingMrifModal = new bootstrap.Modal(el);
-      else if (id === 'mrrListModal') mrrListModal = new bootstrap.Modal(el);
-      else if (id === 'mrrPrintModal') mrrPrintModal = new bootstrap.Modal(el);
-      else if (id === 'mrsListModal') mrsListModal = new bootstrap.Modal(el);
-      else if (id === 'mrsPrintModal') mrsPrintModal = new bootstrap.Modal(el);
-      else if (id === 'quickScanModal') quickScanModal = new bootstrap.Modal(el);
-      else if (id === 'roleModal') roleModal = new bootstrap.Modal(el);
-      else if (id === 'productionNameModal') productionNameModal = new bootstrap.Modal(el);
-      else if (id === 'batchVerifyModal') batchVerifyModal = new bootstrap.Modal(el);
-      else if (id === 'qrZoomModal') qrZoomModal = new bootstrap.Modal(el);
-      else if (id === 'poScanModal') state.poScanModal = new bootstrap.Modal(el);
-      else if (id === 'poItemsModal') state.poItemsModal = new bootstrap.Modal(el);
-      else if (id === 'loginModal') window.loginModalEl = el; // store for later
-    }
+    if (!el) return;
+    if (id === 'qtyModal') qtyModal = new bootstrap.Modal(el);
+    else if (id === 'successModal') successModal = new bootstrap.Modal(el);
+    else if (id === 'settingsModal') settingsModal = new bootstrap.Modal(el);
+    else if (id === 'newRequestModal') newRequestModal = new bootstrap.Modal(el);
+    else if (id === 'requestSuccessModal') requestSuccessModal = new bootstrap.Modal(el);
+    else if (id === 'whNotifModal') whNotifModal = new bootstrap.Modal(el);
+    else if (id === 'mrifListModal') mrifListModal = new bootstrap.Modal(el);
+    else if (id === 'mrifPrintModal') mrifPrintModal = new bootstrap.Modal(el);
+    else if (id === 'pendingMrifModal') pendingMrifModal = new bootstrap.Modal(el);
+    else if (id === 'mrrListModal') mrrListModal = new bootstrap.Modal(el);
+    else if (id === 'mrrPrintModal') mrrPrintModal = new bootstrap.Modal(el);
+    else if (id === 'mrsListModal') mrsListModal = new bootstrap.Modal(el);
+    else if (id === 'mrsPrintModal') mrsPrintModal = new bootstrap.Modal(el);
+    else if (id === 'quickScanModal') quickScanModal = new bootstrap.Modal(el);
+    else if (id === 'roleModal') roleModal = new bootstrap.Modal(el);
+    else if (id === 'productionNameModal') productionNameModal = new bootstrap.Modal(el);
+    else if (id === 'batchVerifyModal') batchVerifyModal = new bootstrap.Modal(el);
+    else if (id === 'qrZoomModal') qrZoomModal = new bootstrap.Modal(el);
+    else if (id === 'poScanModal') state.poScanModal = new bootstrap.Modal(el);
+    else if (id === 'poItemsModal') state.poItemsModal = new bootstrap.Modal(el);
+    else if (id === 'loginModal') window.loginModalEl = el;
   });
 
-  // Register service worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/GEMCORQR/sw.js')
-      .then(function(registration) {
-        console.log('[SW] Registered successfully:', registration);
-      })
-      .catch(function(error) {
-        console.log('[SW] Registration failed:', error);
-      });
+      .then(function() {})
+      .catch(function() {});
   }
 
-  // Initialize role
   initRole();
 
-  // Load analytics and partial count for warehouse mode
   setTimeout(function() {
     var role = localStorage.getItem('ivm_userRole');
-    console.log('[Main] Role detected:', role);
     if (role === 'warehouse' && state.currentUser) {
       setTimeout(loadAnalytics, 800);
-      setTimeout(updatePartialCount, 1000);
+      if (typeof updatePartialCount === 'function') setTimeout(updatePartialCount, 1000);
     }
   }, 1500);
 
-  // Set receiving date default
   var dateInput = document.getElementById('mrrReceivingDate');
   if (dateInput) dateInput.valueAsDate = new Date();
 
-  // Check URL doc parameter
   setTimeout(checkUrlDocParam, 1500);
 
-  // Close sidebar on outside click (mobile)
   document.addEventListener('click', function(e) {
     var sidebar = document.getElementById('sidebar');
     var toggleBtn = document.querySelector('.sidebar-toggle');
     if (window.innerWidth <= 768 && sidebar && sidebar.classList.contains('open')) {
       var isClickInside = sidebar.contains(e.target) || (toggleBtn && toggleBtn.contains(e.target));
-      if (!isClickInside) {
-        toggleSidebar(false);
-      }
+      if (!isClickInside) toggleSidebar(false);
     }
   });
 });
