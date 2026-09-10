@@ -1,39 +1,33 @@
 // ============================================================
 // CACHE UTILITY – Simple localStorage caching with TTL
+// (CACHE_TTL is defined in config.js — DO NOT redeclare here)
 // ============================================================
-
-const CACHE_TTL = {
-  INVENTORY: 5 * 60 * 1000,    // 5 minutes
-  VENDORS: 10 * 60 * 1000,     // 10 minutes
-  IVM_TEAM: 10 * 60 * 1000,    // 10 minutes
-  PENDING_DOCS: 1 * 60 * 1000, // 1 minute
-  REQUESTORS: 10 * 60 * 1000,  // 10 minutes
-};
 
 function getCache(key) {
   try {
-    const raw = localStorage.getItem('ivm_cache_' + key);
+    var raw = localStorage.getItem('ivm_cache_' + key);
     if (!raw) return null;
-    const item = JSON.parse(raw);
+    var item = JSON.parse(raw);
     if (Date.now() > item.expires) {
       localStorage.removeItem('ivm_cache_' + key);
       return null;
     }
     return item.data;
-  } catch(e) {
+  } catch (e) {
     return null;
   }
 }
 
 function setCache(key, data, ttl) {
   try {
-    const item = {
+    var item = {
       data: data,
       expires: Date.now() + ttl
     };
     localStorage.setItem('ivm_cache_' + key, JSON.stringify(item));
-  } catch(e) {
-    // localStorage full – ignore
+  } catch (e) {
+    // localStorage full — ignore
+    console.warn('[cache] Could not save:', key, e.message);
   }
 }
 
@@ -41,20 +35,28 @@ function clearCache(key) {
   if (key) {
     localStorage.removeItem('ivm_cache_' + key);
   } else {
-    // Clear all ivm_cache_ keys
-    Object.keys(localStorage).forEach(k => {
-      if (k.startsWith('ivm_cache_')) localStorage.removeItem(k);
+    Object.keys(localStorage).forEach(function(k) {
+      if (k.indexOf('ivm_cache_') === 0) localStorage.removeItem(k);
     });
   }
 }
 
 function isCacheValid(key) {
-  const raw = localStorage.getItem('ivm_cache_' + key);
+  var raw = localStorage.getItem('ivm_cache_' + key);
   if (!raw) return false;
   try {
-    const item = JSON.parse(raw);
+    var item = JSON.parse(raw);
     return Date.now() <= item.expires;
-  } catch(e) {
+  } catch (e) {
     return false;
   }
+}
+
+// ─── Optional: inspect cache size ───────────────────────
+function listCacheKeys() {
+  var keys = [];
+  Object.keys(localStorage).forEach(function(k) {
+    if (k.indexOf('ivm_cache_') === 0) keys.push(k.replace('ivm_cache_', ''));
+  });
+  return keys;
 }
