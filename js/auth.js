@@ -36,15 +36,24 @@ function initRole() {
 
 // ─── Preload lists (inventory, vendors, IVM team) ──────────────
 async function preloadWarehouseLists() {
+  console.log('[Preload] Starting background preload...');
   try {
-    await Promise.all([
+    // Fire everything in parallel – non-blocking
+    Promise.allSettled([
       loadRequestInventory(false),
       loadVendorList(false),
       loadIvmTeamList(false)
-    ]);
-    console.log('[Preload] Warehouse lists loaded');
+    ]).then(function() {
+      console.log('[Preload] All lists done');
+      // Preload pending docs for each module
+      var prev = state.currentModule;
+      state.currentModule = 'MRIF'; fetchPendingDocs(false).catch(function() {});
+      state.currentModule = 'MRR';  fetchPendingDocs(false).catch(function() {});
+      state.currentModule = 'MRS';  fetchPendingDocs(false).catch(function() {});
+      state.currentModule = prev;
+    });
   } catch(e) {
-    console.warn('[Preload] Some lists failed to load:', e);
+    console.warn('[Preload] Failed:', e);
   }
 }
 
