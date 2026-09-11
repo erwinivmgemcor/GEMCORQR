@@ -1,5 +1,6 @@
 // ============================================================
-// WAREHOUSE CORE FUNCTIONS (Optimized + Add Missing Item in PO)
+// WAREHOUSE CORE FUNCTIONS
+// (Optimized + Add Missing Item in PO + Prepared By auto-fill)
 // ============================================================
 
 (function() {
@@ -12,6 +13,11 @@
 
 (function() {
   "use strict";
+
+  // ─── Helper: current user display name ───
+  function _getCurrentUserName() {
+    return state.currentUserFullname || state.currentUser || '';
+  }
 
   // ─── Core ──────────────────────────────────────────────
   window.getCleanSheetId = function() {
@@ -683,6 +689,7 @@
 
   window.closePoItemsModal = function() { if (state.poItemsModal) state.poItemsModal.hide(); };
 
+  // ─── CREATE MRR FROM PO — now includes Prepared By ───
   window.createMrrFromPo = function() {
     var btn = document.querySelector('#poItemsModal .btn-success');
 
@@ -697,6 +704,9 @@
       var drNo = document.getElementById('mrrDrNo') ? document.getElementById('mrrDrNo').value.trim() : '';
       var receivingDate = document.getElementById('mrrReceivingDate') ? document.getElementById('mrrReceivingDate').value : '';
 
+      // ★ Auto-fill Prepared By from logged-in user
+      var preparedBy = _getCurrentUserName() || 'WAREHOUSE';
+
       try {
         var payload = {
           action: 'createMrrRequest',
@@ -706,6 +716,7 @@
           supplier: state.currentPoSupplier,
           drNo: drNo,
           receivingDate: receivingDate,
+          preparedBy: preparedBy,
           items: selected
         };
         var res = await fetch(API_URL, {
@@ -719,7 +730,7 @@
         try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
         if (data && data.success) {
           closePoItemsModal();
-          showToast('MRR created: ' + data.docNo, 'success');
+          showToast('MRR created: ' + data.docNo + ' — Prepared by ' + preparedBy, 'success');
           fetchPendingDocs(true);
         } else {
           showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
@@ -1048,11 +1059,21 @@
     var vendorEl = document.getElementById('manualMrrVendor');
     var siteEl = document.getElementById('manualMrrSite');
     var prepEl = document.getElementById('manualMrrPreparedBy');
+
     if (poEl) poEl.value = '';
     if (drEl) drEl.value = '';
     if (vendorEl) vendorEl.value = '';
     if (siteEl) siteEl.value = 'GEMCOR CATMON';
-    if (prepEl) prepEl.value = '';
+
+    // ★ Auto-fill Prepared By from logged-in user
+    if (prepEl) prepEl.value = _getCurrentUserName();
+
+    // ★ Auto-set receiving date to today
+    var dateEl = document.getElementById('manualMrrDate');
+    if (dateEl && !dateEl.value) {
+      dateEl.valueAsDate = new Date();
+    }
+
     manualMrrItems = [];
     renderManualMrrItems();
     updateManualMrrSubmitButton();
@@ -1278,7 +1299,10 @@
       var vendor = document.getElementById('manualMrrVendor') ? document.getElementById('manualMrrVendor').value.trim() : '';
       var site = document.getElementById('manualMrrSite') ? document.getElementById('manualMrrSite').value.trim() : '';
       var receivingDate = document.getElementById('manualMrrDate') ? document.getElementById('manualMrrDate').value : '';
-      var preparedBy = document.getElementById('manualMrrPreparedBy') ? document.getElementById('manualMrrPreparedBy').value.trim() : '';
+      var preparedByField = document.getElementById('manualMrrPreparedBy') ? document.getElementById('manualMrrPreparedBy').value.trim() : '';
+
+      // ★ Fall back to current user if the field is empty
+      var preparedBy = preparedByField || _getCurrentUserName() || 'WAREHOUSE';
 
       var items = [];
       for (var i = 0; i < manualMrrItems.length; i++) {
@@ -1321,7 +1345,7 @@
         try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
         if (data && data.success) {
           if (manualMrrModal) manualMrrModal.hide();
-          showToast('Manual MRR created: ' + data.docNo, 'success');
+          showToast('Manual MRR created: ' + data.docNo + ' — Prepared by ' + preparedBy, 'success');
           fetchPendingDocs(true);
           updateWarehouseKPIs();
         } else {
