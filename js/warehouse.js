@@ -1,6 +1,6 @@
 // ============================================================
 // WAREHOUSE CORE FUNCTIONS
-// (Optimized + Partial Items tracking + Balance MRIF)
+// (Optimized + Partial Items tracking + Balance MRIF with issue-now)
 // ============================================================
 
 (function() {
@@ -1224,7 +1224,7 @@
   };
 
   // ═══════════════════════════════════════════════════════════
-  // PARTIAL ITEMS — Enhanced with grouping and Process Balance
+  // PARTIAL ITEMS — Enhanced with grouping + Process Balance
   // ═══════════════════════════════════════════════════════════
 
   window.fetchPartialItems = async function() {
@@ -1257,7 +1257,12 @@
       var grouped = {};
       items.forEach(function(it) {
         var doc = it.originalDocNo || it.docNo || '(unknown)';
-        if (!grouped[doc]) grouped[doc] = { docNo: doc, items: [], requestor: it.requestor || '', department: it.department || '', joNo: it.joNo || '', gemSoNo: it.gemSoNo || '', clientName: it.clientName || '', project: it.project || '' };
+        if (!grouped[doc]) grouped[doc] = {
+          docNo: doc, items: [],
+          requestor: it.requestor || '', department: it.department || '',
+          joNo: it.joNo || '', gemSoNo: it.gemSoNo || '',
+          clientName: it.clientName || '', project: it.project || ''
+        };
         grouped[doc].items.push(it);
       });
 
@@ -1342,45 +1347,78 @@
 
       var html = '<div class="alert alert-info small py-2 mb-3">' +
         '<i class="bi bi-info-circle me-1"></i> ' +
-        'This will create a new sheet named <strong>Bal.' + docNo + '</strong> containing the items below.' +
+        'A new sheet <strong>Bal.' + docNo + '</strong> will be created. ' +
+        'Enter the quantity you are <strong>issuing right now</strong> for each item. ' +
+        'If you issue the full remaining quantity, the Bal document will be marked <strong>COMPLETED</strong>. ' +
+        'If you issue less, the balance will roll over to another round.' +
         '</div>' +
-        '<div class="table-responsive"><table class="table table-sm table-bordered">' +
+        '<div class="table-responsive"><table class="table table-sm table-bordered align-middle">' +
         '<thead class="table-light"><tr>' +
-          '<th style="width:5%">#</th>' +
-          '<th style="width:20%">Item Code</th>' +
+          '<th style="width:4%">#</th>' +
+          '<th style="width:18%">Item Code</th>' +
           '<th>Description</th>' +
-          '<th class="text-center" style="width:8%">Unit</th>' +
-          '<th class="text-center" style="width:12%">New Qty</th>' +
-          '<th style="width:15%">Remarks</th>' +
+          '<th class="text-center" style="width:7%">Unit</th>' +
+          '<th class="text-center" style="width:9%">Remaining</th>' +
+          '<th class="text-center" style="width:12%">Issued Now</th>' +
+          '<th style="width:18%">Remarks</th>' +
         '</tr></thead><tbody>';
 
       _processPartialItems.forEach(function(it, idx) {
+        var remaining = Number(it.remainingQty || 0);
         html += '<tr>' +
           '<td class="text-center">' + (idx + 1) + '</td>' +
           '<td><code>' + (it.itemCode || '') + '</code></td>' +
           '<td>' + (it.description || '') + '</td>' +
           '<td class="text-center">' + (it.unit || 'PCS') + '</td>' +
+          '<td class="text-center fw-bold text-danger process-remaining-cell" data-idx="' + idx + '">' + remaining + '</td>' +
           '<td class="text-center">' +
             '<input type="number" class="form-control form-control-sm text-center process-qty-input" ' +
-            'data-idx="' + idx + '" value="' + (it.remainingQty || 0) + '" min="0" step="0.01" style="width:80px;margin:0 auto;">' +
+            'data-idx="' + idx + '" value="0" min="0" max="' + remaining + '" step="0.01" ' +
+            'style="width:90px;margin:0 auto;" ' +
+            'oninput="onProcessQtyInput(this)">' +
           '</td>' +
           '<td>' +
             '<input type="text" class="form-control form-control-sm process-remarks-input" ' +
             'data-idx="' + idx + '" placeholder="Optional" maxlength="200">' +
           '</td>' +
-          '</tr>';
+        '</tr>';
       });
 
       html += '</tbody></table></div>' +
-        '<div class="mt-2 text-muted small">' +
-        '<i class="bi bi-lightbulb me-1"></i> Adjust the "New Qty" to match what you are processing now. ' +
-        'Original document will be marked COMPLETED with a note referencing the Balance sheet.' +
+        '<div class="mt-2 small text-muted">' +
+        '<button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="fillAllRemaining()">' +
+          '<i class="bi bi-magic me-1"></i>Fill Full Remaining' +
+        '</button>' +
+        '<span class="ms-1">Set all items to their full remaining quantity.</span>' +
         '</div>';
 
       if (body) body.innerHTML = html;
     } catch(err) {
       if (body) body.innerHTML = '<div class="alert alert-danger">Failed to load items: ' + err.message + '</div>';
     }
+  };
+
+  // ─── Live validation: cap Issued Now at Remaining ───
+  window.onProcessQtyInput = function(input) {
+    var idx = input.getAttribute('data-idx');
+    var remainingCell = document.querySelector('.process-remaining-cell[data-idx="' + idx + '"]');
+    if (!remainingCell) return;
+    var remaining = parseFloat(remainingCell.textContent) || 0;
+    var value = parseFloat(input.value) || 0;
+    if (value > remaining) {
+      input.value = remaining;
+    }
+  };
+
+  // ─── Quick-fill all remaining ───
+  window.fillAllRemaining = function() {
+    document.querySelectorAll('.process-qty-input').forEach(function(inp) {
+      var idx = inp.getAttribute('data-idx');
+      var remainingCell = document.querySelector('.process-remaining-cell[data-idx="' + idx + '"]');
+      if (remainingCell) {
+        inp.value = parseFloat(remainingCell.textContent) || 0;
+      }
+    });
   };
 
   window.submitProcessBalance = function() {
@@ -1394,24 +1432,28 @@
       _processPartialItems.forEach(function(it, idx) {
         var qtyInput = document.querySelector('.process-qty-input[data-idx="' + idx + '"]');
         var remarksInput = document.querySelector('.process-remarks-input[data-idx="' + idx + '"]');
-        var qty = qtyInput ? (parseFloat(qtyInput.value) || 0) : 0;
+        var remaining = Number(it.remainingQty || 0);
+        var issueNow = qtyInput ? (parseFloat(qtyInput.value) || 0) : 0;
         var remarks = remarksInput ? (remarksInput.value || '').trim() : '';
-        if (qty > 0) {
-          itemsPayload.push({
-            inventoryId: it.itemCode || '',
-            description: it.description || '',
-            qty: qty,
-            issuedQty: '',
-            unit: it.unit || 'PCS',
-            remarks: remarks || 'PENDING',
-            originalRowIndex: it.originalRowIndex || 0
-          });
-        }
+
+        if (issueNow > remaining) issueNow = remaining;
+
+        itemsPayload.push({
+          inventoryId: it.itemCode || '',
+          description: it.description || '',
+          qty: remaining,               // the full remaining that becomes the new "REQ QTY"
+          issueNow: issueNow,           // what's issued in this round
+          unit: it.unit || 'PCS',
+          remarks: remarks || '',
+          originalRowIndex: it.originalRowIndex || 0
+        });
       });
 
-      if (!itemsPayload.length) {
-        showToast('Please enter at least one quantity > 0', 'warning');
-        return;
+      var anyIssued = itemsPayload.some(function(it) { return it.issueNow > 0; });
+      if (!anyIssued) {
+        if (!confirm('You have not entered any "Issued Now" quantity.\n\nContinue anyway? The Bal document will be created as PENDING.')) {
+          return;
+        }
       }
 
       try {
@@ -1436,11 +1478,13 @@
             var pm = bootstrap.Modal.getInstance(processModalEl);
             if (pm) pm.hide();
           }
-          showToast('Balance MRIF created: ' + data.balDocNo, 'success');
+          showToast('Balance MRIF created: ' + data.balDocNo + ' (' + (data.status || 'COMPLETED') + ')', 'success');
+
           // Refresh counts and lists
           if (typeof updatePartialCount === 'function') updatePartialCount();
           if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
-          // Refresh the partial items modal so the processed rows disappear
+
+          // Reopen the Partial Items modal so processed rows disappear
           setTimeout(function() {
             var p = document.getElementById('partialItemsModal');
             if (p) {
