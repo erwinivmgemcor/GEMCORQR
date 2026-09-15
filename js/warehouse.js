@@ -1,6 +1,6 @@
 // ============================================================
 // WAREHOUSE CORE FUNCTIONS
-// (Optimized + Add Missing Item in PO + Prepared By auto-fill)
+// (Optimized + Partial Items tracking + Balance MRIF)
 // ============================================================
 
 (function() {
@@ -14,7 +14,6 @@
 (function() {
   "use strict";
 
-  // ─── Helper: current user display name ───
   function _getCurrentUserName() {
     return state.currentUserFullname || state.currentUser || '';
   }
@@ -98,9 +97,7 @@
   window.fetchPendingDocs = async function(forceRefresh) {
     var sheetId = getCleanSheetId();
     if (!sheetId) return [];
-
     var cacheKey = 'pendingDocs_' + state.currentModule + '_' + sheetId;
-
     if (!forceRefresh) {
       var cached = getCache(cacheKey);
       if (cached) {
@@ -113,7 +110,6 @@
         return cached;
       }
     }
-
     try {
       var docs = await _fetchPendingDocsFromServer(sheetId);
       setCache(cacheKey, docs, 5 * 60 * 1000);
@@ -185,10 +181,7 @@
   };
 
   window.changeDocument = function() {
-    if (state.currentDoc) {
-      saveDocProgress();
-      clearDocProgress(state.currentDoc);
-    }
+    if (state.currentDoc) { saveDocProgress(); clearDocProgress(state.currentDoc); }
     state.currentDoc = null;
     resetDocumentState();
     stopScanner();
@@ -218,9 +211,7 @@
       var verified = state.items.filter(function(i) { return i.verified; }).length;
       if (verified > 0) {
         localStorage.setItem('ivm_progress_' + state.currentDoc, JSON.stringify({
-          module: state.currentModule,
-          items: state.items,
-          savedAt: new Date().toISOString()
+          module: state.currentModule, items: state.items, savedAt: new Date().toISOString()
         }));
       }
     }
@@ -317,7 +308,6 @@
         '</tr>';
     });
     tbody.innerHTML = html;
-
     tbody.querySelectorAll('tr').forEach(function(tr) {
       tr.addEventListener('click', function(e) {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
@@ -326,7 +316,6 @@
         if (item) openQtyModal(item);
       });
     });
-
     var countEl = document.getElementById('verifyCount');
     if (countEl) countEl.textContent = verified + '/' + state.items.length + ' Verified';
     updateSubmitButton(verified, state.items.length);
@@ -398,12 +387,10 @@
     showToast('Batch verify completed', 'success');
   };
 
-  // ─── SUBMIT (Optimistic + button loading) ─────────────
   var isSubmitting = false;
 
   window.onSubmit = function() {
     var btn = document.getElementById('submitBtn');
-
     return withButtonLoading(btn, async function() {
       if (isSubmitting) return;
       var verifiedItems = state.items.filter(function(i) { return i.verified; });
@@ -413,7 +400,6 @@
       if (verified < total) {
         if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly verified items will be sent.')) return;
       }
-
       isSubmitting = true;
       try {
         var result = await submitTransaction(verifiedItems);
@@ -422,19 +408,13 @@
           var anyProcessed = false;
           state.items.forEach(function(it) {
             if (!it.verified) { allComplete = false; }
-            else {
-              anyProcessed = true;
-              if (it.issuedQty < it.qty) allComplete = false;
-            }
+            else { anyProcessed = true; if (it.issuedQty < it.qty) allComplete = false; }
           });
           var newStatus = allComplete && anyProcessed ? 'COMPLETED' : (anyProcessed ? 'PARTIAL' : 'PENDING');
-
           var statusUrl = API_URL + '?action=updateDocStatus&docNo=' + encodeURIComponent(state.currentDoc) + '&status=' + newStatus + '&_t=' + Date.now();
           fetch(statusUrl, { redirect: 'follow' }).catch(function() {});
-
           clearDocProgress(state.currentDoc);
           if (successModal) successModal.show();
-
           setTimeout(function() {
             if (successModal) successModal.hide();
             changeDocument();
@@ -470,7 +450,7 @@
     return JSON.parse(text);
   };
 
-  // ─── PO ITEMS (with Add Missing Item + auto-suggest) ────
+  // ─── PO ITEMS ─────────────────────────────────────
   window.renderPoItems = function() {
     var noEl = document.getElementById('poDisplayNo');
     var prfEl = document.getElementById('poDisplayPrf');
@@ -496,8 +476,7 @@
     if (warning) {
       if (hasMissing) {
         warning.classList.remove('d-none');
-        warning.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i>' +
-          '<strong>Some items are incomplete.</strong> Please fill in the missing Item Code and Description below, or uncheck items that you cannot complete.';
+        warning.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Some items are incomplete.</strong> Please fill in the missing Item Code and Description below.';
       } else {
         warning.classList.add('d-none');
       }
@@ -506,11 +485,9 @@
     list.innerHTML = state.poItemsData.map(function(item, idx) {
       var isManual = !!item._manual;
       var isMissing = !item.inventoryId || !item.inventoryId.trim() || !item.description || !item.description.trim();
-
       var borderClass = '';
       if (isManual) borderClass = 'border border-info';
       else if (isMissing) borderClass = 'border border-danger';
-
       var codeVal = item.inventoryId || '';
       var descVal = item.description || '';
       var isChecked = isManual ? true : !isMissing;
@@ -518,33 +495,25 @@
       return '<div class="card mb-2 po-item-card ' + borderClass + '" id="po-card-' + idx + '">' +
         '<div class="card-body py-2 px-3">' +
         '<div class="d-flex align-items-center gap-2 flex-wrap">' +
-        '<div class="form-check m-0">' +
-        '<input class="form-check-input po-check" type="checkbox" id="po-check-' + idx + '" ' + (isChecked ? 'checked' : '') + ' onchange="togglePoCard(' + idx + ')">' +
-        '</div>' +
+        '<div class="form-check m-0"><input class="form-check-input po-check" type="checkbox" id="po-check-' + idx + '" ' + (isChecked ? 'checked' : '') + ' onchange="togglePoCard(' + idx + ')"></div>' +
         '<div class="flex-grow-1" style="min-width:120px;">' +
         '<div class="row g-1">' +
-        '<div class="col-12 col-md-4">' +
-        '<label class="form-label mb-0 small">Item Code</label>' +
+        '<div class="col-12 col-md-4"><label class="form-label mb-0 small">Item Code</label>' +
         ((isMissing || isManual) ?
           '<input type="text" class="form-control form-control-sm po-edit-code" id="po-code-' + idx + '" value="' + codeVal + '" placeholder="Enter Item Code" list="inventoryCodeList" oninput="updatePoItem(' + idx + ', \'inventoryId\', this.value)" onchange="autoFillPoDescription(' + idx + ', this.value)">' :
           '<div class="fw-bold small">' + codeVal + '</div>') +
         '</div>' +
-        '<div class="col-12 col-md-4">' +
-        '<label class="form-label mb-0 small">Description</label>' +
+        '<div class="col-12 col-md-4"><label class="form-label mb-0 small">Description</label>' +
         ((isMissing || isManual) ?
           '<input type="text" class="form-control form-control-sm po-edit-desc" id="po-desc-' + idx + '" value="' + descVal + '" placeholder="Enter Description" oninput="updatePoItem(' + idx + ', \'description\', this.value)">' :
           '<div class="text-muted small">' + descVal + '</div>') +
         '</div>' +
-        '<div class="col-6 col-md-2">' +
-        '<label class="form-label mb-0 small">PO Qty</label>' +
+        '<div class="col-6 col-md-2"><label class="form-label mb-0 small">PO Qty</label>' +
         (isManual ?
           '<input type="number" class="form-control form-control-sm" id="po-qty-' + idx + '" value="' + (item.qty || 1) + '" min="0" style="width:80px" oninput="updatePoItem(' + idx + ', \'qty\', this.value)">' :
           '<div class="fw-bold small">' + (item.qty || 0) + '</div>') +
         '</div>' +
-        '<div class="col-6 col-md-2">' +
-        '<label class="form-label mb-0 small">Unit</label>' +
-        '<div class="fw-bold small">' + (item.unit || 'PCS') + '</div>' +
-        '</div>' +
+        '<div class="col-6 col-md-2"><label class="form-label mb-0 small">Unit</label><div class="fw-bold small">' + (item.unit || 'PCS') + '</div></div>' +
         '</div>' +
         '<div class="d-flex gap-2 mt-1 flex-wrap">' +
         '<div style="min-width:80px;"><label class="form-label mb-0 small">ATL Qty</label>' +
@@ -555,32 +524,19 @@
         '<input type="text" class="form-control form-control-sm" id="po-remarks-' + idx + '" placeholder="Optional note..." maxlength="200"></div>' +
         '</div>' +
         '</div>' +
-        (isManual ? '<span class="badge bg-info ms-2">Manual</span>' :
-         (isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : '')) +
-        '</div>' +
-        '</div>' +
-        '</div>';
+        (isManual ? '<span class="badge bg-info ms-2">Manual</span>' : (isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : '')) +
+        '</div></div></div>';
     }).join('');
 
     updateCreateMrrButton();
-
     document.querySelectorAll('.po-check').forEach(function(cb) {
       cb.addEventListener('change', updateCreateMrrButton);
     });
   };
 
-  // ─── Add a manual item row inside the PO Items modal ──
   window.addPoManualItem = function() {
     if (!state.poItemsData) state.poItemsData = [];
-    state.poItemsData.push({
-      inventoryId: '',
-      description: '',
-      qty: 1,
-      atlQty: 0,
-      unit: 'PCS',
-      remarks: '',
-      _manual: true
-    });
+    state.poItemsData.push({ inventoryId: '', description: '', qty: 1, atlQty: 0, unit: 'PCS', remarks: '', _manual: true });
     renderPoItems();
     setTimeout(function() {
       var idx = state.poItemsData.length - 1;
@@ -624,11 +580,8 @@
 
   window.updatePoItem = function(idx, field, value) {
     if (!state.poItemsData[idx]) return;
-    if (field === 'qty') {
-      state.poItemsData[idx][field] = parseFloat(value) || 0;
-    } else {
-      state.poItemsData[idx][field] = (value || '').trim();
-    }
+    if (field === 'qty') state.poItemsData[idx][field] = parseFloat(value) || 0;
+    else state.poItemsData[idx][field] = (value || '').trim();
     updateCreateMrrButton();
   };
 
@@ -649,14 +602,11 @@
     state.poItemsData.forEach(function(item, idx) {
       var cb = document.getElementById('po-check-' + idx);
       if (!cb || !cb.checked) return;
-
       var atlEl = document.getElementById('po-atl-' + idx);
       var unitEl = document.getElementById('po-unit-' + idx);
       var remarksEl = document.getElementById('po-remarks-' + idx);
       var qtyEl = document.getElementById('po-qty-' + idx);
-
       var qty = qtyEl ? (parseFloat(qtyEl.value) || 0) : (item.qty || 0);
-
       selected.push({
         inventoryId: (item.inventoryId || '').trim(),
         description: (item.description || '').trim(),
@@ -689,10 +639,8 @@
 
   window.closePoItemsModal = function() { if (state.poItemsModal) state.poItemsModal.hide(); };
 
-  // ─── CREATE MRR FROM PO — now includes Prepared By ───
   window.createMrrFromPo = function() {
     var btn = document.querySelector('#poItemsModal .btn-success');
-
     return withButtonLoading(btn, async function() {
       var selected = getSelectedPoItems();
       if (selected.length === 0) { showToast('Please select at least one item', 'warning'); return; }
@@ -700,30 +648,20 @@
         return !item.inventoryId || !item.inventoryId.trim() || !item.description || !item.description.trim();
       });
       if (hasMissing) { showToast('Fill missing details first', 'danger'); return; }
-
       var drNo = document.getElementById('mrrDrNo') ? document.getElementById('mrrDrNo').value.trim() : '';
       var receivingDate = document.getElementById('mrrReceivingDate') ? document.getElementById('mrrReceivingDate').value : '';
-
-      // ★ Auto-fill Prepared By from logged-in user
       var preparedBy = _getCurrentUserName() || 'WAREHOUSE';
-
       try {
         var payload = {
           action: 'createMrrRequest',
-          poNo: state.currentPoNo,
-          prfNo: state.currentPoPrf,
-          client: state.currentPoClient,
-          supplier: state.currentPoSupplier,
-          drNo: drNo,
-          receivingDate: receivingDate,
-          preparedBy: preparedBy,
+          poNo: state.currentPoNo, prfNo: state.currentPoPrf,
+          client: state.currentPoClient, supplier: state.currentPoSupplier,
+          drNo: drNo, receivingDate: receivingDate, preparedBy: preparedBy,
           items: selected
         };
         var res = await fetch(API_URL, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          redirect: 'follow'
+          method: 'POST', body: JSON.stringify(payload),
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow'
         });
         var text = await res.text();
         var data;
@@ -735,9 +673,7 @@
         } else {
           showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
         }
-      } catch(err) {
-        showToast('Error: ' + err.message, 'danger');
-      }
+      } catch(err) { showToast('Error: ' + err.message, 'danger'); }
     }, 'Creating MRR...');
   };
 
@@ -746,10 +682,8 @@
     if (!poInput) return;
     var poNo = poInput.value.trim();
     if (!poNo) { showToast('Please enter a PO number', 'warning'); return; }
-
     loadRequestInventory().then(populateInventoryDatalist).catch(function() {});
     showLoading('Looking up PO...');
-
     fetch(API_URL + '?action=getPoItems&poNo=' + encodeURIComponent(poNo) + '&_t=' + Date.now(), { redirect: 'follow' })
       .then(function(res) { return res.text(); })
       .then(function(text) {
@@ -779,10 +713,8 @@
     if (!finalPo) { showToast('Please enter a PO number', 'warning'); return; }
     if (document.getElementById('manualPoInput')) document.getElementById('manualPoInput').value = '';
     if (document.getElementById('mrrManualPoInput')) document.getElementById('mrrManualPoInput').value = '';
-
     loadRequestInventory().then(populateInventoryDatalist).catch(function() {});
     showLoading('Looking up PO...');
-
     fetch(API_URL + '?action=getPoItems&poNo=' + encodeURIComponent(finalPo) + '&_t=' + Date.now(), { redirect: 'follow' })
       .then(function(res) { return res.text(); })
       .then(function(text) {
@@ -808,7 +740,7 @@
 
   window.closePoScanModal = function() { if (state.poScanModal) state.poScanModal.hide(); };
 
-  // ─── QTY MODAL ─────────────────────────────────────────
+  // ─── QTY MODAL ────────────────────────────────────
   var currentModalItem = null;
 
   window.openQtyModal = function(item) {
@@ -850,9 +782,7 @@
     var isMRR = state.currentModule === 'MRR';
     if (!isMRR && qtyVal > currentModalItem.qty) {
       var max = currentModalItem.qty;
-      var msg = state.currentModule === 'MRS'
-        ? 'Returned Qty cannot exceed Expected Qty (Max: ' + max + ')'
-        : 'Issued Qty cannot exceed Requested Qty (Max: ' + max + ')';
+      var msg = state.currentModule === 'MRS' ? 'Returned Qty cannot exceed Expected Qty (Max: ' + max + ')' : 'Issued Qty cannot exceed Requested Qty (Max: ' + max + ')';
       showExceedError(msg);
       input.value = max;
       input.classList.add('is-invalid');
@@ -860,9 +790,8 @@
       return;
     }
     var unitSelect = document.getElementById('modalUnit');
-    var selectedUnit = unitSelect ? unitSelect.value : 'PIECE';
     currentModalItem.issuedQty = qtyVal;
-    currentModalItem.unit = selectedUnit;
+    currentModalItem.unit = unitSelect ? unitSelect.value : 'PIECE';
     currentModalItem.verified = true;
     saveDocProgress();
     renderItems();
@@ -897,37 +826,28 @@
     if (a2) a2.classList.add('d-none');
   };
 
-  // ─── SMART DROPDOWN POSITIONING ────────────────────────
   function _positionSuggestDropdown(dropdown, input) {
     var inputRect = input.getBoundingClientRect();
     var spaceBelow = window.innerHeight - inputRect.bottom;
     var spaceAbove = inputRect.top;
     var dropdownMinHeight = 200;
-    var dropdownMaxWidth = 360;
-
     dropdown.style.position = 'fixed';
     dropdown.style.left = inputRect.left + 'px';
     dropdown.style.width = Math.max(inputRect.width, 280) + 'px';
-    dropdown.style.minWidth = Math.min(dropdownMaxWidth, Math.max(inputRect.width, 280)) + 'px';
     dropdown.style.zIndex = '99999';
-
     if (spaceBelow < dropdownMinHeight && spaceAbove > spaceBelow) {
       dropdown.style.top = 'auto';
       dropdown.style.bottom = (window.innerHeight - inputRect.top + 2) + 'px';
-      dropdown.style.marginTop = '0';
-      dropdown.style.marginBottom = '2px';
       dropdown.style.maxHeight = Math.min(spaceAbove - 20, 340) + 'px';
     } else {
       dropdown.style.bottom = 'auto';
       dropdown.style.top = (inputRect.bottom + 2) + 'px';
-      dropdown.style.marginTop = '2px';
-      dropdown.style.marginBottom = '0';
       dropdown.style.maxHeight = Math.min(spaceBelow - 20, 340) + 'px';
     }
   }
   window._positionSuggestDropdown = _positionSuggestDropdown;
 
-  // ─── CACHED LOADERS ────────────────────────────────────
+  // ─── CACHED LOADERS ────────────────────────────────
   window.loadRequestInventory = async function(forceRefresh) {
     var cacheKey = 'inventoryList';
     if (!forceRefresh) {
@@ -941,7 +861,6 @@
       var data;
       try { data = JSON.parse(text); } catch(e) { data = {}; }
       var inv = data.inventory || data.items || [];
-
       var skipPatterns = ['total', 'inventory codes', 'inventory id', 'item id', 'grand total', 'subtotal', 'sub-total'];
       inv = inv.filter(function(it) {
         var code = String(it.code || it.inventoryId || '').trim();
@@ -955,14 +874,10 @@
         }
         return true;
       });
-
       state.requestInventoryList = inv;
       setCache(cacheKey, inv, 5 * 60 * 1000);
       return inv;
-    } catch(err) {
-      state.requestInventoryList = [];
-      return [];
-    }
+    } catch(err) { state.requestInventoryList = []; return []; }
   };
 
   window.loadRequestorList = async function(forceRefresh) {
@@ -1046,42 +961,29 @@
     datalist.innerHTML = html;
   };
 
-  // ─── MANUAL MRR ────────────────────────────────────────
+  // ─── MANUAL MRR ────────────────────────────────────
   var manualMrrModal = null;
   var manualMrrItems = [];
 
   window.openManualMrrModal = function() {
-    if (!manualMrrModal) {
-      manualMrrModal = new bootstrap.Modal(document.getElementById('manualMrrModal'));
-    }
+    if (!manualMrrModal) manualMrrModal = new bootstrap.Modal(document.getElementById('manualMrrModal'));
     var poEl = document.getElementById('manualMrrPoNo');
     var drEl = document.getElementById('manualMrrDrNo');
     var vendorEl = document.getElementById('manualMrrVendor');
     var siteEl = document.getElementById('manualMrrSite');
     var prepEl = document.getElementById('manualMrrPreparedBy');
-
     if (poEl) poEl.value = '';
     if (drEl) drEl.value = '';
     if (vendorEl) vendorEl.value = '';
     if (siteEl) siteEl.value = 'GEMCOR CATMON';
-
-    // ★ Auto-fill Prepared By from logged-in user
     if (prepEl) prepEl.value = _getCurrentUserName();
-
-    // ★ Auto-set receiving date to today
     var dateEl = document.getElementById('manualMrrDate');
-    if (dateEl && !dateEl.value) {
-      dateEl.valueAsDate = new Date();
-    }
-
+    if (dateEl && !dateEl.value) dateEl.valueAsDate = new Date();
     manualMrrItems = [];
     renderManualMrrItems();
     updateManualMrrSubmitButton();
     manualMrrModal.show();
-
-    if (state.requestInventoryList.length === 0) {
-      loadRequestInventory().catch(function() {});
-    }
+    if (state.requestInventoryList.length === 0) loadRequestInventory().catch(function() {});
     loadVendorList(false).catch(function() {});
     loadIvmTeamList(false).catch(function() {});
   };
@@ -1118,52 +1020,23 @@
       return;
     }
     if (emptyState) emptyState.style.display = 'none';
-
     var html = '';
     for (var i = 0; i < manualMrrItems.length; i++) {
       var it = manualMrrItems[i];
       html += '<tr>' +
         '<td class="align-middle text-center">' + (i + 1) + '</td>' +
         '<td><div style="position:relative;width:100%;">' +
-          '<input type="text" class="form-control form-control-sm manual-mrr-search" ' +
-            'placeholder="Type to search..." ' +
-            'value="' + (it.inventoryId ? it.inventoryId + ' - ' + it.description : '') + '" ' +
-            'oninput="filterManualMrrItems(this, ' + i + ')" ' +
-            'onfocus="filterManualMrrItems(this, ' + i + ')" ' +
-            'onblur="updateManualMrrSubmitButton()" ' +
-            'autocomplete="off" style="width:100%;min-width:150px;">' +
-          '<div class="list-group d-none manual-mrr-dropdown" ' +
-            'style="background:#fff;border:1px solid #ced4da;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.18);padding:4px 0;overflow-y:auto;" ' +
-            'id="manualMrrDropdown' + i + '"></div>' +
+          '<input type="text" class="form-control form-control-sm manual-mrr-search" placeholder="Type to search..." value="' + (it.inventoryId ? it.inventoryId + ' - ' + it.description : '') + '" oninput="filterManualMrrItems(this, ' + i + ')" onfocus="filterManualMrrItems(this, ' + i + ')" onblur="updateManualMrrSubmitButton()" autocomplete="off" style="width:100%;min-width:150px;">' +
+          '<div class="list-group d-none manual-mrr-dropdown" style="background:#fff;border:1px solid #ced4da;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.18);padding:4px 0;overflow-y:auto;" id="manualMrrDropdown' + i + '"></div>' +
           '<input type="hidden" class="manual-mrr-code" id="manualMrrCode' + i + '" value="' + (it.inventoryId || '') + '">' +
           '<input type="hidden" class="manual-mrr-desc" id="manualMrrDesc' + i + '" value="' + (it.description || '') + '">' +
         '</div></td>' +
-        '<td><input type="text" class="form-control form-control-sm manual-mrr-desc-text" ' +
-          'id="manualMrrDescText' + i + '" ' +
-          'value="' + (it.description || '') + '" ' +
-          'oninput="updateManualMrrItem(' + i + ', \'description\', this.value); updateManualMrrSubmitButton();" ' +
-          'placeholder="Description" style="min-width:120px;"></td>' +
-        '<td><input type="number" class="form-control form-control-sm text-center" ' +
-          'value="' + (it.qty || 0) + '" ' +
-          'oninput="updateManualMrrItem(' + i + ', \'qty\', parseFloat(this.value)||0); updateManualMrrSubmitButton();" ' +
-          'min="0" step="0.01" style="width:70px;"></td>' +
-        '<td><input type="number" class="form-control form-control-sm text-center" ' +
-          'value="' + (it.atlQty || 0) + '" ' +
-          'oninput="updateManualMrrItem(' + i + ', \'atlQty\', parseFloat(this.value)||0); updateManualMrrSubmitButton();" ' +
-          'min="0" step="0.01" style="width:70px;"></td>' +
-        '<td><select class="form-select form-select-sm manual-mrr-unit" ' +
-          'onchange="updateManualMrrItem(' + i + ', \'unit\', this.value)">' +
-          buildUnitOptions(it.unit || 'PIECE') +
-        '</select></td>' +
-        '<td><input type="text" class="form-control form-control-sm" ' +
-          'value="' + (it.remarks || '') + '" ' +
-          'oninput="updateManualMrrItem(' + i + ', \'remarks\', this.value)" ' +
-          'placeholder="Remarks" maxlength="200" style="min-width:100px;"></td>' +
-        '<td class="align-middle text-center">' +
-          '<button class="btn btn-sm btn-outline-danger" onclick="removeManualMrrItem(' + i + ')" title="Remove">' +
-            '<i class="bi bi-trash"></i>' +
-          '</button>' +
-        '</td>' +
+        '<td><input type="text" class="form-control form-control-sm manual-mrr-desc-text" id="manualMrrDescText' + i + '" value="' + (it.description || '') + '" oninput="updateManualMrrItem(' + i + ', \'description\', this.value); updateManualMrrSubmitButton();" placeholder="Description" style="min-width:120px;"></td>' +
+        '<td><input type="number" class="form-control form-control-sm text-center" value="' + (it.qty || 0) + '" oninput="updateManualMrrItem(' + i + ', \'qty\', parseFloat(this.value)||0); updateManualMrrSubmitButton();" min="0" step="0.01" style="width:70px;"></td>' +
+        '<td><input type="number" class="form-control form-control-sm text-center" value="' + (it.atlQty || 0) + '" oninput="updateManualMrrItem(' + i + ', \'atlQty\', parseFloat(this.value)||0); updateManualMrrSubmitButton();" min="0" step="0.01" style="width:70px;"></td>' +
+        '<td><select class="form-select form-select-sm manual-mrr-unit" onchange="updateManualMrrItem(' + i + ', \'unit\', this.value)">' + buildUnitOptions(it.unit || 'PIECE') + '</select></td>' +
+        '<td><input type="text" class="form-control form-control-sm" value="' + (it.remarks || '') + '" oninput="updateManualMrrItem(' + i + ', \'remarks\', this.value)" placeholder="Remarks" maxlength="200" style="min-width:100px;"></td>' +
+        '<td class="align-middle text-center"><button class="btn btn-sm btn-outline-danger" onclick="removeManualMrrItem(' + i + ')" title="Remove"><i class="bi bi-trash"></i></button></td>' +
         '</tr>';
     }
     tbody.innerHTML = html;
@@ -1175,7 +1048,6 @@
     var dropdown = document.getElementById('manualMrrDropdown' + idx);
     if (!dropdown) return;
     dropdown.innerHTML = '';
-
     var hiddenCode = document.getElementById('manualMrrCode' + idx);
     var hiddenDesc = document.getElementById('manualMrrDesc' + idx);
     if (hiddenCode && hiddenDesc) {
@@ -1185,35 +1057,25 @@
           var c = it.code || it.inventoryId || '';
           return c.toLowerCase() === typed.toLowerCase();
         });
-        if (exact) {
-          hiddenCode.value = exact.code || exact.inventoryId || typed;
-          hiddenDesc.value = exact.description || '';
-        } else if (typed) {
-          hiddenCode.value = typed;
-          if (!hiddenDesc.value) hiddenDesc.value = typed;
-        }
+        if (exact) { hiddenCode.value = exact.code || exact.inventoryId || typed; hiddenDesc.value = exact.description || ''; }
+        else if (typed) { hiddenCode.value = typed; if (!hiddenDesc.value) hiddenDesc.value = typed; }
       }
     }
-
     updateManualMrrSubmitButton();
-
     if (!term) { dropdown.classList.add('d-none'); return; }
-
     if (state.requestInventoryList.length === 0) {
       dropdown.innerHTML = '<div class="list-group-item text-muted" style="padding:8px 12px;">Loading inventory...</div>';
       _positionSuggestDropdown(dropdown, input);
       dropdown.classList.remove('d-none');
       return;
     }
-
     var matches = state.requestInventoryList.filter(function(it) {
       var code = (it.code || it.inventoryId || '').toLowerCase();
       var desc = (it.description || '').toLowerCase();
       return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
     }).slice(0, 20);
-
     if (matches.length === 0) {
-      dropdown.innerHTML = '<div class="list-group-item text-muted" style="padding:8px 12px;">No matches — you can type the code and description manually.</div>';
+      dropdown.innerHTML = '<div class="list-group-item text-muted" style="padding:8px 12px;">No matches — you can type the code manually.</div>';
     } else {
       matches.forEach(function(it) {
         var code = it.code || it.inventoryId || '';
@@ -1222,17 +1084,11 @@
         var el = document.createElement('div');
         el.className = 'list-group-item list-group-item-action';
         el.style.cssText = 'padding:10px 14px;cursor:pointer;font-size:0.9rem;border-bottom:1px solid #f0f0f0;';
-        el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div>' +
-                       '<div class="text-muted small">' + desc + ' <span class="badge bg-light text-dark">' + unit + '</span></div>';
-        el.onmousedown = function(e) {
-          e.preventDefault();
-          selectManualMrrItem(idx, code, desc, unit);
-          dropdown.classList.add('d-none');
-        };
+        el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div><div class="text-muted small">' + desc + ' <span class="badge bg-light text-dark">' + unit + '</span></div>';
+        el.onmousedown = function(e) { e.preventDefault(); selectManualMrrItem(idx, code, desc, unit); dropdown.classList.add('d-none'); };
         dropdown.appendChild(el);
       });
     }
-
     _positionSuggestDropdown(dropdown, input);
     dropdown.classList.remove('d-none');
   };
@@ -1269,11 +1125,9 @@
   window.updateManualMrrSubmitButton = function() {
     var btn = document.getElementById('btnSubmitManualMrr');
     if (!btn) return;
-
     var drNo = document.getElementById('manualMrrDrNo') ? document.getElementById('manualMrrDrNo').value.trim() : '';
     var vendor = document.getElementById('manualMrrVendor') ? document.getElementById('manualMrrVendor').value.trim() : '';
     var site = document.getElementById('manualMrrSite') ? document.getElementById('manualMrrSite').value.trim() : '';
-
     var hasValidItems = false;
     var rows = document.querySelectorAll('#manualMrrItemsBody tr');
     for (var r = 0; r < rows.length; r++) {
@@ -1286,13 +1140,11 @@
       var qty = qtyInput ? parseFloat(qtyInput.value) || 0 : 0;
       if (code && desc && qty > 0) { hasValidItems = true; break; }
     }
-
     btn.disabled = !(drNo && vendor && site && hasValidItems);
   };
 
   window.submitManualMrr = function() {
     var btn = document.getElementById('btnSubmitManualMrr');
-
     return withButtonLoading(btn, async function() {
       var poNo = document.getElementById('manualMrrPoNo') ? document.getElementById('manualMrrPoNo').value.trim() : '';
       var drNo = document.getElementById('manualMrrDrNo') ? document.getElementById('manualMrrDrNo').value.trim() : '';
@@ -1300,45 +1152,27 @@
       var site = document.getElementById('manualMrrSite') ? document.getElementById('manualMrrSite').value.trim() : '';
       var receivingDate = document.getElementById('manualMrrDate') ? document.getElementById('manualMrrDate').value : '';
       var preparedByField = document.getElementById('manualMrrPreparedBy') ? document.getElementById('manualMrrPreparedBy').value.trim() : '';
-
-      // ★ Fall back to current user if the field is empty
       var preparedBy = preparedByField || _getCurrentUserName() || 'WAREHOUSE';
 
       var items = [];
       for (var i = 0; i < manualMrrItems.length; i++) {
         var it = manualMrrItems[i];
         if (it.inventoryId && it.inventoryId.trim() && it.description && it.description.trim() && it.qty > 0) {
-          items.push({
-            inventoryId: it.inventoryId.trim(),
-            description: it.description.trim(),
-            qty: it.qty,
-            atlQty: it.atlQty || 0,
-            unit: it.unit || 'PIECE',
-            remarks: it.remarks || ''
-          });
+          items.push({ inventoryId: it.inventoryId.trim(), description: it.description.trim(), qty: it.qty, atlQty: it.atlQty || 0, unit: it.unit || 'PIECE', remarks: it.remarks || '' });
         }
       }
       if (items.length === 0) { showToast('Please add at least one valid item', 'warning'); return; }
 
       try {
         var payload = {
-          action: 'createMrrRequest',
-          poNo: poNo || 'N/A',
-          prfNo: '',
-          client: vendor,
-          supplier: vendor,
-          drNo: drNo,
-          receivingDate: receivingDate,
-          receivingSite: site,
-          preparedBy: preparedBy,
-          items: items,
-          isManual: true
+          action: 'createMrrRequest', poNo: poNo || 'N/A', prfNo: '',
+          client: vendor, supplier: vendor, drNo: drNo,
+          receivingDate: receivingDate, receivingSite: site,
+          preparedBy: preparedBy, items: items, isManual: true
         };
         var res = await fetch(API_URL, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          redirect: 'follow'
+          method: 'POST', body: JSON.stringify(payload),
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow'
         });
         var text = await res.text();
         var data;
@@ -1351,13 +1185,11 @@
         } else {
           showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
         }
-      } catch(err) {
-        showToast('Error: ' + err.message, 'danger');
-      }
+      } catch(err) { showToast('Error: ' + err.message, 'danger'); }
     }, 'Creating MRR...');
   };
 
-  // ─── QUICK ACTIONS ─────────────────────────────────────
+  // ─── QUICK ACTIONS ─────────────────────────────────
   window.quickProcessPending = function(btn) {
     return withButtonLoading(btn, async function() {
       var statusEl = document.getElementById('quickActionStatus');
@@ -1373,33 +1205,28 @@
         if (!docNo) return;
         await onDocSelect(docNo);
         if (statusEl) statusEl.textContent = '📄 Loaded: ' + cleanDocNo(docNo);
-      } catch(err) {
-        if (statusEl) statusEl.textContent = '❌ Error: ' + err.message;
-      }
+      } catch(err) { if (statusEl) statusEl.textContent = '❌ Error: ' + err.message; }
     }, 'Processing...');
   };
 
   window.quickNewMrr = function(btn) {
     return withButtonLoading(btn, async function() {
-      if (typeof openManualMrrModal === 'function') {
-        openManualMrrModal();
-      } else {
-        showToast('Manual MRR modal not available', 'danger');
-      }
+      if (typeof openManualMrrModal === 'function') openManualMrrModal();
+      else showToast('Manual MRR modal not available', 'danger');
     }, 'Opening...');
   };
 
   window.quickNewMrif = function(btn) {
     return withButtonLoading(btn, async function() {
-      if (typeof openManualMrifModal === 'function') {
-        openManualMrifModal();
-      } else {
-        showToast('Manual MRIF modal not available', 'danger');
-      }
+      if (typeof openManualMrifModal === 'function') openManualMrifModal();
+      else showToast('Manual MRIF modal not available', 'danger');
     }, 'Opening...');
   };
 
-  // ─── PARTIAL ITEMS ─────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════
+  // PARTIAL ITEMS — Enhanced with grouping and Process Balance
+  // ═══════════════════════════════════════════════════════════
+
   window.fetchPartialItems = async function() {
     try {
       var url = API_URL + '?action=getPartialItems&_t=' + Date.now();
@@ -1413,47 +1240,221 @@
   window.openPartialItemsModal = async function() {
     var modalEl = document.getElementById('partialItemsModal');
     if (!modalEl) { showToast('Modal not found', 'danger'); return; }
-    var modal = new bootstrap.Modal(modalEl);
+    var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     var container = document.getElementById('partialItemsList');
-    if (container) container.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading...</div></div>';
+    if (container) container.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading partial items...</div></div>';
     modal.show();
+
     try {
       var items = await fetchPartialItems();
       if (!container) return;
       if (items.length === 0) {
-        container.innerHTML = '<div class="list-group-item text-muted text-center py-4">No partial items found.</div>';
+        container.innerHTML = '<div class="list-group-item text-muted text-center py-4">No partial items found. All items are fully served or pending.</div>';
         return;
       }
-      var html = '';
+
+      // ─── Group by original doc ───
+      var grouped = {};
       items.forEach(function(it) {
-        var statusBadge = it.remarks || 'PARTIAL';
-        var badgeColor = 'warning';
-        if (statusBadge.indexOf('SERVED') !== -1) badgeColor = 'success';
-        else if (statusBadge.indexOf('PENDING') !== -1) badgeColor = 'secondary';
-        html += '<div class="list-group-item" style="cursor:pointer;" data-docno="' + it.docNo + '">' +
-          '<div class="d-flex justify-content-between align-items-start">' +
-          '<div>' +
-          '<div class="fw-bold">' + it.docNo + '</div>' +
-          '<div><code>' + it.itemCode + '</code> – ' + it.description + '</div>' +
-          '<div class="small text-muted">Requested: ' + it.requestedQty + ' | Issued: ' + it.issuedQty + ' | Unit: ' + it.unit + '</div>' +
+        var doc = it.originalDocNo || it.docNo || '(unknown)';
+        if (!grouped[doc]) grouped[doc] = { docNo: doc, items: [], requestor: it.requestor || '', department: it.department || '', joNo: it.joNo || '', gemSoNo: it.gemSoNo || '', clientName: it.clientName || '', project: it.project || '' };
+        grouped[doc].items.push(it);
+      });
+
+      var html = '';
+      Object.keys(grouped).forEach(function(doc) {
+        var g = grouped[doc];
+        html += '<div class="card mb-3 border-warning">' +
+          '<div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">' +
+            '<div><i class="bi bi-file-earmark-text me-2"></i><strong>' + g.docNo + '</strong> <span class="badge bg-secondary">MRIF</span></div>' +
+            '<button class="btn btn-sm btn-dark" onclick="openProcessPartialModal(\'' + doc + '\')">' +
+              '<i class="bi bi-arrow-right-circle me-1"></i>Process Balance' +
+            '</button>' +
           '</div>' +
-          '<span class="badge bg-' + badgeColor + '">' + statusBadge + '</span>' +
+          '<div class="card-body p-2">' +
+            '<div class="row g-2 small mb-2">' +
+              (g.requestor ? '<div class="col-md-6"><strong>Requestor:</strong> ' + g.requestor + '</div>' : '') +
+              (g.department ? '<div class="col-md-6"><strong>Dept:</strong> ' + g.department + '</div>' : '') +
+              (g.joNo ? '<div class="col-md-6"><strong>JO No:</strong> ' + g.joNo + '</div>' : '') +
+              (g.gemSoNo ? '<div class="col-md-6"><strong>GEM SO:</strong> ' + g.gemSoNo + '</div>' : '') +
+              (g.clientName ? '<div class="col-md-6"><strong>Client:</strong> ' + g.clientName + '</div>' : '') +
+              (g.project ? '<div class="col-md-6"><strong>Project:</strong> ' + g.project + '</div>' : '') +
+            '</div>' +
+            '<div class="table-responsive">' +
+              '<table class="table table-sm table-bordered mb-0">' +
+                '<thead class="table-light"><tr>' +
+                  '<th style="width:22%">Item Code</th>' +
+                  '<th>Description</th>' +
+                  '<th class="text-center" style="width:9%">Req.</th>' +
+                  '<th class="text-center" style="width:9%">Issued</th>' +
+                  '<th class="text-center" style="width:10%">Remaining</th>' +
+                  '<th class="text-center" style="width:8%">Unit</th>' +
+                '</tr></thead><tbody>';
+        g.items.forEach(function(it) {
+          html += '<tr>' +
+            '<td><code>' + (it.itemCode || '') + '</code></td>' +
+            '<td>' + (it.description || '') + '</td>' +
+            '<td class="text-center">' + (it.requestedQty || 0) + '</td>' +
+            '<td class="text-center">' + (it.issuedQty || 0) + '</td>' +
+            '<td class="text-center fw-bold text-danger">' + (it.remainingQty || 0) + '</td>' +
+            '<td class="text-center">' + (it.unit || 'PCS') + '</td>' +
+            '</tr>';
+        });
+        html += '</tbody></table></div>' +
           '</div>' +
           '</div>';
       });
       container.innerHTML = html;
-      container.querySelectorAll('.list-group-item').forEach(function(el) {
-        el.addEventListener('click', function() {
-          var docNo = this.getAttribute('data-docno');
-          if (docNo) {
-            modal.hide();
-            selectModule('MRIF').then(function() { onDocSelect(docNo); });
-          }
-        });
-      });
     } catch(err) {
       if (container) container.innerHTML = '<div class="list-group-item text-danger text-center py-4">Failed: ' + err.message + '</div>';
     }
+  };
+
+  // ─── Open Process Balance modal ───
+  var _processPartialDocNo = null;
+  var _processPartialItems = [];
+
+  window.openProcessPartialModal = async function(docNo) {
+    if (!docNo) return;
+    _processPartialDocNo = docNo;
+    var modalEl = document.getElementById('processPartialModal');
+    if (!modalEl) { showToast('Process Balance modal not found', 'danger'); return; }
+    var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+    var titleEl = document.getElementById('processPartialDocTitle');
+    if (titleEl) titleEl.textContent = 'Process Balance for ' + docNo;
+
+    var body = document.getElementById('processPartialBody');
+    if (body) body.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading items...</div></div>';
+
+    modal.show();
+
+    try {
+      var all = await fetchPartialItems();
+      _processPartialItems = all.filter(function(it) {
+        return (it.originalDocNo || it.docNo) === docNo;
+      });
+
+      if (!_processPartialItems.length) {
+        if (body) body.innerHTML = '<div class="alert alert-info mb-0">No open partial items for this document.</div>';
+        return;
+      }
+
+      var html = '<div class="alert alert-info small py-2 mb-3">' +
+        '<i class="bi bi-info-circle me-1"></i> ' +
+        'This will create a new sheet named <strong>Bal.' + docNo + '</strong> containing the items below.' +
+        '</div>' +
+        '<div class="table-responsive"><table class="table table-sm table-bordered">' +
+        '<thead class="table-light"><tr>' +
+          '<th style="width:5%">#</th>' +
+          '<th style="width:20%">Item Code</th>' +
+          '<th>Description</th>' +
+          '<th class="text-center" style="width:8%">Unit</th>' +
+          '<th class="text-center" style="width:12%">New Qty</th>' +
+          '<th style="width:15%">Remarks</th>' +
+        '</tr></thead><tbody>';
+
+      _processPartialItems.forEach(function(it, idx) {
+        html += '<tr>' +
+          '<td class="text-center">' + (idx + 1) + '</td>' +
+          '<td><code>' + (it.itemCode || '') + '</code></td>' +
+          '<td>' + (it.description || '') + '</td>' +
+          '<td class="text-center">' + (it.unit || 'PCS') + '</td>' +
+          '<td class="text-center">' +
+            '<input type="number" class="form-control form-control-sm text-center process-qty-input" ' +
+            'data-idx="' + idx + '" value="' + (it.remainingQty || 0) + '" min="0" step="0.01" style="width:80px;margin:0 auto;">' +
+          '</td>' +
+          '<td>' +
+            '<input type="text" class="form-control form-control-sm process-remarks-input" ' +
+            'data-idx="' + idx + '" placeholder="Optional" maxlength="200">' +
+          '</td>' +
+          '</tr>';
+      });
+
+      html += '</tbody></table></div>' +
+        '<div class="mt-2 text-muted small">' +
+        '<i class="bi bi-lightbulb me-1"></i> Adjust the "New Qty" to match what you are processing now. ' +
+        'Original document will be marked COMPLETED with a note referencing the Balance sheet.' +
+        '</div>';
+
+      if (body) body.innerHTML = html;
+    } catch(err) {
+      if (body) body.innerHTML = '<div class="alert alert-danger">Failed to load items: ' + err.message + '</div>';
+    }
+  };
+
+  window.submitProcessBalance = function() {
+    if (!_processPartialDocNo || !_processPartialItems.length) {
+      showToast('No items to process', 'warning');
+      return;
+    }
+    var btn = document.getElementById('btnSubmitProcessBalance');
+    return withButtonLoading(btn, async function() {
+      var itemsPayload = [];
+      _processPartialItems.forEach(function(it, idx) {
+        var qtyInput = document.querySelector('.process-qty-input[data-idx="' + idx + '"]');
+        var remarksInput = document.querySelector('.process-remarks-input[data-idx="' + idx + '"]');
+        var qty = qtyInput ? (parseFloat(qtyInput.value) || 0) : 0;
+        var remarks = remarksInput ? (remarksInput.value || '').trim() : '';
+        if (qty > 0) {
+          itemsPayload.push({
+            inventoryId: it.itemCode || '',
+            description: it.description || '',
+            qty: qty,
+            issuedQty: '',
+            unit: it.unit || 'PCS',
+            remarks: remarks || 'PENDING',
+            originalRowIndex: it.originalRowIndex || 0
+          });
+        }
+      });
+
+      if (!itemsPayload.length) {
+        showToast('Please enter at least one quantity > 0', 'warning');
+        return;
+      }
+
+      try {
+        var payload = {
+          action: 'processPartialBalance',
+          originalDocNo: _processPartialDocNo,
+          items: itemsPayload,
+          processedBy: _getCurrentUserName() || 'WAREHOUSE'
+        };
+        var res = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          redirect: 'follow'
+        });
+        var text = await res.text();
+        var data;
+        try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+        if (data && data.success) {
+          var processModalEl = document.getElementById('processPartialModal');
+          if (processModalEl) {
+            var pm = bootstrap.Modal.getInstance(processModalEl);
+            if (pm) pm.hide();
+          }
+          showToast('Balance MRIF created: ' + data.balDocNo, 'success');
+          // Refresh counts and lists
+          if (typeof updatePartialCount === 'function') updatePartialCount();
+          if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
+          // Refresh the partial items modal so the processed rows disappear
+          setTimeout(function() {
+            var p = document.getElementById('partialItemsModal');
+            if (p) {
+              var pm2 = bootstrap.Modal.getInstance(p);
+              if (pm2 && pm2._isShown) openPartialItemsModal();
+            }
+          }, 400);
+        } else {
+          showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
+        }
+      } catch(err) {
+        showToast('Error: ' + err.message, 'danger');
+      }
+    }, 'Creating Balance...');
   };
 
   window.updatePartialCount = async function() {
