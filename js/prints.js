@@ -1,26 +1,35 @@
 // ============================================================
-// PRINT PREVIEW FUNCTIONS (with Bulk Print support)
+// PRINT PREVIEW FUNCTIONS (with Bulk Print + Bal.MRIF support)
 // ============================================================
 
-// ─── Helper: load document list for a module ────────────────────
+// ─── Helper: Display doc number (strips -dept suffix, keeps "Bal." prefix) ───
+function _displayDocNo(docNo) {
+  if (!docNo) return '';
+  if (docNo.indexOf('Bal.') === 0) {
+    var rest = docNo.substring(4);
+    var cleaned = rest.replace(/-\w+$/, '');
+    return 'Bal.' + cleaned;
+  }
+  return cleanDocNo(docNo);
+}
+
+// ─── Helper: load document list for a module ────
 async function loadDocumentListForModule(docType) {
   var prevModule = state.currentModule;
   state.currentModule = docType;
   var id = getCleanSheetId();
   state.currentModule = prevModule;
-  
+
   if (!id) {
     showToast('⚠️ No Sheet ID for ' + docType + '. Please sync or enter it in Settings.', 'warning');
     return [];
   }
-  
+
   try {
     const url = API_URL + '?action=getPendingDocs&docType=' + docType + '&sheetId=' + id + '&_t=' + Date.now();
-    console.log('[loadDocumentListForModule] URL:', url);
     const res = await fetch(url, { redirect: 'follow' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const text = await res.text();
-    console.log('[loadDocumentListForModule] Raw response:', text.substring(0, 500));
     let data;
     try { data = JSON.parse(text); } catch(e) { data = {}; }
     if (data.error) {
@@ -36,7 +45,7 @@ async function loadDocumentListForModule(docType) {
   }
 }
 
-// ─── Render document list with checkboxes ──────────────────────
+// ─── Render document list with checkboxes ────
 function renderDocumentList(container, docs, docType) {
   if (!container) return;
   container.innerHTML = '';
@@ -44,23 +53,33 @@ function renderDocumentList(container, docs, docType) {
     container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No ' + docType + ' documents found</div>';
     return;
   }
-  var ignoreList = ['MONITORING', 'SUMMARY', 'SYNC', 'SERVED', 'INVENTORYCODES', 'REQUESTOR LIST', 'SOF MONITORING 2026', 'GEMCOR PRF PO', 'Sheet1', 'LINKS', 'Copy of INVENTORYCODES', 'DOCLINKS'];
+  var ignoreList = ['MONITORING', 'SUMMARY', 'SYNC', 'SERVED', 'INVENTORYCODES', 'REQUESTOR LIST', 'SOF MONITORING 2026', 'GEMCOR PRF PO', 'Sheet1', 'LINKS', 'Copy of INVENTORYCODES', 'DOCLINKS', 'PARTIAL ITEMS'];
   var filtered = docs.filter(function(d) {
     var name = d.docNo || d.sheetName || '';
+    var upper = name.toUpperCase();
     for (var i = 0; i < ignoreList.length; i++) {
-      if (name.toUpperCase().indexOf(ignoreList[i]) !== -1) return false;
+      if (upper === ignoreList[i] || upper.indexOf(ignoreList[i]) !== -1) return false;
     }
+    // Keep Bal.MRIF too
+    if (upper.indexOf('BAL.') === 0) return true;
     return true;
   });
   if (filtered.length === 0) {
     container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No valid ' + docType + ' documents found</div>';
     return;
   }
-  
+
+  // Sort: Bal. docs come first (or alongside), alphabetically
+  filtered.sort(function(a, b) {
+    var na = (a.docNo || a.sheetName || '').toUpperCase();
+    var nb = (b.docNo || b.sheetName || '').toUpperCase();
+    return na.localeCompare(nb);
+  });
+
   // Add a select-all header row
   var header = document.createElement('div');
   header.className = 'list-group-item d-flex align-items-center bg-light';
-  header.innerHTML = 
+  header.innerHTML =
     '<div class="form-check me-3">' +
       '<input type="checkbox" id="selectAllDocs" onchange="toggleAllDocs(this.checked)">' +
       '<label class="form-check-label" for="selectAllDocs"> Select All</label>' +
@@ -68,22 +87,25 @@ function renderDocumentList(container, docs, docType) {
     '<span class="fw-bold flex-grow-1">Document</span>' +
     '<span class="fw-bold">Action</span>';
   container.appendChild(header);
-  
+
   filtered.forEach(function(d) {
     var docNo = typeof d === 'string' ? d : (d.docNo || d.name || d.sheetName || '');
+    var isBal = docNo.toUpperCase().indexOf('BAL.') === 0;
     var el = document.createElement('div');
     el.className = 'list-group-item d-flex align-items-center';
-    var color = docType === 'MRR' ? 'success' : (docType === 'MRIF' ? 'warning' : 'warning');
-    el.innerHTML = 
+    var color = docType === 'MRR' ? 'success' : (isBal ? 'info' : (docType === 'MRIF' ? 'warning' : 'warning'));
+    var icon = isBal ? 'bi-layers-fill' : 'bi-file-earmark-text';
+    var badge = isBal ? ' <span class="badge bg-info text-dark">BAL</span>' : '';
+    el.innerHTML =
       '<div class="form-check me-3">' +
         '<input type="checkbox" class="doc-checkbox" data-docno="' + docNo + '" data-doc-type="' + docType + '">' +
       '</div>' +
-      '<div class="flex-grow-1"><i class="bi bi-file-earmark-text me-2 text-' + color + '"></i><strong>' + docNo + '</strong></div>' +
+      '<div class="flex-grow-1"><i class="bi ' + icon + ' me-2 text-' + color + '"></i><strong>' + docNo + '</strong>' + badge + '</div>' +
       '<button class="btn btn-sm btn-outline-primary print-single-btn" data-docno="' + docNo + '" data-doc-type="' + docType + '">' +
         '<i class="bi bi-eye me-1"></i> View / Print' +
       '</button>';
     container.appendChild(el);
-    
+
     el.querySelector('.print-single-btn').addEventListener('click', function(e) {
       e.stopPropagation();
       var doc = this.getAttribute('data-docno');
@@ -93,16 +115,14 @@ function renderDocumentList(container, docs, docType) {
       else if (type === 'MRS') openMrsPrint(doc);
     });
   });
-  
+
   container.dataset.docType = docType;
 }
 
-// ─── Toggle all checkboxes ──────────────────────────────────────
 function toggleAllDocs(checked) {
   document.querySelectorAll('.doc-checkbox').forEach(cb => cb.checked = checked);
 }
 
-// ─── Get selected documents ────────────────────────────────────
 function getSelectedDocs() {
   var selected = [];
   document.querySelectorAll('.doc-checkbox:checked').forEach(cb => {
@@ -114,41 +134,32 @@ function getSelectedDocs() {
   return selected;
 }
 
-// ─── Print selected documents ──────────────────────────────────
 async function printSelectedDocs() {
   var selected = getSelectedDocs();
   if (selected.length === 0) {
     showToast('Please select at least one document', 'warning');
     return;
   }
-  
+
   var docType = selected[0].docType;
   var docNos = selected.map(s => s.docNo);
-  
+
   showLoading('Loading ' + docNos.length + ' documents...');
   try {
     var sheetKey = 'sheetId_' + docType;
     var sheetIdVal = localStorage.getItem(sheetKey);
     var sheetIdClean = sheetIdVal ? extractSheetId(sheetIdVal) : '';
-    
+
     var url = API_URL + '?action=getMultipleDocItems&docNos=' + encodeURIComponent(docNos.join(',')) +
               '&docType=' + docType + '&sheetId=' + encodeURIComponent(sheetIdClean) + '&_t=' + Date.now();
-    console.log('[printSelectedDocs] URL:', url);
     var res = await fetch(url, { redirect: 'follow' });
     var text = await res.text();
-    console.log('[printSelectedDocs] Raw response:', text.substring(0, 500));
     var data;
     try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
-    
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to load documents');
-    }
-    
-    if (!data.documents || data.documents.length === 0) {
-      throw new Error('No document data returned');
-    }
-    
-    // If only one document, use the original render function for better compatibility
+
+    if (!data.success) throw new Error(data.error || 'Failed to load documents');
+    if (!data.documents || data.documents.length === 0) throw new Error('No document data returned');
+
     if (data.documents.length === 1) {
       var docData = data.documents[0];
       if (docType === 'MRIF') renderMrifPrint(docData.docNo, docData.info, docData.items);
@@ -157,17 +168,15 @@ async function printSelectedDocs() {
     } else {
       renderBulkPrintPreview(data.documents, docType);
     }
-    
-    // Close the list modal
+
     if (docType === 'MRIF' && mrifListModal) mrifListModal.hide();
     else if (docType === 'MRR' && mrrListModal) mrrListModal.hide();
     else if (docType === 'MRS' && mrsListModal) mrsListModal.hide();
-    
-    // Show the print modal
+
     if (docType === 'MRIF' && mrifPrintModal) mrifPrintModal.show();
     else if (docType === 'MRR' && mrrPrintModal) mrrPrintModal.show();
     else if (docType === 'MRS' && mrsPrintModal) mrsPrintModal.show();
-    
+
   } catch(err) {
     console.error('[printSelectedDocs] Error:', err);
     showToast('Error: ' + err.message, 'danger');
@@ -176,42 +185,27 @@ async function printSelectedDocs() {
   }
 }
 
-// ─── Render bulk print preview ──────────────────────────────────
 function renderBulkPrintPreview(documents, docType) {
   var container = null;
   if (docType === 'MRIF') container = document.getElementById('mrifPrintContent');
   else if (docType === 'MRR') container = document.getElementById('mrrPrintContent');
   else if (docType === 'MRS') container = document.getElementById('mrsPrintContent');
-  
-  if (!container) {
-    showToast('Print container not found', 'danger');
-    return;
-  }
-  
+  if (!container) { showToast('Print container not found', 'danger'); return; }
+
   var combinedHtml = '';
   documents.forEach(function(docData, index) {
     var docNo = docData.docNo;
     var info = docData.info || {};
     var items = docData.items || [];
-    
-    if (docType === 'MRIF') {
-      combinedHtml += buildSingleMrifHtml(docNo, info, items);
-    } else if (docType === 'MRR') {
-      combinedHtml += buildSingleMrrHtml(docNo, info, items);
-    } else if (docType === 'MRS') {
-      combinedHtml += buildSingleMrsHtml(docNo, info, items);
-    }
-    
-    if (index < documents.length - 1) {
-      combinedHtml += '<div style="page-break-after: always;"></div>';
-    }
+    if (docType === 'MRIF') combinedHtml += buildSingleMrifHtml(docNo, info, items);
+    else if (docType === 'MRR') combinedHtml += buildSingleMrrHtml(docNo, info, items);
+    else if (docType === 'MRS') combinedHtml += buildSingleMrsHtml(docNo, info, items);
+    if (index < documents.length - 1) combinedHtml += '<div style="page-break-after: always;"></div>';
   });
-  
   container.innerHTML = combinedHtml;
-  console.log('[renderBulkPrintPreview] Rendered ' + documents.length + ' documents');
 }
 
-// ─── Build single MRIF HTML (for bulk print) ──────────────────
+// ─── Build single MRIF HTML ────
 function buildSingleMrifHtml(docNo, info, items) {
   var requestor = info.Requestor || info.requestor || info.requestorName || '';
   var department = info.Department || info.department || info.dept || '';
@@ -220,6 +214,10 @@ function buildSingleMrifHtml(docNo, info, items) {
   var joNo = info['JO No.'] || info.joNo || '';
   var client = info['Client Name'] || info.clientName || info.client || '';
   var project = info.Project || info.project || '';
+
+  var isBal = docNo.indexOf('Bal.') === 0;
+  var displayDocNo = _displayDocNo(docNo);
+  var titleText = isBal ? 'MATERIALS REQUEST AND ISSUANCE FORM (BALANCE)' : 'MATERIALS REQUEST AND ISSUANCE FORM';
 
   var dateStr = dateRaw;
   try {
@@ -238,7 +236,6 @@ function buildSingleMrifHtml(docNo, info, items) {
       var desc = it.description || it.desc || '';
       var qty = it.expectedQty || it.qty || it.requestedQty || 0;
       var issued = it.actualQty || it.issuedQty || it.atlQty || 0;
-      // ─── FIX: Show blank if issued is 0 ────────────────────
       var issuedDisplay = (issued === 0 || issued === '') ? '' : issued;
       var unit = it.unit || 'PIECE';
       var remarks = it.remarks || '';
@@ -266,11 +263,11 @@ function buildSingleMrifHtml(docNo, info, items) {
     '<div class="mrif-header">' +
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
       '<div class="mrif-docno">' +
-        '<div><span class="mrif-dn-label">MRIF No.:</span><span class="mrif-dn-box">' + cleanDocNo(docNo) + '</span></div>' +
+        '<div><span class="mrif-dn-label">MRIF No.:</span><span class="mrif-dn-box">' + displayDocNo + '</span></div>' +
         '<div class="mrif-doc-qr"><img src="' + mrifQrUrl + '" alt="MRIF QR" style="width:90px;height:90px;margin-top:4px;"></div>' +
       '</div>' +
     '</div>' +
-    '<div class="mrif-title">MATERIALS REQUEST AND ISSUANCE FORM</div>' +
+    '<div class="mrif-title">' + titleText + '</div>' +
     '<table class="mrif-meta">' +
       '<tr>' +
         '<td class="meta-label">REQUESTOR:</td>' +
@@ -325,7 +322,7 @@ function buildSingleMrifHtml(docNo, info, items) {
   '</div>';
 }
 
-// ─── Build single MRR HTML (for bulk print) ──────────────────
+// ─── Build single MRR HTML ────
 function buildSingleMrrHtml(docNo, info, items) {
   var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
   var vendor = info['Vendor/Client'] || info.vendor || info.client || '';
@@ -362,7 +359,6 @@ function buildSingleMrrHtml(docNo, info, items) {
       var desc = it.description || it.desc || it.itemDescription || '';
       var requestedQty = it.recQty || it.expectedQty || it.qty || it.quantity || 0;
       var receivedQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
-      // ─── FIX: Show blank if receivedQty is 0 ──────────────
       var receivedDisplay = (receivedQty === 0 || receivedQty === '') ? '' : receivedQty;
       var unit = it.unit || it.uom || 'PIECE';
       var remarks = it.remarks || it.status || it.note || '';
@@ -465,7 +461,7 @@ function buildSingleMrrHtml(docNo, info, items) {
   '</div>';
 }
 
-// ─── Build single MRS HTML (for bulk print) ──────────────────
+// ─── Build single MRS HTML ────
 function buildSingleMrsHtml(docNo, info, items) {
   var requestor = info.Requestor || info.requestor || info.requestorName || '';
   var department = info.Department || info.department || info.dept || '';
@@ -492,7 +488,6 @@ function buildSingleMrsHtml(docNo, info, items) {
       var desc = it.description || it.desc || '';
       var qtyReturned = it.expectedQty || it.qty || it.requestedQty || 0;
       var actualReturned = it.actualQty || it.issuedQty || it.atlQty || 0;
-      // ─── FIX: Show blank if actualReturned is 0 ──────────────
       var actualDisplay = (actualReturned === 0 || actualReturned === '') ? '' : actualReturned;
       var unit = it.unit || 'PIECE';
       var remarks = it.remarks || '';
@@ -579,38 +574,22 @@ function buildSingleMrsHtml(docNo, info, items) {
   '</div>';
 }
 
-// ─── Single document print functions ────────────────────────────
+// ─── Single document print functions ────
 async function openMrifPrint(docNo) {
   if (state.isLoading) return;
-  showLoading('Loading ' + cleanDocNo(docNo) + '...');
+  showLoading('Loading ' + _displayDocNo(docNo) + '...');
   try {
     var sheetId = getCleanSheetId();
     var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
-    console.log('[openMrifPrint] URL:', url);
     var res = await fetch(url, { redirect: 'follow' });
     var text = await res.text();
-    console.log('[openMrifPrint] Raw response:', text.substring(0, 500));
     var data;
-    try { data = JSON.parse(text); } catch(e) { 
-      console.error('[openMrifPrint] JSON parse error:', e);
-      data = {}; 
-    }
-    if (data.error) {
-      showToast('Error: ' + data.error, 'danger');
-      return;
-    }
-    if (!data.success) {
-      showToast('Error: ' + (data.error || 'Failed to load document'), 'danger');
-      return;
-    }
-    if (!data.items || data.items.length === 0) {
-      console.warn('[openMrifPrint] No items found for ' + docNo, data.debug);
-    }
+    try { data = JSON.parse(text); } catch(e) { data = {}; }
+    if (data.error) { showToast('Error: ' + data.error, 'danger'); return; }
+    if (!data.success) { showToast('Error: ' + (data.error || 'Failed to load document'), 'danger'); return; }
     renderMrifPrint(docNo, data.info || {}, data.items || []);
     if (mrifListModal) mrifListModal.hide();
-    setTimeout(function() {
-      if (mrifPrintModal) mrifPrintModal.show();
-    }, 300);
+    setTimeout(function() { if (mrifPrintModal) mrifPrintModal.show(); }, 300);
   } catch(err) {
     console.error('[openMrifPrint] Error:', err);
     showToast('Failed to load document: ' + err.message, 'danger');
@@ -621,32 +600,19 @@ async function openMrifPrint(docNo) {
 
 async function openMrrPrint(docNo) {
   if (state.isLoading) return;
-  showLoading('Loading ' + cleanDocNo(docNo) + '...');
+  showLoading('Loading ' + _displayDocNo(docNo) + '...');
   try {
     var sheetId = getCleanSheetId();
     var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRR&sheetId=' + sheetId + '&_t=' + Date.now();
-    console.log('[openMrrPrint] URL:', url);
     var res = await fetch(url, { redirect: 'follow' });
     var text = await res.text();
-    console.log('[openMrrPrint] Raw response:', text.substring(0, 500));
     var data;
-    try { data = JSON.parse(text); } catch(e) { 
-      console.error('[openMrrPrint] JSON parse error:', e);
-      data = {}; 
-    }
-    if (data.error) {
-      showToast('Error: ' + data.error, 'danger');
-      return;
-    }
-    if (!data.success) {
-      showToast('Error: ' + (data.error || 'Failed to load document'), 'danger');
-      return;
-    }
+    try { data = JSON.parse(text); } catch(e) { data = {}; }
+    if (data.error) { showToast('Error: ' + data.error, 'danger'); return; }
+    if (!data.success) { showToast('Error: ' + (data.error || 'Failed to load document'), 'danger'); return; }
     renderMrrPrint(docNo, data.info || {}, data.items || []);
     if (mrrListModal) mrrListModal.hide();
-    setTimeout(function() {
-      if (mrrPrintModal) mrrPrintModal.show();
-    }, 300);
+    setTimeout(function() { if (mrrPrintModal) mrrPrintModal.show(); }, 300);
   } catch(err) {
     console.error('[openMrrPrint] Error:', err);
     showToast('Failed to load document: ' + err.message, 'danger');
@@ -657,32 +623,19 @@ async function openMrrPrint(docNo) {
 
 async function openMrsPrint(docNo) {
   if (state.isLoading) return;
-  showLoading('Loading ' + cleanDocNo(docNo) + '...');
+  showLoading('Loading ' + _displayDocNo(docNo) + '...');
   try {
     var sheetId = getCleanSheetId();
     var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRS&sheetId=' + sheetId + '&_t=' + Date.now();
-    console.log('[openMrsPrint] URL:', url);
     var res = await fetch(url, { redirect: 'follow' });
     var text = await res.text();
-    console.log('[openMrsPrint] Raw response:', text.substring(0, 500));
     var data;
-    try { data = JSON.parse(text); } catch(e) { 
-      console.error('[openMrsPrint] JSON parse error:', e);
-      data = {}; 
-    }
-    if (data.error) {
-      showToast('Error: ' + data.error, 'danger');
-      return;
-    }
-    if (!data.success) {
-      showToast('Error: ' + (data.error || 'Failed to load document'), 'danger');
-      return;
-    }
+    try { data = JSON.parse(text); } catch(e) { data = {}; }
+    if (data.error) { showToast('Error: ' + data.error, 'danger'); return; }
+    if (!data.success) { showToast('Error: ' + (data.error || 'Failed to load document'), 'danger'); return; }
     renderMrsPrint(docNo, data.info || {}, data.items || []);
     if (mrsListModal) mrsListModal.hide();
-    setTimeout(function() {
-      if (mrsPrintModal) mrsPrintModal.show();
-    }, 300);
+    setTimeout(function() { if (mrsPrintModal) mrsPrintModal.show(); }, 300);
   } catch(err) {
     console.error('[openMrsPrint] Error:', err);
     showToast('Failed to load document: ' + err.message, 'danger');
@@ -691,46 +644,37 @@ async function openMrsPrint(docNo) {
   }
 }
 
-// ─── Direct render functions ──────────────────────────────────
+// ─── Direct render functions ────
 function renderMrifPrint(docNo, info, items) {
   var container = document.getElementById('mrifPrintContent');
   if (!container) return;
   container.innerHTML = buildSingleMrifHtml(docNo, info, items);
-  console.log('[renderMrifPrint] Rendered MRIF:', docNo);
 }
 
 function renderMrrPrint(docNo, info, items) {
   var container = document.getElementById('mrrPrintContent');
   if (!container) return;
   container.innerHTML = buildSingleMrrHtml(docNo, info, items);
-  console.log('[renderMrrPrint] Rendered MRR:', docNo);
 }
 
 function renderMrsPrint(docNo, info, items) {
   var container = document.getElementById('mrsPrintContent');
   if (!container) return;
   container.innerHTML = buildSingleMrsHtml(docNo, info, items);
-  console.log('[renderMrsPrint] Rendered MRS:', docNo);
 }
 
-// ─── Print functions ────────────────────────────────────────────
+// ─── Print functions ────
 function printMrif() { printWithIframe('mrifPrintContent', 'MRIF Print'); }
 function printMrr() { printWithIframe('mrrPrintContent', 'MRR Print'); }
 function printMrs() { printWithIframe('mrsPrintContent', 'MRS Print'); }
 
 function printWithIframe(containerId, title) {
   var previewContent = document.getElementById(containerId);
-  if (!previewContent) {
-    showToast('Print content not found', 'danger');
-    return;
-  }
+  if (!previewContent) { showToast('Print content not found', 'danger'); return; }
   var sheetHtml = previewContent.innerHTML;
-  if (!sheetHtml || sheetHtml.trim() === '') {
-    showToast('Nothing to print', 'warning');
-    return;
-  }
+  if (!sheetHtml || sheetHtml.trim() === '') { showToast('Nothing to print', 'warning'); return; }
 
-  var printStyles = 
+  var printStyles =
     '@page { size: letter portrait; margin: 0.25in; }' +
     '* { box-sizing: border-box; }' +
     'body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #000; line-height: 1.3; }' +
@@ -794,31 +738,21 @@ function printWithIframe(containerId, title) {
       showToast('Print failed. Try again.', 'danger');
     }
     setTimeout(function() {
-      if (iframe.parentNode) {
-        document.body.removeChild(iframe);
-      }
+      if (iframe.parentNode) document.body.removeChild(iframe);
     }, 2000);
   }, 800);
 }
 
-function closeMrifPrint() {
-  if (mrifPrintModal) mrifPrintModal.hide();
-}
-function closeMrrPrint() {
-  if (mrrPrintModal) mrrPrintModal.hide();
-}
-function closeMrsPrint() {
-  if (mrsPrintModal) mrsPrintModal.hide();
-}
+function closeMrifPrint() { if (mrifPrintModal) mrifPrintModal.hide(); }
+function closeMrrPrint() { if (mrrPrintModal) mrrPrintModal.hide(); }
+function closeMrsPrint() { if (mrsPrintModal) mrsPrintModal.hide(); }
 
-// ─── List modals ──────────────────────────────────────────────────
+// ─── List modals ────
 async function openMrifList() {
   if (state.isLoading) return;
   if (mrifListModal) mrifListModal.show();
   var container = document.getElementById('mrifListContainer');
-  if (container) {
-    container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRIF documents...</div></div>';
-  }
+  if (container) container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRIF documents...</div></div>';
   try {
     var docs = await loadDocumentListForModule('MRIF');
     renderDocumentList(container, docs, 'MRIF');
@@ -831,9 +765,7 @@ async function openMrrList() {
   if (state.isLoading) return;
   if (mrrListModal) mrrListModal.show();
   var container = document.getElementById('mrrListContainer');
-  if (container) {
-    container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRR documents...</div></div>';
-  }
+  if (container) container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRR documents...</div></div>';
   try {
     var docs = await loadDocumentListForModule('MRR');
     renderDocumentList(container, docs, 'MRR');
@@ -846,9 +778,7 @@ async function openMrsList() {
   if (state.isLoading) return;
   if (mrsListModal) mrsListModal.show();
   var container = document.getElementById('mrsListContainer');
-  if (container) {
-    container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRS documents...</div></div>';
-  }
+  if (container) container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading MRS documents...</div></div>';
   try {
     var docs = await loadDocumentListForModule('MRS');
     renderDocumentList(container, docs, 'MRS');
