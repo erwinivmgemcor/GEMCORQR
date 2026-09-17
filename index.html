@@ -1013,55 +1013,62 @@
   </div>
 </div>
 
-<!-- PO Items Modal (with auto-suggest for missing codes) -->
+<!-- PO Items Modal (Wide desktop, responsive mobile) -->
 <div class="modal fade" id="poItemsModal" tabindex="-1">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable po-items-modal-dialog">
     <div class="modal-content">
       <div class="modal-header bg-success text-white">
         <h5 class="modal-title"><i class="bi bi-clipboard-check me-2"></i>Select Arrived Items</h5>
         <button type="button" class="btn-close btn-close-white" onclick="closePoItemsModal()"></button>
       </div>
       <div class="modal-body">
+        <!-- PO Info -->
         <div id="poInfoDisplay" class="card bg-light mb-3">
           <div class="card-body py-2">
             <div class="row g-2">
-              <div class="col-6"><div class="small text-muted">PO Number</div><div class="fw-bold" id="poDisplayNo">-</div></div>
-              <div class="col-6"><div class="small text-muted">PRF No.</div><div class="fw-bold" id="poDisplayPrf">-</div></div>
-              <div class="col-12"><div class="small text-muted">Client / Vendor</div><div class="fw-bold" id="poDisplayClient">-</div></div>
+              <div class="col-6 col-md-4"><div class="small text-muted">PO Number</div><div class="fw-bold" id="poDisplayNo">-</div></div>
+              <div class="col-6 col-md-4"><div class="small text-muted">PRF No.</div><div class="fw-bold" id="poDisplayPrf">-</div></div>
+              <div class="col-12 col-md-4"><div class="small text-muted">Client / Vendor</div><div class="fw-bold" id="poDisplayClient">-</div></div>
             </div>
           </div>
         </div>
 
-        <!-- Datalist for auto-suggest -->
         <datalist id="inventoryCodeList"></datalist>
 
+        <!-- Warnings -->
         <div id="poIncompleteWarning" class="alert alert-warning d-none">
           <i class="bi bi-exclamation-triangle-fill me-2"></i>
-          <strong>Some items are incomplete.</strong> Please fill in the missing Item Code and Description below, or uncheck items that you cannot complete.
+          <strong>Some items are incomplete.</strong> Please fill in the missing Item Code and Description below, or click <strong>Clear</strong> to reset an item and enter the correct one.
         </div>
         <div class="alert alert-info small py-1">
           <i class="bi bi-lightbulb me-1"></i> <strong>Tip:</strong> Start typing an Item Code – suggestions from the inventory master will appear automatically.
         </div>
 
-      <div class="d-flex justify-content-between align-items-center mb-2">
-  <small class="text-muted"><i class="bi bi-info-circle me-1"></i>Check items that arrived</small>
-  <div class="d-flex gap-2">
-    <button class="btn btn-sm btn-outline-primary" onclick="selectAllPoItems(true)">
-      <i class="bi bi-check-all me-1"></i>All
-    </button>
-    <button class="btn btn-sm btn-success" onclick="addPoManualItem()">
-      <i class="bi bi-plus-lg me-1"></i>Add Missing Item
-    </button>
-  </div>
-</div>
-        <div id="poItemsList" style="max-height:350px;overflow-y:auto;"></div>
+        <!-- Toolbar -->
+        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+          <small class="text-muted"><i class="bi bi-info-circle me-1"></i>Check items that arrived</small>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllPoItems(true)">
+              <i class="bi bi-check-all me-1"></i>All
+            </button>
+            <button type="button" class="btn btn-sm btn-success" onclick="addPoManualItem()">
+              <i class="bi bi-plus-lg me-1"></i>Add Missing Item
+            </button>
+          </div>
+        </div>
+
+        <!-- Items List -->
+        <div id="poItemsList" class="po-items-list"></div>
+
         <hr>
+
+        <!-- Doc Reference -->
         <div class="row g-2">
-          <div class="col-12">
+          <div class="col-12 col-md-6">
             <label class="form-label small">D.R. No. / S.I. No. / A.R. No.</label>
             <input type="text" id="mrrDrNo" class="form-control" placeholder="Enter document reference">
           </div>
-          <div class="col-12">
+          <div class="col-12 col-md-6">
             <label class="form-label small">Receiving Date</label>
             <input type="date" id="mrrReceivingDate" class="form-control">
           </div>
