@@ -1,7 +1,7 @@
 // ============================================================
 // WAREHOUSE CORE FUNCTIONS
 // (Optimized + Partial Items + Balance MRIF + Clear/Edit PO Items
-//  + Double-Processing Protection)
+//  + Restore PO Items + New Row Feedback + Double-Processing Protection)
 // ============================================================
 
 (function() {
@@ -18,6 +18,17 @@
   function _getCurrentUserName() {
     return state.currentUserFullname || state.currentUser || '';
   }
+
+  // ═══════════════════════════════════════════════════════════
+  // PO ITEMS — SNAPSHOT SUPPORT
+  // ═══════════════════════════════════════════════════════════
+  var _originalPoItems = null;
+
+  window._saveOriginalPoItems = function() {
+    try {
+      _originalPoItems = JSON.parse(JSON.stringify(state.poItemsData || []));
+    } catch(e) { _originalPoItems = []; }
+  };
 
   // ─── Core ──────────────────────────────────────────────
   window.getCleanSheetId = function() {
@@ -187,11 +198,9 @@
     resetDocumentState();
     stopScanner();
 
-    // ─── Remove the already-processed banner if present ───
     var oldBanner = document.getElementById('alreadyProcessedBanner');
     if (oldBanner && oldBanner.parentNode) oldBanner.parentNode.removeChild(oldBanner);
 
-    // ─── Restore scanner + manual input visibility ───
     var scannerContainer = document.querySelector('#activeTransactionSection .scanner-container');
     if (scannerContainer) scannerContainer.style.display = '';
     var manualInput = document.getElementById('manualInput');
@@ -291,25 +300,19 @@
     startScanner();
   };
 
-  // ═══════════════════════════════════════════════════════════════════
-  // CHECK IF ALREADY PROCESSED — disables UI, hides scanner, shows banner
-  // ═══════════════════════════════════════════════════════════════════
   window.checkIfAlreadyProcessed = function() {
     if (state.items.length === 0) return;
-
     var allDone = state.items.every(function(item) {
       var r = String(item.remarks || '').toUpperCase();
       return r.indexOf('SERVED') !== -1 || r.indexOf('COMPLETE') !== -1;
     });
 
-    // ─── If not yet processed → clean up any leftovers and exit ───
     if (!allDone) {
       var oldBanner = document.getElementById('alreadyProcessedBanner');
       if (oldBanner && oldBanner.parentNode) oldBanner.parentNode.removeChild(oldBanner);
       return;
     }
 
-    // ─── 1) Disable submit button ───
     var btn = document.getElementById('submitBtn');
     var txt = document.getElementById('submitBtnText');
     if (btn) {
@@ -319,10 +322,8 @@
     }
     if (txt) txt.textContent = '✅ Already Processed';
 
-    // ─── 2) Stop the scanner ───
     try { stopScanner(); } catch(e) {}
 
-    // ─── 3) Hide scanning controls ───
     var scannerContainer = document.querySelector('#activeTransactionSection .scanner-container');
     if (scannerContainer) scannerContainer.style.display = 'none';
     var manualInput = document.getElementById('manualInput');
@@ -331,17 +332,14 @@
       if (group) group.style.display = 'none';
     }
 
-    // ─── 4) Disable bulk action buttons ───
     document.querySelectorAll('#activeTransactionSection button').forEach(function(b) {
       var onclick = b.getAttribute('onclick') || '';
-      if (onclick.indexOf('openBatchVerify') !== -1 ||
-          onclick.indexOf('toggleSelectAll') !== -1) {
+      if (onclick.indexOf('openBatchVerify') !== -1 || onclick.indexOf('toggleSelectAll') !== -1) {
         b.disabled = true;
         b.classList.add('opacity-50');
       }
     });
 
-    // ─── 5) Show green banner ───
     if (!document.getElementById('alreadyProcessedBanner')) {
       var banner = document.createElement('div');
       banner.id = 'alreadyProcessedBanner';
@@ -402,10 +400,7 @@
     var btn = document.getElementById('submitBtn');
     var txt = document.getElementById('submitBtnText');
     if (!btn || !txt) return;
-
-    // ─── Don't override if already-processed banner is showing ───
     if (document.getElementById('alreadyProcessedBanner')) return;
-
     if (total === 0) { btn.disabled = true; txt.textContent = 'No Items'; return; }
     btn.disabled = false;
     if (verified === total) {
@@ -460,16 +455,11 @@
 
   var isSubmitting = false;
 
-  // ═══════════════════════════════════════════════════════════════════
-  // SUBMIT — with double-processing guard
-  // ═══════════════════════════════════════════════════════════════════
   window.onSubmit = function() {
     var btn = document.getElementById('submitBtn');
-
     return withButtonLoading(btn, async function() {
       if (isSubmitting) return;
 
-      // ─── GUARD #1: block if the document is already fully SERVED/COMPLETE ───
       var allDone = state.items.length > 0 && state.items.every(function(item) {
         var r = String(item.remarks || '').toUpperCase();
         return r.indexOf('SERVED') !== -1 || r.indexOf('COMPLETE') !== -1;
@@ -479,7 +469,6 @@
         return;
       }
 
-      // ─── GUARD #2: filter out already-SERVED/COMPLETE items ───
       var verifiedItems = state.items.filter(function(i) {
         if (!i.verified) return false;
         var r = String(i.remarks || '').toUpperCase();
@@ -500,9 +489,7 @@
       }
 
       if (verified < total) {
-        if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly newly-verified items will be sent.')) {
-          return;
-        }
+        if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly newly-verified items will be sent.')) return;
       }
 
       isSubmitting = true;
@@ -533,7 +520,6 @@
             if (typeof updatePartialCount === 'function') updatePartialCount();
           }, 1500);
         } else {
-          // Server-side guard rejected
           var errMsg = (result && result.error) ? result.error : 'Submission failed';
           showToast(errMsg, 'danger');
           isSubmitting = false;
@@ -561,7 +547,9 @@
     return JSON.parse(text);
   };
 
-  // ─── PO ITEMS (always-editable code + desc + Clear button) ────
+  // ═══════════════════════════════════════════════════════════════
+  // PO ITEMS — RENDER, CLEAR, ADD, RESTORE
+  // ═══════════════════════════════════════════════════════════════
   window.renderPoItems = function() {
     var noEl = document.getElementById('poDisplayNo');
     var prfEl = document.getElementById('poDisplayPrf');
@@ -597,14 +585,19 @@
     list.innerHTML = state.poItemsData.map(function(item, idx) {
       var isManual = !!item._manual;
       var isMissing = !item.inventoryId || !item.inventoryId.trim() || !item.description || !item.description.trim();
+      var isNew = !!item._new;
+
       var borderClass = '';
       if (isMissing) borderClass = 'border border-danger';
       else if (isManual) borderClass = 'border border-info';
+
+      var newClass = isNew ? ' po-item-new' : '';
+
       var codeVal = item.inventoryId || '';
       var descVal = item.description || '';
       var isChecked = isManual ? true : !isMissing;
 
-      return '<div class="card mb-2 po-item-card ' + borderClass + '" id="po-card-' + idx + '">' +
+      return '<div class="card mb-2 po-item-card ' + borderClass + newClass + '" id="po-card-' + idx + '">' +
         '<div class="card-body py-2 px-3">' +
         '<div class="d-flex align-items-start gap-2">' +
         '<div class="form-check m-0 mt-3">' +
@@ -677,36 +670,87 @@
     });
   };
 
+  // ─── Clear a single PO item ───
   window.clearPoItem = function(idx) {
     if (!state.poItemsData[idx]) return;
+
     state.poItemsData[idx].inventoryId = '';
     state.poItemsData[idx].description = '';
     state.poItemsData[idx]._manual = true;
+
     renderPoItems();
+    updateCreateMrrButton();
+
     setTimeout(function() {
-      var el = document.getElementById('po-code-' + idx);
-      if (el) {
-        el.focus();
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      var modalBody = document.querySelector('#poItemsModal .modal-body');
+      var card = document.getElementById('po-card-' + idx);
+      if (card && modalBody) {
+        modalBody.scrollTop = card.offsetTop - 20;
       }
-    }, 100);
+      var el = document.getElementById('po-code-' + idx);
+      if (el) el.focus();
+    }, 80);
+
     showToast('Item cleared. Type or pick the correct item code.', 'info');
   };
 
+  // ─── Add a new manual item row ───
   window.addPoManualItem = function() {
-    if (!state.poItemsData) state.poItemsData = [];
-    state.poItemsData.push({
-      inventoryId: '', description: '', qty: 1, atlQty: 0, unit: 'PCS', remarks: '', _manual: true
-    });
+    try {
+      if (!state.poItemsData) state.poItemsData = [];
+
+      state.poItemsData.push({
+        inventoryId: '',
+        description: '',
+        qty: 1,
+        atlQty: 0,
+        unit: 'PCS',
+        remarks: '',
+        _manual: true,
+        _new: true
+      });
+
+      renderPoItems();
+      updateCreateMrrButton();
+
+      var newIdx = state.poItemsData.length - 1;
+
+      setTimeout(function() {
+        var modalBody = document.querySelector('#poItemsModal .modal-body');
+        var card = document.getElementById('po-card-' + newIdx);
+        if (card && modalBody) {
+          modalBody.scrollTo({ top: card.offsetTop - 20, behavior: 'smooth' });
+        } else if (card) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        var el = document.getElementById('po-code-' + newIdx);
+        if (el) el.focus();
+
+        setTimeout(function() {
+          if (state.poItemsData[newIdx]) {
+            state.poItemsData[newIdx]._new = false;
+            var card2 = document.getElementById('po-card-' + newIdx);
+            if (card2) card2.classList.remove('po-item-new');
+          }
+        }, 3000);
+      }, 100);
+
+      showToast('New row added. Enter the item code.', 'success');
+    } catch(err) {
+      console.error('[addPoManualItem] Error:', err);
+      showToast('Could not add item: ' + err.message, 'danger');
+    }
+  };
+
+  // ─── Restore PO items (undo all clears/additions) ───
+  window.restorePoItems = function() {
+    if (!_originalPoItems || _originalPoItems.length === 0) {
+      showToast('No original PO items to restore.', 'warning');
+      return;
+    }
+    state.poItemsData = JSON.parse(JSON.stringify(_originalPoItems));
     renderPoItems();
-    setTimeout(function() {
-      var idx = state.poItemsData.length - 1;
-      var card = document.getElementById('po-card-' + idx);
-      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      var el = document.getElementById('po-code-' + idx);
-      if (el) el.focus();
-    }, 100);
-    showToast('New row added. Enter the item code.', 'info');
+    showToast('PO items restored to original.', 'success');
   };
 
   function populateInventoryDatalist() {
@@ -867,6 +911,7 @@
           state.currentPoClient = data.client || '';
           state.currentPoSupplier = data.supplier || data.client || '';
           state.poItemsData = data.items;
+          window._saveOriginalPoItems();
           renderPoItems();
           if (state.poScanModal) state.poScanModal.hide();
           if (state.poItemsModal) state.poItemsModal.show();
@@ -898,6 +943,7 @@
           state.currentPoClient = data.client || '';
           state.currentPoSupplier = data.supplier || data.client || '';
           state.poItemsData = data.items;
+          window._saveOriginalPoItems();
           renderPoItems();
           if (state.poScanModal) state.poScanModal.hide();
           if (state.poItemsModal) state.poItemsModal.show();
@@ -912,7 +958,7 @@
 
   window.closePoScanModal = function() { if (state.poScanModal) state.poScanModal.hide(); };
 
-  // ─── QTY MODAL ────────────────────────────────────
+  // ─── QTY MODAL ───
   var currentModalItem = null;
 
   window.openQtyModal = function(item) {
@@ -1019,7 +1065,7 @@
   }
   window._positionSuggestDropdown = _positionSuggestDropdown;
 
-  // ─── CACHED LOADERS ────────────────────────────────
+  // ─── CACHED LOADERS ───
   window.loadRequestInventory = async function(forceRefresh) {
     var cacheKey = 'inventoryList';
     if (!forceRefresh) {
@@ -1133,7 +1179,7 @@
     datalist.innerHTML = html;
   };
 
-  // ─── MANUAL MRR ────────────────────────────────────
+  // ─── MANUAL MRR ───
   var manualMrrModal = null;
   var manualMrrItems = [];
 
@@ -1361,7 +1407,7 @@
     }, 'Creating MRR...');
   };
 
-  // ─── QUICK ACTIONS ─────────────────────────────────
+  // ─── QUICK ACTIONS ───
   window.quickProcessPending = function(btn) {
     return withButtonLoading(btn, async function() {
       var statusEl = document.getElementById('quickActionStatus');
