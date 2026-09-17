@@ -1,10 +1,11 @@
-const CACHE_NAME = 'gemcor-wms-v2.1.0';
+const CACHE_NAME = 'gemcor-wms-v2.1.1';
 const urlsToCache = [
   '/GEMCORQR/',
   '/GEMCORQR/index.html',
   '/GEMCORQR/style.css',
   '/GEMCORQR/gemcor-logo.png',
   '/GEMCORQR/js/config.js',
+  '/GEMCORQR/js/cache.js',
   '/GEMCORQR/js/utils.js',
   '/GEMCORQR/js/state.js',
   '/GEMCORQR/js/auth.js',
@@ -15,6 +16,8 @@ const urlsToCache = [
   '/GEMCORQR/js/prints.js',
   '/GEMCORQR/js/notifications.js',
   '/GEMCORQR/js/analytics.js',
+  '/GEMCORQR/js/history.js',
+  '/GEMCORQR/js/pending.js',
   '/GEMCORQR/js/main.js'
 ];
 
