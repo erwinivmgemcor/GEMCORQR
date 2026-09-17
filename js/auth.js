@@ -1,39 +1,52 @@
 // ============================================================
-// AUTHENTICATION & ROLE MANAGEMENT (with Button Loading)
+// AUTHENTICATION & ROLE MANAGEMENT
+// (With Production + Warehouse login — both require authentication)
 // ============================================================
 
+// Init pendingRole in state
+if (typeof state !== 'undefined' && state.pendingRole === undefined) {
+  state.pendingRole = null;
+}
+
 function initRole() {
+  // ─── Restore saved session ───
   var savedUser = localStorage.getItem('ivm_username');
+  var savedFullname = localStorage.getItem('ivm_userFullname');
+  var savedRole = localStorage.getItem('ivm_userRole');
+
   if (savedUser) {
     state.currentUser = savedUser;
-    state.currentUserFullname = localStorage.getItem('ivm_userFullname') || savedUser;
+    state.currentUserFullname = savedFullname || savedUser;
+  }
+  if (savedRole) {
+    state.userRole = savedRole;
   }
 
-  const role = localStorage.getItem('ivm_userRole');
-  if (!role) {
+  // ─── Require BOTH role AND username ───
+  if (!savedRole || !savedUser) {
+    // Clean partial state
+    if (savedRole && !savedUser) localStorage.removeItem('ivm_userRole');
     if (roleModal) roleModal.show();
-  } else {
-    applyRoleUI();
-    if (role === 'warehouse') {
-      if (!state.currentUser) {
-        setTimeout(showLoginModal, 300);
-      } else {
-        preloadWarehouseLists();
-        if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
-          setTimeout(function() { if (settingsModal) settingsModal.show(); }, 500);
-        }
-        selectModule('MRIF');
-        setTimeout(loadAnalytics, 500);
-        loadWarehouseNotifications();
-      }
-    } else {
-      checkProductionName();
+    return;
+  }
+
+  // ─── Both present → apply UI ───
+  applyRoleUI();
+
+  if (savedRole === 'warehouse') {
+    preloadWarehouseLists();
+    if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
+      setTimeout(function() { if (settingsModal) settingsModal.show(); }, 500);
     }
+    selectModule('MRIF');
+    setTimeout(loadAnalytics, 500);
+    loadWarehouseNotifications();
+  } else if (savedRole === 'production') {
+    loadMyRequests();
   }
 }
 
 async function preloadWarehouseLists() {
-  console.log('[Preload] Starting background preload...');
   try {
     Promise.allSettled([
       loadRequestInventory(false),
@@ -51,65 +64,55 @@ async function preloadWarehouseLists() {
   }
 }
 
+// ─── Role selection → show login ───
 function selectRole(role) {
-  if (role === 'production') {
-    localStorage.setItem('ivm_userRole', 'production');
-    if (roleModal) roleModal.hide();
-    applyRoleUI();
-    showToast('Production mode activated', 'success');
-    checkProductionName();
-  } else if (role === 'warehouse') {
-    if (state.currentUser) {
-      localStorage.setItem('ivm_userRole', 'warehouse');
-      if (roleModal) roleModal.hide();
-      applyRoleUI();
-      showToast('Warehouse mode activated', 'success');
-      preloadWarehouseLists();
-      if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
-        setTimeout(function() { if (settingsModal) settingsModal.show(); }, 500);
-      }
-      selectModule('MRIF');
-      loadWarehouseNotifications();
-      setTimeout(loadAnalytics, 500);
-    } else {
-      if (roleModal) roleModal.hide();
-      showLoginModal();
-    }
+  state.pendingRole = role;
+  if (roleModal) roleModal.hide();
+  showLoginModal(role);
+}
+
+// ─── Show login modal (role-specific) ───
+function showLoginModal(role) {
+  var loginModalEl = document.getElementById('loginModal');
+  if (!loginModalEl) return;
+
+  // Update title based on role
+  var titleEl = loginModalEl.querySelector('.modal-title');
+  if (titleEl) {
+    titleEl.innerHTML = '<i class="bi bi-shield-lock me-2"></i>' +
+      (role === 'production' ? 'Production Login' : 'Warehouse Login');
   }
-}
 
-function checkProductionName() {
-  var name = localStorage.getItem('ivm_requestorName');
-  if (!name) {
-    if (productionNameModal) productionNameModal.show();
-  } else {
-    loadMyRequests();
-  }
-}
-
-function saveProductionName() {
-  var name = document.getElementById('productionNameInput') ? document.getElementById('productionNameInput').value.trim() : '';
-  if (!name) { showToast('Please enter your name', 'warning'); return; }
-  localStorage.setItem('ivm_requestorName', name);
-  if (productionNameModal) productionNameModal.hide();
-  localStorage.removeItem('ivm_requestStatuses');
-  loadMyRequests();
-}
-
-function showLoginModal() {
-  var loginModal = document.getElementById('loginModal');
-  if (!loginModal) return;
+  // Reset fields
   var userField = document.getElementById('loginUsername');
   var passField = document.getElementById('loginPassword');
   var errorField = document.getElementById('loginError');
   if (userField) userField.value = '';
   if (passField) passField.value = '';
-  if (errorField) errorField.classList.add('d-none');
-  var modal = new bootstrap.Modal(loginModal, { backdrop: 'static' });
+  if (errorField) {
+    errorField.classList.add('d-none');
+    errorField.textContent = '';
+  }
+
+  var modal = bootstrap.Modal.getOrCreateInstance(loginModalEl, { backdrop: 'static', keyboard: false });
   modal.show();
   setTimeout(function() { if (userField) userField.focus(); }, 300);
 }
 
+// ─── Cancel login → return to role modal ───
+function backToRoleSelection() {
+  var loginModalEl = document.getElementById('loginModal');
+  if (loginModalEl) {
+    var m = bootstrap.Modal.getInstance(loginModalEl);
+    if (m) m.hide();
+  }
+  state.pendingRole = null;
+  setTimeout(function() {
+    if (roleModal) roleModal.show();
+  }, 300);
+}
+
+// ─── Actual login call ───
 async function loginUser() {
   var btn = document.getElementById('loginBtn');
 
@@ -126,24 +129,61 @@ async function loginUser() {
       return;
     }
 
+    var requestedRole = state.pendingRole || 'warehouse';
+
     try {
-      var url = API_URL + '?action=verifyUser&username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password) + '&_t=' + Date.now();
+      var url = API_URL + '?action=verifyUser&username=' + encodeURIComponent(username) +
+                '&password=' + encodeURIComponent(password) + '&_t=' + Date.now();
       var res = await fetch(url, { redirect: 'follow' });
       var data = await res.json();
-      if (data.success) {
-        state.currentUser = data.username;
-        state.currentUserFullname = data.fullname || data.username;
-        localStorage.setItem('ivm_username', state.currentUser);
-        localStorage.setItem('ivm_userFullname', state.currentUserFullname);
-        localStorage.setItem('ivm_userRole', 'warehouse');
 
-        var loginModal = document.getElementById('loginModal');
-        if (loginModal) {
-          var modal = bootstrap.Modal.getInstance(loginModal);
-          if (modal) modal.hide();
+      if (!data.success) {
+        if (errorField) {
+          errorField.textContent = data.error || 'Login failed';
+          errorField.classList.remove('d-none');
         }
-        showToast('Welcome, ' + state.currentUserFullname + '!', 'success');
-        applyRoleUI();
+        return;
+      }
+
+      // ─── Role authorization check ───
+      var serverRole = (data.role || 'warehouse').toLowerCase();
+      if (serverRole !== requestedRole) {
+        if (errorField) {
+          errorField.textContent = 'This account is not authorized as ' + requestedRole +
+            '. You are registered as ' + serverRole + '.';
+          errorField.classList.remove('d-none');
+        }
+        return;
+      }
+
+      // ─── Save session ───
+      state.currentUser = data.username;
+      state.currentUserFullname = data.fullname || data.username;
+      state.userRole = serverRole;
+      state.pendingRole = null;
+
+      localStorage.setItem('ivm_username', state.currentUser);
+      localStorage.setItem('ivm_userFullname', state.currentUserFullname);
+      localStorage.setItem('ivm_userRole', serverRole);
+
+      // For production, also store requestor name
+      if (serverRole === 'production') {
+        localStorage.setItem('ivm_requestorName', state.currentUserFullname);
+      }
+
+      // ─── Close login modal ───
+      var loginModalEl = document.getElementById('loginModal');
+      if (loginModalEl) {
+        var m = bootstrap.Modal.getInstance(loginModalEl);
+        if (m) m.hide();
+      }
+
+      showToast('Welcome, ' + state.currentUserFullname + '!', 'success');
+
+      // ─── Apply role UI ───
+      applyRoleUI();
+
+      if (serverRole === 'warehouse') {
         preloadWarehouseLists();
         if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
           setTimeout(function() { if (settingsModal) settingsModal.show(); }, 500);
@@ -151,12 +191,10 @@ async function loginUser() {
         selectModule('MRIF');
         loadWarehouseNotifications();
         setTimeout(loadAnalytics, 500);
-      } else {
-        if (errorField) {
-          errorField.textContent = data.error || 'Login failed';
-          errorField.classList.remove('d-none');
-        }
+      } else if (serverRole === 'production') {
+        loadMyRequests();
       }
+
     } catch(err) {
       if (errorField) {
         errorField.textContent = 'Network error: ' + err.message;
@@ -166,69 +204,58 @@ async function loginUser() {
   }, 'Signing in...');
 }
 
+// ─── Logout ───
 function logoutUser() {
-  if (confirm('Logout ' + (state.currentUserFullname || state.currentUser) + '?')) {
-    state.currentUser = null;
-    state.currentUserFullname = '';
-    localStorage.removeItem('ivm_username');
-    localStorage.removeItem('ivm_userFullname');
-    localStorage.removeItem('ivm_userRole');
-    location.reload();
-  }
+  if (!confirm('Logout ' + (state.currentUserFullname || state.currentUser) + '?')) return;
+  state.currentUser = null;
+  state.currentUserFullname = '';
+  state.userRole = null;
+  state.pendingRole = null;
+  localStorage.removeItem('ivm_username');
+  localStorage.removeItem('ivm_userFullname');
+  localStorage.removeItem('ivm_userRole');
+  localStorage.removeItem('ivm_requestorName');
+  location.reload();
 }
 
+// ─── PIN (admin fallback — kept for compatibility) ───
 function showPinEntry() {
   var section = document.getElementById('pinEntrySection');
   if (section) section.classList.remove('d-none');
   clearPin();
 }
-
 function enterPinDigit(d) {
   if (state.pinBuffer.length < 4) {
     state.pinBuffer += d;
     updatePinDots();
   }
 }
-
 function backspacePin() {
   state.pinBuffer = state.pinBuffer.slice(0, -1);
   updatePinDots();
 }
-
 function clearPin() {
   state.pinBuffer = '';
   updatePinDots();
   var err = document.getElementById('pinError');
   if (err) err.classList.add('d-none');
 }
-
 function updatePinDots() {
-  for (let i = 1; i <= 4; i++) {
-    const dot = document.getElementById('pinDot' + i);
+  for (var i = 1; i <= 4; i++) {
+    var dot = document.getElementById('pinDot' + i);
     if (dot) {
       if (i <= state.pinBuffer.length) dot.classList.add('filled');
       else dot.classList.remove('filled');
     }
   }
 }
-
 function verifyPin() {
-  const storedPin = localStorage.getItem('ivm_warehousePin') || DEFAULT_PIN;
+  var storedPin = localStorage.getItem('ivm_warehousePin') || DEFAULT_PIN;
   if (state.pinBuffer === storedPin) {
-    localStorage.setItem('ivm_userRole', 'warehouse');
     state.pinAttempts = 0;
     if (roleModal) roleModal.hide();
-    applyRoleUI();
-    showToast('Warehouse mode unlocked', 'success');
-    if (!state.currentUser) {
-      setTimeout(showLoginModal, 300);
-    } else {
-      preloadWarehouseLists();
-      if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
-        setTimeout(function() { if (settingsModal) settingsModal.show(); }, 500);
-      }
-      selectModule('MRIF');
-    }
+    showToast('PIN verified', 'success');
+    selectRole('warehouse');
   } else {
     state.pinAttempts++;
     var err = document.getElementById('pinError');
@@ -242,11 +269,13 @@ function verifyPin() {
   }
 }
 
+// ─── Apply role UI ───
 function applyRoleUI() {
-  const role = localStorage.getItem('ivm_userRole');
-  const isProduction = (role === 'production');
-  const isWarehouse = (role === 'warehouse');
+  var role = localStorage.getItem('ivm_userRole');
+  var isProduction = (role === 'production');
+  var isWarehouse = (role === 'warehouse');
 
+  // Hide/show module buttons
   var btnMRR = document.getElementById('btnMRR');
   var btnMRIF = document.getElementById('btnMRIF');
   var btnMRS = document.getElementById('btnMRS');
@@ -254,8 +283,20 @@ function applyRoleUI() {
   if (btnMRIF) btnMRIF.style.display = isProduction ? 'none' : '';
   if (btnMRS) btnMRS.style.display = isProduction ? 'none' : '';
 
+  // Production banner — show logged-in user
   var banner = document.getElementById('productionBanner');
-  if (banner) banner.classList.toggle('d-none', !isProduction);
+  if (banner) {
+    if (isProduction) {
+      banner.classList.remove('d-none');
+      banner.innerHTML = '<i class="bi bi-person-badge"></i>' +
+        '<div class="ms-2">' +
+        '<strong>Production Mode</strong><br>' +
+        '<small>Logged in as ' + (state.currentUserFullname || state.currentUser) + '</small>' +
+        '</div>';
+    } else {
+      banner.classList.add('d-none');
+    }
+  }
 
   var dashboard = document.getElementById('warehouseDashboard');
   if (dashboard) dashboard.classList.toggle('d-none', isProduction);
@@ -272,23 +313,30 @@ function applyRoleUI() {
   var whBtn = document.getElementById('whNotifBtn');
   if (whBtn) whBtn.classList.toggle('d-none', isProduction);
 
+  // Logout button
   var logoutItem = document.getElementById('logoutNavItem');
   if (logoutItem) {
-    logoutItem.style.display = (isWarehouse && state.currentUser) ? 'flex' : 'none';
+    logoutItem.style.display = (isWarehouse || isProduction) && state.currentUser ? 'flex' : 'none';
   }
 
+  // Sidebar role display
   var sidebarRole = document.getElementById('sidebarRole');
   if (sidebarRole) {
-    if (isProduction) sidebarRole.textContent = 'Production Mode';
-    else sidebarRole.textContent = state.currentUserFullname || 'Warehouse';
+    if (isProduction) {
+      sidebarRole.textContent = 'Production · ' + (state.currentUserFullname || state.currentUser);
+    } else {
+      sidebarRole.textContent = state.currentUserFullname || 'Warehouse';
+    }
   }
 
+  // Current role display in Settings
   var roleDisplay = document.getElementById('currentRoleDisplay');
   if (roleDisplay) {
-    roleDisplay.textContent = role === 'warehouse' ? 'Warehouse Staff' : 'Production Staff';
-    roleDisplay.className = role === 'warehouse' ? 'badge bg-success' : 'badge bg-primary';
+    roleDisplay.textContent = isProduction ? 'Production Staff' : 'Warehouse Staff';
+    roleDisplay.className = isProduction ? 'badge bg-primary' : 'badge bg-success';
   }
 
+  // Intervals
   if (isProduction) {
     var active = document.getElementById('activeTransactionSection');
     if (active) active.classList.add('d-none');
@@ -296,7 +344,7 @@ function applyRoleUI() {
     if (dash) dash.classList.add('d-none');
     if (window._requestsInterval) clearInterval(window._requestsInterval);
     window._requestsInterval = setInterval(function() {
-      if (!state.isLoading) loadMyRequests();
+      if (!state.isLoading && typeof loadMyRequests === 'function') loadMyRequests();
     }, 30000);
     if (window._whInterval) clearInterval(window._whInterval);
   } else {
@@ -305,16 +353,18 @@ function applyRoleUI() {
     if (window._requestsInterval) clearInterval(window._requestsInterval);
     if (window._whInterval) clearInterval(window._whInterval);
     window._whInterval = setInterval(function() {
-      if (!state.isLoading) loadWarehouseNotifications();
+      if (!state.isLoading && typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications();
     }, 30000);
-    loadWarehouseNotifications();
-    updateWarehouseKPIs();
+    if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications();
+    if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
   }
 
+  // Sidebar
   if (typeof window.applySidebarRole === 'function') {
     window.applySidebarRole(role);
   }
 
+  // Navigate to correct page
   if (isProduction) {
     navigateTo('myrequests');
   } else {
@@ -330,11 +380,12 @@ function switchRole() {
   if (roleModal) roleModal.show();
 }
 
+// ─── PIN management ───
 function changePin() {
-  const current = document.getElementById('currentPinInput') ? document.getElementById('currentPinInput').value : '';
-  const newPin = document.getElementById('newPinInput') ? document.getElementById('newPinInput').value : '';
-  const storedPin = localStorage.getItem('ivm_warehousePin') || DEFAULT_PIN;
-  const msg = document.getElementById('pinChangeMsg');
+  var current = document.getElementById('currentPinInput') ? document.getElementById('currentPinInput').value : '';
+  var newPin = document.getElementById('newPinInput') ? document.getElementById('newPinInput').value : '';
+  var storedPin = localStorage.getItem('ivm_warehousePin') || DEFAULT_PIN;
+  var msg = document.getElementById('pinChangeMsg');
   if (current !== storedPin) {
     if (msg) { msg.textContent = 'Current PIN is incorrect'; msg.className = 'small mt-2 text-danger'; }
     return;
@@ -351,10 +402,11 @@ function changePin() {
   if (newP) newP.value = '';
 }
 
+// ─── Settings ───
 function openSettings() {
   loadSettingsToUI();
-  const role = localStorage.getItem('ivm_userRole');
-  const isProduction = (role === 'production');
+  var role = localStorage.getItem('ivm_userRole');
+  var isProduction = (role === 'production');
   var pinSection = document.getElementById('pinManagementSection');
   var syncSection = document.getElementById('syncSection');
   var sheetSection = document.getElementById('sheetIdsSection');
@@ -364,8 +416,8 @@ function openSettings() {
   if (syncSection) syncSection.style.display = isProduction ? 'none' : '';
   if (sheetSection) sheetSection.style.display = isProduction ? 'none' : '';
   if (roleDisplay) {
-    roleDisplay.textContent = role === 'warehouse' ? 'Warehouse Staff' : 'Production Staff';
-    roleDisplay.className = role === 'warehouse' ? 'badge bg-success' : 'badge bg-primary';
+    roleDisplay.textContent = isProduction ? 'Production Staff' : 'Warehouse Staff';
+    roleDisplay.className = isProduction ? 'badge bg-primary' : 'badge bg-success';
   }
   if (versionEl) versionEl.textContent = 'v' + APP_VERSION;
   if (settingsModal) settingsModal.show();
@@ -391,3 +443,7 @@ function saveSettings() {
   if (settingsModal) settingsModal.hide();
   if (state.currentModule) selectModule(state.currentModule);
 }
+
+// ─── Legacy no-ops (kept for compatibility) ───
+function checkProductionName() { /* no longer used — production must login */ }
+function saveProductionName() { /* no longer used */ }
