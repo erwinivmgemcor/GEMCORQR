@@ -1,5 +1,6 @@
 // ============================================================
-// PRINT PREVIEW FUNCTIONS (with Bulk Print + Bal.MRIF support)
+// PRINT PREVIEW FUNCTIONS
+// (with Bulk Print + Bal.MRIF support + Newest-First Sort)
 // ============================================================
 
 // ─── Helper: Display doc number (strips -dept suffix, keeps "Bal." prefix) ───
@@ -11,6 +12,18 @@ function _displayDocNo(docNo) {
     return 'Bal.' + cleaned;
   }
   return cleanDocNo(docNo);
+}
+
+// ─── Helper: Extract trailing numeric series from doc number ───
+function _extractDocNumber(docNo) {
+  if (!docNo) return 0;
+  var m = String(docNo).match(/(\d{4,})/);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
+// ─── Helper: Is this a Bal. document? ───
+function _isBalDoc(docNo) {
+  return String(docNo || '').toUpperCase().indexOf('BAL.') === 0;
 }
 
 // ─── Helper: load document list for a module ────
@@ -45,7 +58,7 @@ async function loadDocumentListForModule(docType) {
   }
 }
 
-// ─── Render document list with checkboxes ────
+// ─── Render document list with checkboxes (NEWEST FIRST) ────
 function renderDocumentList(container, docs, docType) {
   if (!container) return;
   container.innerHTML = '';
@@ -53,30 +66,54 @@ function renderDocumentList(container, docs, docType) {
     container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No ' + docType + ' documents found</div>';
     return;
   }
-  var ignoreList = ['MONITORING', 'SUMMARY', 'SYNC', 'SERVED', 'INVENTORYCODES', 'REQUESTOR LIST', 'SOF MONITORING 2026', 'GEMCOR PRF PO', 'Sheet1', 'LINKS', 'Copy of INVENTORYCODES', 'DOCLINKS', 'PARTIAL ITEMS'];
+
+  var ignoreList = [
+    'MONITORING', 'SUMMARY', 'SYNC', 'SERVED', 'INVENTORYCODES',
+    'REQUESTOR LIST', 'SOF MONITORING 2026', 'GEMCOR PRF PO',
+    'Sheet1', 'LINKS', 'Copy of INVENTORYCODES', 'DOCLINKS', 'PARTIAL ITEMS'
+  ];
+
   var filtered = docs.filter(function(d) {
     var name = d.docNo || d.sheetName || '';
     var upper = name.toUpperCase();
     for (var i = 0; i < ignoreList.length; i++) {
-      if (upper === ignoreList[i] || upper.indexOf(ignoreList[i]) !== -1) return false;
+      if (upper === ignoreList[i]) return false;
     }
-    // Keep Bal.MRIF too
-    if (upper.indexOf('BAL.') === 0) return true;
-    return true;
+    // Must start with the module prefix or "Bal.<prefix>"
+    if (upper.indexOf(docType) === 0) return true;
+    if (upper.indexOf('BAL.' + docType) === 0) return true;
+    return false;
   });
+
   if (filtered.length === 0) {
     container.innerHTML = '<div class="list-group-item text-center text-muted py-3">No valid ' + docType + ' documents found</div>';
     return;
   }
 
-  // Sort: Bal. docs come first (or alongside), alphabetically
+  // ═══════════════════════════════════════════════════════════
+  // SORT: newest series on top (descending by trailing number)
+  // Bal.<doc> appears immediately after its parent doc.
+  // ═══════════════════════════════════════════════════════════
   filtered.sort(function(a, b) {
     var na = (a.docNo || a.sheetName || '').toUpperCase();
     var nb = (b.docNo || b.sheetName || '').toUpperCase();
-    return na.localeCompare(nb);
+
+    var numA = _extractDocNumber(na);
+    var numB = _extractDocNumber(nb);
+
+    // Primary: descending numeric series
+    if (numA !== numB) return numB - numA;
+
+    // Secondary: same number → parent doc first, then Bal.
+    var isBalA = na.indexOf('BAL.') === 0;
+    var isBalB = nb.indexOf('BAL.') === 0;
+    if (isBalA !== isBalB) return isBalA ? 1 : -1;
+
+    // Tertiary: alphabetical descending (rare edge case)
+    return nb.localeCompare(na);
   });
 
-  // Add a select-all header row
+  // Select-all header
   var header = document.createElement('div');
   header.className = 'list-group-item d-flex align-items-center bg-light';
   header.innerHTML =
