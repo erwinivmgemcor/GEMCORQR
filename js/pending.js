@@ -1,10 +1,9 @@
 // ============================================================
-// PENDING DOCUMENTS — Show MRR + MRIF + MRS pending & partial, process each
+// PENDING DOCUMENTS — MRR + MRIF + MRS
 // ============================================================
 
 var _pendingModal = null;
 
-// ─── Open the list of pending docs (all 3 types) ───
 window.openPendingMrifList = async function() {
   var modalEl = document.getElementById('pendingMrifModal');
   if (!modalEl) { showToast('Pending modal not found', 'danger'); return; }
@@ -41,7 +40,6 @@ window.openPendingMrifList = async function() {
       return;
     }
 
-    // Sort: MRIF → MRR → MRS; within each, newest first
     var typeOrder = { MRIF: 0, MRR: 1, MRS: 2 };
     docs.sort(function(a, b) {
       var ta = typeOrder[a.docType] || 99;
@@ -113,7 +111,6 @@ window.openPendingMrifList = async function() {
   }
 };
 
-// ─── Dispatcher — opens the balance modal for any doc type ───
 window.openPendingProcessModal = async function(docNo, docType) {
   if (!docNo || !docType) return;
 
@@ -127,8 +124,10 @@ window.openPendingProcessModal = async function(docNo, docType) {
 
   var submitBtn = document.getElementById('btnSubmitProcessBalance');
   if (submitBtn) {
-    var label = docType === 'MRR' ? 'Create Balance MRR' :
-                docType === 'MRS' ? 'Create Balance MRS' : 'Create Balance MRIF';
+    // MRIF: "Create Balance MRIF" (creates Bal.MRIF)
+    // MRR/MRS: "Create New MRR/MRS" (creates fresh sequential doc)
+    var label = docType === 'MRR' ? 'Create New MRR' :
+                docType === 'MRS' ? 'Create New MRS' : 'Create Balance MRIF';
     submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>' + label;
   }
 
@@ -184,10 +183,14 @@ window.openPendingProcessModal = async function(docNo, docType) {
     var colHeader = docType === 'MRR' ? 'Received Now' :
                     docType === 'MRS' ? 'Returned Now' : 'Issued Now';
 
+    var infoMsg = docType === 'MRIF'
+      ? 'A <strong>Bal.' + escapeHtmlPending(docNo) + '</strong> sheet will be created for any remaining quantities.'
+      : 'A <strong>new ' + escapeHtmlPending(docType) + ' document</strong> will be created for the quantities you enter.';
+
     var html = '<div class="alert alert-info small py-2 mb-3">' +
       '<i class="bi bi-info-circle me-1"></i> ' +
       'Enter the quantity you are processing <strong>right now</strong> for each item. ' +
-      'A <strong>Bal.' + escapeHtmlPending(docNo) + '</strong> sheet will be created for any remaining quantities.' +
+      infoMsg +
       '</div>' +
       '<div class="table-responsive"><table class="table table-sm table-bordered align-middle">' +
       '<thead class="table-light"><tr>' +
@@ -240,7 +243,6 @@ window.openPendingProcessModal = async function(docNo, docType) {
   }
 };
 
-// ─── Override submitProcessBalance ───
 window.submitProcessBalance = function() {
   if (!window._processPartialDocNo || !window._processPartialItems || !window._processPartialItems.length) {
     showToast('No items to process', 'warning');
@@ -269,15 +271,26 @@ window.submitProcessBalance = function() {
     });
     var anyIssued = itemsPayload.some(function(it) { return it.issueNow > 0; });
     if (!anyIssued) {
-      if (!confirm('You have not entered any quantity.\n\nContinue anyway? A Bal document will be created as PENDING.')) return;
+      if (!confirm('You have not entered any quantity.\n\nContinue anyway? A new document will be created as PENDING.')) return;
     }
+
+    // ─── FIX: Get the CURRENT USER from state / localStorage ───
+    var currentUser = '';
+    if (typeof state !== 'undefined') {
+      currentUser = state.currentUserFullname || state.currentUser || '';
+    }
+    if (!currentUser) {
+      currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || '';
+    }
+    if (!currentUser) currentUser = 'WAREHOUSE';
+
     try {
       var payload = {
         action: 'processBalance',
         docType: docType,
         originalDocNo: window._processPartialDocNo,
         items: itemsPayload,
-        processedBy: (typeof _getCurrentUserName === 'function' ? _getCurrentUserName() : '') || 'WAREHOUSE'
+        processedBy: currentUser
       };
       var res = await fetch(API_URL, {
         method: 'POST',
@@ -294,7 +307,8 @@ window.submitProcessBalance = function() {
           var pm = bootstrap.Modal.getInstance(processModalEl);
           if (pm) pm.hide();
         }
-        showToast('Balance ' + docType + ' created: ' + data.balDocNo + ' (' + (data.status || 'COMPLETED') + ')', 'success');
+        var msgPrefix = docType === 'MRIF' ? 'Balance MRIF created: ' : 'New ' + docType + ' created: ';
+        showToast(msgPrefix + data.balDocNo + ' (' + (data.status || 'COMPLETED') + ')', 'success');
         if (typeof updatePartialCount === 'function') updatePartialCount();
         if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
         if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
@@ -304,10 +318,9 @@ window.submitProcessBalance = function() {
     } catch(err) {
       showToast('Error: ' + err.message, 'danger');
     }
-  }, 'Creating Balance...');
+  }, 'Creating...');
 };
 
-// ─── Helpers ───
 function getTargetSheetIdPending(docType) {
   var key = 'sheetId_' + docType;
   var val = localStorage.getItem(key);
