@@ -541,63 +541,118 @@
           </div>
         </div>
 
-        <div id="analyticsSection" class="mt-4">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <h6 class="mb-0"><i class="bi bi-graph-up me-2"></i>Analytics Dashboard</h6>
-            <button class="btn btn-sm btn-outline-primary" onclick="loadAnalytics()">
-              <i class="bi bi-arrow-repeat me-1"></i>Refresh
-            </button>
-          </div>
-          <div id="analyticsLoading" class="text-center py-4">
-            <div class="spinner-border text-primary"></div>
-            <div class="text-muted mt-2">Loading analytics...</div>
-          </div>
-          <div id="analyticsError" class="alert alert-danger d-none">
-            <i class="bi bi-exclamation-triangle-fill me-2"></i>
-            <span id="analyticsErrorText">Failed to load analytics.</span>
-            <button class="btn btn-sm btn-outline-danger ms-2" onclick="loadAnalytics()">Retry</button>
-          </div>
-          <div id="analyticsContent" class="d-none">
-            <div class="row g-3 mb-3">
-              <div class="col-md-4">
-                <div class="card h-100 analytics-card">
-                  <div class="card-body text-center">
-                    <div class="text-muted small">Average Processing Time</div>
-                    <div class="h2" id="avgProcessingTime">-</div>
-                    <div class="text-muted small">From request to completion</div>
-                  </div>
-                </div>
-              </div>
-              <div class="col-md-8">
-                <div class="card h-100 analytics-card">
-                  <div class="card-header">Daily Request Volume (Last 30 Days)</div>
-                  <div class="card-body" style="height:180px;">
-                    <div id="dailyChartContainer"><canvas id="dailyChart"></canvas></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="row g-3">
-              <div class="col-md-6">
-                <div class="card analytics-card">
-                  <div class="card-header">Top 10 Most Requested Items</div>
-                  <div class="card-body" style="height:250px;">
-                    <div id="topItemsChartContainer"><canvas id="topItemsChart"></canvas></div>
-                  </div>
-                </div>
-              </div>
-              <div class="col-md-6">
-                <div class="card analytics-card">
-                  <div class="card-header">Staff Performance</div>
-                  <div class="card-body" style="height:250px;">
-                    <div id="staffChartContainer"><canvas id="staffChart"></canvas></div>
-                  </div>
-                </div>
-              </div>
-            </div>
+       <!-- Analytics -->
+<div id="analyticsSection" class="mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="mb-0"><i class="bi bi-graph-up me-2"></i>Analytics Dashboard</h6>
+    <button class="btn btn-sm btn-outline-primary" onclick="loadAnalytics()">
+      <i class="bi bi-arrow-repeat me-1"></i>Refresh
+    </button>
+  </div>
+
+  <div id="analyticsLoading" class="text-center py-4">
+    <div class="spinner-border text-primary"></div>
+    <div class="text-muted mt-2">Loading analytics...</div>
+  </div>
+
+  <div id="analyticsError" class="alert alert-danger d-none">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+    <span id="analyticsErrorText">Failed to load analytics.</span>
+    <button class="btn btn-sm btn-outline-danger ms-2" onclick="loadAnalytics()">Retry</button>
+  </div>
+
+  <div id="analyticsContent" class="d-none">
+
+    <!-- Row 1: Totals cards -->
+    <div class="row g-3 mb-3">
+      <div class="col-6 col-md-3">
+        <div class="card h-100 analytics-card">
+          <div class="card-body text-center">
+            <div class="text-muted small">MRIF Documents</div>
+            <div class="h3 mb-0" id="kpiMRIFCount">0</div>
+            <div class="text-muted small">Material Requests</div>
           </div>
         </div>
       </div>
+      <div class="col-6 col-md-3">
+        <div class="card h-100 analytics-card">
+          <div class="card-body text-center">
+            <div class="text-muted small">MRR Documents</div>
+            <div class="h3 mb-0" id="kpiMRRCount">0</div>
+            <div class="text-muted small">Receivings</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card h-100 analytics-card">
+          <div class="card-body text-center">
+            <div class="text-muted small">MRS Documents</div>
+            <div class="h3 mb-0" id="kpiMRSCount">0</div>
+            <div class="text-muted small">Returns</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card h-100 analytics-card">
+          <div class="card-body text-center">
+            <div class="text-muted small">Avg. Processing Time</div>
+            <div class="h3 mb-0" id="avgProcessingTime">-</div>
+            <div class="text-muted small" id="avgProcessingSub">From request to completion</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 2: Daily Volume (full width) -->
+    <div class="row g-3 mb-3">
+      <div class="col-12">
+        <div class="card analytics-card">
+          <div class="card-header">Daily Request Volume (Last 30 Days)</div>
+          <div class="card-body" style="height:220px;">
+            <div id="dailyChartContainer"><canvas id="dailyChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 3: Top Items + Top Requestors -->
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-md-6">
+        <div class="card analytics-card h-100">
+          <div class="card-header">Top 10 Most Requested Items</div>
+          <div class="card-body" style="height:300px;">
+            <div id="topItemsChartContainer"><canvas id="topItemsChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-md-6">
+        <div class="card analytics-card h-100">
+          <div class="card-header">
+            <i class="bi bi-person-badge me-1"></i>Top 10 Requestors (Production)
+          </div>
+          <div class="card-body" style="height:300px;">
+            <div id="requestorChartContainer"><canvas id="requestorChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 4: Warehouse Staff Performance -->
+    <div class="row g-3">
+      <div class="col-12">
+        <div class="card analytics-card">
+          <div class="card-header">
+            <i class="bi bi-shield-check me-1"></i>Warehouse Staff Performance
+          </div>
+          <div class="card-body" style="height:250px;">
+            <div id="staffChartContainer"><canvas id="staffChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
 
       <div id="myRequestsSection" class="d-none">
         <div class="section-header d-flex justify-content-between align-items-center">
