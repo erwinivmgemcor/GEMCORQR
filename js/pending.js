@@ -1,5 +1,5 @@
 // ============================================================
-// PENDING DOCUMENTS — Show MRR + MRIF + MRS pending, process each
+// PENDING DOCUMENTS — Show MRR + MRIF + MRS pending & partial, process each
 // ============================================================
 
 var _pendingModal = null;
@@ -11,7 +11,7 @@ window.openPendingMrifList = async function() {
   if (!_pendingModal) _pendingModal = new bootstrap.Modal(modalEl);
 
   var titleEl = modalEl.querySelector('.modal-title');
-  if (titleEl) titleEl.innerHTML = '<i class="bi bi-clock-history me-2"></i>Pending Documents (MRR / MRIF / MRS)';
+  if (titleEl) titleEl.innerHTML = '<i class="bi bi-clock-history me-2"></i>Pending & Partial Documents';
 
   var container = document.getElementById('pendingMrifListContainer');
   if (container) {
@@ -67,8 +67,21 @@ window.openPendingMrifList = async function() {
       var badge = '<span class="badge ' + badgeClass + ' me-2">' + escapeHtmlPending(docType) + '</span>';
       var balTag = isBal ? ' <span class="badge bg-info text-dark">BAL</span>' : '';
       var icon = isBal ? 'bi-layers-fill text-info' : 'bi-file-earmark-text text-warning';
-      var pendingInfo = d.pendingRows
-        ? ' <small class="text-muted">(' + d.pendingRows + '/' + d.totalRows + ' pending)</small>'
+
+      // ─── Status chips ───
+      var statusChips = '';
+      var pRows = Number(d.pendingRows || 0);
+      var paRows = Number(d.partialRows || 0);
+      if (pRows > 0) {
+        statusChips += ' <span class="badge bg-warning text-dark" title="Items not yet processed">' +
+                       pRows + ' pending</span>';
+      }
+      if (paRows > 0) {
+        statusChips += ' <span class="badge bg-info text-dark" title="Items partially processed">' +
+                       paRows + ' partial</span>';
+      }
+      var totalInfo = d.totalRows
+        ? ' <small class="text-muted">/ ' + d.totalRows + ' items</small>'
         : '';
 
       html += '<div class="list-group-item pending-mrif-item d-flex justify-content-between align-items-center"' +
@@ -76,7 +89,7 @@ window.openPendingMrifList = async function() {
         '<div class="flex-grow-1">' +
           '<i class="bi ' + icon + ' me-2"></i>' +
           badge +
-          '<strong>' + escapeHtmlPending(docNo) + '</strong>' + balTag + pendingInfo +
+          '<strong>' + escapeHtmlPending(docNo) + '</strong>' + balTag + statusChips + totalInfo +
         '</div>' +
         '<button class="btn btn-sm btn-dark btn-process-balance">' +
           '<i class="bi bi-arrow-right-circle me-1"></i>Process' +
@@ -117,6 +130,14 @@ window.openPendingProcessModal = async function(docNo, docType) {
   if (titleEl) titleEl.innerHTML = '<i class="bi bi-arrow-right-circle me-2"></i>' +
     'Process ' + escapeHtmlPending(docNo) + ' (' + escapeHtmlPending(docType) + ')';
 
+  // Update the submit button label based on doc type
+  var submitBtn = document.getElementById('btnSubmitProcessBalance');
+  if (submitBtn) {
+    var label = docType === 'MRR' ? 'Create Balance MRR' :
+                docType === 'MRS' ? 'Create Balance MRS' : 'Create Balance MRIF';
+    submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>' + label;
+  }
+
   var body = document.getElementById('processPartialBody');
   if (body) {
     body.innerHTML = '<div class="text-center py-4">' +
@@ -150,7 +171,8 @@ window.openPendingProcessModal = async function(docNo, docType) {
         issuedQty: issued,
         remainingQty: remaining > 0 ? remaining : 0,
         unit: it.unit || 'PCS',
-        originalRowIndex: it.rowIndex || 0
+        originalRowIndex: it.rowIndex || 0,
+        remarks: it.remarks || ''
       };
     }).filter(function(it) { return it.remainingQty > 0; });
 
