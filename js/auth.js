@@ -2,6 +2,11 @@
 // AUTHENTICATION & ROLE MANAGEMENT
 // Supports: warehouse-only, production-only, BOTH-role users
 // Friendly error messages for network/server issues
+// ──────────────────────────────────────────────────────────
+// FIXES:
+//   - Single-role users CANNOT switch modes (blocked in switchRole)
+//   - applyRoleUI validates the current role is in allowed roles
+//     → if not, forces logout to prevent escalation
 // ============================================================
 
 if (typeof state !== 'undefined') {
@@ -28,6 +33,10 @@ function _hasBothRoles() {
   var roles = _getAllowedRoles();
   return roles && roles.indexOf('warehouse') !== -1 && roles.indexOf('production') !== -1;
 }
+function _hasRole(role) {
+  var roles = _getAllowedRoles();
+  return roles && roles.indexOf(role) !== -1;
+}
 
 // ─── Init ───
 function initRole() {
@@ -42,9 +51,21 @@ function initRole() {
   }
   if (savedRoles) state.allowedRoles = savedRoles;
 
+  // Require BOTH role + user
   if (!savedRole || !savedUser) {
     if (savedRole && !savedUser) localStorage.removeItem('ivm_userRole');
     if (roleModal) roleModal.show();
+    return;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SANITY CHECK: current role must be in allowedRoles
+  // Prevents a tampered/stale session from bypassing role rules
+  // ═══════════════════════════════════════════════════════════
+  if (savedRoles && savedRoles.length > 0 && savedRoles.indexOf(savedRole) === -1) {
+    console.warn('[Auth] Role mismatch detected — forcing logout');
+    showToast('Session role mismatch. Please log in again.', 'warning');
+    setTimeout(logoutUser, 500);
     return;
   }
 
@@ -121,11 +142,16 @@ function backToRoleSelection() {
   }
   state.pendingRole = null;
   setTimeout(function() {
-    if (roleModal) roleModal.show();
+    // Only show the role modal if we're actually logged out
+    var savedUser = localStorage.getItem('ivm_username');
+    var savedRole = localStorage.getItem('ivm_userRole');
+    if (!savedUser || !savedRole) {
+      if (roleModal) roleModal.show();
+    }
   }, 300);
 }
 
-// ─── Friendly error helper ───
+// ─── Friendly login error ───
 function _showLoginError(errorField, html) {
   if (!errorField) return;
   errorField.innerHTML = html;
@@ -152,11 +178,9 @@ async function loginUser() {
                 '&password=' + encodeURIComponent(password) + '&_t=' + Date.now();
       var res = await fetch(url, { redirect: 'follow' });
 
-      // Read as text first (avoids the JSON.parse throwing on HTML)
       var text = '';
       try { text = await res.text(); } catch(e) { text = ''; }
 
-      // ─── Detect HTML / empty response (server offline or deployment issue) ───
       var trimmed = String(text || '').trim();
       if (!trimmed || trimmed.charAt(0) === '<') {
         _showLoginError(errorField,
@@ -171,7 +195,6 @@ async function loginUser() {
         return;
       }
 
-      // ─── Parse JSON safely ───
       var data;
       try {
         data = JSON.parse(trimmed);
@@ -187,13 +210,9 @@ async function loginUser() {
         return;
       }
 
-      // ─── Invalid credentials / server error ───
       if (!data.success) {
         var msg = data.error || 'Login failed.';
-        // Translate common backend errors to friendly text
-        if (msg.toLowerCase().indexOf('invalid username') !== -1 ||
-            msg.toLowerCase().indexOf('invalid password') !== -1 ||
-            msg.toLowerCase().indexOf('invalid') !== -1) {
+        if (msg.toLowerCase().indexOf('invalid') !== -1) {
           _showLoginError(errorField,
             '<div class="d-flex gap-2">' +
               '<i class="bi bi-x-circle-fill fs-5"></i>' +
@@ -232,7 +251,7 @@ async function loginUser() {
         return;
       }
 
-      // ─── Success → save session ───
+      // ─── Save session ───
       state.currentUser = data.username;
       state.currentUserFullname = data.fullname || data.username;
       state.userRole = requestedRole;
@@ -271,7 +290,6 @@ async function loginUser() {
       }
 
     } catch(err) {
-      // Network error (offline, DNS, CORS, etc.)
       _showLoginError(errorField,
         '<div class="d-flex gap-2">' +
           '<i class="bi bi-wifi-off fs-5"></i>' +
@@ -284,14 +302,18 @@ async function loginUser() {
   }, 'Signing in...');
 }
 
-// ─── Switch mode (both-role users) ───
+// ══════════════════════════════════════════════════════════════
+// SWITCH MODE — allowed only for both-role users
+// ══════════════════════════════════════════════════════════════
 window.switchMode = function(newRole) {
   if (newRole !== 'warehouse' && newRole !== 'production') return;
-  var roles = _getAllowedRoles() || [];
-  if (roles.indexOf(newRole) === -1) {
+
+  // ─── HARD GUARD: verify the role is allowed ───
+  if (!_hasRole(newRole)) {
     showToast('You do not have access to ' + newRole + ' mode.', 'danger');
     return;
   }
+
   localStorage.setItem('ivm_userRole', newRole);
   state.userRole = newRole;
 
@@ -310,7 +332,7 @@ window.switchMode = function(newRole) {
 
 window.openModePicker = function() {
   if (!_hasBothRoles()) {
-    if (roleModal) roleModal.show();
+    showToast('Your account only has one role. Contact admin to request access to the other mode.', 'info');
     return;
   }
   var el = document.getElementById('modePickerModal');
@@ -382,7 +404,7 @@ function verifyPin() {
   }
 }
 
-// ─── Apply role UI ───
+// ─── Apply Role UI ───
 function applyRoleUI() {
   var role = localStorage.getItem('ivm_userRole');
   var isProduction = (role === 'production');
@@ -473,15 +495,46 @@ function applyRoleUI() {
   else navigateTo('dashboard');
 }
 
+// ══════════════════════════════════════════════════════════════
+// SWITCH ROLE (Settings → Switch Role button)
+// ──────────────────────────────────────────────────────────────
+// BEHAVIOR:
+//   - Both-role users → open the mode picker (no re-login)
+//   - Single-role users → show a message (no role picker, no escalation)
+//   - If not logged in → show the role picker (fresh login)
+// ══════════════════════════════════════════════════════════════
 function switchRole() {
   if (settingsModal) settingsModal.hide();
   var section = document.getElementById('pinEntrySection');
   if (section) section.classList.add('d-none');
   clearPin();
-  if (_hasBothRoles()) openModePicker();
-  else if (roleModal) roleModal.show();
+
+  var loggedIn = !!(localStorage.getItem('ivm_username') && localStorage.getItem('ivm_userRole'));
+
+  if (!loggedIn) {
+    // Not logged in → show role picker for fresh login
+    if (roleModal) roleModal.show();
+    return;
+  }
+
+  // Logged in: decide based on allowed roles
+  if (_hasBothRoles()) {
+    // Both roles → open mode picker
+    openModePicker();
+  } else {
+    // Single role → block switching entirely
+    var current = localStorage.getItem('ivm_userRole') || 'warehouse';
+    var currentLabel = current === 'warehouse' ? 'Warehouse' : 'Production';
+    var otherLabel = current === 'warehouse' ? 'Production' : 'Warehouse';
+    showToast(
+      'Your account is only authorized for ' + currentLabel + ' mode. ' +
+      'Contact your administrator to add ' + otherLabel + ' access.',
+      'warning'
+    );
+  }
 }
 
+// ─── PIN change ───
 function changePin() {
   var current = document.getElementById('currentPinInput') ? document.getElementById('currentPinInput').value : '';
   var newPin = document.getElementById('newPinInput') ? document.getElementById('newPinInput').value : '';
@@ -503,15 +556,19 @@ function changePin() {
   if (newP) newP.value = '';
 }
 
+// ─── Settings ───
 function openSettings() {
   loadSettingsToUI();
   var role = localStorage.getItem('ivm_userRole');
   var isProduction = (role === 'production');
+  var hasBoth = _hasBothRoles();
+
   var pinSection = document.getElementById('pinManagementSection');
   var syncSection = document.getElementById('syncSection');
   var sheetSection = document.getElementById('sheetIdsSection');
   var roleDisplay = document.getElementById('currentRoleDisplay');
   var versionEl = document.getElementById('appVersion');
+
   if (pinSection) pinSection.style.display = isProduction ? 'none' : '';
   if (syncSection) syncSection.style.display = isProduction ? 'none' : '';
   if (sheetSection) sheetSection.style.display = isProduction ? 'none' : '';
@@ -520,6 +577,13 @@ function openSettings() {
     roleDisplay.className = isProduction ? 'badge bg-primary' : 'badge bg-success';
   }
   if (versionEl) versionEl.textContent = 'v' + APP_VERSION;
+
+  // Hide "Switch Role" button for single-role users
+  var switchRoleBtn = document.querySelector('#settingsModal button[onclick*="switchRole"]');
+  if (switchRoleBtn) {
+    switchRoleBtn.style.display = hasBoth ? '' : 'none';
+  }
+
   if (settingsModal) settingsModal.show();
 }
 
@@ -544,5 +608,6 @@ function saveSettings() {
   if (state.currentModule) selectModule(state.currentModule);
 }
 
+// Legacy no-ops
 function checkProductionName() {}
 function saveProductionName() {}
