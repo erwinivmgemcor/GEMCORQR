@@ -1,6 +1,7 @@
 // ============================================================
 // WAREHOUSE CORE FUNCTIONS
-// (Optimized + Partial Items + Balance MRIF + Clear/Edit PO Items)
+// (Optimized + Partial Items + Balance MRIF + Clear/Edit PO Items
+//  + Double-Processing Protection)
 // ============================================================
 
 (function() {
@@ -185,6 +186,20 @@
     state.currentDoc = null;
     resetDocumentState();
     stopScanner();
+
+    // ─── Remove the already-processed banner if present ───
+    var oldBanner = document.getElementById('alreadyProcessedBanner');
+    if (oldBanner && oldBanner.parentNode) oldBanner.parentNode.removeChild(oldBanner);
+
+    // ─── Restore scanner + manual input visibility ───
+    var scannerContainer = document.querySelector('#activeTransactionSection .scanner-container');
+    if (scannerContainer) scannerContainer.style.display = '';
+    var manualInput = document.getElementById('manualInput');
+    if (manualInput) {
+      var group = manualInput.closest('.input-group');
+      if (group) group.style.display = '';
+    }
+
     var picker = document.getElementById('docPickerSection');
     if (picker) picker.classList.remove('d-none');
     var active = document.getElementById('activeTransactionSection');
@@ -276,19 +291,71 @@
     startScanner();
   };
 
+  // ═══════════════════════════════════════════════════════════════════
+  // CHECK IF ALREADY PROCESSED — disables UI, hides scanner, shows banner
+  // ═══════════════════════════════════════════════════════════════════
   window.checkIfAlreadyProcessed = function() {
     if (state.items.length === 0) return;
-    var allProcessed = state.items.every(function(item) {
-      var r = item.remarks || '';
-      return r === 'SERVED' || r === 'COMPLETE' || r.indexOf('SERVED') !== -1 || r.indexOf('COMPLETE') !== -1;
+
+    var allDone = state.items.every(function(item) {
+      var r = String(item.remarks || '').toUpperCase();
+      return r.indexOf('SERVED') !== -1 || r.indexOf('COMPLETE') !== -1;
     });
-    if (allProcessed) {
-      var btn = document.getElementById('submitBtn');
-      var txt = document.getElementById('submitBtnText');
-      if (btn) { btn.disabled = true; btn.classList.add('opacity-50'); }
-      if (txt) txt.textContent = '✅ Already Processed';
-      showToast('This document has already been fully processed.', 'info');
+
+    // ─── If not yet processed → clean up any leftovers and exit ───
+    if (!allDone) {
+      var oldBanner = document.getElementById('alreadyProcessedBanner');
+      if (oldBanner && oldBanner.parentNode) oldBanner.parentNode.removeChild(oldBanner);
+      return;
     }
+
+    // ─── 1) Disable submit button ───
+    var btn = document.getElementById('submitBtn');
+    var txt = document.getElementById('submitBtnText');
+    if (btn) {
+      btn.disabled = true;
+      btn.classList.add('opacity-50');
+      btn.style.pointerEvents = 'none';
+    }
+    if (txt) txt.textContent = '✅ Already Processed';
+
+    // ─── 2) Stop the scanner ───
+    try { stopScanner(); } catch(e) {}
+
+    // ─── 3) Hide scanning controls ───
+    var scannerContainer = document.querySelector('#activeTransactionSection .scanner-container');
+    if (scannerContainer) scannerContainer.style.display = 'none';
+    var manualInput = document.getElementById('manualInput');
+    if (manualInput) {
+      var group = manualInput.closest('.input-group');
+      if (group) group.style.display = 'none';
+    }
+
+    // ─── 4) Disable bulk action buttons ───
+    document.querySelectorAll('#activeTransactionSection button').forEach(function(b) {
+      var onclick = b.getAttribute('onclick') || '';
+      if (onclick.indexOf('openBatchVerify') !== -1 ||
+          onclick.indexOf('toggleSelectAll') !== -1) {
+        b.disabled = true;
+        b.classList.add('opacity-50');
+      }
+    });
+
+    // ─── 5) Show green banner ───
+    if (!document.getElementById('alreadyProcessedBanner')) {
+      var banner = document.createElement('div');
+      banner.id = 'alreadyProcessedBanner';
+      banner.className = 'alert alert-success mt-3 d-flex align-items-center gap-2';
+      banner.innerHTML =
+        '<i class="bi bi-check-circle-fill" style="font-size:1.5rem;"></i>' +
+        '<div><strong>This document has already been fully processed.</strong><br>' +
+        '<small class="text-muted">All items are marked SERVED/COMPLETE. ' +
+        'Reprocessing is blocked to prevent duplicate transactions.</small></div>';
+      var section = document.getElementById('activeTransactionSection');
+      if (section) section.appendChild(banner);
+    }
+
+    showToast('This document has already been fully processed.', 'info');
   };
 
   window.renderItems = function() {
@@ -335,6 +402,10 @@
     var btn = document.getElementById('submitBtn');
     var txt = document.getElementById('submitBtnText');
     if (!btn || !txt) return;
+
+    // ─── Don't override if already-processed banner is showing ───
+    if (document.getElementById('alreadyProcessedBanner')) return;
+
     if (total === 0) { btn.disabled = true; txt.textContent = 'No Items'; return; }
     btn.disabled = false;
     if (verified === total) {
@@ -389,17 +460,51 @@
 
   var isSubmitting = false;
 
+  // ═══════════════════════════════════════════════════════════════════
+  // SUBMIT — with double-processing guard
+  // ═══════════════════════════════════════════════════════════════════
   window.onSubmit = function() {
     var btn = document.getElementById('submitBtn');
+
     return withButtonLoading(btn, async function() {
       if (isSubmitting) return;
-      var verifiedItems = state.items.filter(function(i) { return i.verified; });
+
+      // ─── GUARD #1: block if the document is already fully SERVED/COMPLETE ───
+      var allDone = state.items.length > 0 && state.items.every(function(item) {
+        var r = String(item.remarks || '').toUpperCase();
+        return r.indexOf('SERVED') !== -1 || r.indexOf('COMPLETE') !== -1;
+      });
+      if (allDone) {
+        showToast('This document has already been fully processed.', 'warning');
+        return;
+      }
+
+      // ─── GUARD #2: filter out already-SERVED/COMPLETE items ───
+      var verifiedItems = state.items.filter(function(i) {
+        if (!i.verified) return false;
+        var r = String(i.remarks || '').toUpperCase();
+        if (r.indexOf('SERVED') !== -1 || r.indexOf('COMPLETE') !== -1) return false;
+        return true;
+      });
+
       var total = state.items.length;
       var verified = verifiedItems.length;
-      if (verified === 0) { showToast('No items verified.', 'warning'); return; }
-      if (verified < total) {
-        if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly verified items will be sent.')) return;
+
+      if (verified === 0) {
+        if (state.items.some(function(i) { return i.verified; })) {
+          showToast('All verified items are already SERVED/COMPLETE.', 'info');
+        } else {
+          showToast('No items verified.', 'warning');
+        }
+        return;
       }
+
+      if (verified < total) {
+        if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly newly-verified items will be sent.')) {
+          return;
+        }
+      }
+
       isSubmitting = true;
       try {
         var result = await submitTransaction(verifiedItems);
@@ -408,7 +513,10 @@
           var anyProcessed = false;
           state.items.forEach(function(it) {
             if (!it.verified) { allComplete = false; }
-            else { anyProcessed = true; if (it.issuedQty < it.qty) allComplete = false; }
+            else {
+              anyProcessed = true;
+              if (it.issuedQty < it.qty) allComplete = false;
+            }
           });
           var newStatus = allComplete && anyProcessed ? 'COMPLETED' : (anyProcessed ? 'PARTIAL' : 'PENDING');
           var statusUrl = API_URL + '?action=updateDocStatus&docNo=' + encodeURIComponent(state.currentDoc) + '&status=' + newStatus + '&_t=' + Date.now();
@@ -425,7 +533,10 @@
             if (typeof updatePartialCount === 'function') updatePartialCount();
           }, 1500);
         } else {
-          throw new Error(result && result.error ? result.error : 'Submission failed');
+          // Server-side guard rejected
+          var errMsg = (result && result.error) ? result.error : 'Submission failed';
+          showToast(errMsg, 'danger');
+          isSubmitting = false;
         }
       } catch(err) {
         showToast('Submit error: ' + err.message, 'danger');
@@ -486,11 +597,9 @@
     list.innerHTML = state.poItemsData.map(function(item, idx) {
       var isManual = !!item._manual;
       var isMissing = !item.inventoryId || !item.inventoryId.trim() || !item.description || !item.description.trim();
-
       var borderClass = '';
       if (isMissing) borderClass = 'border border-danger';
       else if (isManual) borderClass = 'border border-info';
-
       var codeVal = item.inventoryId || '';
       var descVal = item.description || '';
       var isChecked = isManual ? true : !isMissing;
@@ -501,11 +610,10 @@
         '<div class="form-check m-0 mt-3">' +
         '<input class="form-check-input po-check" type="checkbox" id="po-check-' + idx + '" ' + (isChecked ? 'checked' : '') + ' onchange="togglePoCard(' + idx + ')">' +
         '</div>' +
-        '<div class="flex-grow-1" style="min-width:120px;">' +
-        '<div class="row g-1">' +
-        // ITEM CODE — always editable with auto-suggest
+        '<div class="flex-grow-1" style="min-width:0;">' +
+        '<div class="row g-2">' +
         '<div class="col-12 col-md-5">' +
-        '<label class="form-label mb-0 small">Item Code</label>' +
+        '<label class="form-label mb-0 small text-muted">Item Code</label>' +
         '<input type="text" class="form-control form-control-sm po-edit-code" ' +
           'id="po-code-' + idx + '" ' +
           'value="' + codeVal + '" ' +
@@ -515,51 +623,46 @@
           'oninput="updatePoItem(' + idx + ', \'inventoryId\', this.value); autoFillPoDescription(' + idx + ', this.value, false);" ' +
           'onchange="autoFillPoDescription(' + idx + ', this.value, true);">' +
         '</div>' +
-        // DESCRIPTION — always editable
         '<div class="col-12 col-md-5">' +
-        '<label class="form-label mb-0 small">Description</label>' +
+        '<label class="form-label mb-0 small text-muted">Description</label>' +
         '<input type="text" class="form-control form-control-sm po-edit-desc" ' +
           'id="po-desc-' + idx + '" ' +
           'value="' + descVal + '" ' +
           'placeholder="Auto-fills from item code" ' +
           'oninput="updatePoItem(' + idx + ', \'description\', this.value);">' +
         '</div>' +
-        // PO QTY — editable if manual/cleared, read-only if from PO
         '<div class="col-6 col-md-1">' +
-        '<label class="form-label mb-0 small">PO Qty</label>' +
+        '<label class="form-label mb-0 small text-muted">PO Qty</label>' +
         (isManual ?
-          '<input type="number" class="form-control form-control-sm" id="po-qty-' + idx + '" value="' + (item.qty || 1) + '" min="0" style="width:70px;" oninput="updatePoItem(' + idx + ', \'qty\', this.value)">' :
+          '<input type="number" class="form-control form-control-sm" id="po-qty-' + idx + '" value="' + (item.qty || 1) + '" min="0" oninput="updatePoItem(' + idx + ', \'qty\', this.value)">' :
           '<div class="fw-bold small pt-1">' + (item.qty || 0) + '</div>') +
         '</div>' +
-        // UNIT
         '<div class="col-6 col-md-1">' +
-        '<label class="form-label mb-0 small">Unit</label>' +
+        '<label class="form-label mb-0 small text-muted">Unit</label>' +
         '<div class="fw-bold small pt-1">' + (item.unit || 'PCS') + '</div>' +
         '</div>' +
         '</div>' +
-        // SECOND ROW: ATL Qty, Unit Override, Remarks, Clear button
-        '<div class="d-flex gap-2 mt-1 flex-wrap align-items-end">' +
-        '<div style="width:90px;">' +
-        '<label class="form-label mb-0 small">ATL Qty</label>' +
+        '<div class="row g-2 mt-1">' +
+        '<div class="col-6 col-md-2">' +
+        '<label class="form-label mb-0 small text-muted">ATL Qty</label>' +
         '<input type="number" class="form-control form-control-sm" id="po-atl-' + idx + '" value="' + (item.atlQty != null ? item.atlQty : (item.qty || 0)) + '" min="0">' +
         '</div>' +
-        '<div style="width:110px;">' +
-        '<label class="form-label mb-0 small">Unit (Override)</label>' +
-        '<select class="form-select form-select-sm" id="po-unit-' + idx + '" style="width:100px;">' + buildUnitOptions(item.unit || 'PCS') + '</select>' +
+        '<div class="col-6 col-md-2">' +
+        '<label class="form-label mb-0 small text-muted">Unit (Override)</label>' +
+        '<select class="form-select form-select-sm" id="po-unit-' + idx + '">' + buildUnitOptions(item.unit || 'PCS') + '</select>' +
         '</div>' +
-        '<div style="flex:1;min-width:150px;">' +
-        '<label class="form-label mb-0 small">Remarks</label>' +
+        '<div class="col-12 col-md-6">' +
+        '<label class="form-label mb-0 small text-muted">Remarks</label>' +
         '<input type="text" class="form-control form-control-sm" id="po-remarks-' + idx + '" placeholder="Optional note..." maxlength="200">' +
         '</div>' +
-        '<div>' +
-        '<button type="button" class="btn btn-sm btn-outline-danger" onclick="clearPoItem(' + idx + ')" title="Clear this item">' +
-          '<i class="bi bi-eraser-fill me-1"></i>Clear' +
+        '<div class="col-12 col-md-2 d-flex align-items-end">' +
+        '<button type="button" class="btn btn-sm btn-outline-danger w-100" onclick="clearPoItem(' + idx + ')" title="Clear this item">' +
+        '<i class="bi bi-eraser-fill me-1"></i>Clear' +
         '</button>' +
         '</div>' +
         '</div>' +
         '</div>' +
-        // Badges
-        '<div class="d-flex flex-column gap-1 ms-2">' +
+        '<div class="d-flex flex-column gap-1 ms-2 align-items-end">' +
         (isManual ? '<span class="badge bg-info">Manual</span>' : '') +
         (isMissing ? '<span class="badge bg-danger">Incomplete</span>' : '') +
         '</div>' +
@@ -569,19 +672,15 @@
     }).join('');
 
     updateCreateMrrButton();
-
     document.querySelectorAll('.po-check').forEach(function(cb) {
       cb.addEventListener('change', updateCreateMrrButton);
     });
   };
 
-  // ─── Clear a single PO item (reset code + desc, make editable) ───
   window.clearPoItem = function(idx) {
     if (!state.poItemsData[idx]) return;
-    // Wipe code + description but keep qty/unit
     state.poItemsData[idx].inventoryId = '';
     state.poItemsData[idx].description = '';
-    // Mark as manual so it stays editable and PO Qty becomes editable
     state.poItemsData[idx]._manual = true;
     renderPoItems();
     setTimeout(function() {
@@ -594,25 +693,16 @@
     showToast('Item cleared. Type or pick the correct item code.', 'info');
   };
 
-  // ─── Add a manual item row inside the PO Items modal ───
   window.addPoManualItem = function() {
     if (!state.poItemsData) state.poItemsData = [];
     state.poItemsData.push({
-      inventoryId: '',
-      description: '',
-      qty: 1,
-      atlQty: 0,
-      unit: 'PCS',
-      remarks: '',
-      _manual: true
+      inventoryId: '', description: '', qty: 1, atlQty: 0, unit: 'PCS', remarks: '', _manual: true
     });
     renderPoItems();
     setTimeout(function() {
       var idx = state.poItemsData.length - 1;
       var card = document.getElementById('po-card-' + idx);
-      if (card) {
-        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
       var el = document.getElementById('po-code-' + idx);
       if (el) el.focus();
     }, 100);
@@ -630,20 +720,15 @@
     datalist.innerHTML = html;
   }
 
-  // ─── Auto-fill description from item code ───
-  // force = false → only fill if the description is empty
-  // force = true  → always overwrite (used on change/datalist pick)
   window.autoFillPoDescription = function(idx, code, force) {
     if (!code) return;
     code = String(code).trim();
     if (!code) return;
-
     var match = state.requestInventoryList.find(function(it) {
       var c = it.code || it.inventoryId || '';
       return c.toLowerCase() === code.toLowerCase();
     });
     if (!match) return;
-
     var descInput = document.getElementById('po-desc-' + idx);
     if (descInput) {
       if (force || !descInput.value.trim()) {
@@ -651,7 +736,6 @@
         updatePoItem(idx, 'description', descInput.value);
       }
     }
-
     var unitSelect = document.getElementById('po-unit-' + idx);
     if (unitSelect && match.unit) {
       for (var opt = 0; opt < unitSelect.options.length; opt++) {
@@ -690,11 +774,9 @@
       var unitEl = document.getElementById('po-unit-' + idx);
       var remarksEl = document.getElementById('po-remarks-' + idx);
       var qtyEl = document.getElementById('po-qty-' + idx);
-
       var code = codeEl ? (codeEl.value || '').trim() : (item.inventoryId || '').trim();
       var desc = descEl ? (descEl.value || '').trim() : (item.description || '').trim();
       var qty = qtyEl ? (parseFloat(qtyEl.value) || 0) : (item.qty || 0);
-
       selected.push({
         inventoryId: code,
         description: desc,
@@ -1314,7 +1396,7 @@
   };
 
   // ═══════════════════════════════════════════════════════════
-  // PARTIAL ITEMS — Enhanced with grouping + Process Balance
+  // PARTIAL ITEMS
   // ═══════════════════════════════════════════════════════════
 
   window.fetchPartialItems = async function() {
@@ -1342,7 +1424,6 @@
         container.innerHTML = '<div class="list-group-item text-muted text-center py-4">No partial items found. All items are fully served or pending.</div>';
         return;
       }
-
       var grouped = {};
       items.forEach(function(it) {
         var doc = it.originalDocNo || it.docNo || '(unknown)';
@@ -1354,7 +1435,6 @@
         };
         grouped[doc].items.push(it);
       });
-
       var html = '';
       Object.keys(grouped).forEach(function(doc) {
         var g = grouped[doc];
@@ -1394,9 +1474,7 @@
             '<td class="text-center">' + (it.unit || 'PCS') + '</td>' +
             '</tr>';
         });
-        html += '</tbody></table></div>' +
-          '</div>' +
-          '</div>';
+        html += '</tbody></table></div></div></div>';
       });
       container.innerHTML = html;
     } catch(err) {
@@ -1427,12 +1505,10 @@
       _processPartialItems = all.filter(function(it) {
         return (it.originalDocNo || it.docNo) === docNo;
       });
-
       if (!_processPartialItems.length) {
         if (body) body.innerHTML = '<div class="alert alert-info mb-0">No open partial items for this document.</div>';
         return;
       }
-
       var html = '<div class="alert alert-info small py-2 mb-3">' +
         '<i class="bi bi-info-circle me-1"></i> ' +
         'A new sheet <strong>Bal.' + docNo + '</strong> will be created. ' +
@@ -1450,7 +1526,6 @@
           '<th class="text-center" style="width:12%">Issued Now</th>' +
           '<th style="width:18%">Remarks</th>' +
         '</tr></thead><tbody>';
-
       _processPartialItems.forEach(function(it, idx) {
         var remaining = Number(it.remainingQty || 0);
         html += '<tr>' +
@@ -1471,7 +1546,6 @@
           '</td>' +
         '</tr>';
       });
-
       html += '</tbody></table></div>' +
         '<div class="mt-2 small text-muted">' +
         '<button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="fillAllRemaining()">' +
@@ -1479,7 +1553,6 @@
         '</button>' +
         '<span class="ms-1">Set all items to their full remaining quantity.</span>' +
         '</div>';
-
       if (body) body.innerHTML = html;
     } catch(err) {
       if (body) body.innerHTML = '<div class="alert alert-danger">Failed to load items: ' + err.message + '</div>';
@@ -1528,12 +1601,10 @@
           originalRowIndex: it.originalRowIndex || 0
         });
       });
-
       var anyIssued = itemsPayload.some(function(it) { return it.issueNow > 0; });
       if (!anyIssued) {
         if (!confirm('You have not entered any "Issued Now" quantity.\n\nContinue anyway? The Bal document will be created as PENDING.')) return;
       }
-
       try {
         var payload = {
           action: 'processPartialBalance',
