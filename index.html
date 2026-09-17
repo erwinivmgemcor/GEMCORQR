@@ -533,6 +533,9 @@
                   </button>
                   <button class="btn btn-outline-secondary" onclick="openQuickScan()">
                     <i class="bi bi-qr-code-scan me-1"></i> Quick Scan
+                    <button class="btn btn-outline-dark" onclick="openProcessHistory(this)">
+                      <i class="bi bi-clock-history me-1"></i> Process History
+                    </button>
                   </button>
                 </div>
                 <div id="quickActionStatus" class="mt-2 small text-muted"></div>
@@ -2031,6 +2034,69 @@
   </div>
 </div>
 
+  <!-- Process History Modal -->
+<div class="modal fade" id="processHistoryModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title"><i class="bi bi-clock-history me-2"></i>Process History — Warehouse Audit Trail</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info small py-2">
+          <i class="bi bi-info-circle me-1"></i>
+          Track who processed which document, when, and the current status. Useful for daily work back-tracking.
+        </div>
+
+        <!-- Filters -->
+        <div class="row g-2 mb-3">
+          <div class="col-6 col-md-3">
+            <label class="form-label small fw-bold">Document Type</label>
+            <select id="historyFilterType" class="form-select form-select-sm">
+              <option value="">All Types</option>
+              <option value="MRIF">MRIF</option>
+              <option value="MRR">MRR</option>
+              <option value="MRS">MRS</option>
+            </select>
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small fw-bold">Warehouse Staff</label>
+            <input type="text" id="historyFilterStaff" class="form-control form-control-sm" placeholder="e.g. ERWIN" onkeypress="if(event.key==='Enter')loadProcessHistory()">
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small fw-bold">From Date</label>
+            <input type="date" id="historyFilterFrom" class="form-control form-control-sm">
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small fw-bold">To Date</label>
+            <input type="date" id="historyFilterTo" class="form-control form-control-sm">
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+          <button class="btn btn-primary btn-sm" onclick="loadProcessHistory()">
+            <i class="bi bi-search me-1"></i>Apply Filters
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="resetHistoryFilters()">
+            <i class="bi bi-x-circle me-1"></i>Reset
+          </button>
+          <span class="ms-auto small text-muted" id="historyCount">Loading...</span>
+        </div>
+
+        <div id="processHistoryContent">
+          <div class="text-center py-4">
+            <div class="spinner-border text-primary"></div>
+            <div class="text-muted mt-2">Loading history...</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Hidden containers -->
 <div id="whNotificationsList" class="d-none"></div>
 <div id="mrrPrintOnly" class="d-none"></div>
@@ -2064,6 +2130,7 @@
 <script src="/GEMCORQR/js/prints.js?v=2.4.0"></script>
 <script src="/GEMCORQR/js/notifications.js?v=2.4.0"></script>
 <script src="/GEMCORQR/js/analytics.js?v=2.4.0"></script>
+<script src="/GEMCORQR/js/history.js?v=2.4.0"></script>
 <script src="/GEMCORQR/js/main.js?v=2.4.0"></script>
 
 </body>
