@@ -1,9 +1,12 @@
 // ============================================================
 // PENDING DOCUMENTS — MRR + MRIF + MRS
+// - PENDING → normal scanner flow (like clicking a doc from the dropdown)
+// - PARTIAL → Bal process flow (Bal.MRIF / new MRR / new MRS)
 // ============================================================
 
 var _pendingModal = null;
 
+// ─── Open the list of pending docs (all 3 types) ───
 window.openPendingMrifList = async function() {
   var modalEl = document.getElementById('pendingMrifModal');
   if (!modalEl) { showToast('Pending modal not found', 'danger'); return; }
@@ -40,6 +43,7 @@ window.openPendingMrifList = async function() {
       return;
     }
 
+    // Sort: MRIF → MRR → MRS; within each, newest first
     var typeOrder = { MRIF: 0, MRR: 1, MRS: 2 };
     docs.sort(function(a, b) {
       var ta = typeOrder[a.docType] || 99;
@@ -74,8 +78,14 @@ window.openPendingMrifList = async function() {
         ? '<div class="small text-muted ms-4"><i class="bi bi-person me-1"></i>' + escapeHtmlPending(d.requestor) + '</div>'
         : '';
 
+      // Action button label depends on status
+      var actionLabel = status === 'PARTIAL' ? 'Process Balance' : 'Process';
+      var actionIcon = status === 'PARTIAL' ? 'bi-arrow-right-circle' : 'bi-play-circle';
+
       html += '<div class="list-group-item pending-mrif-item"' +
-        ' data-docno="' + escapeHtmlPending(docNo) + '" data-doctype="' + escapeHtmlPending(docType) + '">' +
+        ' data-docno="' + escapeHtmlPending(docNo) + '"' +
+        ' data-doctype="' + escapeHtmlPending(docType) + '"' +
+        ' data-status="' + escapeHtmlPending(status) + '">' +
         '<div class="d-flex justify-content-between align-items-center">' +
           '<div class="flex-grow-1">' +
             '<i class="bi ' + icon + ' me-2"></i>' +
@@ -84,7 +94,7 @@ window.openPendingMrifList = async function() {
             requestorInfo +
           '</div>' +
           '<button class="btn btn-sm btn-dark btn-process-balance">' +
-            '<i class="bi bi-arrow-right-circle me-1"></i>Process' +
+            '<i class="bi ' + actionIcon + ' me-1"></i>' + actionLabel +
           '</button>' +
         '</div>' +
       '</div>';
@@ -95,9 +105,17 @@ window.openPendingMrifList = async function() {
       el.addEventListener('click', function() {
         var docNo = this.getAttribute('data-docno');
         var docType = this.getAttribute('data-doctype');
+        var status = (this.getAttribute('data-status') || '').toUpperCase();
         if (!docNo || !docType) return;
         if (_pendingModal) _pendingModal.hide();
-        setTimeout(function() { openPendingProcessModal(docNo, docType); }, 300);
+
+        if (status === 'PARTIAL') {
+          // PARTIAL → Bal process flow
+          setTimeout(function() { openPendingProcessModal(docNo, docType); }, 300);
+        } else {
+          // PENDING (or anything else) → normal scanner flow
+          setTimeout(function() { openPendingNormalFlow(docNo, docType); }, 300);
+        }
       });
     });
 
@@ -111,6 +129,56 @@ window.openPendingMrifList = async function() {
   }
 };
 
+// ─── Normal flow — same as clicking a doc from the dropdown ───
+window.openPendingNormalFlow = async function(docNo, docType) {
+  if (!docNo || !docType) return;
+
+  var sectionMap = { 'MRIF': 'releasing', 'MRR': 'receiving', 'MRS': 'returns' };
+  var section = sectionMap[docType] || 'releasing';
+
+  // Navigate to the correct module section
+  if (typeof navigateTo === 'function') {
+    navigateTo(section);
+  } else if (typeof selectModule === 'function') {
+    await selectModule(docType);
+  }
+
+  // Wait for navigation to settle
+  await new Promise(function(resolve) { setTimeout(resolve, 400); });
+
+  // Force the module context
+  state.currentModule = docType;
+  if (typeof updateLabels === 'function') updateLabels();
+
+  // Ensure sheet ID exists
+  var sheetId = getTargetSheetIdPending(docType);
+  if (!sheetId) {
+    showToast('⚠️ No Sheet ID for ' + docType + '. Attempting to sync...', 'warning');
+    if (typeof syncModuleLinks === 'function') {
+      await syncModuleLinks();
+      sheetId = getTargetSheetIdPending(docType);
+      if (!sheetId) {
+        showToast('Still missing Sheet ID. Please set it manually in Settings.', 'danger');
+        return;
+      }
+    }
+  }
+
+  try {
+    if (typeof onDocSelect === 'function') {
+      await onDocSelect(docNo);
+      var displayName = (typeof cleanDocNo === 'function') ? cleanDocNo(docNo) : docNo;
+      showToast('Loaded ' + displayName, 'success');
+    } else {
+      showToast('onDocSelect not available', 'danger');
+    }
+  } catch (err) {
+    console.error('[openPendingNormalFlow] Error:', err);
+    showToast('Failed to load document: ' + err.message, 'danger');
+  }
+};
+
+// ─── PARTIAL flow — opens the Bal processing modal ───
 window.openPendingProcessModal = async function(docNo, docType) {
   if (!docNo || !docType) return;
 
@@ -124,8 +192,6 @@ window.openPendingProcessModal = async function(docNo, docType) {
 
   var submitBtn = document.getElementById('btnSubmitProcessBalance');
   if (submitBtn) {
-    // MRIF: "Create Balance MRIF" (creates Bal.MRIF)
-    // MRR/MRS: "Create New MRR/MRS" (creates fresh sequential doc)
     var label = docType === 'MRR' ? 'Create New MRR' :
                 docType === 'MRS' ? 'Create New MRS' : 'Create Balance MRIF';
     submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>' + label;
@@ -243,6 +309,7 @@ window.openPendingProcessModal = async function(docNo, docType) {
   }
 };
 
+// ─── Submit the Bal process ───
 window.submitProcessBalance = function() {
   if (!window._processPartialDocNo || !window._processPartialItems || !window._processPartialItems.length) {
     showToast('No items to process', 'warning');
@@ -274,7 +341,7 @@ window.submitProcessBalance = function() {
       if (!confirm('You have not entered any quantity.\n\nContinue anyway? A new document will be created as PENDING.')) return;
     }
 
-    // ─── FIX: Get the CURRENT USER from state / localStorage ───
+    // Get current user
     var currentUser = '';
     if (typeof state !== 'undefined') {
       currentUser = state.currentUserFullname || state.currentUser || '';
@@ -321,6 +388,7 @@ window.submitProcessBalance = function() {
   }, 'Creating...');
 };
 
+// ─── Helpers ───
 function getTargetSheetIdPending(docType) {
   var key = 'sheetId_' + docType;
   var val = localStorage.getItem(key);
