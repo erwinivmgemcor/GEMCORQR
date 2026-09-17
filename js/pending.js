@@ -41,7 +41,7 @@ window.openPendingMrifList = async function() {
       return;
     }
 
-    // Sort: MRIF first, then MRR, then MRS; within each, newest first
+    // Sort: MRIF → MRR → MRS; within each, newest first
     var typeOrder = { MRIF: 0, MRR: 1, MRS: 2 };
     docs.sort(function(a, b) {
       var ta = typeOrder[a.docType] || 99;
@@ -56,44 +56,39 @@ window.openPendingMrifList = async function() {
       '</div>';
 
     docs.forEach(function(d) {
-      var docNo = d.docNo || d.sheetName || '';
+      var docNo = d.docNo || '';
       var docType = (d.docType || '').toUpperCase();
-      var isBal = docNo.toUpperCase().indexOf('BAL.') === 0;
+      var status = (d.status || '').toUpperCase();
+      var isBal = !!d.isBal || docNo.toUpperCase().indexOf('BAL.') === 0;
 
-      var badgeClass = docType === 'MRIF' ? 'bg-warning text-dark' :
-                       docType === 'MRR' ? 'bg-success' :
-                       docType === 'MRS' ? 'bg-danger' : 'bg-secondary';
+      var typeBadgeClass = docType === 'MRIF' ? 'bg-warning text-dark' :
+                           docType === 'MRR' ? 'bg-success' :
+                           docType === 'MRS' ? 'bg-danger' : 'bg-secondary';
 
-      var badge = '<span class="badge ' + badgeClass + ' me-2">' + escapeHtmlPending(docType) + '</span>';
+      var statusBadgeClass = status === 'PARTIAL' ? 'bg-info text-dark' : 'bg-warning text-dark';
+
+      var badge = '<span class="badge ' + typeBadgeClass + ' me-2">' + escapeHtmlPending(docType) + '</span>';
       var balTag = isBal ? ' <span class="badge bg-info text-dark">BAL</span>' : '';
+      var statusTag = ' <span class="badge ' + statusBadgeClass + '">' + escapeHtmlPending(status) + '</span>';
       var icon = isBal ? 'bi-layers-fill text-info' : 'bi-file-earmark-text text-warning';
 
-      // ─── Status chips ───
-      var statusChips = '';
-      var pRows = Number(d.pendingRows || 0);
-      var paRows = Number(d.partialRows || 0);
-      if (pRows > 0) {
-        statusChips += ' <span class="badge bg-warning text-dark" title="Items not yet processed">' +
-                       pRows + ' pending</span>';
-      }
-      if (paRows > 0) {
-        statusChips += ' <span class="badge bg-info text-dark" title="Items partially processed">' +
-                       paRows + ' partial</span>';
-      }
-      var totalInfo = d.totalRows
-        ? ' <small class="text-muted">/ ' + d.totalRows + ' items</small>'
+      var requestorInfo = d.requestor
+        ? '<div class="small text-muted ms-4"><i class="bi bi-person me-1"></i>' + escapeHtmlPending(d.requestor) + '</div>'
         : '';
 
-      html += '<div class="list-group-item pending-mrif-item d-flex justify-content-between align-items-center"' +
+      html += '<div class="list-group-item pending-mrif-item"' +
         ' data-docno="' + escapeHtmlPending(docNo) + '" data-doctype="' + escapeHtmlPending(docType) + '">' +
-        '<div class="flex-grow-1">' +
-          '<i class="bi ' + icon + ' me-2"></i>' +
-          badge +
-          '<strong>' + escapeHtmlPending(docNo) + '</strong>' + balTag + statusChips + totalInfo +
+        '<div class="d-flex justify-content-between align-items-center">' +
+          '<div class="flex-grow-1">' +
+            '<i class="bi ' + icon + ' me-2"></i>' +
+            badge +
+            '<strong>' + escapeHtmlPending(docNo) + '</strong>' + balTag + statusTag +
+            requestorInfo +
+          '</div>' +
+          '<button class="btn btn-sm btn-dark btn-process-balance">' +
+            '<i class="bi bi-arrow-right-circle me-1"></i>Process' +
+          '</button>' +
         '</div>' +
-        '<button class="btn btn-sm btn-dark btn-process-balance">' +
-          '<i class="bi bi-arrow-right-circle me-1"></i>Process' +
-        '</button>' +
       '</div>';
     });
     container.innerHTML = html;
@@ -117,7 +112,6 @@ window.openPendingMrifList = async function() {
     }
   }
 };
-
 // ─── Dispatcher — opens the balance modal for any doc type ───
 window.openPendingProcessModal = async function(docNo, docType) {
   if (!docNo || !docType) return;
