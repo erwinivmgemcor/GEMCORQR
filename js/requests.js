@@ -1,6 +1,7 @@
 // ============================================================
-// NEW REQUEST FUNCTIONS (with Item Scanner, Remarks,
-// Double-click protection, and QR + items details modal)
+// NEW REQUEST FUNCTIONS
+// (Item Scanner, Remarks, Double-click protection,
+//  QR + items details modal, My Requests filtered to MRIF/MRS)
 // ============================================================
 
 function openNewRequest() {
@@ -35,29 +36,20 @@ function resetWizard() {
   document.getElementById('btnStep5Next').disabled = true;
 
   closeWizardScanner();
-
   goToStep(1);
 }
 
 function goToStep(step) {
   closeWizardScanner();
-
   document.querySelectorAll('.wizard-step').forEach(function(el) {
     var s = parseInt(el.getAttribute('data-step'));
     el.classList.remove('active', 'completed');
-    if (s === step) {
-      el.classList.add('active');
-    } else if (s < step) {
-      el.classList.add('completed');
-    }
+    if (s === step) el.classList.add('active');
+    else if (s < step) el.classList.add('completed');
   });
-
-  document.querySelectorAll('.wizard-panel').forEach(function(el) {
-    el.classList.remove('active');
-  });
+  document.querySelectorAll('.wizard-panel').forEach(function(el) { el.classList.remove('active'); });
   var panel = document.getElementById('step' + step);
   if (panel) panel.classList.add('active');
-
   if (step === 4) populateReviewData();
   if (step === 6) populateFinalReview();
 }
@@ -72,11 +64,8 @@ function selectDocType(type) {
 function onJoNoInput() {
   var val = document.getElementById('step2JoNo').value.trim();
   var status = document.getElementById('joNoStatus');
-  if (val.length > 0) {
-    status.innerHTML = '<span class="text-muted"><i class="bi bi-info-circle"></i> Click <strong>Next</strong> to look up SOF data</span>';
-  } else {
-    status.innerHTML = '';
-  }
+  if (val.length > 0) status.innerHTML = '<span class="text-muted"><i class="bi bi-info-circle"></i> Click <strong>Next</strong> to look up SOF data</span>';
+  else status.innerHTML = '';
 }
 
 async function doStep2Next() {
@@ -85,20 +74,15 @@ async function doStep2Next() {
     document.getElementById('joNoStatus').innerHTML = '<span class="text-danger"><i class="bi bi-exclamation-circle"></i> Please enter a JO No.</span>';
     return;
   }
-
   document.getElementById('joNoStatus').innerHTML = '<span class="text-primary"><i class="bi bi-arrow-repeat spin"></i> Looking up SOF data...</span>';
-
   document.getElementById('reqJoNo').value = joNo;
-
   await lookupSofDataWizard();
-
   goToStep(3);
 }
 
 async function lookupSofDataWizard() {
   var joNo = document.getElementById('reqJoNo').value.trim();
   if (!joNo) return;
-
   showLoading('Looking up JO No....');
   try {
     var url = API_URL + '?action=getSofData&joNo=' + encodeURIComponent(joNo) + '&_t=' + Date.now();
@@ -106,7 +90,6 @@ async function lookupSofDataWizard() {
     var text = await res.text();
     var data;
     try { data = JSON.parse(text); } catch(e) { data = {}; }
-
     if (data.success) {
       document.getElementById('reqGemSoNo').value = data.gemSoNo || '';
       document.getElementById('reqClientName').value = data.clientName || '';
@@ -133,30 +116,20 @@ function onStep3RequestorChange() {
   var selected = sel.options[sel.selectedIndex];
   var name = sel.value;
   var dept = selected ? selected.dataset.department : '';
-
   document.getElementById('reqRequestor').value = name;
   document.getElementById('reqDepartment').value = dept || '';
   document.getElementById('step3Department').value = dept || '';
-
   document.getElementById('btnStep3Next').disabled = !name;
 }
 
 function populateReviewData() {
-  var docType = document.getElementById('reqDocType').value;
-  var joNo = document.getElementById('reqJoNo').value;
-  var requestor = document.getElementById('reqRequestor').value;
-  var dept = document.getElementById('reqDepartment').value;
-  var gemSo = document.getElementById('reqGemSoNo').value;
-  var client = document.getElementById('reqClientName').value;
-  var project = document.getElementById('reqProject').value;
-
-  document.getElementById('reviewDocType').textContent = docType || '-';
-  document.getElementById('reviewJoNo').textContent = joNo || '-';
-  document.getElementById('reviewGemSoNo').textContent = gemSo || '-';
-  document.getElementById('reviewClientName').textContent = client || '-';
-  document.getElementById('reviewProject').textContent = project || '-';
-  document.getElementById('reviewRequestor').textContent = requestor || '-';
-  document.getElementById('reviewDepartment').textContent = dept || '-';
+  document.getElementById('reviewDocType').textContent = document.getElementById('reqDocType').value || '-';
+  document.getElementById('reviewJoNo').textContent = document.getElementById('reqJoNo').value || '-';
+  document.getElementById('reviewGemSoNo').textContent = document.getElementById('reqGemSoNo').value || '-';
+  document.getElementById('reviewClientName').textContent = document.getElementById('reqClientName').value || '-';
+  document.getElementById('reviewProject').textContent = document.getElementById('reqProject').value || '-';
+  document.getElementById('reviewRequestor').textContent = document.getElementById('reqRequestor').value || '-';
+  document.getElementById('reviewDepartment').textContent = document.getElementById('reqDepartment').value || '-';
 }
 
 function addStep5ItemRow() {
@@ -170,33 +143,16 @@ function addStep5ItemRow() {
         '<label class="form-label small">Item</label>' +
         '<div class="input-group">' +
           '<input type="text" class="form-control req-item-search" placeholder="Type to search or scan..." oninput="filterStep5Items(this,' + idx + ')" onfocus="filterStep5Items(this,' + idx + ')">' +
-          '<button class="btn btn-outline-secondary scan-wizard-btn" type="button" onclick="openWizardScanner(' + idx + ')" title="Scan QR Code">' +
-            '<i class="bi bi-qr-code-scan"></i>' +
-          '</button>' +
+          '<button class="btn btn-outline-secondary scan-wizard-btn" type="button" onclick="openWizardScanner(' + idx + ')" title="Scan QR Code"><i class="bi bi-qr-code-scan"></i></button>' +
         '</div>' +
         '<div class="list-group position-absolute z-3 d-none req-dropdown" style="max-height:150px;overflow-y:auto;width:90%;" id="step5Dropdown' + idx + '"></div>' +
         '<input type="hidden" class="req-item-code" id="step5Code' + idx + '">' +
         '<input type="hidden" class="req-item-desc" id="step5Desc' + idx + '">' +
       '</div>' +
-      '<div class="col-2 col-md-2">' +
-        '<label class="form-label small">Qty</label>' +
-        '<input type="number" class="form-control req-qty" min="1" value="1">' +
-      '</div>' +
-      '<div class="col-2 col-md-2">' +
-        '<label class="form-label small">Unit</label>' +
-        '<select class="form-select req-unit">' +
-          buildUnitOptions('PIECE') +
-        '</select>' +
-      '</div>' +
-      '<div class="col-3 col-md-3">' +
-        '<label class="form-label small">Remarks</label>' +
-        '<input type="text" class="form-control req-remarks" placeholder="Optional note..." maxlength="200">' +
-      '</div>' +
-      '<div class="col-1 col-md-1">' +
-        '<button class="btn btn-outline-danger btn-sm w-100" onclick="this.closest(\'.step5-item-row\').remove(); checkStep5Items();">' +
-          '<i class="bi bi-trash"></i>' +
-        '</button>' +
-      '</div>' +
+      '<div class="col-2 col-md-2"><label class="form-label small">Qty</label><input type="number" class="form-control req-qty" min="1" value="1"></div>' +
+      '<div class="col-2 col-md-2"><label class="form-label small">Unit</label><select class="form-select req-unit">' + buildUnitOptions('PIECE') + '</select></div>' +
+      '<div class="col-3 col-md-3"><label class="form-label small">Remarks</label><input type="text" class="form-control req-remarks" placeholder="Optional note..." maxlength="200"></div>' +
+      '<div class="col-1 col-md-1"><button class="btn btn-outline-danger btn-sm w-100" onclick="this.closest(\'.step5-item-row\').remove(); checkStep5Items();"><i class="bi bi-trash"></i></button></div>' +
     '</div>';
   container.appendChild(div);
   checkStep5Items();
@@ -207,13 +163,11 @@ function filterStep5Items(input, idx) {
   var dropdown = document.getElementById('step5Dropdown' + idx);
   dropdown.innerHTML = '';
   if (!term) { dropdown.classList.add('d-none'); return; }
-
   var matches = state.requestInventoryList.filter(function(it) {
     var code = (it.code || it.inventoryId || '').toLowerCase();
     var desc = (it.description || '').toLowerCase();
     return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
   }).slice(0, 10);
-
   if (matches.length === 0) {
     dropdown.innerHTML = '<div class="list-group-item text-muted">No matches</div>';
   } else {
@@ -230,9 +184,7 @@ function filterStep5Items(input, idx) {
         document.getElementById('step5Code' + idx).value = code;
         document.getElementById('step5Desc' + idx).value = desc;
         var unitSelect = input.closest('.step5-item-row').querySelector('.req-unit');
-        if (unitSelect && unitSelect.querySelector('option[value="' + unit + '"]')) {
-          unitSelect.value = unit;
-        }
+        if (unitSelect && unitSelect.querySelector('option[value="' + unit + '"]')) unitSelect.value = unit;
         dropdown.classList.add('d-none');
         checkStep5Items();
       };
@@ -259,7 +211,6 @@ function populateFinalReview() {
   document.getElementById('finalGemSoNo').textContent = document.getElementById('reqGemSoNo').value || '-';
   document.getElementById('finalClientName').textContent = document.getElementById('reqClientName').value || '-';
   document.getElementById('finalProject').textContent = document.getElementById('reqProject').value || '-';
-
   var tbody = document.getElementById('finalItemsTable');
   tbody.innerHTML = '';
   var rows = document.querySelectorAll('#step5ItemsContainer .step5-item-row');
@@ -277,87 +228,57 @@ function populateFinalReview() {
   });
 }
 
-// ─── Wizard Scanner Functions ────────────────────────────
+// ─── Wizard Scanner ───
 var wizardScanner = null;
 var wizardScannerRowIndex = null;
 
 function openWizardScanner(rowIndex) {
   closeWizardScanner();
-
   wizardScannerRowIndex = rowIndex;
   var overlay = document.getElementById('wizardScannerOverlay');
   if (!overlay) return;
   overlay.classList.remove('d-none');
-
-  if (!wizardScanner) {
-    wizardScanner = new Html5Qrcode('wizardReader');
-  }
-
+  if (!wizardScanner) wizardScanner = new Html5Qrcode('wizardReader');
   Html5Qrcode.getCameras().then(function(cameras) {
-    if (cameras.length === 0) {
-      showToast('No cameras found', 'warning');
-      closeWizardScanner();
-      return;
-    }
+    if (cameras.length === 0) { showToast('No cameras found', 'warning'); closeWizardScanner(); return; }
     var camId = cameras.find(function(c) { return c.label.toLowerCase().includes('back'); })?.id || cameras[0].id;
     wizardScanner.start(camId, { fps: 10, qrbox: { width: 200, height: 200 } }, onWizardScanSuccess, function() {})
-      .catch(function(err) {
-        showToast('Camera error: ' + err, 'danger');
-        closeWizardScanner();
-      });
-  }).catch(function(err) {
-    showToast('Camera access denied', 'danger');
-    closeWizardScanner();
-  });
+      .catch(function(err) { showToast('Camera error: ' + err, 'danger'); closeWizardScanner(); });
+  }).catch(function(err) { showToast('Camera access denied', 'danger'); closeWizardScanner(); });
 }
-
 function closeWizardScanner() {
-  if (wizardScanner) {
-    wizardScanner.stop().catch(function() {});
-    wizardScanner = null;
-  }
+  if (wizardScanner) { wizardScanner.stop().catch(function() {}); wizardScanner = null; }
   var overlay = document.getElementById('wizardScannerOverlay');
   if (overlay) overlay.classList.add('d-none');
   wizardScannerRowIndex = null;
 }
-
 function onWizardScanSuccess(decodedText) {
   closeWizardScanner();
-
   var idx = wizardScannerRowIndex;
   if (idx === null) return;
-
   var matchedItem = null;
   var code = decodedText.trim();
   for (var i = 0; i < state.requestInventoryList.length; i++) {
     var it = state.requestInventoryList[i];
-    if (it.inventoryId === code || it.code === code) {
-      matchedItem = it;
-      break;
-    }
+    if (it.inventoryId === code || it.code === code) { matchedItem = it; break; }
   }
   if (!matchedItem) {
     var lowerCode = code.toLowerCase();
     for (var j = 0; j < state.requestInventoryList.length; j++) {
       var it2 = state.requestInventoryList[j];
-      if (it2.inventoryId.toLowerCase().indexOf(lowerCode) !== -1 ||
-          it2.code.toLowerCase().indexOf(lowerCode) !== -1) {
-        matchedItem = it2;
-        break;
+      if (it2.inventoryId.toLowerCase().indexOf(lowerCode) !== -1 || it2.code.toLowerCase().indexOf(lowerCode) !== -1) {
+        matchedItem = it2; break;
       }
     }
   }
-
   var row = document.querySelector('#step5ItemsContainer .step5-item-row:nth-child(' + (idx+1) + ')');
   if (!row) return;
-
   var searchInput = row.querySelector('.req-item-search');
   var codeInput = document.getElementById('step5Code' + idx);
   var descInput = document.getElementById('step5Desc' + idx);
   var unitSelect = row.querySelector('.req-unit');
   var dropdown = document.getElementById('step5Dropdown' + idx);
   if (dropdown) dropdown.classList.add('d-none');
-
   if (matchedItem) {
     if (searchInput) searchInput.value = matchedItem.inventoryId + ' - ' + matchedItem.description;
     if (codeInput) codeInput.value = matchedItem.inventoryId || matchedItem.code;
@@ -365,10 +286,7 @@ function onWizardScanSuccess(decodedText) {
     if (unitSelect) {
       var unit = matchedItem.unit || 'PIECE';
       for (var opt = 0; opt < unitSelect.options.length; opt++) {
-        if (unitSelect.options[opt].value === unit) {
-          unitSelect.selectedIndex = opt;
-          break;
-        }
+        if (unitSelect.options[opt].value === unit) { unitSelect.selectedIndex = opt; break; }
       }
     }
     checkStep5Items();
@@ -381,25 +299,16 @@ function onWizardScanSuccess(decodedText) {
     showToast('Scanned code: ' + code + ' (not in inventory, you can edit manually)', 'warning');
   }
 }
-
 document.addEventListener('hidden.bs.modal', function (event) {
-  if (event.target.id === 'newRequestModal') {
-    closeWizardScanner();
-  }
+  if (event.target.id === 'newRequestModal') closeWizardScanner();
 });
 
-// ─── Submit Request ──────────────────────────────────────
-// DOUBLE-CLICK PROTECTION: immediate synchronous guard + button disable
+// ─── Submit New Request (with double-click protection) ───
 var _isSubmittingNewRequest = false;
 
 async function submitNewRequest() {
-  // ─── Guard #1: flag check (synchronous, prevents race) ───
-  if (_isSubmittingNewRequest) {
-    console.log('[Submit] Blocked duplicate submit — already in progress');
-    return;
-  }
+  if (_isSubmittingNewRequest) return;
 
-  // ─── Guard #2: disable the actual button instantly ──────
   var submitBtn = document.querySelector('#step6 .btn-success') ||
                   document.querySelector('#newRequestModal .btn-success');
   var origHtml = '';
@@ -411,13 +320,9 @@ async function submitNewRequest() {
     submitBtn.classList.add('btn-loading');
     submitBtn.innerHTML = '<span class="btn-spinner"></span>Submitting...';
   }
-
   _isSubmittingNewRequest = true;
-
-  // ─── Guard #3: also block via global state ──────────────
   state.isLoading = true;
 
-  // ─── Collect data ───────────────────────────────────────
   var docType = document.getElementById('reqDocType').value;
   var requestor = document.getElementById('reqRequestor').value.trim();
   var department = document.getElementById('reqDepartment').value.trim();
@@ -439,15 +344,7 @@ async function submitNewRequest() {
     var qty = parseInt(row.querySelector('.req-qty').value, 10);
     var unit = row.querySelector('.req-unit').value || 'PIECE';
     var remarks = row.querySelector('.req-remarks').value || '';
-    if (code && qty > 0) {
-      items.push({
-        inventoryId: code,
-        description: desc,
-        qty: qty,
-        unit: unit,
-        remarks: remarks
-      });
-    }
+    if (code && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty, unit: unit, remarks: remarks });
   });
 
   if (items.length === 0) {
@@ -477,9 +374,11 @@ async function submitNewRequest() {
       redirect: 'follow'
     });
     var text = await res.text();
-    var data;
-    try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
-
+    var trimmed = String(text || '').trim();
+    if (!trimmed || trimmed.charAt(0) === '<') {
+      throw new Error('Server is unavailable. Please try again.');
+    }
+    var data = JSON.parse(trimmed);
     if (data && data.success) {
       localStorage.setItem('ivm_requestorName', requestor);
       newRequestModal.hide();
@@ -489,7 +388,7 @@ async function submitNewRequest() {
       localStorage.setItem('ivm_requestStatuses', JSON.stringify(statuses));
       loadMyRequests();
     } else {
-      showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
+      showToast('Failed: ' + ((data && data.error) || 'Unknown error'), 'danger');
     }
   } catch(err) {
     showToast('Error: ' + err.message, 'danger');
@@ -510,18 +409,11 @@ function _resetSubmitState(btn, origHtml) {
   }
 }
 
-// ─── QR DOWNLOAD / SHARE ─────────────────────────────────
+// ─── QR Download / Share ───
 function downloadRequestQr() {
-  if (!lastQrDocNo || !lastQrTicketNo) {
-    showToast('No QR to download', 'warning');
-    return;
-  }
+  if (!lastQrDocNo || !lastQrTicketNo) { showToast('No QR to download', 'warning'); return; }
   var img = document.getElementById('requestQrImg');
-  if (!img || !img.src || img.src === '') {
-    showToast('QR image not loaded', 'warning');
-    return;
-  }
-
+  if (!img || !img.src || img.src === '') { showToast('QR image not loaded', 'warning'); return; }
   var canvas = document.createElement('canvas');
   var ctx = canvas.getContext('2d');
   var qrImg = new Image();
@@ -546,12 +438,12 @@ function downloadRequestQr() {
     link.href = canvas.toDataURL('image/png');
     link.click();
   };
-  qrImg.onerror = function() { showToast('Failed to load QR image for download', 'danger'); };
+  qrImg.onerror = function() { showToast('Failed to load QR image', 'danger'); };
   qrImg.src = img.src;
 }
 
 async function shareRequestQr() {
-  if (!navigator.share) { showToast('Share not supported on this device', 'warning'); return; }
+  if (!navigator.share) { showToast('Share not supported', 'warning'); return; }
   if (!lastQrDocNo || !lastQrTicketNo) { showToast('No QR to share', 'warning'); return; }
   var img = document.getElementById('requestQrImg');
   if (!img || !img.src) { showToast('QR image not loaded', 'warning'); return; }
@@ -574,7 +466,6 @@ function showRequestQr(ticketNo, docNo) {
   document.getElementById('requestDocNo').textContent = docNo;
   lastQrTicketNo = ticketNo;
   lastQrDocNo = docNo;
-
   var appUrl = window.location.origin + window.location.pathname;
   var qrDataUrl = appUrl + '?doc=' + encodeURIComponent(docNo);
   var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(qrDataUrl);
@@ -586,14 +477,154 @@ function showRequestQr(ticketNo, docNo) {
     document.getElementById('qrFallback').classList.remove('d-none');
     document.getElementById('qrFallback').innerHTML = '<strong>Doc No:</strong> ' + docNo;
   };
-
   var shareBtn = document.getElementById('shareQrBtn');
   if (shareBtn) shareBtn.style.display = navigator.share ? 'inline-block' : 'none';
-
   requestSuccessModal.show();
 }
 
-// ─── REQUEST DETAILS (warehouse view) ────────────────────
+// ─── Load My Requests (MRIF + MRS only) ───
+async function loadMyRequests() {
+  var requestor = localStorage.getItem('ivm_requestorName');
+  if (!requestor) return;
+  showLoading('Loading requests...');
+  try {
+    var url = API_URL + '?action=getMyRequests&requestor=' + encodeURIComponent(requestor) + '&_t=' + Date.now();
+    var res = await fetch(url);
+    var text = await res.text();
+    var trimmed = String(text || '').trim();
+    if (!trimmed || trimmed.charAt(0) === '<') {
+      var listEl = document.getElementById('myRequestsList');
+      if (listEl) listEl.innerHTML = '<div class="list-group-item text-warning text-center py-3">Server unavailable. Please try again later.</div>';
+      return;
+    }
+    var data = JSON.parse(trimmed);
+
+    if (data.success && data.requests) {
+      // ═══════════════════════════════════════════════════════════
+      // FILTER: Only MRIF and MRS — hide MRR from production users
+      // (MRR is a warehouse-created document, not a production request)
+      // ═══════════════════════════════════════════════════════════
+      data.requests = data.requests.filter(function(req) {
+        var t = (req.type || '').toUpperCase();
+        return t === 'MRIF' || t === 'MRS';
+      });
+
+      data.requests.sort(function(a, b) {
+        var ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        var tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return tb - ta;
+      });
+
+      var prevStatuses = {};
+      try { prevStatuses = JSON.parse(localStorage.getItem('ivm_requestStatuses') || '{}'); } catch(e) {}
+      var newStatuses = {};
+      var hasNewReady = false;
+      var readyCount = 0;
+      var pendingCount = 0;
+
+      data.requests.forEach(function(req) {
+        var docNo = req.docNo || '';
+        var status = req.status || 'PENDING';
+        newStatuses[docNo] = status;
+        var prevStatus = prevStatuses[docNo] || 'PENDING';
+        if (prevStatus === 'PENDING' && (status === 'PARTIAL' || status === 'COMPLETED')) hasNewReady = true;
+        if (status !== 'PENDING') readyCount++;
+        else pendingCount++;
+      });
+      localStorage.setItem('ivm_requestStatuses', JSON.stringify(newStatuses));
+
+      var badge = document.getElementById('myRequestsBadge');
+      if (badge) { badge.textContent = readyCount; badge.classList.toggle('d-none', readyCount === 0); }
+      var badgeSidebar = document.getElementById('myRequestsBadgeSidebar');
+      if (badgeSidebar) { badgeSidebar.textContent = readyCount; badgeSidebar.classList.toggle('d-none', readyCount === 0); }
+
+      renderMyRequests(data.requests);
+
+      var kpiActive = document.getElementById('kpiActiveDocs');
+      var kpiPending = document.getElementById('kpiPending');
+      var kpiCompleted = document.getElementById('kpiCompleted');
+      if (kpiActive) kpiActive.textContent = data.requests.length;
+      if (kpiPending) kpiPending.textContent = pendingCount;
+      if (kpiCompleted) kpiCompleted.textContent = readyCount;
+
+      if (hasNewReady) {
+        playSuccessBeep();
+        showToast('Your request has been processed by the warehouse!', 'success');
+      }
+    } else {
+      var listEl2 = document.getElementById('myRequestsList');
+      if (listEl2) listEl2.innerHTML = '<div class="list-group-item text-muted text-center py-3">No requests found</div>';
+    }
+  } catch(e) {
+    console.error('[loadMyRequests] Error:', e);
+    var listEl3 = document.getElementById('myRequestsList');
+    if (listEl3) listEl3.innerHTML = '<div class="list-group-item text-danger text-center py-3">Failed to load requests. Check your connection.</div>';
+  } finally { hideLoading(); }
+}
+
+// ─── Render My Requests ───
+function renderMyRequests(requests) {
+  var container = document.getElementById('myRequestsList');
+  if (!container) return;
+  container.innerHTML = '';
+
+  // ═══════════════════════════════════════════════════════════
+  // FILTER AGAIN (defense in depth — in case caller passes unfiltered)
+  // ═══════════════════════════════════════════════════════════
+  var filtered = (requests || []).filter(function(req) {
+    var t = (req.type || '').toUpperCase();
+    return t === 'MRIF' || t === 'MRS';
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<div class="list-group-item text-muted text-center py-4">' +
+      '<i class="bi bi-inbox fs-3 d-block mb-2"></i>' +
+      'No requests found.</div>';
+    return;
+  }
+
+  filtered.forEach(function(req) {
+    var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
+    var status = req.status || 'PENDING';
+    var isCompleted = (status === 'COMPLETED');
+    var isPartial = (status === 'PARTIAL');
+    var badgeClass = isCompleted ? 'success' : (isPartial ? 'info' : 'warning');
+    var statusText = isCompleted ? 'COMPLETED' : (isPartial ? 'PARTIAL' : 'PENDING');
+    var icon = isCompleted ? 'bi-check-circle-fill' : (isPartial ? 'bi-hourglass-split' : 'bi-clock');
+    var docNo = req.docNo || '';
+    var docType = req.type || 'MRIF';
+
+    var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + '" ' +
+      'data-docno="' + docNo + '" data-doctype="' + docType + '" ' +
+      'style="cursor:pointer;">' +
+        '<div class="d-flex justify-content-between align-items-start">' +
+          '<div class="flex-grow-1">' +
+            '<div class="fw-bold">' + docNo + ' <span class="badge bg-secondary">' + docType + '</span></div>' +
+            '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
+            '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
+            '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i> Click to view QR &amp; requested items</div>' +
+          '</div>' +
+          '<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + statusText + '</span>' +
+        '</div>' +
+      '</div>';
+    container.innerHTML += html;
+  });
+
+  container.querySelectorAll('.request-card').forEach(function(el) {
+    el.addEventListener('click', function() {
+      var docNo = this.getAttribute('data-docno');
+      var docType = this.getAttribute('data-doctype') || 'MRIF';
+      if (!docNo) return;
+      if (typeof window.openMyRequestDetails === 'function') {
+        window.openMyRequestDetails(docNo, docType);
+      } else if (typeof openRequestDetails === 'function') {
+        openRequestDetails(docNo, docType);
+      }
+    });
+  });
+}
+
+// ─── Request Details ───
 async function openRequestDetails(docNo, docType) {
   if (!docNo) return;
   var modal = document.getElementById('requestDetailsModal');
@@ -602,7 +633,6 @@ async function openRequestDetails(docNo, docType) {
   content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading request details...</div></div>';
   var bsModal = new bootstrap.Modal(modal);
   bsModal.show();
-
   try {
     var sheetKey = 'sheetId_' + (docType || 'MRIF');
     var sheetIdVal = localStorage.getItem(sheetKey);
@@ -633,12 +663,7 @@ function buildRequestDetailsHtml(docNo, docType, info, items) {
   var joNo = info['JO No.'] || info.joNo || '—';
   var client = info['Client Name'] || info.clientName || info.client || '—';
   var project = info.Project || info.project || '—';
-  var poNo = info['PO No.'] || info.poNo || '—';
-  var vendor = info['Vendor/Client'] || info.vendor || info.client || '—';
-  var drNo = info['DR No.'] || info.drNo || '—';
-  var receivingDate = info['Receiving Date'] || info.receivingDate || '—';
-  var receivingSite = info['Receiving Site'] || info.receivingSite || '—';
-  var preparedBy = info['Prepared By'] || info.preparedBy || '—';
+  var isMRR = (docType === 'MRR');
 
   var dateStr = dateRaw;
   try {
@@ -673,8 +698,6 @@ function buildRequestDetailsHtml(docNo, docType, info, items) {
     itemsHtml = '<tr><td colspan="7" class="text-center text-muted py-3">No items found</td></tr>';
   }
 
-  var isMRR = (docType === 'MRR');
-
   return '<div class="request-details">' +
     '<div class="row g-2 mb-3">' +
       '<div class="col-md-6"><strong>Document:</strong> ' + docNo + '</div>' +
@@ -682,12 +705,6 @@ function buildRequestDetailsHtml(docNo, docType, info, items) {
       (requestor !== '—' ? '<div class="col-md-6"><strong>Requestor:</strong> ' + requestor + '</div>' : '') +
       (department !== '—' ? '<div class="col-md-6"><strong>Department:</strong> ' + department + '</div>' : '') +
       (dateStr !== '—' ? '<div class="col-md-6"><strong>Date:</strong> ' + dateStr + '</div>' : '') +
-      (isMRR ? '<div class="col-md-6"><strong>Receiving Site:</strong> ' + receivingSite + '</div>' : '') +
-      (isMRR ? '<div class="col-md-6"><strong>PO No.:</strong> ' + poNo + '</div>' : '') +
-      (isMRR ? '<div class="col-md-6"><strong>Vendor:</strong> ' + vendor + '</div>' : '') +
-      (isMRR ? '<div class="col-md-6"><strong>DR No.:</strong> ' + drNo + '</div>' : '') +
-      (isMRR ? '<div class="col-md-6"><strong>Receiving Date:</strong> ' + receivingDate + '</div>' : '') +
-      (isMRR ? '<div class="col-md-6"><strong>Prepared By:</strong> ' + preparedBy + '</div>' : '') +
       (!isMRR && gemSo !== '—' ? '<div class="col-md-6"><strong>GEM SO No.:</strong> ' + gemSo + '</div>' : '') +
       (!isMRR && joNo !== '—' ? '<div class="col-md-6"><strong>JO No.:</strong> ' + joNo + '</div>' : '') +
       (!isMRR && client !== '—' ? '<div class="col-md-6"><strong>Client:</strong> ' + client + '</div>' : '') +
@@ -696,139 +713,21 @@ function buildRequestDetailsHtml(docNo, docType, info, items) {
     '<hr>' +
     '<div class="table-responsive">' +
       '<table class="table table-sm table-bordered">' +
-        '<thead class="table-light">' +
-          '<tr>' +
-            '<th>#</th>' +
-            '<th>Item Code</th>' +
-            '<th>Description</th>' +
-            '<th class="text-center">' + (isMRR ? 'Rec. Qty' : 'Req. Qty') + '</th>' +
-            '<th class="text-center">' + (isMRR ? 'ATL Qty' : 'Issued Qty') + '</th>' +
-            '<th class="text-center">Unit</th>' +
-            '<th>Remarks</th>' +
-          '</tr>' +
-        '</thead>' +
+        '<thead class="table-light"><tr>' +
+          '<th>#</th><th>Item Code</th><th>Description</th>' +
+          '<th class="text-center">' + (isMRR ? 'Rec. Qty' : 'Req. Qty') + '</th>' +
+          '<th class="text-center">' + (isMRR ? 'ATL Qty' : 'Issued Qty') + '</th>' +
+          '<th class="text-center">Unit</th><th>Remarks</th>' +
+        '</tr></thead>' +
         '<tbody>' + itemsHtml + '</tbody>' +
       '</table>' +
     '</div>' +
   '</div>';
 }
 
-// ─── MY REQUESTS ─────────────────────────────────────────
-async function loadMyRequests() {
-  var requestor = localStorage.getItem('ivm_requestorName');
-  if (!requestor) return;
-  showLoading('Loading requests...');
-  try {
-    var url = API_URL + '?action=getMyRequests&requestor=' + encodeURIComponent(requestor) + '&_t=' + Date.now();
-    var res = await fetch(url);
-    var data = await res.json();
-    if (data.success && data.requests) {
-      data.requests.sort(function(a, b) {
-        var ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-        var tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-        return tb - ta;
-      });
-      var prevStatuses = {};
-      try { prevStatuses = JSON.parse(localStorage.getItem('ivm_requestStatuses') || '{}'); } catch(e) {}
-      var newStatuses = {};
-      var hasNewReady = false;
-      var readyCount = 0;
-      var pendingCount = 0;
-      data.requests.forEach(function(req) {
-        var docNo = req.docNo || '';
-        var status = req.status || 'PENDING';
-        newStatuses[docNo] = status;
-        var prevStatus = prevStatuses[docNo] || 'PENDING';
-        if (prevStatus === 'PENDING' && (status === 'PARTIAL' || status === 'COMPLETED')) {
-          hasNewReady = true;
-        }
-        if (status !== 'PENDING') readyCount++;
-        else pendingCount++;
-      });
-      localStorage.setItem('ivm_requestStatuses', JSON.stringify(newStatuses));
-      var badge = document.getElementById('myRequestsBadge');
-      if (badge) { badge.textContent = readyCount; badge.classList.toggle('d-none', readyCount === 0); }
-      var badgeSidebar = document.getElementById('myRequestsBadgeSidebar');
-      if (badgeSidebar) { badgeSidebar.textContent = readyCount; badgeSidebar.classList.toggle('d-none', readyCount === 0); }
-      renderMyRequests(data.requests);
-      var kpiActive = document.getElementById('kpiActiveDocs');
-      var kpiPending = document.getElementById('kpiPending');
-      var kpiCompleted = document.getElementById('kpiCompleted');
-      if (kpiActive) kpiActive.textContent = data.requests.length;
-      if (kpiPending) kpiPending.textContent = pendingCount;
-      if (kpiCompleted) kpiCompleted.textContent = readyCount;
-      if (hasNewReady) {
-        playSuccessBeep();
-        showToast('Your request has been processed by the warehouse!', 'success');
-      }
-    } else {
-      var listEl = document.getElementById('myRequestsList');
-      if (listEl) listEl.innerHTML = '<div class="list-group-item text-muted text-center py-3">' + (data.error ? 'Error: ' + data.error : 'No requests found') + '</div>';
-    }
-  } catch(e) {
-    console.error('[loadMyRequests] Error:', e);
-    var listEl2 = document.getElementById('myRequestsList');
-    if (listEl2) listEl2.innerHTML = '<div class="list-group-item text-danger text-center py-3">Failed to load requests. Check your connection.</div>';
-  } finally { hideLoading(); }
-}
-
-// ─── Render My Requests (click → open QR + items modal) ──
-function renderMyRequests(requests) {
-  var container = document.getElementById('myRequestsList');
-  if (!container) return;
-  container.innerHTML = '';
-  if (!requests || requests.length === 0) {
-    container.innerHTML = '<div class="list-group-item text-muted text-center">No requests found</div>';
-    return;
-  }
-
-  requests.forEach(function(req) {
-    var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
-    var status = req.status || 'PENDING';
-    var isCompleted = (status === 'COMPLETED');
-    var isPartial = (status === 'PARTIAL');
-    var badgeClass = isCompleted ? 'success' : (isPartial ? 'info' : 'warning');
-    var statusText = isCompleted ? 'COMPLETED' : (isPartial ? 'PARTIAL' : 'PENDING');
-    var icon = isCompleted ? 'bi-check-circle-fill' : (isPartial ? 'bi-hourglass-split' : 'bi-clock');
-    var docNo = req.docNo || '';
-    var docType = req.type || 'MRIF';
-
-    var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + '" ' +
-      'data-docno="' + docNo + '" data-doctype="' + docType + '" ' +
-      'style="cursor:pointer;">' +
-        '<div class="d-flex justify-content-between align-items-start">' +
-          '<div class="flex-grow-1">' +
-            '<div class="fw-bold">' + docNo + ' <span class="badge bg-secondary">' + docType + '</span></div>' +
-            '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
-            '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
-            '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i> Click to view QR &amp; requested items</div>' +
-          '</div>' +
-          '<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + statusText + '</span>' +
-        '</div>' +
-      '</div>';
-    container.innerHTML += html;
-  });
-
-  // Click on card → open details modal (QR + items)
-  container.querySelectorAll('.request-card').forEach(function(el) {
-    el.addEventListener('click', function() {
-      var docNo = this.getAttribute('data-docno');
-      var docType = this.getAttribute('data-doctype') || 'MRIF';
-      if (!docNo) return;
-      if (typeof window.openMyRequestDetails === 'function') {
-        window.openMyRequestDetails(docNo, docType);
-      } else if (typeof openRequestDetails === 'function') {
-        openRequestDetails(docNo, docType);
-      }
-    });
-  });
-}
-
-// ─── MANUAL MRIF FUNCTIONS ────────────────────────────────
+// ─── Manual MRIF ───
 function openManualMrifModal() {
-  if (!manualMrifModal) {
-    manualMrifModal = new bootstrap.Modal(document.getElementById('manualMrifModal'));
-  }
+  if (!manualMrifModal) manualMrifModal = new bootstrap.Modal(document.getElementById('manualMrifModal'));
   document.getElementById('manualMrifRequestor').value = '';
   document.getElementById('manualMrifDepartment').value = '';
   document.getElementById('manualMrifJoNo').value = '';
@@ -875,50 +774,23 @@ function renderManualMrifItems() {
     return;
   }
   if (emptyState) emptyState.style.display = 'none';
-
   var html = '';
   for (var i = 0; i < manualMrifItems.length; i++) {
     var it = manualMrifItems[i];
     html += '<tr>' +
       '<td class="align-middle text-center">' + (i + 1) + '</td>' +
       '<td><div style="position:relative;">' +
-        '<input type="text" class="form-control form-control-sm manual-mrif-search" ' +
-          'placeholder="Type to search..." ' +
-          'value="' + (it.inventoryId ? it.inventoryId + ' - ' + it.description : '') + '" ' +
-          'oninput="filterManualMrifItems(this, ' + i + ')" ' +
-          'onfocus="filterManualMrifItems(this, ' + i + ')" ' +
-          'autocomplete="off">' +
-        '<div class="list-group d-none manual-mrif-dropdown" ' +
-          'style="background:#fff;border:1px solid #ced4da;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.18);padding:4px 0;overflow-y:auto;" ' +
-          'id="manualMrifDropdown' + i + '"></div>' +
+        '<input type="text" class="form-control form-control-sm manual-mrif-search" placeholder="Type to search..." value="' + (it.inventoryId ? it.inventoryId + ' - ' + it.description : '') + '" oninput="filterManualMrifItems(this, ' + i + ')" onfocus="filterManualMrifItems(this, ' + i + ')" autocomplete="off">' +
+        '<div class="list-group d-none manual-mrif-dropdown" style="background:#fff;border:1px solid #ced4da;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.18);padding:4px 0;overflow-y:auto;" id="manualMrifDropdown' + i + '"></div>' +
         '<input type="hidden" class="manual-mrif-code" id="manualMrifCode' + i + '" value="' + (it.inventoryId || '') + '">' +
         '<input type="hidden" class="manual-mrif-desc" id="manualMrifDesc' + i + '" value="' + (it.description || '') + '">' +
       '</div></td>' +
-      '<td><input type="text" class="form-control form-control-sm" ' +
-        'value="' + (it.description || '') + '" ' +
-        'onchange="updateManualMrifItem(' + i + ', \'description\', this.value)" ' +
-        'placeholder="Description"></td>' +
-      '<td><input type="number" class="form-control form-control-sm text-center" ' +
-        'value="' + (it.qty || 1) + '" ' +
-        'onchange="updateManualMrifItem(' + i + ', \'qty\', parseFloat(this.value)||0)" ' +
-        'min="1" step="1"></td>' +
-      '<td><input type="number" class="form-control form-control-sm text-center" ' +
-        'value="' + (it.atlQty || 0) + '" ' +
-        'onchange="updateManualMrifItem(' + i + ', \'atlQty\', parseFloat(this.value)||0)" ' +
-        'min="0" step="1"></td>' +
-      '<td><select class="form-select form-select-sm manual-mrif-unit" ' +
-        'onchange="updateManualMrifItem(' + i + ', \'unit\', this.value)">' +
-        buildUnitOptions(it.unit || 'PIECE') +
-      '</select></td>' +
-      '<td><input type="text" class="form-control form-control-sm" ' +
-        'value="' + (it.remarks || '') + '" ' +
-        'onchange="updateManualMrifItem(' + i + ', \'remarks\', this.value)" ' +
-        'placeholder="Remarks" maxlength="200"></td>' +
-      '<td class="align-middle text-center">' +
-        '<button class="btn btn-sm btn-outline-danger" onclick="removeManualMrifItem(' + i + ')" title="Remove">' +
-          '<i class="bi bi-trash"></i>' +
-        '</button>' +
-      '</td>' +
+      '<td><input type="text" class="form-control form-control-sm" value="' + (it.description || '') + '" onchange="updateManualMrifItem(' + i + ', \'description\', this.value)" placeholder="Description"></td>' +
+      '<td><input type="number" class="form-control form-control-sm text-center" value="' + (it.qty || 1) + '" onchange="updateManualMrifItem(' + i + ', \'qty\', parseFloat(this.value)||0)" min="1" step="1"></td>' +
+      '<td><input type="number" class="form-control form-control-sm text-center" value="' + (it.atlQty || 0) + '" onchange="updateManualMrifItem(' + i + ', \'atlQty\', parseFloat(this.value)||0)" min="0" step="1"></td>' +
+      '<td><select class="form-select form-select-sm manual-mrif-unit" onchange="updateManualMrifItem(' + i + ', \'unit\', this.value)">' + buildUnitOptions(it.unit || 'PIECE') + '</select></td>' +
+      '<td><input type="text" class="form-control form-control-sm" value="' + (it.remarks || '') + '" onchange="updateManualMrifItem(' + i + ', \'remarks\', this.value)" placeholder="Remarks" maxlength="200"></td>' +
+      '<td class="align-middle text-center"><button class="btn btn-sm btn-outline-danger" onclick="removeManualMrifItem(' + i + ')" title="Remove"><i class="bi bi-trash"></i></button></td>' +
       '</tr>';
   }
   tbody.innerHTML = html;
@@ -929,12 +801,10 @@ function _positionMrifSuggestDropdown(dropdown, input) {
   var spaceBelow = window.innerHeight - inputRect.bottom;
   var spaceAbove = inputRect.top;
   var dropdownMinHeight = 200;
-
   dropdown.style.position = 'fixed';
   dropdown.style.left = inputRect.left + 'px';
   dropdown.style.width = Math.max(inputRect.width, 280) + 'px';
   dropdown.style.zIndex = '99999';
-
   if (spaceBelow < dropdownMinHeight && spaceAbove > spaceBelow) {
     dropdown.style.top = 'auto';
     dropdown.style.bottom = (window.innerHeight - inputRect.top + 2) + 'px';
@@ -951,24 +821,20 @@ function filterManualMrifItems(input, idx) {
   var dropdown = document.getElementById('manualMrifDropdown' + idx);
   if (!dropdown) return;
   dropdown.innerHTML = '';
-
   if (!term) { dropdown.classList.add('d-none'); return; }
-
   if (state.requestInventoryList.length === 0) {
     dropdown.innerHTML = '<div class="list-group-item text-muted" style="padding:8px 12px;">Loading inventory...</div>';
     _positionMrifSuggestDropdown(dropdown, input);
     dropdown.classList.remove('d-none');
     return;
   }
-
   var matches = state.requestInventoryList.filter(function(it) {
     var code = (it.code || it.inventoryId || '').toLowerCase();
     var desc = (it.description || '').toLowerCase();
     return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
   }).slice(0, 20);
-
   if (matches.length === 0) {
-    dropdown.innerHTML = '<div class="list-group-item text-muted" style="padding:8px 12px;">No matches — you can type the code and description manually.</div>';
+    dropdown.innerHTML = '<div class="list-group-item text-muted" style="padding:8px 12px;">No matches</div>';
   } else {
     matches.forEach(function(it) {
       var code = it.code || it.inventoryId || '';
@@ -977,8 +843,7 @@ function filterManualMrifItems(input, idx) {
       var el = document.createElement('div');
       el.className = 'list-group-item list-group-item-action';
       el.style.cssText = 'padding:10px 14px;cursor:pointer;font-size:0.9rem;border-bottom:1px solid #f0f0f0;';
-      el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div>' +
-                     '<div class="text-muted small">' + desc + ' <span class="badge bg-light text-dark">' + unit + '</span></div>';
+      el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div><div class="text-muted small">' + desc + ' <span class="badge bg-light text-dark">' + unit + '</span></div>';
       el.onmousedown = function(e) {
         e.preventDefault();
         input.value = code + ' - ' + desc;
@@ -990,9 +855,7 @@ function filterManualMrifItems(input, idx) {
           if (descInput) descInput.value = desc;
         }
         var unitSelect = row.querySelector('.manual-mrif-unit');
-        if (unitSelect && unitSelect.querySelector('option[value="' + unit + '"]')) {
-          unitSelect.value = unit;
-        }
+        if (unitSelect && unitSelect.querySelector('option[value="' + unit + '"]')) unitSelect.value = unit;
         if (manualMrifItems[idx]) {
           manualMrifItems[idx].inventoryId = code;
           manualMrifItems[idx].description = desc;
@@ -1004,7 +867,6 @@ function filterManualMrifItems(input, idx) {
       dropdown.appendChild(el);
     });
   }
-
   _positionMrifSuggestDropdown(dropdown, input);
   dropdown.classList.remove('d-none');
 }
@@ -1016,20 +878,14 @@ function updateManualMrifSubmitButton() {
   var hasValidItems = false;
   for (var i = 0; i < manualMrifItems.length; i++) {
     var it = manualMrifItems[i];
-    if (it.inventoryId && it.inventoryId.trim() && it.description && it.description.trim() && it.qty > 0) {
-      hasValidItems = true;
-      break;
-    }
+    if (it.inventoryId && it.inventoryId.trim() && it.description && it.description.trim() && it.qty > 0) { hasValidItems = true; break; }
   }
   btn.disabled = !(requestor && hasValidItems);
 }
 
-// ─── Submit Manual MRIF (with double-click protection) ────
 var _isSubmittingManualMrif = false;
-
 async function submitManualMrif() {
   if (_isSubmittingManualMrif) return;
-
   var btn = document.getElementById('btnSubmitManualMrif');
   var origHtml = '';
   if (btn) {
@@ -1040,7 +896,6 @@ async function submitManualMrif() {
     btn.innerHTML = '<span class="btn-spinner"></span>Creating...';
   }
   _isSubmittingManualMrif = true;
-
   try {
     var requestor = document.getElementById('manualMrifRequestor').value.trim();
     var department = document.getElementById('manualMrifDepartment').value.trim();
@@ -1048,7 +903,6 @@ async function submitManualMrif() {
     var gemSoNo = document.getElementById('manualMrifGemSoNo').value.trim();
     var clientName = document.getElementById('manualMrifClient').value.trim();
     var project = document.getElementById('manualMrifProject').value.trim();
-
     var items = [];
     var rows = document.querySelectorAll('#manualMrifItemsBody tr');
     for (var i = 0; i < rows.length; i++) {
@@ -1064,39 +918,26 @@ async function submitManualMrif() {
       var atl = atlInput ? parseInt(atlInput.value, 10) : 0;
       var unit = unitSelect ? unitSelect.value : 'PIECE';
       var remarks = remarksInput ? remarksInput.value.trim() : '';
-      if (code && desc && qty > 0) {
-        items.push({ inventoryId: code, description: desc, qty: qty, atlQty: atl, unit: unit, remarks: remarks });
-      }
+      if (code && desc && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty, atlQty: atl, unit: unit, remarks: remarks });
     }
-
     if (items.length === 0) { showToast('Please add at least one valid item', 'warning'); return; }
     if (!requestor) { showToast('Please enter a requestor name', 'warning'); return; }
-
     var payload = {
-      action: 'createRequest',
-      docType: 'MRIF',
-      requestor: requestor,
-      department: department || '',
-      joNo: joNo || '',
-      gemSoNo: gemSoNo || '',
-      clientName: clientName || '',
-      project: project || '',
-      items: items,
-      timestamp: new Date().toISOString(),
-      isManual: true
+      action: 'createRequest', docType: 'MRIF', requestor: requestor,
+      department: department || '', joNo: joNo || '', gemSoNo: gemSoNo || '',
+      clientName: clientName || '', project: project || '',
+      items: items, timestamp: new Date().toISOString(), isManual: true
     };
-
     var res = await fetch(API_URL, {
       method: 'POST',
       body: JSON.stringify(payload),
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       redirect: 'follow'
     });
-
     var text = await res.text();
-    var data;
-    try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid JSON response'); }
-
+    var trimmed = String(text || '').trim();
+    if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
+    var data = JSON.parse(trimmed);
     if (data && data.success) {
       if (manualMrifModal) manualMrifModal.hide();
       showToast('Manual MRIF created: ' + data.docNo, 'success');
@@ -1104,10 +945,9 @@ async function submitManualMrif() {
       await loadWarehouseNotifications();
       await updateWarehouseKPIs();
     } else {
-      showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
+      showToast('Failed: ' + ((data && data.error) || 'Unknown error'), 'danger');
     }
   } catch(err) {
-    console.error('[Manual MRIF] Error:', err);
     showToast('Error: ' + err.message, 'danger');
   } finally {
     _isSubmittingManualMrif = false;
