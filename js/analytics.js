@@ -224,7 +224,7 @@ function renderDailyChart(dailyData) {
   });
 }
 
-// ─── Top 10 Most Requested Items ───
+// ─── Top Requested Items — Doughnut chart with Top N + Others ───
 function renderTopItemsChart(topItems) {
   var ctx = _prepChart('topItemsChart', '_topItemsChart');
   if (!ctx) return;
@@ -235,52 +235,130 @@ function renderTopItemsChart(topItems) {
     return;
   }
 
-  var labels = topItems.map(function(d) { return d.itemCode; });
-  var counts = topItems.map(function(d) { return d.count; });
-  var qtys = topItems.map(function(d) { return d.totalQty || 0; });
+  // ═══════════════════════════════════════════════════════════
+  // Group into Top N + Others for readability
+  // ═══════════════════════════════════════════════════════════
+  var TOP_N = 8;
+  var totalRequested = topItems.reduce(function(sum, it) { return sum + (it.count || 0); }, 0);
+  var displayed = [];
+  var labels = [];
+  var counts = [];
+  var qtyTotals = [];
+
+  if (topItems.length <= TOP_N + 2) {
+    // Few items — show all
+    topItems.forEach(function(it) {
+      displayed.push(it);
+      labels.push(it.itemCode);
+      counts.push(it.count);
+      qtyTotals.push(it.totalQty || 0);
+    });
+  } else {
+    // Show top N + "Others"
+    var topPortion = topItems.slice(0, TOP_N);
+    var otherPortion = topItems.slice(TOP_N);
+
+    topPortion.forEach(function(it) {
+      displayed.push(it);
+      labels.push(it.itemCode);
+      counts.push(it.count);
+      qtyTotals.push(it.totalQty || 0);
+    });
+
+    var otherCount = otherPortion.reduce(function(sum, it) { return sum + (it.count || 0); }, 0);
+    var otherQty = otherPortion.reduce(function(sum, it) { return sum + (it.totalQty || 0); }, 0);
+
+    labels.push('Others (' + otherPortion.length + ' items)');
+    counts.push(otherCount);
+    qtyTotals.push(otherQty);
+    displayed.push({ isOther: true, items: otherPortion, count: otherCount, totalQty: otherQty });
+  }
+
+  // ─── Color palette ───
+  var palette = [
+    '#1e3a5f', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6',
+    '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6b7280'
+  ];
+  var colors = labels.map(function(_, i) { return palette[i % palette.length]; });
+
+  // ─── Custom legend below chart ───
+  if (container) {
+    var legendHtml = '<div class="chart-pie-legend">';
+    displayed.forEach(function(it, idx) {
+      if (it.isOther) return; // handled separately
+      var pct = totalRequested > 0 ? ((it.count / totalRequested) * 100).toFixed(1) : '0.0';
+      legendHtml += '<span class="chart-pie-legend-item">' +
+        '<span class="chart-pie-dot" style="background:' + colors[idx] + '"></span>' +
+        '<code>' + escapeHtmlSimple(it.itemCode) + '</code>' +
+        '<span class="chart-pie-legend-meta">' + it.count + ' · ' + pct + '%</span>' +
+        '</span>';
+    });
+    // If there's an "Others" slice, show a summary line
+    var otherSlice = displayed[displayed.length - 1];
+    if (otherSlice && otherSlice.isOther) {
+      var otherPct = totalRequested > 0 ? ((otherSlice.count / totalRequested) * 100).toFixed(1) : '0.0';
+      legendHtml += '<span class="chart-pie-legend-item chart-pie-legend-other">' +
+        '<span class="chart-pie-dot" style="background:' + colors[colors.length - 1] + '"></span>' +
+        '<em>Others (' + otherSlice.items.length + ' items)</em>' +
+        '<span class="chart-pie-legend-meta">' + otherSlice.count + ' · ' + otherPct + '%</span>' +
+        '</span>';
+    }
+    legendHtml += '</div>';
+    container.insertAdjacentHTML('afterbegin', legendHtml);
+  }
 
   window._topItemsChart = new Chart(ctx, {
-    type: 'bar',
+    type: 'doughnut',
     data: {
       labels: labels,
       datasets: [{
-        label: 'Times Requested',
         data: counts,
-        backgroundColor: '#f59e0b',
-        borderRadius: 4
+        backgroundColor: colors,
+        borderColor: '#fff',
+        borderWidth: 2,
+        hoverOffset: 8
       }]
     },
     options: {
-      indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
       animation: { duration: 400 },
-      layout: { padding: { right: 20 } },
+      cutout: '45%',
       plugins: {
         legend: { display: false },
         tooltip: {
           callbacks: {
+            title: function(context) {
+              return context[0].label;
+            },
             label: function(context) {
               var i = context.dataIndex;
-              return [
-                'Times Requested: ' + counts[i],
-                'Total Qty: ' + qtys[i]
+              var count = counts[i];
+              var qty = qtyTotals[i];
+              var pct = totalRequested > 0 ? ((count / totalRequested) * 100).toFixed(1) : '0.0';
+              var lines = [
+                'Times Requested: ' + count + ' (' + pct + '%)',
+                'Total Qty: ' + qty
               ];
+              if (displayed[i] && displayed[i].isOther) {
+                lines.push('Includes ' + displayed[i].items.length + ' item(s)');
+              }
+              return lines;
             }
           }
-        }
-      },
-      scales: {
-        x: {
-          beginAtZero: true,
-          ticks: { stepSize: 1, precision: 0 }
-        },
-        y: {
-          ticks: { font: { size: 10 } }
         }
       }
     }
   });
+}
+
+// ─── Local HTML escape (in case history.js not loaded) ───
+function escapeHtmlSimple(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 // ─── Warehouse Staff Performance ───
