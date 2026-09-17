@@ -63,7 +63,6 @@ window.openPendingMrifList = async function() {
     });
     container.innerHTML = html;
 
-    // Row click → open the balance processor
     container.querySelectorAll('.pending-mrif-item').forEach(function(el) {
       el.addEventListener('click', function() {
         var docNo = this.getAttribute('data-docno');
@@ -84,12 +83,13 @@ window.openPendingMrifList = async function() {
 };
 
 // ─── Open the Bal.MRIF processing modal for a document ───
-// Loads ALL items from the source document (not just OPEN rows)
-// and lets the user enter "Issued Now" quantities.
-// Reuses the existing #processPartialModal UI.
 window.openPendingMrifProcessModal = async function(docNo) {
   if (!docNo) return;
-  _processPartialDocNo = docNo;
+  if (typeof _processPartialDocNo !== 'undefined') {
+    _processPartialDocNo = docNo;
+  } else {
+    window._processPartialDocNo = docNo;
+  }
 
   var modalEl = document.getElementById('processPartialModal');
   if (!modalEl) { showToast('Process modal not found', 'danger'); return; }
@@ -120,8 +120,7 @@ window.openPendingMrifProcessModal = async function(docNo) {
 
     var items = data.items || [];
 
-    // Build the process rows — every item with remaining > 0
-    _processPartialItems = items.map(function(it) {
+    var processItems = items.map(function(it) {
       var requested = Number(it.qty || it.expectedQty || it.requestedQty || 0);
       var issued = Number(it.issuedQty || it.actualQty || it.atlQty || 0);
       var remaining = requested - issued;
@@ -135,11 +134,13 @@ window.openPendingMrifProcessModal = async function(docNo) {
         originalRowIndex: it.rowIndex || 0
       };
     }).filter(function(it) {
-      // Skip items already fully served
       return it.remainingQty > 0;
     });
 
-    if (_processPartialItems.length === 0) {
+    // Store globally so submitProcessBalance can read them
+    window._processPartialItems = processItems;
+
+    if (processItems.length === 0) {
       if (body) {
         body.innerHTML = '<div class="alert alert-success mb-0">' +
           '<i class="bi bi-check-circle-fill me-2"></i>' +
@@ -148,7 +149,6 @@ window.openPendingMrifProcessModal = async function(docNo) {
       return;
     }
 
-    // Render the same UI as openProcessPartialModal
     var html = '<div class="alert alert-info small py-2 mb-3">' +
       '<i class="bi bi-info-circle me-1"></i> ' +
       'Enter the quantity you are <strong>issuing right now</strong> for each item. ' +
@@ -165,7 +165,7 @@ window.openPendingMrifProcessModal = async function(docNo) {
         '<th style="width:18%">Remarks</th>' +
       '</tr></thead><tbody>';
 
-    _processPartialItems.forEach(function(it, idx) {
+    processItems.forEach(function(it, idx) {
       var remaining = Number(it.remainingQty || 0);
       html += '<tr>' +
         '<td class="text-center">' + (idx + 1) + '</td>' +
@@ -205,7 +205,6 @@ window.openPendingMrifProcessModal = async function(docNo) {
   }
 };
 
-// ─── Local escape helper (in case history.js not loaded yet) ───
 function escapeHtmlPending(s) {
   if (s === null || s === undefined) return '';
   return String(s)
