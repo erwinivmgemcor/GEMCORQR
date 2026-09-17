@@ -400,6 +400,53 @@
     #poItemsModal .modal-body { padding: 16px; }
     .po-items-list { max-height: 45vh; }
   }
+
+  /* ═══════════════════════════════════════════════════════════
+   PIE CHART LEGEND
+   ═══════════════════════════════════════════════════════════ */
+.chart-pie-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 4px 8px 10px 8px;
+  font-size: 0.75rem;
+  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 8px;
+}
+.chart-pie-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.chart-pie-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.chart-pie-legend-item code {
+  font-size: 0.72rem;
+  background: #f1f5f9;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #1e3a5f;
+}
+.chart-pie-legend-meta {
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 0.7rem;
+}
+.chart-pie-legend-other {
+  background: #f9fafb;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+@media (max-width: 767.98px) {
+  .chart-pie-legend { font-size: 0.7rem; gap: 4px 10px; }
+  .chart-pie-legend-item code { font-size: 0.68rem; }
+}
 </style>
 </head>
 <body>
@@ -652,8 +699,9 @@
         <div class="card analytics-card h-100">
           <div class="card-header">Top 10 Most Requested Items</div>
           <div class="card-body" style="padding:12px;">
-            <div class="chart-wrapper" style="height:320px;">
-              <canvas id="topItemsChart"></canvas>
+            <div class="chart-wrapper" style="height:360px;">
+  <canvas id="topItemsChart"></canvas>
+</div>
             </div>
           </div>
         </div>
