@@ -1,6 +1,6 @@
 // ============================================================
 // MAIN - DOM Ready & Initialization
-// Handles openMyRequestDetails (QR + items) for production role
+// (Handles openMyRequestDetails + filters My Requests to MRIF/MRS)
 // ============================================================
 
 window.applySidebarRole = function(role) {
@@ -33,6 +33,7 @@ window.applySidebarRole = function(role) {
   }
 };
 
+// ─── Navigation ────────────────────────────────────────────────
 function navigateTo(sectionId) {
   document.querySelectorAll('.section-page').forEach(function(el) {
     el.classList.remove('active');
@@ -104,12 +105,11 @@ function toggleSidebar(open) {
 
 // ══════════════════════════════════════════════════════════════
 // OPEN MY REQUEST DETAILS
-// Shows the QR code AND the requested items list (not just QR)
+// Shows QR code + requested items list
 // ══════════════════════════════════════════════════════════════
 window.openMyRequestDetails = async function(docNo, docType) {
   var modalEl = document.getElementById('myRequestDetailsModal');
   if (!modalEl) {
-    // Fallback to the older details modal if the new one is missing
     if (typeof openRequestDetails === 'function') {
       openRequestDetails(docNo, docType);
       return;
@@ -125,7 +125,6 @@ window.openMyRequestDetails = async function(docNo, docType) {
   content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading request details...</div></div>';
   modal.show();
 
-  // QR
   var appUrl = window.location.origin + window.location.pathname;
   var qrData = appUrl + '?doc=' + encodeURIComponent(docNo);
   var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(qrData);
@@ -143,7 +142,12 @@ window.openMyRequestDetails = async function(docNo, docType) {
               '&sheetId=' + encodeURIComponent(sheetIdClean) +
               '&_t=' + Date.now();
     var res = await fetch(url, { redirect: 'follow' });
-    var data = await res.json();
+    var text = await res.text();
+    var trimmed = String(text || '').trim();
+    if (!trimmed || trimmed.charAt(0) === '<') {
+      throw new Error('Server unavailable');
+    }
+    var data = JSON.parse(trimmed);
 
     if (data && data.success) {
       var info = data.info || {};
@@ -252,10 +256,19 @@ window.downloadMyRequestQr = function() {
   qrImg.src = img.src;
 };
 
-// ─── Override renderMyRequests (page list) ─────────────
+// ─── Override renderMyRequests (page list) ─────────────────
+// FILTER: only MRIF and MRS — MRR is warehouse-created, not a production request
 var originalRenderMyRequests = window.renderMyRequests || function() {};
 
 window.renderMyRequests = function(requests) {
+  // ═══════════════════════════════════════════════════════════
+  // FILTER: Only show MRIF and MRS in My Requests
+  // ═══════════════════════════════════════════════════════════
+  requests = (requests || []).filter(function(req) {
+    var t = (req.type || '').toUpperCase();
+    return t === 'MRIF' || t === 'MRS';
+  });
+
   // Call the requests.js version first (fills #myRequestsList for dashboard)
   if (typeof originalRenderMyRequests === 'function') {
     try { originalRenderMyRequests(requests); } catch(e) { console.warn('[renderMyRequests] Original error:', e); }
@@ -266,7 +279,9 @@ window.renderMyRequests = function(requests) {
   if (!container) return;
   container.innerHTML = '';
   if (!requests || requests.length === 0) {
-    container.innerHTML = '<div class="list-group-item text-muted text-center">No requests found</div>';
+    container.innerHTML = '<div class="list-group-item text-muted text-center py-4">' +
+      '<i class="bi bi-inbox fs-3 d-block mb-2"></i>' +
+      'No requests found.</div>';
     return;
   }
 
@@ -317,7 +332,7 @@ window.renderMyRequests = function(requests) {
   });
 };
 
-// ─── Override loadMyRequests ──────────────────────────
+// ─── Override loadMyRequests ──────────────────────────────
 var originalLoadMyRequests = window.loadMyRequests || function() {};
 window.loadMyRequests = function() {
   if (typeof originalLoadMyRequests === 'function') {
@@ -325,7 +340,7 @@ window.loadMyRequests = function() {
   }
 };
 
-// ─── Override updateWarehouseKPIs ─────────────────────
+// ─── Override updateWarehouseKPIs ─────────────────────────
 var originalUpdateWarehouseKPIs = window.updateWarehouseKPIs || function() {};
 window.updateWarehouseKPIs = function() {
   if (typeof originalUpdateWarehouseKPIs === 'function') {
@@ -333,7 +348,7 @@ window.updateWarehouseKPIs = function() {
   }
 };
 
-// ─── Test connection ──────────────────────────────────
+// ─── Test connection ──────────────────────────────────────
 async function testConnection() {
   var resultDiv = document.getElementById('testResult');
   if (!resultDiv) return;
@@ -359,7 +374,7 @@ async function testConnection() {
   }
 }
 
-// ─── URL doc parameter ────────────────────────────────
+// ─── URL doc parameter ────────────────────────────────────
 function checkUrlDocParam() {
   var params = new URLSearchParams(window.location.search);
   var docNo = params.get('doc');
@@ -368,6 +383,7 @@ function checkUrlDocParam() {
   var docType = 'MRIF';
   if (docNo.indexOf('MRR') === 0) docType = 'MRR';
   else if (docNo.indexOf('MRS') === 0) docType = 'MRS';
+  else if (docNo.indexOf('Bal.MRIF') === 0) docType = 'MRIF';
 
   if (window.history.replaceState) {
     window.history.replaceState({}, document.title, window.location.pathname);
@@ -385,7 +401,7 @@ function checkUrlDocParam() {
   }
 }
 
-// ─── DOM Ready ────────────────────────────────────────
+// ─── DOM Ready ────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
   var modalIds = ['qtyModal', 'successModal', 'settingsModal', 'newRequestModal',
     'requestSuccessModal', 'whNotifModal', 'mrifListModal', 'mrifPrintModal',
