@@ -1,15 +1,15 @@
 // ============================================================
 // AUTHENTICATION & ROLE MANAGEMENT
 // Supports: warehouse-only, production-only, BOTH-role users
+// Friendly error messages for network/server issues
 // ============================================================
 
-// Ensure state defaults
 if (typeof state !== 'undefined') {
   if (state.pendingRole === undefined) state.pendingRole = null;
   if (state.allowedRoles === undefined) state.allowedRoles = null;
 }
 
-// ─── Parse allowed roles from storage ───
+// ─── Role helpers ───
 function _getAllowedRoles() {
   try {
     var raw = localStorage.getItem('ivm_allowedRoles');
@@ -18,14 +18,12 @@ function _getAllowedRoles() {
     return Array.isArray(arr) ? arr : null;
   } catch(e) { return null; }
 }
-
 function _setAllowedRoles(roles) {
   try {
     localStorage.setItem('ivm_allowedRoles', JSON.stringify(roles || []));
     state.allowedRoles = roles || [];
   } catch(e) {}
 }
-
 function _hasBothRoles() {
   var roles = _getAllowedRoles();
   return roles && roles.indexOf('warehouse') !== -1 && roles.indexOf('production') !== -1;
@@ -44,7 +42,6 @@ function initRole() {
   }
   if (savedRoles) state.allowedRoles = savedRoles;
 
-  // Require BOTH role + user
   if (!savedRole || !savedUser) {
     if (savedRole && !savedUser) localStorage.removeItem('ivm_userRole');
     if (roleModal) roleModal.show();
@@ -128,6 +125,13 @@ function backToRoleSelection() {
   }, 300);
 }
 
+// ─── Friendly error helper ───
+function _showLoginError(errorField, html) {
+  if (!errorField) return;
+  errorField.innerHTML = html;
+  errorField.classList.remove('d-none');
+}
+
 // ─── Login ───
 async function loginUser() {
   var btn = document.getElementById('loginBtn');
@@ -137,10 +141,7 @@ async function loginUser() {
     var errorField = document.getElementById('loginError');
 
     if (!username || !password) {
-      if (errorField) {
-        errorField.textContent = 'Please enter username and password';
-        errorField.classList.remove('d-none');
-      }
+      _showLoginError(errorField, 'Please enter both username and password.');
       return;
     }
 
@@ -150,12 +151,61 @@ async function loginUser() {
       var url = API_URL + '?action=verifyUser&username=' + encodeURIComponent(username) +
                 '&password=' + encodeURIComponent(password) + '&_t=' + Date.now();
       var res = await fetch(url, { redirect: 'follow' });
-      var data = await res.json();
 
+      // Read as text first (avoids the JSON.parse throwing on HTML)
+      var text = '';
+      try { text = await res.text(); } catch(e) { text = ''; }
+
+      // ─── Detect HTML / empty response (server offline or deployment issue) ───
+      var trimmed = String(text || '').trim();
+      if (!trimmed || trimmed.charAt(0) === '<') {
+        _showLoginError(errorField,
+          '<div class="d-flex gap-2">' +
+            '<i class="bi bi-exclamation-triangle-fill fs-5"></i>' +
+            '<div>' +
+              '<strong>System is temporarily unavailable.</strong><br>' +
+              '<small class="text-muted">The server did not respond correctly. ' +
+              'Please try again in a moment. If the issue continues, contact your system administrator.</small>' +
+            '</div>' +
+          '</div>');
+        return;
+      }
+
+      // ─── Parse JSON safely ───
+      var data;
+      try {
+        data = JSON.parse(trimmed);
+      } catch(e) {
+        _showLoginError(errorField,
+          '<div class="d-flex gap-2">' +
+            '<i class="bi bi-exclamation-triangle-fill fs-5"></i>' +
+            '<div>' +
+              '<strong>Unexpected server response.</strong><br>' +
+              '<small class="text-muted">Please try again or contact your administrator.</small>' +
+            '</div>' +
+          '</div>');
+        return;
+      }
+
+      // ─── Invalid credentials / server error ───
       if (!data.success) {
-        if (errorField) {
-          errorField.textContent = data.error || 'Login failed';
-          errorField.classList.remove('d-none');
+        var msg = data.error || 'Login failed.';
+        // Translate common backend errors to friendly text
+        if (msg.toLowerCase().indexOf('invalid username') !== -1 ||
+            msg.toLowerCase().indexOf('invalid password') !== -1 ||
+            msg.toLowerCase().indexOf('invalid') !== -1) {
+          _showLoginError(errorField,
+            '<div class="d-flex gap-2">' +
+              '<i class="bi bi-x-circle-fill fs-5"></i>' +
+              '<div><strong>Incorrect username or password.</strong><br>' +
+              '<small class="text-muted">Please check your credentials and try again.</small></div>' +
+            '</div>');
+        } else {
+          _showLoginError(errorField,
+            '<div class="d-flex gap-2">' +
+              '<i class="bi bi-exclamation-triangle-fill fs-5"></i>' +
+              '<div><strong>' + msg + '</strong></div>' +
+            '</div>');
         }
         return;
       }
@@ -166,15 +216,23 @@ async function loginUser() {
       if (roles.length === 0) roles = ['warehouse'];
 
       if (roles.indexOf(requestedRole) === -1) {
-        if (errorField) {
-          errorField.textContent = 'This account is not authorized as ' + requestedRole +
-            '. Allowed: ' + roles.join(', ') + '.';
-          errorField.classList.remove('d-none');
-        }
+        var roleLabel = requestedRole === 'production' ? 'Production' : 'Warehouse';
+        var allowedLabel = roles.map(function(r) {
+          return r === 'production' ? 'Production' : 'Warehouse';
+        }).join(' and ');
+        _showLoginError(errorField,
+          '<div class="d-flex gap-2">' +
+            '<i class="bi bi-shield-x fs-5"></i>' +
+            '<div>' +
+              '<strong>Access denied.</strong><br>' +
+              '<small class="text-muted">Your account is not allowed to log in as <strong>' + roleLabel + '</strong>. ' +
+              'Allowed role(s): <strong>' + allowedLabel + '</strong>.</small>' +
+            '</div>' +
+          '</div>');
         return;
       }
 
-      // ─── Save session ───
+      // ─── Success → save session ───
       state.currentUser = data.username;
       state.currentUserFullname = data.fullname || data.username;
       state.userRole = requestedRole;
@@ -190,7 +248,6 @@ async function loginUser() {
 
       state.pendingRole = null;
 
-      // ─── Close login modal ───
       var loginModalEl = document.getElementById('loginModal');
       if (loginModalEl) {
         var m = bootstrap.Modal.getInstance(loginModalEl);
@@ -214,15 +271,20 @@ async function loginUser() {
       }
 
     } catch(err) {
-      if (errorField) {
-        errorField.textContent = 'Network error: ' + err.message;
-        errorField.classList.remove('d-none');
-      }
+      // Network error (offline, DNS, CORS, etc.)
+      _showLoginError(errorField,
+        '<div class="d-flex gap-2">' +
+          '<i class="bi bi-wifi-off fs-5"></i>' +
+          '<div>' +
+            '<strong>Could not connect.</strong><br>' +
+            '<small class="text-muted">Please check your internet connection and try again.</small>' +
+          '</div>' +
+        '</div>');
     }
   }, 'Signing in...');
 }
 
-// ─── Switch mode (no re-login) ───
+// ─── Switch mode (both-role users) ───
 window.switchMode = function(newRole) {
   if (newRole !== 'warehouse' && newRole !== 'production') return;
   var roles = _getAllowedRoles() || [];
@@ -230,19 +292,15 @@ window.switchMode = function(newRole) {
     showToast('You do not have access to ' + newRole + ' mode.', 'danger');
     return;
   }
-
-  // Save new mode
   localStorage.setItem('ivm_userRole', newRole);
   state.userRole = newRole;
 
-  // Close any modal that might be open
   var modeModalEl = document.getElementById('modePickerModal');
   if (modeModalEl) {
     var mm = bootstrap.Modal.getInstance(modeModalEl);
     if (mm) mm.hide();
   }
 
-  // Reset and re-apply
   var active = document.getElementById('activeTransactionSection');
   if (active) active.classList.add('d-none');
 
@@ -250,16 +308,13 @@ window.switchMode = function(newRole) {
   showToast('Switched to ' + (newRole === 'warehouse' ? 'Warehouse' : 'Production') + ' mode.', 'success');
 };
 
-// ─── Open mode picker modal (for both-role users) ───
 window.openModePicker = function() {
   if (!_hasBothRoles()) {
-    // Single-role user → fall back to role modal (logout-required flow)
     if (roleModal) roleModal.show();
     return;
   }
   var el = document.getElementById('modePickerModal');
   if (!el) {
-    // Fallback: direct switch to the other role
     var current = localStorage.getItem('ivm_userRole');
     switchMode(current === 'warehouse' ? 'production' : 'warehouse');
     return;
@@ -284,19 +339,14 @@ function logoutUser() {
   location.reload();
 }
 
-// ─── Legacy PIN (admin fallback) ───
+// ─── PIN (admin fallback) ───
 function showPinEntry() {
   var section = document.getElementById('pinEntrySection');
   if (section) section.classList.remove('d-none');
   clearPin();
 }
-function enterPinDigit(d) {
-  if (state.pinBuffer.length < 4) { state.pinBuffer += d; updatePinDots(); }
-}
-function backspacePin() {
-  state.pinBuffer = state.pinBuffer.slice(0, -1);
-  updatePinDots();
-}
+function enterPinDigit(d) { if (state.pinBuffer.length < 4) { state.pinBuffer += d; updatePinDots(); } }
+function backspacePin() { state.pinBuffer = state.pinBuffer.slice(0, -1); updatePinDots(); }
 function clearPin() {
   state.pinBuffer = '';
   updatePinDots();
@@ -332,7 +382,7 @@ function verifyPin() {
   }
 }
 
-// ─── Apply role UI (with mode switcher visibility) ───
+// ─── Apply role UI ───
 function applyRoleUI() {
   var role = localStorage.getItem('ivm_userRole');
   var isProduction = (role === 'production');
@@ -346,7 +396,6 @@ function applyRoleUI() {
   if (btnMRIF) btnMRIF.style.display = isProduction ? 'none' : '';
   if (btnMRS) btnMRS.style.display = isProduction ? 'none' : '';
 
-  // Production banner
   var banner = document.getElementById('productionBanner');
   if (banner) {
     if (isProduction) {
@@ -372,36 +421,28 @@ function applyRoleUI() {
   var whBtn = document.getElementById('whNotifBtn');
   if (whBtn) whBtn.classList.toggle('d-none', isProduction);
 
-  // Show "Switch Mode" only for both-role users
   var switchModeNavItem = document.getElementById('switchModeNavItem');
   if (switchModeNavItem) {
     switchModeNavItem.style.display = (hasBoth && state.currentUser) ? 'flex' : 'none';
   }
 
-  // Logout button
   var logoutItem = document.getElementById('logoutNavItem');
   if (logoutItem) {
     logoutItem.style.display = (isWarehouse || isProduction) && state.currentUser ? 'flex' : 'none';
   }
 
-  // Sidebar role display
   var sidebarRole = document.getElementById('sidebarRole');
   if (sidebarRole) {
-    if (isProduction) {
-      sidebarRole.textContent = 'Production · ' + (state.currentUserFullname || state.currentUser);
-    } else {
-      sidebarRole.textContent = state.currentUserFullname || 'Warehouse';
-    }
+    if (isProduction) sidebarRole.textContent = 'Production · ' + (state.currentUserFullname || state.currentUser);
+    else sidebarRole.textContent = state.currentUserFullname || 'Warehouse';
   }
 
-  // Settings role display
   var roleDisplay = document.getElementById('currentRoleDisplay');
   if (roleDisplay) {
     roleDisplay.textContent = isProduction ? 'Production Staff' : 'Warehouse Staff';
     roleDisplay.className = isProduction ? 'badge bg-primary' : 'badge bg-success';
   }
 
-  // Intervals
   if (isProduction) {
     var active = document.getElementById('activeTransactionSection');
     if (active) active.classList.add('d-none');
@@ -428,28 +469,19 @@ function applyRoleUI() {
     window.applySidebarRole(role);
   }
 
-  if (isProduction) {
-    navigateTo('myrequests');
-  } else {
-    navigateTo('dashboard');
-  }
+  if (isProduction) navigateTo('myrequests');
+  else navigateTo('dashboard');
 }
 
-// ─── Switch role button (Settings modal) ───
 function switchRole() {
   if (settingsModal) settingsModal.hide();
   var section = document.getElementById('pinEntrySection');
   if (section) section.classList.add('d-none');
   clearPin();
-
-  if (_hasBothRoles()) {
-    openModePicker();
-  } else {
-    if (roleModal) roleModal.show();
-  }
+  if (_hasBothRoles()) openModePicker();
+  else if (roleModal) roleModal.show();
 }
 
-// ─── PIN change ───
 function changePin() {
   var current = document.getElementById('currentPinInput') ? document.getElementById('currentPinInput').value : '';
   var newPin = document.getElementById('newPinInput') ? document.getElementById('newPinInput').value : '';
@@ -471,19 +503,15 @@ function changePin() {
   if (newP) newP.value = '';
 }
 
-// ─── Settings modal ───
 function openSettings() {
   loadSettingsToUI();
   var role = localStorage.getItem('ivm_userRole');
   var isProduction = (role === 'production');
-  var hasBoth = _hasBothRoles();
-
   var pinSection = document.getElementById('pinManagementSection');
   var syncSection = document.getElementById('syncSection');
   var sheetSection = document.getElementById('sheetIdsSection');
   var roleDisplay = document.getElementById('currentRoleDisplay');
   var versionEl = document.getElementById('appVersion');
-
   if (pinSection) pinSection.style.display = isProduction ? 'none' : '';
   if (syncSection) syncSection.style.display = isProduction ? 'none' : '';
   if (sheetSection) sheetSection.style.display = isProduction ? 'none' : '';
@@ -516,6 +544,5 @@ function saveSettings() {
   if (state.currentModule) selectModule(state.currentModule);
 }
 
-// Legacy no-ops
 function checkProductionName() {}
 function saveProductionName() {}
