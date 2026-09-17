@@ -25,7 +25,21 @@ function _extractDocNumber(docNo) {
 function _isBalDoc(docNo) {
   return String(docNo || '').toUpperCase().indexOf('BAL.') === 0;
 }
-
+// ─── Helper: Strip system status from Remarks before printing ───
+// Removes "(SERVED)", "(PENDING)", "(PARTIAL)", "(COMPLETE)", "(BALANCED)",
+// standalone status words, and pipe separators. Keeps only the user's
+// manual note (e.g. "sample", "urgent").
+function _cleanRemarksForPrint(remarks) {
+  if (!remarks) return '';
+  var s = String(remarks).trim();
+  // Strip status in parentheses: "(SERVED)", "(PARTIAL)" etc.
+  s = s.replace(/\s*\((SERVED|PENDING|PARTIAL|COMPLETE|BALANCED)\)\s*/gi, ' ');
+  // Strip standalone status words
+  s = s.replace(/\b(SERVED|PENDING|PARTIAL|COMPLETE|BALANCED)\b/gi, '');
+  // Clean pipe separators and collapse whitespace
+  s = s.replace(/\s*\|\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  return s;
+}
 // ─── Helper: load document list for a module ────
 async function loadDocumentListForModule(docType) {
   var prevModule = state.currentModule;
