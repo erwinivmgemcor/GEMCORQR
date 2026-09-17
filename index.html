@@ -24,6 +24,31 @@
 <link rel="stylesheet" href="/GEMCORQR/style.css">
 
 <style>
+  /* ═══════════════════════════════════════════════════════════
+   ANALYTICS CHART WRAPPERS — Fix Chart.js sizing issues
+   ═══════════════════════════════════════════════════════════ */
+.chart-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.chart-wrapper canvas {
+  display: block;
+  width: 100% !important;
+  max-width: 100%;
+}
+
+/* Prevent flex/grid from squeezing chart containers */
+.analytics-card { overflow: hidden; }
+.analytics-card .card-body { overflow: hidden; }
+
+/* Make analytics cards equal height inside a row */
+.analytics-card .card-body { display: block; }
+
+/* Mobile tweaks */
+@media (max-width: 767.98px) {
+  .chart-wrapper { height: 200px !important; }
+}
   /* ─── SIDEBAR ─── */
   .app-wrapper { display: flex; min-height: 100vh; }
   .sidebar {
@@ -545,6 +570,7 @@
         </div>
 
        <!-- Analytics -->
+<!-- Analytics -->
 <div id="analyticsSection" class="mt-4">
   <div class="d-flex justify-content-between align-items-center mb-2">
     <h6 class="mb-0"><i class="bi bi-graph-up me-2"></i>Analytics Dashboard</h6>
@@ -566,7 +592,7 @@
 
   <div id="analyticsContent" class="d-none">
 
-    <!-- Row 1: Totals cards -->
+    <!-- Row 1: Totals -->
     <div class="row g-3 mb-3">
       <div class="col-6 col-md-3">
         <div class="card h-100 analytics-card">
@@ -606,13 +632,15 @@
       </div>
     </div>
 
-    <!-- Row 2: Daily Volume (full width) -->
+    <!-- Row 2: Daily Volume -->
     <div class="row g-3 mb-3">
       <div class="col-12">
         <div class="card analytics-card">
           <div class="card-header">Daily Request Volume (Last 30 Days)</div>
-          <div class="card-body" style="height:220px;">
-            <div id="dailyChartContainer"><canvas id="dailyChart"></canvas></div>
+          <div class="card-body" style="padding:12px;">
+            <div class="chart-wrapper" style="height:220px;">
+              <canvas id="dailyChart"></canvas>
+            </div>
           </div>
         </div>
       </div>
@@ -620,35 +648,41 @@
 
     <!-- Row 3: Top Items + Top Requestors -->
     <div class="row g-3 mb-3">
-      <div class="col-12 col-md-6">
+      <div class="col-12 col-lg-6">
         <div class="card analytics-card h-100">
           <div class="card-header">Top 10 Most Requested Items</div>
-          <div class="card-body" style="height:300px;">
-            <div id="topItemsChartContainer"><canvas id="topItemsChart"></canvas></div>
+          <div class="card-body" style="padding:12px;">
+            <div class="chart-wrapper" style="height:320px;">
+              <canvas id="topItemsChart"></canvas>
+            </div>
           </div>
         </div>
       </div>
-      <div class="col-12 col-md-6">
+      <div class="col-12 col-lg-6">
         <div class="card analytics-card h-100">
           <div class="card-header">
             <i class="bi bi-person-badge me-1"></i>Top 10 Requestors (Production)
           </div>
-          <div class="card-body" style="height:300px;">
-            <div id="requestorChartContainer"><canvas id="requestorChart"></canvas></div>
+          <div class="card-body" style="padding:12px;">
+            <div class="chart-wrapper" style="height:320px;">
+              <canvas id="requestorChart"></canvas>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Row 4: Warehouse Staff Performance -->
+    <!-- Row 4: Warehouse Staff -->
     <div class="row g-3">
       <div class="col-12">
         <div class="card analytics-card">
           <div class="card-header">
             <i class="bi bi-shield-check me-1"></i>Warehouse Staff Performance
           </div>
-          <div class="card-body" style="height:250px;">
-            <div id="staffChartContainer"><canvas id="staffChart"></canvas></div>
+          <div class="card-body" style="padding:12px;">
+            <div class="chart-wrapper" style="height:260px;">
+              <canvas id="staffChart"></canvas>
+            </div>
           </div>
         </div>
       </div>
@@ -656,19 +690,6 @@
 
   </div>
 </div>
-
-      <div id="myRequestsSection" class="d-none">
-        <div class="section-header d-flex justify-content-between align-items-center">
-          <div class="section-title"><i class="bi bi-clock-history"></i> My Requests</div>
-          <span id="myRequestsBadge" class="badge bg-danger d-none">0</span>
-        </div>
-        <div class="card">
-          <div class="card-body p-0">
-            <div id="myRequestsList" class="list-group list-group-flush"></div>
-          </div>
-        </div>
-      </div>
-    </div>
 
     <!-- ================================================================ -->
     <!-- SECTION: RELEASING (MRIF) -->
