@@ -447,6 +447,71 @@
   .chart-pie-legend { font-size: 0.7rem; gap: 4px 10px; }
   .chart-pie-legend-item code { font-size: 0.68rem; }
 }
+
+  /* ═══════════════════════════════════════════════════════════
+   ANALYTICS CHART SIZING + PIE LEGEND
+   ═══════════════════════════════════════════════════════════ */
+.analytics-card { overflow: hidden; }
+.analytics-card .card-body { overflow: hidden; }
+
+/* Force canvases to fill their parent */
+.analytics-card canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+}
+
+/* Pie chart legend */
+.chart-pie-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 4px 4px 8px 4px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  max-height: 90px;
+  overflow-y: auto;
+  border-bottom: 1px solid #f0f0f0;
+}
+.chart-pie-legend:empty { display: none; }
+
+.chart-pie-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.chart-pie-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.chart-pie-legend-item code {
+  font-size: 0.7rem;
+  background: #f1f5f9;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #1e3a5f;
+}
+.chart-pie-legend-meta {
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 0.68rem;
+}
+.chart-pie-legend-other {
+  background: #f9fafb;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+@media (max-width: 767.98px) {
+  .chart-pie-legend { max-height: none; font-size: 0.7rem; gap: 4px 10px; }
+  .chart-pie-legend-item code { font-size: 0.66rem; }
+}
+  
 </style>
 </head>
 <body>
@@ -617,7 +682,6 @@
         </div>
 
        <!-- Analytics -->
-<!-- Analytics -->
 <div id="analyticsSection" class="mt-4">
   <div class="d-flex justify-content-between align-items-center mb-2">
     <h6 class="mb-0"><i class="bi bi-graph-up me-2"></i>Analytics Dashboard</h6>
@@ -685,7 +749,7 @@
         <div class="card analytics-card">
           <div class="card-header">Daily Request Volume (Last 30 Days)</div>
           <div class="card-body" style="padding:12px;">
-            <div class="chart-wrapper" style="height:220px;">
+            <div style="position:relative;height:220px;">
               <canvas id="dailyChart"></canvas>
             </div>
           </div>
@@ -693,26 +757,28 @@
       </div>
     </div>
 
-    <!-- Row 3: Top Items + Top Requestors -->
+    <!-- Row 3: Top Items (doughnut) + Top Requestors -->
     <div class="row g-3 mb-3">
-      <div class="col-12 col-lg-6">
+      <div class="col-12 col-xl-6">
         <div class="card analytics-card h-100">
-          <div class="card-header">Top 10 Most Requested Items</div>
+          <div class="card-header">Most Requested Items</div>
           <div class="card-body" style="padding:12px;">
-            <div class="chart-wrapper" style="height:360px;">
-  <canvas id="topItemsChart"></canvas>
-</div>
+            <!-- Legend (populated by JS) -->
+            <div id="topItemsLegend" class="chart-pie-legend mb-2"></div>
+            <!-- Chart -->
+            <div style="position:relative;height:280px;">
+              <canvas id="topItemsChart"></canvas>
             </div>
           </div>
         </div>
       </div>
-      <div class="col-12 col-lg-6">
+      <div class="col-12 col-xl-6">
         <div class="card analytics-card h-100">
           <div class="card-header">
             <i class="bi bi-person-badge me-1"></i>Top 10 Requestors (Production)
           </div>
           <div class="card-body" style="padding:12px;">
-            <div class="chart-wrapper" style="height:320px;">
+            <div style="position:relative;height:340px;">
               <canvas id="requestorChart"></canvas>
             </div>
           </div>
@@ -728,7 +794,7 @@
             <i class="bi bi-shield-check me-1"></i>Warehouse Staff Performance
           </div>
           <div class="card-body" style="padding:12px;">
-            <div class="chart-wrapper" style="height:260px;">
+            <div style="position:relative;height:260px;">
               <canvas id="staffChart"></canvas>
             </div>
           </div>
