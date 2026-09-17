@@ -1,10 +1,29 @@
 // ============================================================
-// DASHBOARD ANALYTICS (Improved)
+// DASHBOARD ANALYTICS — Fixed Chart.js sizing
 // ============================================================
 
 var analyticsLoaded = false;
 var analyticsRetryCount = 0;
 var MAX_ANALYTICS_RETRIES = 3;
+
+// Chart instances
+window._dailyChart = null;
+window._topItemsChart = null;
+window._staffChart = null;
+window._requestorChart = null;
+
+// Debounced resize handler
+var _resizeTimer = null;
+window.addEventListener('resize', function() {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(function() {
+    ['_dailyChart', '_topItemsChart', '_staffChart', '_requestorChart'].forEach(function(k) {
+      if (window[k] && typeof window[k].resize === 'function') {
+        try { window[k].resize(); } catch(e) {}
+      }
+    });
+  }, 250);
+});
 
 async function loadAnalytics() {
   if (state.isLoading) return;
@@ -22,13 +41,12 @@ async function loadAnalytics() {
   if (errorEl) errorEl.classList.add('d-none');
 
   var timeoutId = setTimeout(function() {
-    console.warn('[Analytics] Load timeout – forcing hide.');
     if (loadingEl) loadingEl.classList.add('d-none');
     if (contentEl) contentEl.classList.add('d-none');
     if (errorEl) {
       errorEl.classList.remove('d-none');
-      var errText = document.getElementById('analyticsErrorText');
-      if (errText) errText.textContent = 'Analytics took too long to load. Click "Refresh" to try again.';
+      var t = document.getElementById('analyticsErrorText');
+      if (t) t.textContent = 'Analytics took too long to load. Click "Refresh" to try again.';
     }
   }, 10000);
 
@@ -44,7 +62,7 @@ async function loadAnalytics() {
     clearTimeout(timeoutId);
     if (!data.success) throw new Error(data.error || 'Unknown error');
 
-    // ─── KPI cards ───
+    // ─── Totals ───
     var totals = data.totals || {};
     var kpis = {
       'kpiActiveDocs': totals.total || 0,
@@ -56,8 +74,6 @@ async function loadAnalytics() {
       var el = document.getElementById(id);
       if (el) el.textContent = kpis[id];
     }
-
-    // ─── Extra totals ───
     var elMRIF = document.getElementById('kpiMRIFCount');
     var elMRR = document.getElementById('kpiMRRCount');
     var elMRS = document.getElementById('kpiMRSCount');
@@ -65,7 +81,7 @@ async function loadAnalytics() {
     if (elMRR) elMRR.textContent = totals.mrr || 0;
     if (elMRS) elMRS.textContent = totals.mrs || 0;
 
-    // ─── Average processing time ───
+    // ─── Avg processing time ───
     var avgEl = document.getElementById('avgProcessingTime');
     var avgSubEl = document.getElementById('avgProcessingSub');
     if (avgEl) {
@@ -86,20 +102,32 @@ async function loadAnalytics() {
       }
     }
 
-    // ─── Charts ───
-    var dailyCanvas = document.getElementById('dailyChart');
-    var topItemsCanvas = document.getElementById('topItemsChart');
-    var staffCanvas = document.getElementById('staffChart');
-    var requestorCanvas = document.getElementById('requestorChart');
-
-    if (dailyCanvas) renderDailyChart(data.dailyRequests || []);
-    if (topItemsCanvas) renderTopItemsChart(data.topItems || []);
-    if (staffCanvas) renderStaffChart(data.staffPerformance || []);
-    if (requestorCanvas) renderRequestorChart(data.requestorPerformance || []);
-
+    // ═══════════════════════════════════════════════════════════
+    // SHOW THE CONTENT FIRST — then render charts on next frame
+    // (otherwise Chart.js measures a hidden/sized-to-0 container)
+    // ═══════════════════════════════════════════════════════════
     if (loadingEl) loadingEl.classList.add('d-none');
     if (contentEl) contentEl.classList.remove('d-none');
-    if (errorEl) errorEl.classList.add('d-none');
+
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        // Now the DOM has settled — render charts
+        try { renderDailyChart(data.dailyRequests || []); } catch(e) { console.warn(e); }
+        try { renderTopItemsChart(data.topItems || []); } catch(e) { console.warn(e); }
+        try { renderStaffChart(data.staffPerformance || []); } catch(e) { console.warn(e); }
+        try { renderRequestorChart(data.requestorPerformance || []); } catch(e) { console.warn(e); }
+
+        // Force resize in case containers changed size during render
+        setTimeout(function() {
+          ['_dailyChart', '_topItemsChart', '_staffChart', '_requestorChart'].forEach(function(k) {
+            if (window[k] && typeof window[k].resize === 'function') {
+              try { window[k].resize(); } catch(e) {}
+            }
+          });
+        }, 100);
+      });
+    });
+
     analyticsLoaded = true;
     analyticsRetryCount = 0;
   } catch(err) {
@@ -109,25 +137,36 @@ async function loadAnalytics() {
     if (contentEl) contentEl.classList.add('d-none');
     if (errorEl) {
       errorEl.classList.remove('d-none');
-      var errText = document.getElementById('analyticsErrorText');
-      if (errText) errText.textContent = 'Failed to load analytics: ' + err.message;
+      var t = document.getElementById('analyticsErrorText');
+      if (t) t.textContent = 'Failed to load analytics: ' + err.message;
     }
     analyticsRetryCount++;
   }
 }
 
-// ─── Daily Request Volume (30 days, filled) ───
+// ─── Helper: destroy old + return ctx ───
+function _prepChart(canvasId, instanceKey) {
+  var canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  if (window[instanceKey]) {
+    try { window[instanceKey].destroy(); } catch(e) {}
+    window[instanceKey] = null;
+  }
+  return canvas.getContext('2d');
+}
+
+// ─── Daily Request Volume ───
 function renderDailyChart(dailyData) {
-  var canvas = document.getElementById('dailyChart');
-  if (!canvas) return;
+  var ctx = _prepChart('dailyChart', '_dailyChart');
+  if (!ctx) return;
+
   var container = document.getElementById('dailyChartContainer');
   if (!dailyData || dailyData.length === 0) {
     if (container) container.innerHTML = '<div class="text-center text-muted py-4">No data for the last 30 days</div>';
     return;
   }
-  var ctx = canvas.getContext('2d');
+
   var labels = dailyData.map(function(d) {
-    // Format "2026-09-16" → "Sep 16"
     try {
       var parts = d.date.split('-');
       var dt = new Date(parts[0], parts[1] - 1, parts[2]);
@@ -137,7 +176,6 @@ function renderDailyChart(dailyData) {
   });
   var counts = dailyData.map(function(d) { return d.count; });
 
-  if (window._dailyChart) window._dailyChart.destroy();
   window._dailyChart = new Chart(ctx, {
     type: 'line',
     data: {
@@ -157,6 +195,7 @@ function renderDailyChart(dailyData) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: { duration: 400 },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -171,7 +210,7 @@ function renderDailyChart(dailyData) {
         y: {
           beginAtZero: true,
           ticks: { stepSize: 1, precision: 0 },
-          title: { display: true, text: 'Requests' }
+          title: { display: true, text: 'Requests', font: { size: 10 } }
         },
         x: {
           ticks: {
@@ -187,19 +226,19 @@ function renderDailyChart(dailyData) {
 
 // ─── Top 10 Most Requested Items ───
 function renderTopItemsChart(topItems) {
-  var canvas = document.getElementById('topItemsChart');
-  if (!canvas) return;
+  var ctx = _prepChart('topItemsChart', '_topItemsChart');
+  if (!ctx) return;
+
   var container = document.getElementById('topItemsChartContainer');
   if (!topItems || topItems.length === 0) {
     if (container) container.innerHTML = '<div class="text-center text-muted py-4">No item data yet. Items will appear after requests are created.</div>';
     return;
   }
-  var ctx = canvas.getContext('2d');
+
   var labels = topItems.map(function(d) { return d.itemCode; });
   var counts = topItems.map(function(d) { return d.count; });
   var qtys = topItems.map(function(d) { return d.totalQty || 0; });
 
-  if (window._topItemsChart) window._topItemsChart.destroy();
   window._topItemsChart = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -215,6 +254,8 @@ function renderTopItemsChart(topItems) {
       indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
+      animation: { duration: 400 },
+      layout: { padding: { right: 20 } },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -244,18 +285,20 @@ function renderTopItemsChart(topItems) {
 
 // ─── Warehouse Staff Performance ───
 function renderStaffChart(staffData) {
-  var canvas = document.getElementById('staffChart');
-  if (!canvas) return;
+  var ctx = _prepChart('staffChart', '_staffChart');
+  if (!ctx) return;
+
   var container = document.getElementById('staffChartContainer');
   if (!staffData || staffData.length === 0) {
     if (container) container.innerHTML = '<div class="text-center text-muted py-4">No warehouse staff data yet</div>';
     return;
   }
-  var ctx = canvas.getContext('2d');
-  var labels = staffData.map(function(d) { return d.name; });
-  var counts = staffData.map(function(d) { return d.count; });
 
-  if (window._staffChart) window._staffChart.destroy();
+  // Take top 10 only
+  var top10 = staffData.slice(0, 10);
+  var labels = top10.map(function(d) { return d.name; });
+  var counts = top10.map(function(d) { return d.count; });
+
   window._staffChart = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -271,6 +314,8 @@ function renderStaffChart(staffData) {
       indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
+      animation: { duration: 400 },
+      layout: { padding: { right: 20 } },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -292,23 +337,21 @@ function renderStaffChart(staffData) {
   });
 }
 
-// ─── Top Requestors (Production) ───
+// ─── Top Requestors ───
 function renderRequestorChart(requestorData) {
-  var canvas = document.getElementById('requestorChart');
-  if (!canvas) return;
+  var ctx = _prepChart('requestorChart', '_requestorChart');
+  if (!ctx) return;
+
   var container = document.getElementById('requestorChartContainer');
   if (!requestorData || requestorData.length === 0) {
     if (container) container.innerHTML = '<div class="text-center text-muted py-4">No requestor data yet. Submit a request to see who requests the most.</div>';
     return;
   }
 
-  // Take top 10
   var top10 = requestorData.slice(0, 10);
-  var ctx = canvas.getContext('2d');
   var labels = top10.map(function(d) { return d.name; });
   var counts = top10.map(function(d) { return d.count; });
 
-  if (window._requestorChart) window._requestorChart.destroy();
   window._requestorChart = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -324,6 +367,8 @@ function renderRequestorChart(requestorData) {
       indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
+      animation: { duration: 400 },
+      layout: { padding: { right: 20 } },
       plugins: {
         legend: { display: false },
         tooltip: {
