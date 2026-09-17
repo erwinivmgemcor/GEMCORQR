@@ -27,7 +27,9 @@ const state = {
   isLoading: false,
   warehouseName: localStorage.getItem('ivm_warehouseName') || '',
   currentUser: localStorage.getItem('ivm_username') || null,
-  currentUserFullname: localStorage.getItem('ivm_userFullname') || ''
+  currentUserFullname: localStorage.getItem('ivm_userFullname') || '',
+  pendingRole: null,   // <-- ADD THIS
+  userRole: localStorage.getItem('ivm_userRole') || null
 };
 
 let lastQrDocNo = '';
