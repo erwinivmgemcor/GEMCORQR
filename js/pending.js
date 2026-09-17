@@ -112,6 +112,7 @@ window.openPendingMrifList = async function() {
     }
   }
 };
+
 // ─── Dispatcher — opens the balance modal for any doc type ───
 window.openPendingProcessModal = async function(docNo, docType) {
   if (!docNo || !docType) return;
@@ -124,7 +125,6 @@ window.openPendingProcessModal = async function(docNo, docType) {
   if (titleEl) titleEl.innerHTML = '<i class="bi bi-arrow-right-circle me-2"></i>' +
     'Process ' + escapeHtmlPending(docNo) + ' (' + escapeHtmlPending(docType) + ')';
 
-  // Update the submit button label based on doc type
   var submitBtn = document.getElementById('btnSubmitProcessBalance');
   if (submitBtn) {
     var label = docType === 'MRR' ? 'Create Balance MRR' :
@@ -240,7 +240,7 @@ window.openPendingProcessModal = async function(docNo, docType) {
   }
 };
 
-// ─── Override submitProcessBalance — sends docType too ───
+// ─── Override submitProcessBalance ───
 window.submitProcessBalance = function() {
   if (!window._processPartialDocNo || !window._processPartialItems || !window._processPartialItems.length) {
     showToast('No items to process', 'warning');
