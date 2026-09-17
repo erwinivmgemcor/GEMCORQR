@@ -1,6 +1,6 @@
 // ============================================================
 // WAREHOUSE CORE FUNCTIONS
-// (Optimized + Partial Items tracking + Balance MRIF with issue-now)
+// (Optimized + Partial Items + Balance MRIF + Clear/Edit PO Items)
 // ============================================================
 
 (function() {
@@ -450,7 +450,7 @@
     return JSON.parse(text);
   };
 
-  // ─── PO ITEMS ─────────────────────────────────────
+  // ─── PO ITEMS (always-editable code + desc + Clear button) ────
   window.renderPoItems = function() {
     var noEl = document.getElementById('poDisplayNo');
     var prfEl = document.getElementById('poDisplayPrf');
@@ -476,7 +476,8 @@
     if (warning) {
       if (hasMissing) {
         warning.classList.remove('d-none');
-        warning.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i><strong>Some items are incomplete.</strong> Please fill in the missing Item Code and Description below.';
+        warning.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i>' +
+          '<strong>Some items are incomplete.</strong> Please fill in the missing Item Code and Description below, or click <strong>Clear</strong> to reset an item and enter the correct one.';
       } else {
         warning.classList.add('d-none');
       }
@@ -485,66 +486,137 @@
     list.innerHTML = state.poItemsData.map(function(item, idx) {
       var isManual = !!item._manual;
       var isMissing = !item.inventoryId || !item.inventoryId.trim() || !item.description || !item.description.trim();
+
       var borderClass = '';
-      if (isManual) borderClass = 'border border-info';
-      else if (isMissing) borderClass = 'border border-danger';
+      if (isMissing) borderClass = 'border border-danger';
+      else if (isManual) borderClass = 'border border-info';
+
       var codeVal = item.inventoryId || '';
       var descVal = item.description || '';
       var isChecked = isManual ? true : !isMissing;
 
       return '<div class="card mb-2 po-item-card ' + borderClass + '" id="po-card-' + idx + '">' +
         '<div class="card-body py-2 px-3">' +
-        '<div class="d-flex align-items-center gap-2 flex-wrap">' +
-        '<div class="form-check m-0"><input class="form-check-input po-check" type="checkbox" id="po-check-' + idx + '" ' + (isChecked ? 'checked' : '') + ' onchange="togglePoCard(' + idx + ')"></div>' +
+        '<div class="d-flex align-items-start gap-2">' +
+        '<div class="form-check m-0 mt-3">' +
+        '<input class="form-check-input po-check" type="checkbox" id="po-check-' + idx + '" ' + (isChecked ? 'checked' : '') + ' onchange="togglePoCard(' + idx + ')">' +
+        '</div>' +
         '<div class="flex-grow-1" style="min-width:120px;">' +
         '<div class="row g-1">' +
-        '<div class="col-12 col-md-4"><label class="form-label mb-0 small">Item Code</label>' +
-        ((isMissing || isManual) ?
-          '<input type="text" class="form-control form-control-sm po-edit-code" id="po-code-' + idx + '" value="' + codeVal + '" placeholder="Enter Item Code" list="inventoryCodeList" oninput="updatePoItem(' + idx + ', \'inventoryId\', this.value)" onchange="autoFillPoDescription(' + idx + ', this.value)">' :
-          '<div class="fw-bold small">' + codeVal + '</div>') +
+        // ITEM CODE — always editable with auto-suggest
+        '<div class="col-12 col-md-5">' +
+        '<label class="form-label mb-0 small">Item Code</label>' +
+        '<input type="text" class="form-control form-control-sm po-edit-code" ' +
+          'id="po-code-' + idx + '" ' +
+          'value="' + codeVal + '" ' +
+          'placeholder="Type or pick item code..." ' +
+          'list="inventoryCodeList" ' +
+          'autocomplete="off" ' +
+          'oninput="updatePoItem(' + idx + ', \'inventoryId\', this.value); autoFillPoDescription(' + idx + ', this.value, false);" ' +
+          'onchange="autoFillPoDescription(' + idx + ', this.value, true);">' +
         '</div>' +
-        '<div class="col-12 col-md-4"><label class="form-label mb-0 small">Description</label>' +
-        ((isMissing || isManual) ?
-          '<input type="text" class="form-control form-control-sm po-edit-desc" id="po-desc-' + idx + '" value="' + descVal + '" placeholder="Enter Description" oninput="updatePoItem(' + idx + ', \'description\', this.value)">' :
-          '<div class="text-muted small">' + descVal + '</div>') +
+        // DESCRIPTION — always editable
+        '<div class="col-12 col-md-5">' +
+        '<label class="form-label mb-0 small">Description</label>' +
+        '<input type="text" class="form-control form-control-sm po-edit-desc" ' +
+          'id="po-desc-' + idx + '" ' +
+          'value="' + descVal + '" ' +
+          'placeholder="Auto-fills from item code" ' +
+          'oninput="updatePoItem(' + idx + ', \'description\', this.value);">' +
         '</div>' +
-        '<div class="col-6 col-md-2"><label class="form-label mb-0 small">PO Qty</label>' +
+        // PO QTY — editable if manual/cleared, read-only if from PO
+        '<div class="col-6 col-md-1">' +
+        '<label class="form-label mb-0 small">PO Qty</label>' +
         (isManual ?
-          '<input type="number" class="form-control form-control-sm" id="po-qty-' + idx + '" value="' + (item.qty || 1) + '" min="0" style="width:80px" oninput="updatePoItem(' + idx + ', \'qty\', this.value)">' :
-          '<div class="fw-bold small">' + (item.qty || 0) + '</div>') +
+          '<input type="number" class="form-control form-control-sm" id="po-qty-' + idx + '" value="' + (item.qty || 1) + '" min="0" style="width:70px;" oninput="updatePoItem(' + idx + ', \'qty\', this.value)">' :
+          '<div class="fw-bold small pt-1">' + (item.qty || 0) + '</div>') +
         '</div>' +
-        '<div class="col-6 col-md-2"><label class="form-label mb-0 small">Unit</label><div class="fw-bold small">' + (item.unit || 'PCS') + '</div></div>' +
-        '</div>' +
-        '<div class="d-flex gap-2 mt-1 flex-wrap">' +
-        '<div style="min-width:80px;"><label class="form-label mb-0 small">ATL Qty</label>' +
-        '<input type="number" class="form-control form-control-sm" id="po-atl-' + idx + '" value="' + (item.atlQty != null ? item.atlQty : (item.qty || 0)) + '" min="0" style="width:80px"></div>' +
-        '<div style="min-width:80px;"><label class="form-label mb-0 small">Unit (Override)</label>' +
-        '<select class="form-select form-select-sm" id="po-unit-' + idx + '" style="width:90px;">' + buildUnitOptions(item.unit || 'PCS') + '</select></div>' +
-        '<div style="min-width:120px; flex:1;"><label class="form-label mb-0 small">Remarks</label>' +
-        '<input type="text" class="form-control form-control-sm" id="po-remarks-' + idx + '" placeholder="Optional note..." maxlength="200"></div>' +
+        // UNIT
+        '<div class="col-6 col-md-1">' +
+        '<label class="form-label mb-0 small">Unit</label>' +
+        '<div class="fw-bold small pt-1">' + (item.unit || 'PCS') + '</div>' +
         '</div>' +
         '</div>' +
-        (isManual ? '<span class="badge bg-info ms-2">Manual</span>' : (isMissing ? '<span class="badge bg-danger ms-2">Incomplete</span>' : '')) +
-        '</div></div></div>';
+        // SECOND ROW: ATL Qty, Unit Override, Remarks, Clear button
+        '<div class="d-flex gap-2 mt-1 flex-wrap align-items-end">' +
+        '<div style="width:90px;">' +
+        '<label class="form-label mb-0 small">ATL Qty</label>' +
+        '<input type="number" class="form-control form-control-sm" id="po-atl-' + idx + '" value="' + (item.atlQty != null ? item.atlQty : (item.qty || 0)) + '" min="0">' +
+        '</div>' +
+        '<div style="width:110px;">' +
+        '<label class="form-label mb-0 small">Unit (Override)</label>' +
+        '<select class="form-select form-select-sm" id="po-unit-' + idx + '" style="width:100px;">' + buildUnitOptions(item.unit || 'PCS') + '</select>' +
+        '</div>' +
+        '<div style="flex:1;min-width:150px;">' +
+        '<label class="form-label mb-0 small">Remarks</label>' +
+        '<input type="text" class="form-control form-control-sm" id="po-remarks-' + idx + '" placeholder="Optional note..." maxlength="200">' +
+        '</div>' +
+        '<div>' +
+        '<button type="button" class="btn btn-sm btn-outline-danger" onclick="clearPoItem(' + idx + ')" title="Clear this item">' +
+          '<i class="bi bi-eraser-fill me-1"></i>Clear' +
+        '</button>' +
+        '</div>' +
+        '</div>' +
+        '</div>' +
+        // Badges
+        '<div class="d-flex flex-column gap-1 ms-2">' +
+        (isManual ? '<span class="badge bg-info">Manual</span>' : '') +
+        (isMissing ? '<span class="badge bg-danger">Incomplete</span>' : '') +
+        '</div>' +
+        '</div>' +
+        '</div>' +
+        '</div>';
     }).join('');
 
     updateCreateMrrButton();
+
     document.querySelectorAll('.po-check').forEach(function(cb) {
       cb.addEventListener('change', updateCreateMrrButton);
     });
   };
 
+  // ─── Clear a single PO item (reset code + desc, make editable) ───
+  window.clearPoItem = function(idx) {
+    if (!state.poItemsData[idx]) return;
+    // Wipe code + description but keep qty/unit
+    state.poItemsData[idx].inventoryId = '';
+    state.poItemsData[idx].description = '';
+    // Mark as manual so it stays editable and PO Qty becomes editable
+    state.poItemsData[idx]._manual = true;
+    renderPoItems();
+    setTimeout(function() {
+      var el = document.getElementById('po-code-' + idx);
+      if (el) {
+        el.focus();
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+    showToast('Item cleared. Type or pick the correct item code.', 'info');
+  };
+
+  // ─── Add a manual item row inside the PO Items modal ───
   window.addPoManualItem = function() {
     if (!state.poItemsData) state.poItemsData = [];
-    state.poItemsData.push({ inventoryId: '', description: '', qty: 1, atlQty: 0, unit: 'PCS', remarks: '', _manual: true });
+    state.poItemsData.push({
+      inventoryId: '',
+      description: '',
+      qty: 1,
+      atlQty: 0,
+      unit: 'PCS',
+      remarks: '',
+      _manual: true
+    });
     renderPoItems();
     setTimeout(function() {
       var idx = state.poItemsData.length - 1;
+      var card = document.getElementById('po-card-' + idx);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       var el = document.getElementById('po-code-' + idx);
       if (el) el.focus();
-      var card = document.getElementById('po-card-' + idx);
-      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 100);
+    showToast('New row added. Enter the item code.', 'info');
   };
 
   function populateInventoryDatalist() {
@@ -558,22 +630,32 @@
     datalist.innerHTML = html;
   }
 
-  window.autoFillPoDescription = function(idx, code) {
+  // ─── Auto-fill description from item code ───
+  // force = false → only fill if the description is empty
+  // force = true  → always overwrite (used on change/datalist pick)
+  window.autoFillPoDescription = function(idx, code, force) {
     if (!code) return;
+    code = String(code).trim();
+    if (!code) return;
+
     var match = state.requestInventoryList.find(function(it) {
-      return (it.inventoryId === code || it.code === code);
+      var c = it.code || it.inventoryId || '';
+      return c.toLowerCase() === code.toLowerCase();
     });
-    if (match) {
-      var descInput = document.getElementById('po-desc-' + idx);
-      if (descInput && !descInput.value) {
+    if (!match) return;
+
+    var descInput = document.getElementById('po-desc-' + idx);
+    if (descInput) {
+      if (force || !descInput.value.trim()) {
         descInput.value = match.description || '';
         updatePoItem(idx, 'description', descInput.value);
       }
-      var unitSelect = document.getElementById('po-unit-' + idx);
-      if (unitSelect && match.unit) {
-        for (var opt = 0; opt < unitSelect.options.length; opt++) {
-          if (unitSelect.options[opt].value === match.unit) { unitSelect.selectedIndex = opt; break; }
-        }
+    }
+
+    var unitSelect = document.getElementById('po-unit-' + idx);
+    if (unitSelect && match.unit) {
+      for (var opt = 0; opt < unitSelect.options.length; opt++) {
+        if (unitSelect.options[opt].value === match.unit) { unitSelect.selectedIndex = opt; break; }
       }
     }
   };
@@ -592,7 +674,7 @@
     var hasMissingSelected = selected.some(function(item) {
       return !item.inventoryId || !item.inventoryId.trim() || !item.description || !item.description.trim();
     });
-    if (hasMissingSelected) { btn.disabled = true; btn.title = 'Fill missing fields'; }
+    if (hasMissingSelected) { btn.disabled = true; btn.title = 'Fill missing fields or uncheck the item'; }
     else if (selected.length === 0) { btn.disabled = true; btn.title = 'Select at least one item'; }
     else { btn.disabled = false; btn.title = ''; }
   };
@@ -602,14 +684,20 @@
     state.poItemsData.forEach(function(item, idx) {
       var cb = document.getElementById('po-check-' + idx);
       if (!cb || !cb.checked) return;
+      var codeEl = document.getElementById('po-code-' + idx);
+      var descEl = document.getElementById('po-desc-' + idx);
       var atlEl = document.getElementById('po-atl-' + idx);
       var unitEl = document.getElementById('po-unit-' + idx);
       var remarksEl = document.getElementById('po-remarks-' + idx);
       var qtyEl = document.getElementById('po-qty-' + idx);
+
+      var code = codeEl ? (codeEl.value || '').trim() : (item.inventoryId || '').trim();
+      var desc = descEl ? (descEl.value || '').trim() : (item.description || '').trim();
       var qty = qtyEl ? (parseFloat(qtyEl.value) || 0) : (item.qty || 0);
+
       selected.push({
-        inventoryId: (item.inventoryId || '').trim(),
-        description: (item.description || '').trim(),
+        inventoryId: code,
+        description: desc,
         qty: qty,
         unit: unitEl ? unitEl.value : (item.unit || 'PCS'),
         atlQty: atlEl ? (parseFloat(atlEl.value) || 0) : 0,
@@ -648,9 +736,11 @@
         return !item.inventoryId || !item.inventoryId.trim() || !item.description || !item.description.trim();
       });
       if (hasMissing) { showToast('Fill missing details first', 'danger'); return; }
+
       var drNo = document.getElementById('mrrDrNo') ? document.getElementById('mrrDrNo').value.trim() : '';
       var receivingDate = document.getElementById('mrrReceivingDate') ? document.getElementById('mrrReceivingDate').value : '';
       var preparedBy = _getCurrentUserName() || 'WAREHOUSE';
+
       try {
         var payload = {
           action: 'createMrrRequest',
@@ -1253,7 +1343,6 @@
         return;
       }
 
-      // ─── Group by original doc ───
       var grouped = {};
       items.forEach(function(it) {
         var doc = it.originalDocNo || it.docNo || '(unknown)';
@@ -1315,7 +1404,6 @@
     }
   };
 
-  // ─── Open Process Balance modal ───
   var _processPartialDocNo = null;
   var _processPartialItems = [];
 
@@ -1398,26 +1486,20 @@
     }
   };
 
-  // ─── Live validation: cap Issued Now at Remaining ───
   window.onProcessQtyInput = function(input) {
     var idx = input.getAttribute('data-idx');
     var remainingCell = document.querySelector('.process-remaining-cell[data-idx="' + idx + '"]');
     if (!remainingCell) return;
     var remaining = parseFloat(remainingCell.textContent) || 0;
     var value = parseFloat(input.value) || 0;
-    if (value > remaining) {
-      input.value = remaining;
-    }
+    if (value > remaining) input.value = remaining;
   };
 
-  // ─── Quick-fill all remaining ───
   window.fillAllRemaining = function() {
     document.querySelectorAll('.process-qty-input').forEach(function(inp) {
       var idx = inp.getAttribute('data-idx');
       var remainingCell = document.querySelector('.process-remaining-cell[data-idx="' + idx + '"]');
-      if (remainingCell) {
-        inp.value = parseFloat(remainingCell.textContent) || 0;
-      }
+      if (remainingCell) inp.value = parseFloat(remainingCell.textContent) || 0;
     });
   };
 
@@ -1435,14 +1517,12 @@
         var remaining = Number(it.remainingQty || 0);
         var issueNow = qtyInput ? (parseFloat(qtyInput.value) || 0) : 0;
         var remarks = remarksInput ? (remarksInput.value || '').trim() : '';
-
         if (issueNow > remaining) issueNow = remaining;
-
         itemsPayload.push({
           inventoryId: it.itemCode || '',
           description: it.description || '',
-          qty: remaining,               // the full remaining that becomes the new "REQ QTY"
-          issueNow: issueNow,           // what's issued in this round
+          qty: remaining,
+          issueNow: issueNow,
           unit: it.unit || 'PCS',
           remarks: remarks || '',
           originalRowIndex: it.originalRowIndex || 0
@@ -1451,9 +1531,7 @@
 
       var anyIssued = itemsPayload.some(function(it) { return it.issueNow > 0; });
       if (!anyIssued) {
-        if (!confirm('You have not entered any "Issued Now" quantity.\n\nContinue anyway? The Bal document will be created as PENDING.')) {
-          return;
-        }
+        if (!confirm('You have not entered any "Issued Now" quantity.\n\nContinue anyway? The Bal document will be created as PENDING.')) return;
       }
 
       try {
@@ -1479,12 +1557,8 @@
             if (pm) pm.hide();
           }
           showToast('Balance MRIF created: ' + data.balDocNo + ' (' + (data.status || 'COMPLETED') + ')', 'success');
-
-          // Refresh counts and lists
           if (typeof updatePartialCount === 'function') updatePartialCount();
           if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
-
-          // Reopen the Partial Items modal so processed rows disappear
           setTimeout(function() {
             var p = document.getElementById('partialItemsModal');
             if (p) {
