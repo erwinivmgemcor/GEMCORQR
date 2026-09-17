@@ -462,6 +462,9 @@
       <div class="nav-item" data-section="about" onclick="navigateTo('about')">
         <i class="bi bi-info-circle"></i> About / Instructions
       </div>
+      <div class="nav-item" data-section="switchmode" onclick="openModePicker()" style="display:none;" id="switchModeNavItem">
+      <i class="bi bi-arrow-left-right"></i> Switch Mode
+      </div>
       <div class="nav-item" data-section="logout" onclick="logoutUser()" style="display:none;" id="logoutNavItem">
         <i class="bi bi-box-arrow-right"></i> Logout
       </div>
@@ -1257,7 +1260,8 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title"><i class="bi bi-shield-lock me-2"></i>Warehouse Login</h5>
+        <h5 class="modal-title"><i class="bi bi-shield-lock me-2"></i>Login</h5>
+        <button type="button" class="btn-close btn-close-white" onclick="backToRoleSelection()" aria-label="Close"></button>
       </div>
       <div class="modal-body">
         <div class="mb-3">
@@ -1271,8 +1275,12 @@
         <div id="loginError" class="alert alert-danger d-none"></div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" onclick="backToRoleSelection()">Back to Role</button>
-        <button type="button" class="btn btn-primary" id="loginBtn" onclick="loginUser()">Login</button>
+        <button type="button" class="btn btn-secondary" onclick="backToRoleSelection()">
+          <i class="bi bi-arrow-left me-1"></i>Back to Role
+        </button>
+        <button type="button" class="btn btn-primary" id="loginBtn" onclick="loginUser()">
+          <i class="bi bi-box-arrow-in-right me-1"></i>Login
+        </button>
       </div>
     </div>
   </div>
@@ -2050,6 +2058,54 @@
     </div>
   </div>
 </div>
+
+  <!-- Mode Picker Modal (for both-role users) -->
+<div class="modal fade" id="modePickerModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="bi bi-arrow-left-right me-2"></i>Switch Mode</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">You are currently logged in as <strong id="modePickerUser">User</strong>.
+          Pick the mode you want to work in.</p>
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="card role-card p-3 text-center" onclick="switchMode('warehouse')">
+              <i class="bi bi-shield-check text-success" style="font-size:2rem"></i>
+              <h5 class="mt-2 mb-1">Warehouse Mode</h5>
+              <small class="text-muted">Process releases, receiving, and returns</small>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="card role-card p-3 text-center" onclick="switchMode('production')">
+              <i class="bi bi-person-badge text-primary" style="font-size:2rem"></i>
+              <h5 class="mt-2 mb-1">Production Mode</h5>
+              <small class="text-muted">Create material requests and track your items</small>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Fill in the user name when the modal opens
+document.addEventListener('DOMContentLoaded', function() {
+  var modalEl = document.getElementById('modePickerModal');
+  if (modalEl) {
+    modalEl.addEventListener('show.bs.modal', function() {
+      var el = document.getElementById('modePickerUser');
+      if (el) el.textContent = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'User';
+    });
+  }
+});
+</script>
   
 <!-- Hidden containers -->
 <div id="whNotificationsList" class="d-none"></div>
