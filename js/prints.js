@@ -1,6 +1,7 @@
 // ============================================================
 // PRINT PREVIEW FUNCTIONS
-// (with Bulk Print + Bal.MRIF support + Newest-First Sort)
+// (Bulk Print + Bal.MRIF support + Newest-First Sort
+//  + Remarks cleaning — hides system status from prints)
 // ============================================================
 
 // ─── Helper: Display doc number (strips -dept suffix, keeps "Bal." prefix) ───
@@ -25,6 +26,7 @@ function _extractDocNumber(docNo) {
 function _isBalDoc(docNo) {
   return String(docNo || '').toUpperCase().indexOf('BAL.') === 0;
 }
+
 // ─── Helper: Strip system status from Remarks before printing ───
 // Removes "(SERVED)", "(PENDING)", "(PARTIAL)", "(COMPLETE)", "(BALANCED)",
 // standalone status words, and pipe separators. Keeps only the user's
@@ -40,6 +42,7 @@ function _cleanRemarksForPrint(remarks) {
   s = s.replace(/\s*\|\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
   return s;
 }
+
 // ─── Helper: load document list for a module ────
 async function loadDocumentListForModule(docType) {
   var prevModule = state.currentModule;
@@ -289,7 +292,8 @@ function buildSingleMrifHtml(docNo, info, items) {
       var issued = it.actualQty || it.issuedQty || it.atlQty || 0;
       var issuedDisplay = (issued === 0 || issued === '') ? '' : issued;
       var unit = it.unit || 'PIECE';
-      var remarks = it.remarks || '';
+      // ★ CLEANED REMARKS FOR PRINT
+      var remarks = _cleanRemarksForPrint(it.remarks || '');
       var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
       itemsHtml += '<tr>' +
         '<td class="td-center">' + (i + 1) + '</td>' +
@@ -412,7 +416,8 @@ function buildSingleMrrHtml(docNo, info, items) {
       var receivedQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
       var receivedDisplay = (receivedQty === 0 || receivedQty === '') ? '' : receivedQty;
       var unit = it.unit || it.uom || 'PIECE';
-      var remarks = it.remarks || it.status || it.note || '';
+      // ★ CLEANED REMARKS FOR PRINT
+      var remarks = _cleanRemarksForPrint(it.remarks || it.status || it.note || '');
       itemsHtml += '<tr>' +
         '<td class="td-center" style="width:5%">' + (idx + 1) + '</td>' +
         '<td class="td-center" style="width:16%">' + code + '</td>' +
@@ -541,7 +546,8 @@ function buildSingleMrsHtml(docNo, info, items) {
       var actualReturned = it.actualQty || it.issuedQty || it.atlQty || 0;
       var actualDisplay = (actualReturned === 0 || actualReturned === '') ? '' : actualReturned;
       var unit = it.unit || 'PIECE';
-      var remarks = it.remarks || '';
+      // ★ CLEANED REMARKS FOR PRINT
+      var remarks = _cleanRemarksForPrint(it.remarks || '');
       var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
       itemsHtml += '<tr>' +
         '<td class="td-center">' + (i + 1) + '</td>' +
