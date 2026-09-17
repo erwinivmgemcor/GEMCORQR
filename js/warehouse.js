@@ -383,6 +383,8 @@
     });
     var countEl = document.getElementById('verifyCount');
     if (countEl) countEl.textContent = verified + '/' + state.items.length + ' Verified';
+    var countElBottom = document.getElementById('verifyCountBottom');
+    if (countElBottom) countElBottom.textContent = verified + '/' + state.items.length + ' Verified';
     updateSubmitButton(verified, state.items.length);
   };
 
