@@ -1,8 +1,7 @@
 // ============================================================
-// WAREHOUSE NOTIFICATIONS (with caching fallback)
+// WAREHOUSE NOTIFICATIONS
 // ============================================================
 
-// ─── Fallback cache functions if cache.js is not loaded ──────
 (function() {
   if (typeof getCache === 'undefined') {
     window.getCache = function(key) { return null; };
@@ -15,54 +14,53 @@
 (function() {
   "use strict";
 
-  // ─── Update KPIs (including partial count) ──────────────────────
-window.updateWarehouseKPIs = async function() {
-  try {
-    // ─── Pending count comes from the unified pending source ───
-    // (same endpoint the Pending modal uses → they always match)
-    var pendingUrl = API_URL + '?action=getAllPendingDocs&_t=' + Date.now();
-    var pendingRes = await fetch(pendingUrl, { redirect: 'follow' });
-    var pendingText = await pendingRes.text();
-    var pendingData;
-    try { pendingData = JSON.parse(pendingText); } catch(e) { pendingData = {}; }
-    var allPending = (pendingData && pendingData.documents) || [];
-    var pendingCount = allPending.length;
+  // ─── Update KPIs (Pending count comes from the unified getAllPendingDocs source) ───
+  window.updateWarehouseKPIs = async function() {
+    try {
+      // ─── Pending count from unified pending source ───
+      var pendingUrl = API_URL + '?action=getAllPendingDocs&_t=' + Date.now();
+      var pendingRes = await fetch(pendingUrl, { redirect: 'follow' });
+      var pendingText = await pendingRes.text();
+      var pendingData;
+      try { pendingData = JSON.parse(pendingText); } catch(e) { pendingData = {}; }
+      var allPending = (pendingData && pendingData.documents) || [];
+      var pendingCount = allPending.length;
 
-    // ─── Total / Completed from the sheet-count endpoint ───
-    var sheetId = getCleanSheetId() || '';
-    var countUrl = API_URL + '?action=getPendingDocCount&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
-    var countRes = await fetch(countUrl, { redirect: 'follow' });
-    var countText = await countRes.text();
-    var countData;
-    try { countData = JSON.parse(countText); } catch(e) { countData = {}; }
-    var completedCount = countData.completedCount || 0;
-    var totalCount = countData.totalCount || 0;
+      // ─── Total / Completed from sheet-count endpoint ───
+      var sheetId = getCleanSheetId() || '';
+      var countUrl = API_URL + '?action=getPendingDocCount&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
+      var countRes = await fetch(countUrl, { redirect: 'follow' });
+      var countText = await countRes.text();
+      var countData;
+      try { countData = JSON.parse(countText); } catch(e) { countData = {}; }
+      var completedCount = countData.completedCount || 0;
+      var totalCount = countData.totalCount || 0;
 
-    var kpiActive = document.getElementById('kpiActiveDocs');
-    var kpiPending = document.getElementById('kpiPending');
-    var kpiNotifications = document.getElementById('kpiNotifications');
-    var kpiCompleted = document.getElementById('kpiCompleted');
+      var kpiActive = document.getElementById('kpiActiveDocs');
+      var kpiPending = document.getElementById('kpiPending');
+      var kpiNotifications = document.getElementById('kpiNotifications');
+      var kpiCompleted = document.getElementById('kpiCompleted');
 
-    if (kpiActive) kpiActive.textContent = totalCount;
-    if (kpiPending) kpiPending.textContent = pendingCount;
-    if (kpiNotifications) kpiNotifications.textContent = pendingCount;
-    if (kpiCompleted) kpiCompleted.textContent = completedCount;
+      if (kpiActive) kpiActive.textContent = totalCount;
+      if (kpiPending) kpiPending.textContent = pendingCount;
+      if (kpiNotifications) kpiNotifications.textContent = pendingCount;
+      if (kpiCompleted) kpiCompleted.textContent = completedCount;
 
-    console.log('[KPI] Total:', totalCount, 'Pending:', pendingCount, 'Completed:', completedCount);
+      console.log('[KPI] Total:', totalCount, 'Pending:', pendingCount, 'Completed:', completedCount);
 
-    // ─── Update partial count ───
-    if (typeof updatePartialCount === 'function') {
-      updatePartialCount();
-    }
-  } catch(e) { console.error('[KPI] Error:', e); }
-};
-  // ─── Process notifications (shared logic) ──────────────────────
+      if (typeof updatePartialCount === 'function') {
+        updatePartialCount();
+      }
+    } catch(e) { console.error('[KPI] Error:', e); }
+  };
+
+  // ─── Process notifications ───
   function processNotifications(requests) {
     if (!requests) requests = [];
     var today = new Date();
     var sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
     var currentMrifId = localStorage.getItem('sheetId_MRIF') || '';
-    
+
     var filtered = requests.filter(function(req) {
       var reqDate = new Date(req.timestamp);
       var type = (req.type || '').toUpperCase();
@@ -86,39 +84,33 @@ window.updateWarehouseKPIs = async function() {
       showToast(diff + ' new request(s) received!', 'warning');
     }
 
-    // ─── Update notification badge ────────────────────────────────
     var badge = document.getElementById('whNotifBadge');
     if (badge) {
       badge.textContent = newCount;
       badge.classList.toggle('d-none', newCount === 0);
-      console.log('[WH Notifications] Badge updated:', newCount);
     }
 
     updateWarehouseKPIs();
     renderWarehouseNotifications(filtered);
   }
 
-  // ─── Load warehouse notifications with caching ──────────────────
+  // ─── Load warehouse notifications ───
   window.loadWarehouseNotifications = async function(forceRefresh) {
     if (localStorage.getItem('ivm_userRole') === 'production') return;
-    
+
     const cacheKey = 'pendingRequests';
     if (!forceRefresh) {
       const cached = getCache(cacheKey);
       if (cached) {
         console.log('[WH Notifications] Loaded from cache:', cached.length);
         processNotifications(cached);
-        // Stale-while-revalidate: refresh in background after 2s
-        setTimeout(function() {
-          refreshNotifications();
-        }, 2000);
+        setTimeout(function() { refreshNotifications(); }, 2000);
         return;
       }
     }
     await refreshNotifications();
   };
 
-  // ─── Refresh notifications from server ──────────────────────────
   async function refreshNotifications() {
     try {
       var url = API_URL + '?action=getPendingRequests&_t=' + Date.now();
@@ -137,7 +129,7 @@ window.updateWarehouseKPIs = async function() {
     }
   }
 
-  // ─── Render warehouse notifications (for dropdown) ──────────────
+  // ─── Render warehouse notifications (dropdown) ───
   window.renderWarehouseNotifications = function(requests) {
     var container = document.getElementById('whNotificationsList');
     if (!container) return;
@@ -173,7 +165,7 @@ window.updateWarehouseKPIs = async function() {
     }
   };
 
-  // ─── Render WH notification modal (full list) ───────────────────
+  // ─── Render WH notification modal ───
   window.renderWhNotifModal = function(requests) {
     var container = document.getElementById('whNotifModalList');
     if (!container) return;
@@ -207,7 +199,7 @@ window.updateWarehouseKPIs = async function() {
     });
   };
 
-  // ─── Open notification modal ─────────────────────────────────────
+  // ─── Open notification modal ───
   window.openWhNotifications = function() {
     if (!whNotifModal && document.getElementById('whNotifModal')) {
       whNotifModal = new bootstrap.Modal(document.getElementById('whNotifModal'));
@@ -216,7 +208,6 @@ window.updateWarehouseKPIs = async function() {
     loadAndRenderWhModal();
   };
 
-  // ─── Load and render modal content ──────────────────────────────
   async function loadAndRenderWhModal() {
     var container = document.getElementById('whNotifModalList');
     if (container) {
@@ -226,7 +217,6 @@ window.updateWarehouseKPIs = async function() {
       var url = API_URL + '?action=getPendingRequests&_t=' + Date.now();
       var res = await fetch(url);
       var data = await res.json();
-      console.log('[WH Modal] Response:', data);
       if (data.success && data.requests) {
         var today = new Date();
         var todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
@@ -253,22 +243,21 @@ window.updateWarehouseKPIs = async function() {
     }
   }
 
-  // ─── Process request from notification (direct load) ────────────
+  // ─── Process request from notification ───
   window.processRequestFromNotification = async function(docNo, docType) {
     console.log('[WH] Processing request:', docNo, docType);
-    
+
     if (typeof navigateTo === 'function') {
       navigateTo('releasing');
     } else {
-      console.warn('[WH] navigateTo not available, switching via selectModule');
       await selectModule(docType);
     }
-    
+
     await new Promise(resolve => setTimeout(resolve, 300));
-    
+
     state.currentModule = docType;
     updateLabels();
-    
+
     var sheetId = getCleanSheetId();
     if (!sheetId) {
       showToast('⚠️ No Sheet ID for ' + docType + '. Attempting to sync...', 'warning');
@@ -279,7 +268,7 @@ window.updateWarehouseKPIs = async function() {
         return;
       }
     }
-    
+
     try {
       await onDocSelect(docNo);
       showToast('Loaded ' + cleanDocNo(docNo), 'success');
@@ -289,7 +278,7 @@ window.updateWarehouseKPIs = async function() {
     }
   };
 
-  // ─── Clear notifications ─────────────────────────────────────────
+  // ─── Clear notifications ───
   window.clearWhNotifications = function() {
     if (!confirm('Clear all warehouse notifications? This will reset the badge count.')) return;
     localStorage.setItem('ivm_whNotifCount', '0');
@@ -299,29 +288,21 @@ window.updateWarehouseKPIs = async function() {
     showToast('Notifications cleared', 'info');
   };
 
-  // ─── Start notification polling ──────────────────────────────────
+  // ─── Start / stop polling ───
   window.startNotificationPolling = function() {
-    if (window._whPollInterval) {
-      clearInterval(window._whPollInterval);
-    }
+    if (window._whPollInterval) clearInterval(window._whPollInterval);
     loadWarehouseNotifications();
     window._whPollInterval = setInterval(function() {
-      if (!state.isLoading) {
-        loadWarehouseNotifications();
-      }
+      if (!state.isLoading) loadWarehouseNotifications();
     }, 30000);
-    console.log('[WH Notifications] Polling started (30s interval)');
   };
 
-  // ─── Stop notification polling ───────────────────────────────────
   window.stopNotificationPolling = function() {
     if (window._whPollInterval) {
       clearInterval(window._whPollInterval);
       window._whPollInterval = null;
-      console.log('[WH Notifications] Polling stopped');
     }
   };
 
-  console.log('✅ notifications.js loaded (with caching fallback and partial count support)');
-
+  console.log('✅ notifications.js loaded');
 })();
