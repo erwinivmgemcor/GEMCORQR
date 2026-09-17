@@ -1,7 +1,8 @@
 // ============================================================
 // PRINT PREVIEW FUNCTIONS
 // (Bulk Print + Bal.MRIF support + Newest-First Sort
-//  + Remarks cleaning — hides system status from prints)
+//  + Remarks cleaning — hides system status from prints
+//  + Correct sheet ID lookup by docType — fixes history eye button)
 // ============================================================
 
 // ─── Helper: Display doc number (strips -dept suffix, keeps "Bal." prefix) ───
@@ -28,27 +29,25 @@ function _isBalDoc(docNo) {
 }
 
 // ─── Helper: Strip system status from Remarks before printing ───
-// Removes "(SERVED)", "(PENDING)", "(PARTIAL)", "(COMPLETE)", "(BALANCED)",
-// standalone status words, and pipe separators. Keeps only the user's
-// manual note (e.g. "sample", "urgent").
 function _cleanRemarksForPrint(remarks) {
   if (!remarks) return '';
   var s = String(remarks).trim();
-  // Strip status in parentheses: "(SERVED)", "(PARTIAL)" etc.
   s = s.replace(/\s*\((SERVED|PENDING|PARTIAL|COMPLETE|BALANCED)\)\s*/gi, ' ');
-  // Strip standalone status words
   s = s.replace(/\b(SERVED|PENDING|PARTIAL|COMPLETE|BALANCED)\b/gi, '');
-  // Clean pipe separators and collapse whitespace
   s = s.replace(/\s*\|\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
   return s;
 }
 
+// ─── Helper: Get the correct sheet ID by docType (bypasses state.currentModule) ───
+function _getSheetIdForDocType(docType) {
+  var key = 'sheetId_' + (docType || 'MRIF');
+  var val = localStorage.getItem(key);
+  return val ? (typeof extractSheetId === 'function' ? extractSheetId(val) : val) : '';
+}
+
 // ─── Helper: load document list for a module ────
 async function loadDocumentListForModule(docType) {
-  var prevModule = state.currentModule;
-  state.currentModule = docType;
-  var id = getCleanSheetId();
-  state.currentModule = prevModule;
+  var id = _getSheetIdForDocType(docType);
 
   if (!id) {
     showToast('⚠️ No Sheet ID for ' + docType + '. Please sync or enter it in Settings.', 'warning');
@@ -96,7 +95,6 @@ function renderDocumentList(container, docs, docType) {
     for (var i = 0; i < ignoreList.length; i++) {
       if (upper === ignoreList[i]) return false;
     }
-    // Must start with the module prefix or "Bal.<prefix>"
     if (upper.indexOf(docType) === 0) return true;
     if (upper.indexOf('BAL.' + docType) === 0) return true;
     return false;
@@ -107,30 +105,18 @@ function renderDocumentList(container, docs, docType) {
     return;
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // SORT: newest series on top (descending by trailing number)
-  // Bal.<doc> appears immediately after its parent doc.
-  // ═══════════════════════════════════════════════════════════
   filtered.sort(function(a, b) {
     var na = (a.docNo || a.sheetName || '').toUpperCase();
     var nb = (b.docNo || b.sheetName || '').toUpperCase();
-
     var numA = _extractDocNumber(na);
     var numB = _extractDocNumber(nb);
-
-    // Primary: descending numeric series
     if (numA !== numB) return numB - numA;
-
-    // Secondary: same number → parent doc first, then Bal.
     var isBalA = na.indexOf('BAL.') === 0;
     var isBalB = nb.indexOf('BAL.') === 0;
     if (isBalA !== isBalB) return isBalA ? 1 : -1;
-
-    // Tertiary: alphabetical descending (rare edge case)
     return nb.localeCompare(na);
   });
 
-  // Select-all header
   var header = document.createElement('div');
   header.className = 'list-group-item d-flex align-items-center bg-light';
   header.innerHTML =
@@ -200,9 +186,7 @@ async function printSelectedDocs() {
 
   showLoading('Loading ' + docNos.length + ' documents...');
   try {
-    var sheetKey = 'sheetId_' + docType;
-    var sheetIdVal = localStorage.getItem(sheetKey);
-    var sheetIdClean = sheetIdVal ? extractSheetId(sheetIdVal) : '';
+    var sheetIdClean = _getSheetIdForDocType(docType);
 
     var url = API_URL + '?action=getMultipleDocItems&docNos=' + encodeURIComponent(docNos.join(',')) +
               '&docType=' + docType + '&sheetId=' + encodeURIComponent(sheetIdClean) + '&_t=' + Date.now();
@@ -292,7 +276,6 @@ function buildSingleMrifHtml(docNo, info, items) {
       var issued = it.actualQty || it.issuedQty || it.atlQty || 0;
       var issuedDisplay = (issued === 0 || issued === '') ? '' : issued;
       var unit = it.unit || 'PIECE';
-      // ★ CLEANED REMARKS FOR PRINT
       var remarks = _cleanRemarksForPrint(it.remarks || '');
       var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
       itemsHtml += '<tr>' +
@@ -416,7 +399,6 @@ function buildSingleMrrHtml(docNo, info, items) {
       var receivedQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
       var receivedDisplay = (receivedQty === 0 || receivedQty === '') ? '' : receivedQty;
       var unit = it.unit || it.uom || 'PIECE';
-      // ★ CLEANED REMARKS FOR PRINT
       var remarks = _cleanRemarksForPrint(it.remarks || it.status || it.note || '');
       itemsHtml += '<tr>' +
         '<td class="td-center" style="width:5%">' + (idx + 1) + '</td>' +
@@ -546,7 +528,6 @@ function buildSingleMrsHtml(docNo, info, items) {
       var actualReturned = it.actualQty || it.issuedQty || it.atlQty || 0;
       var actualDisplay = (actualReturned === 0 || actualReturned === '') ? '' : actualReturned;
       var unit = it.unit || 'PIECE';
-      // ★ CLEANED REMARKS FOR PRINT
       var remarks = _cleanRemarksForPrint(it.remarks || '');
       var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
       itemsHtml += '<tr>' +
@@ -632,11 +613,12 @@ function buildSingleMrsHtml(docNo, info, items) {
 }
 
 // ─── Single document print functions ────
+// FIX: look up sheet ID by docType, not by state.currentModule
 async function openMrifPrint(docNo) {
   if (state.isLoading) return;
   showLoading('Loading ' + _displayDocNo(docNo) + '...');
   try {
-    var sheetId = getCleanSheetId();
+    var sheetId = _getSheetIdForDocType('MRIF');
     var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
     var res = await fetch(url, { redirect: 'follow' });
     var text = await res.text();
@@ -659,7 +641,7 @@ async function openMrrPrint(docNo) {
   if (state.isLoading) return;
   showLoading('Loading ' + _displayDocNo(docNo) + '...');
   try {
-    var sheetId = getCleanSheetId();
+    var sheetId = _getSheetIdForDocType('MRR');
     var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRR&sheetId=' + sheetId + '&_t=' + Date.now();
     var res = await fetch(url, { redirect: 'follow' });
     var text = await res.text();
@@ -682,7 +664,7 @@ async function openMrsPrint(docNo) {
   if (state.isLoading) return;
   showLoading('Loading ' + _displayDocNo(docNo) + '...');
   try {
-    var sheetId = getCleanSheetId();
+    var sheetId = _getSheetIdForDocType('MRS');
     var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRS&sheetId=' + sheetId + '&_t=' + Date.now();
     var res = await fetch(url, { redirect: 'follow' });
     var text = await res.text();
