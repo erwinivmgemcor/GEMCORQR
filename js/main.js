@@ -1,29 +1,52 @@
 // ============================================================
 // MAIN - DOM Ready & Initialization
-// (Handles openMyRequestDetails + filters My Requests to MRIF/MRS)
 // ============================================================
 
 window.applySidebarRole = function(role) {
   var isProduction = (role === 'production');
   var isWarehouse = (role === 'warehouse');
+  var hasBoth = (typeof _hasBothRoles === 'function') ? _hasBothRoles() : false;
+
   var sidebarRole = document.getElementById('sidebarRole');
   if (sidebarRole) {
-    sidebarRole.textContent = isProduction ? 'Production Mode' : (state.currentUser ? state.currentUserFullname : 'Warehouse');
+    sidebarRole.textContent = isProduction
+      ? 'Production Mode'
+      : (state.currentUser ? state.currentUserFullname : 'Warehouse');
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // SIDEBAR VISIBILITY RULES
+  // ──────────────────────────────────────────────────────────
+  // Warehouse-only items:  Dashboard, Releasing, Receiving, Returns
+  // Production-only items: New Request, My Requests
+  // Shared items:          Inventory, Settings, About, Logout
+  // Both-mode only:        Switch Mode (handled separately)
+  // ═══════════════════════════════════════════════════════════
+
   var warehouseNavItems = ['dashboard', 'releasing', 'receiving', 'returns'];
+  var productionNavItems = ['requests', 'myrequests'];
+
   document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
     var section = el.dataset.section;
+
+    // Skip the Switch Mode item (handled by applyRoleUI)
+    if (section === 'switchmode') return;
+
     if (warehouseNavItems.indexOf(section) !== -1) {
+      // Show only for warehouse mode
       el.style.display = isProduction ? 'none' : 'flex';
+    } else if (productionNavItems.indexOf(section) !== -1) {
+      // Show only for production mode
+      el.style.display = isProduction ? 'flex' : 'none';
     } else {
+      // Shared: always show (Inventory, Settings, About, Logout)
       el.style.display = 'flex';
     }
   });
 
   var logoutItem = document.getElementById('logoutNavItem');
   if (logoutItem) {
-    logoutItem.style.display = (isWarehouse && state.currentUser) ? 'flex' : 'none';
+    logoutItem.style.display = (isWarehouse || isProduction) && state.currentUser ? 'flex' : 'none';
   }
 
   if (isProduction) {
@@ -85,7 +108,6 @@ function navigateTo(sectionId) {
     if (role === 'warehouse' && typeof updatePartialCount === 'function') setTimeout(updatePartialCount, 500);
   }
 
-  // Ensure My Requests page is refreshed every time it's opened
   if (sectionId === 'myrequests') {
     if (typeof loadMyRequests === 'function') setTimeout(loadMyRequests, 100);
   }
@@ -105,7 +127,6 @@ function toggleSidebar(open) {
 
 // ══════════════════════════════════════════════════════════════
 // OPEN MY REQUEST DETAILS
-// Shows QR code + requested items list
 // ══════════════════════════════════════════════════════════════
 window.openMyRequestDetails = async function(docNo, docType) {
   var modalEl = document.getElementById('myRequestDetailsModal');
@@ -144,9 +165,7 @@ window.openMyRequestDetails = async function(docNo, docType) {
     var res = await fetch(url, { redirect: 'follow' });
     var text = await res.text();
     var trimmed = String(text || '').trim();
-    if (!trimmed || trimmed.charAt(0) === '<') {
-      throw new Error('Server unavailable');
-    }
+    if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
     var data = JSON.parse(trimmed);
 
     if (data && data.success) {
@@ -256,25 +275,22 @@ window.downloadMyRequestQr = function() {
   qrImg.src = img.src;
 };
 
-// ─── Override renderMyRequests (page list) ─────────────────
-// FILTER: only MRIF and MRS — MRR is warehouse-created, not a production request
+// ─── Override renderMyRequests — filter to MRIF/MRS only ────
 var originalRenderMyRequests = window.renderMyRequests || function() {};
 
 window.renderMyRequests = function(requests) {
   // ═══════════════════════════════════════════════════════════
-  // FILTER: Only show MRIF and MRS in My Requests
+  // FILTER: Only show MRIF and MRS — MRR is warehouse-created
   // ═══════════════════════════════════════════════════════════
   requests = (requests || []).filter(function(req) {
     var t = (req.type || '').toUpperCase();
     return t === 'MRIF' || t === 'MRS';
   });
 
-  // Call the requests.js version first (fills #myRequestsList for dashboard)
   if (typeof originalRenderMyRequests === 'function') {
     try { originalRenderMyRequests(requests); } catch(e) { console.warn('[renderMyRequests] Original error:', e); }
   }
 
-  // Now populate the full "My Requests" page container
   var container = document.getElementById('myRequestsListPage');
   if (!container) return;
   container.innerHTML = '';
@@ -322,7 +338,6 @@ window.renderMyRequests = function(requests) {
     container.innerHTML += html;
   });
 
-  // Click → open details modal (QR + items)
   container.querySelectorAll('.request-card').forEach(function(el) {
     el.addEventListener('click', function() {
       var docNo = this.getAttribute('data-docno');
@@ -332,7 +347,7 @@ window.renderMyRequests = function(requests) {
   });
 };
 
-// ─── Override loadMyRequests ──────────────────────────────
+// ─── Wrappers ───
 var originalLoadMyRequests = window.loadMyRequests || function() {};
 window.loadMyRequests = function() {
   if (typeof originalLoadMyRequests === 'function') {
@@ -340,7 +355,6 @@ window.loadMyRequests = function() {
   }
 };
 
-// ─── Override updateWarehouseKPIs ─────────────────────────
 var originalUpdateWarehouseKPIs = window.updateWarehouseKPIs || function() {};
 window.updateWarehouseKPIs = function() {
   if (typeof originalUpdateWarehouseKPIs === 'function') {
@@ -348,7 +362,7 @@ window.updateWarehouseKPIs = function() {
   }
 };
 
-// ─── Test connection ──────────────────────────────────────
+// ─── Test connection ───
 async function testConnection() {
   var resultDiv = document.getElementById('testResult');
   if (!resultDiv) return;
@@ -374,7 +388,7 @@ async function testConnection() {
   }
 }
 
-// ─── URL doc parameter ────────────────────────────────────
+// ─── URL doc parameter ───
 function checkUrlDocParam() {
   var params = new URLSearchParams(window.location.search);
   var docNo = params.get('doc');
@@ -401,7 +415,7 @@ function checkUrlDocParam() {
   }
 }
 
-// ─── DOM Ready ────────────────────────────────────────────
+// ─── DOM Ready ───
 document.addEventListener('DOMContentLoaded', function() {
   var modalIds = ['qtyModal', 'successModal', 'settingsModal', 'newRequestModal',
     'requestSuccessModal', 'whNotifModal', 'mrifListModal', 'mrifPrintModal',
