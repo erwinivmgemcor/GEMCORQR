@@ -16,37 +16,46 @@
   "use strict";
 
   // ─── Update KPIs (including partial count) ──────────────────────
-  window.updateWarehouseKPIs = async function() {
-    try {
-      var sheetId = getCleanSheetId() || '';
-      var url = API_URL + '?action=getPendingDocCount&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
-      var res = await fetch(url, { redirect: 'follow' });
-      var text = await res.text();
-      var data;
-      try { data = JSON.parse(text); } catch(e) { data = {}; }
-      var pendingCount = data.pendingCount || 0;
-      var completedCount = data.completedCount || 0;
-      var totalCount = data.totalCount || 0;
+window.updateWarehouseKPIs = async function() {
+  try {
+    // ─── Pending count comes from the unified pending source ───
+    // (same endpoint the Pending modal uses → they always match)
+    var pendingUrl = API_URL + '?action=getAllPendingDocs&_t=' + Date.now();
+    var pendingRes = await fetch(pendingUrl, { redirect: 'follow' });
+    var pendingText = await pendingRes.text();
+    var pendingData;
+    try { pendingData = JSON.parse(pendingText); } catch(e) { pendingData = {}; }
+    var allPending = (pendingData && pendingData.documents) || [];
+    var pendingCount = allPending.length;
 
-      var kpiActive = document.getElementById('kpiActiveDocs');
-      var kpiPending = document.getElementById('kpiPending');
-      var kpiNotifications = document.getElementById('kpiNotifications');
-      var kpiCompleted = document.getElementById('kpiCompleted');
+    // ─── Total / Completed from the sheet-count endpoint ───
+    var sheetId = getCleanSheetId() || '';
+    var countUrl = API_URL + '?action=getPendingDocCount&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
+    var countRes = await fetch(countUrl, { redirect: 'follow' });
+    var countText = await countRes.text();
+    var countData;
+    try { countData = JSON.parse(countText); } catch(e) { countData = {}; }
+    var completedCount = countData.completedCount || 0;
+    var totalCount = countData.totalCount || 0;
 
-      if (kpiActive) kpiActive.textContent = totalCount;
-      if (kpiPending) kpiPending.textContent = pendingCount;
-      if (kpiNotifications) kpiNotifications.textContent = pendingCount;
-      if (kpiCompleted) kpiCompleted.textContent = completedCount;
+    var kpiActive = document.getElementById('kpiActiveDocs');
+    var kpiPending = document.getElementById('kpiPending');
+    var kpiNotifications = document.getElementById('kpiNotifications');
+    var kpiCompleted = document.getElementById('kpiCompleted');
 
-      console.log('[KPI] Total:', totalCount, 'Pending:', pendingCount, 'Completed:', completedCount);
+    if (kpiActive) kpiActive.textContent = totalCount;
+    if (kpiPending) kpiPending.textContent = pendingCount;
+    if (kpiNotifications) kpiNotifications.textContent = pendingCount;
+    if (kpiCompleted) kpiCompleted.textContent = completedCount;
 
-      // ─── Update partial count ──────────────────────────────────
-      if (typeof updatePartialCount === 'function') {
-        updatePartialCount();
-      }
-    } catch(e) { console.error('[KPI] Error:', e); }
-  };
+    console.log('[KPI] Total:', totalCount, 'Pending:', pendingCount, 'Completed:', completedCount);
 
+    // ─── Update partial count ───
+    if (typeof updatePartialCount === 'function') {
+      updatePartialCount();
+    }
+  } catch(e) { console.error('[KPI] Error:', e); }
+};
   // ─── Process notifications (shared logic) ──────────────────────
   function processNotifications(requests) {
     if (!requests) requests = [];
