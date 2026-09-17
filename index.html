@@ -662,18 +662,19 @@
               </div>
               <div class="card-body">
                 <div class="d-flex flex-wrap gap-2">
-                  <button class="btn btn-success" onclick="quickNewMrr(this)">
-                    <i class="bi bi-box-arrow-in-down me-1"></i> Quick New MRR
-                  </button>
-                  <button class="btn btn-outline-primary" onclick="quickNewMrif(this)">
-                    <i class="bi bi-box-arrow-up me-1"></i> Quick New MRIF
-                  </button>
-                  <button class="btn btn-outline-secondary" onclick="openQuickScan()">
-                    <i class="bi bi-qr-code-scan me-1"></i> Quick Scan
-                    <button class="btn btn-outline-dark" onclick="openProcessHistory(this)">
-                      <i class="bi bi-clock-history me-1"></i> Process History
-                    </button>
-                  </button>
+  <button class="btn btn-success" onclick="quickNewMrr(this)">
+    <i class="bi bi-box-arrow-in-down me-1"></i> Quick New MRR
+  </button>
+  <button class="btn btn-outline-primary" onclick="quickNewMrif(this)">
+    <i class="bi bi-box-arrow-up me-1"></i> Quick New MRIF
+  </button>
+  <button class="btn btn-outline-secondary" onclick="openQuickScan()">
+    <i class="bi bi-qr-code-scan me-1"></i> Quick Scan
+  </button>
+  <button class="btn btn-outline-dark" onclick="openProcessHistory(this)">
+    <i class="bi bi-clock-history me-1"></i> Process History
+  </button>
+</div>
                 </div>
                 <div id="quickActionStatus" class="mt-2 small text-muted"></div>
               </div>
@@ -931,16 +932,16 @@
             </div>
           </div>
 
-          <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mt-2">
-            <div>
-              <button class="btn btn-sm btn-outline-primary" onclick="toggleSelectAll(true)">Select All</button>
-              <button class="btn btn-sm btn-outline-secondary" onclick="toggleSelectAll(false)">Deselect All</button>
-              <button class="btn btn-sm btn-success" onclick="openBatchVerify()">
-                <i class="bi bi-check-all me-1"></i> Batch Verify
-              </button>
-            </div>
-            <span class="fw-bold" id="verifyCount">0/0 Verified</span>
-          </div>
+        <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mt-2">
+  <div>
+    <button class="btn btn-sm btn-outline-primary" onclick="toggleSelectAll(true)">Select All</button>
+    <button class="btn btn-sm btn-outline-secondary" onclick="toggleSelectAll(false)">Deselect All</button>
+    <button class="btn btn-sm btn-success" onclick="openBatchVerify()">
+      <i class="bi bi-check-all me-1"></i> Batch Verify
+    </button>
+  </div>
+  <span class="fw-bold" id="verifyCountBottom">0/0 Verified</span>
+</div>
 
           <button id="submitBtn" class="btn btn-success w-100 mt-4 py-3" onclick="onSubmit()">
             <i class="bi bi-check-circle me-2"></i>
