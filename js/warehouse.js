@@ -1,7 +1,8 @@
 // ============================================================
 // WAREHOUSE CORE FUNCTIONS
-// (Optimized + Partial Items + Balance MRIF + Clear/Edit PO Items
-//  + Restore PO Items + New Row Feedback + Double-Processing Protection)
+// (Partial Items + Balance MRIF + Prefill Manual MRR from doc
+//  + Clear/Edit PO Items + Restore PO Items + New Row Feedback
+//  + Double-Processing Protection)
 // ============================================================
 
 (function() {
@@ -672,62 +673,40 @@
     });
   };
 
-  // ─── Clear a single PO item ───
   window.clearPoItem = function(idx) {
     if (!state.poItemsData[idx]) return;
-
     state.poItemsData[idx].inventoryId = '';
     state.poItemsData[idx].description = '';
     state.poItemsData[idx]._manual = true;
-
     renderPoItems();
     updateCreateMrrButton();
-
     setTimeout(function() {
       var modalBody = document.querySelector('#poItemsModal .modal-body');
       var card = document.getElementById('po-card-' + idx);
-      if (card && modalBody) {
-        modalBody.scrollTop = card.offsetTop - 20;
-      }
+      if (card && modalBody) modalBody.scrollTop = card.offsetTop - 20;
       var el = document.getElementById('po-code-' + idx);
       if (el) el.focus();
     }, 80);
-
     showToast('Item cleared. Type or pick the correct item code.', 'info');
   };
 
-  // ─── Add a new manual item row ───
   window.addPoManualItem = function() {
     try {
       if (!state.poItemsData) state.poItemsData = [];
-
       state.poItemsData.push({
-        inventoryId: '',
-        description: '',
-        qty: 1,
-        atlQty: 0,
-        unit: 'PCS',
-        remarks: '',
-        _manual: true,
-        _new: true
+        inventoryId: '', description: '', qty: 1, atlQty: 0, unit: 'PCS', remarks: '',
+        _manual: true, _new: true
       });
-
       renderPoItems();
       updateCreateMrrButton();
-
       var newIdx = state.poItemsData.length - 1;
-
       setTimeout(function() {
         var modalBody = document.querySelector('#poItemsModal .modal-body');
         var card = document.getElementById('po-card-' + newIdx);
-        if (card && modalBody) {
-          modalBody.scrollTo({ top: card.offsetTop - 20, behavior: 'smooth' });
-        } else if (card) {
-          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
+        if (card && modalBody) modalBody.scrollTo({ top: card.offsetTop - 20, behavior: 'smooth' });
+        else if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
         var el = document.getElementById('po-code-' + newIdx);
         if (el) el.focus();
-
         setTimeout(function() {
           if (state.poItemsData[newIdx]) {
             state.poItemsData[newIdx]._new = false;
@@ -736,7 +715,6 @@
           }
         }, 3000);
       }, 100);
-
       showToast('New row added. Enter the item code.', 'success');
     } catch(err) {
       console.error('[addPoManualItem] Error:', err);
@@ -744,7 +722,6 @@
     }
   };
 
-  // ─── Restore PO items (undo all clears/additions) ───
   window.restorePoItems = function() {
     if (!_originalPoItems || _originalPoItems.length === 0) {
       showToast('No original PO items to restore.', 'warning');
@@ -1187,6 +1164,15 @@
 
   window.openManualMrrModal = function() {
     if (!manualMrrModal) manualMrrModal = new bootstrap.Modal(document.getElementById('manualMrrModal'));
+
+    // Reset prefill flags + UI
+    window._prefillMrrMode = false;
+    window._prefillMrrDocNo = null;
+    var titleEl = document.querySelector('#manualMrrModal .modal-title');
+    if (titleEl) titleEl.innerHTML = '<i class="bi bi-plus-circle me-2"></i>Create Manual MRR';
+    var btn = document.getElementById('btnSubmitManualMrr');
+    if (btn) btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Create MRR';
+
     var poEl = document.getElementById('manualMrrPoNo');
     var drEl = document.getElementById('manualMrrDrNo');
     var vendorEl = document.getElementById('manualMrrVendor');
@@ -1207,6 +1193,110 @@
     loadVendorList(false).catch(function() {});
     loadIvmTeamList(false).catch(function() {});
   };
+
+  // ═══════════════════════════════════════════════════════════
+  // PREFILL MANUAL MRR MODAL FROM A PARTIAL MRR DOC
+  // Loads the original MRR, opens the Manual MRR modal with
+  // everything pre-filled but editable. On submit → processBalance.
+  // ═══════════════════════════════════════════════════════════
+  window.prefillManualMrrFromDoc = async function(docNo) {
+    if (!docNo) return;
+    if (state.isLoading) return;
+
+    showLoading('Loading ' + docNo + '...');
+    try {
+      var key = 'sheetId_MRR';
+      var sheetIdVal = localStorage.getItem(key);
+      var sheetIdClean = sheetIdVal ? extractSheetId(sheetIdVal) : '';
+
+      var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
+                '&docType=MRR&sheetId=' + encodeURIComponent(sheetIdClean) +
+                '&_t=' + Date.now();
+      var res = await fetch(url, { redirect: 'follow' });
+      var text = await res.text();
+      var data;
+      try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+      if (!data.success) throw new Error(data.error || 'Failed to load document');
+
+      var info = data.info || {};
+      var items = data.items || [];
+
+      var poNo = info['PO No.'] || info.poNo || '';
+      var vendor = info['Vendor/Client'] || info.vendor || '';
+      var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
+
+      var remainingItems = items.map(function(it) {
+        var requested = Number(it.qty || it.recQty || it.expectedQty || 0);
+        var received = Number(it.atlQty || it.actualQty || it.issuedQty || 0);
+        var remaining = requested - received;
+        if (remaining <= 0) return null;
+        return {
+          inventoryId: it.inventoryId || it.itemCode || '',
+          description: it.description || '',
+          qty: remaining,
+          atlQty: 0,
+          unit: it.unit || 'PCS',
+          remarks: ''
+        };
+      }).filter(Boolean);
+
+      if (remainingItems.length === 0) {
+        showToast('This MRR has no remaining items to process.', 'info');
+        return;
+      }
+
+      if (!manualMrrModal) manualMrrModal = new bootstrap.Modal(document.getElementById('manualMrrModal'));
+
+      window._prefillMrrMode = true;
+      window._prefillMrrDocNo = docNo;
+
+      // Update modal title + button
+      var titleEl = document.querySelector('#manualMrrModal .modal-title');
+      if (titleEl) titleEl.innerHTML = '<i class="bi bi-arrow-right-circle me-2"></i>Process ' + docNo + ' (MRR)';
+      var btn = document.getElementById('btnSubmitManualMrr');
+      if (btn) btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Create New MRR';
+
+      // Fill form fields
+      var poEl = document.getElementById('manualMrrPoNo');
+      var drEl = document.getElementById('manualMrrDrNo');
+      var vendorEl = document.getElementById('manualMrrVendor');
+      var siteEl = document.getElementById('manualMrrSite');
+      var prepEl = document.getElementById('manualMrrPreparedBy');
+      var dateEl = document.getElementById('manualMrrDate');
+
+      if (poEl) poEl.value = poNo;
+      if (drEl) drEl.value = '';              // blank — new DR for new delivery
+      if (vendorEl) vendorEl.value = vendor;
+      if (siteEl) siteEl.value = receivingSite;
+      if (prepEl) prepEl.value = _getCurrentUserName();
+      if (dateEl) dateEl.valueAsDate = new Date();
+
+      // Fill items
+      manualMrrItems = remainingItems;
+      renderManualMrrItems();
+      updateManualMrrSubmitButton();
+
+      manualMrrModal.show();
+
+    } catch(err) {
+      console.error('[prefillManualMrrFromDoc] Error:', err);
+      showToast('Failed to load document: ' + err.message, 'danger');
+    } finally {
+      hideLoading();
+    }
+  };
+
+  // Reset prefill flags when the manual MRR modal closes
+  document.addEventListener('hidden.bs.modal', function(e) {
+    if (e.target && e.target.id === 'manualMrrModal') {
+      window._prefillMrrMode = false;
+      window._prefillMrrDocNo = null;
+      var titleEl = document.querySelector('#manualMrrModal .modal-title');
+      if (titleEl) titleEl.innerHTML = '<i class="bi bi-plus-circle me-2"></i>Create Manual MRR';
+      var btn = document.getElementById('btnSubmitManualMrr');
+      if (btn) btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Create MRR';
+    }
+  });
 
   window.addManualMrrItem = function() {
     manualMrrItems.push({ inventoryId: '', description: '', qty: 1, atlQty: 0, unit: 'PIECE', remarks: '' });
@@ -1363,6 +1453,7 @@
     btn.disabled = !(drNo && vendor && site && hasValidItems);
   };
 
+  // ─── Submit Manual MRR (or prefill-process a partial MRR) ───
   window.submitManualMrr = function() {
     var btn = document.getElementById('btnSubmitManualMrr');
     return withButtonLoading(btn, async function() {
@@ -1378,18 +1469,64 @@
       for (var i = 0; i < manualMrrItems.length; i++) {
         var it = manualMrrItems[i];
         if (it.inventoryId && it.inventoryId.trim() && it.description && it.description.trim() && it.qty > 0) {
-          items.push({ inventoryId: it.inventoryId.trim(), description: it.description.trim(), qty: it.qty, atlQty: it.atlQty || 0, unit: it.unit || 'PIECE', remarks: it.remarks || '' });
+          items.push({
+            inventoryId: it.inventoryId.trim(),
+            description: it.description.trim(),
+            qty: it.qty,
+            atlQty: it.atlQty || 0,
+            unit: it.unit || 'PIECE',
+            remarks: it.remarks || ''
+          });
         }
       }
       if (items.length === 0) { showToast('Please add at least one valid item', 'warning'); return; }
 
+      var isPrefill = window._prefillMrrMode === true && window._prefillMrrDocNo;
+
       try {
-        var payload = {
-          action: 'createMrrRequest', poNo: poNo || 'N/A', prfNo: '',
-          client: vendor, supplier: vendor, drNo: drNo,
-          receivingDate: receivingDate, receivingSite: site,
-          preparedBy: preparedBy, items: items, isManual: true
-        };
+        var payload;
+        if (isPrefill) {
+          // ★ Partial MRR processing → processBalance creates a new MRR
+          //   AND writes back to the original.
+          payload = {
+            action: 'processBalance',
+            docType: 'MRR',
+            originalDocNo: window._prefillMrrDocNo,
+            items: items.map(function(it) {
+              return {
+                inventoryId: it.inventoryId,
+                description: it.description,
+                qty: it.qty,
+                issueNow: it.atlQty || 0,
+                unit: it.unit,
+                remarks: it.remarks
+              };
+            }),
+            processedBy: preparedBy,
+            // overrides for the new MRR doc
+            drNo: drNo,
+            vendor: vendor,
+            receivingSite: site,
+            receivingDate: receivingDate,
+            poNo: poNo,
+            preparedBy: preparedBy
+          };
+        } else {
+          payload = {
+            action: 'createMrrRequest',
+            poNo: poNo || 'N/A',
+            prfNo: '',
+            client: vendor,
+            supplier: vendor,
+            drNo: drNo,
+            receivingDate: receivingDate,
+            receivingSite: site,
+            preparedBy: preparedBy,
+            items: items,
+            isManual: true
+          };
+        }
+
         var res = await fetch(API_URL, {
           method: 'POST', body: JSON.stringify(payload),
           headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow'
@@ -1399,7 +1536,11 @@
         try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
         if (data && data.success) {
           if (manualMrrModal) manualMrrModal.hide();
-          showToast('Manual MRR created: ' + data.docNo + ' — Prepared by ' + preparedBy, 'success');
+          if (isPrefill) {
+            showToast('New MRR created: ' + data.balDocNo + ' (' + (data.status || 'COMPLETED') + ')', 'success');
+          } else {
+            showToast('Manual MRR created: ' + data.docNo + ' — Prepared by ' + preparedBy, 'success');
+          }
           fetchPendingDocs(true);
           updateWarehouseKPIs();
         } else {
@@ -1560,9 +1701,7 @@
       var html = '<div class="alert alert-info small py-2 mb-3">' +
         '<i class="bi bi-info-circle me-1"></i> ' +
         'A new sheet <strong>Bal.' + docNo + '</strong> will be created. ' +
-        'Enter the quantity you are <strong>issuing right now</strong> for each item. ' +
-        'If you issue the full remaining quantity, the Bal document will be marked <strong>COMPLETED</strong>. ' +
-        'If you issue less, the balance will roll over to another round.' +
+        'Enter the quantity you are <strong>issuing right now</strong> for each item.' +
         '</div>' +
         '<div class="table-responsive"><table class="table table-sm table-bordered align-middle">' +
         '<thead class="table-light"><tr>' +
@@ -1585,8 +1724,7 @@
           '<td class="text-center">' +
             '<input type="number" class="form-control form-control-sm text-center process-qty-input" ' +
             'data-idx="' + idx + '" value="0" min="0" max="' + remaining + '" step="0.01" ' +
-            'style="width:90px;margin:0 auto;" ' +
-            'oninput="onProcessQtyInput(this)">' +
+            'style="width:90px;margin:0 auto;" oninput="onProcessQtyInput(this)">' +
           '</td>' +
           '<td>' +
             '<input type="text" class="form-control form-control-sm process-remarks-input" ' +
@@ -1651,14 +1789,20 @@
       });
       var anyIssued = itemsPayload.some(function(it) { return it.issueNow > 0; });
       if (!anyIssued) {
-        if (!confirm('You have not entered any "Issued Now" quantity.\n\nContinue anyway? The Bal document will be created as PENDING.')) return;
+        if (!confirm('You have not entered any "Issued Now" quantity.\n\nContinue anyway?')) return;
       }
+
+      var currentUser = '';
+      if (typeof state !== 'undefined') currentUser = state.currentUserFullname || state.currentUser || '';
+      if (!currentUser) currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || '';
+      if (!currentUser) currentUser = 'WAREHOUSE';
+
       try {
         var payload = {
           action: 'processPartialBalance',
           originalDocNo: _processPartialDocNo,
           items: itemsPayload,
-          processedBy: _getCurrentUserName() || 'WAREHOUSE'
+          processedBy: currentUser
         };
         var res = await fetch(API_URL, {
           method: 'POST',
