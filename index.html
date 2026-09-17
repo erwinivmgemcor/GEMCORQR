@@ -5,14 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>GEMCOR WMS</title>
 
-<!-- PWA Meta Tags -->
 <link rel="manifest" href="/GEMCORQR/manifest.json">
 <meta name="theme-color" content="#1e3a5f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 
-<!-- Fonts & Bootstrap -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -24,32 +22,6 @@
 <link rel="stylesheet" href="/GEMCORQR/style.css">
 
 <style>
-  /* ═══════════════════════════════════════════════════════════
-   ANALYTICS CHART WRAPPERS — Fix Chart.js sizing issues
-   ═══════════════════════════════════════════════════════════ */
-.chart-wrapper {
-  position: relative;
-  width: 100%;
-  height: 100%;
-}
-.chart-wrapper canvas {
-  display: block;
-  width: 100% !important;
-  max-width: 100%;
-}
-
-/* Prevent flex/grid from squeezing chart containers */
-.analytics-card { overflow: hidden; }
-.analytics-card .card-body { overflow: hidden; }
-
-/* Make analytics cards equal height inside a row */
-.analytics-card .card-body { display: block; }
-
-/* Mobile tweaks */
-@media (max-width: 767.98px) {
-  .chart-wrapper { height: 200px !important; }
-}
-  /* ─── SIDEBAR ─── */
   .app-wrapper { display: flex; min-height: 100vh; }
   .sidebar {
     width: 260px;
@@ -106,7 +78,6 @@
   .section-page { display: none; animation: fadeIn 0.25s ease; }
   .section-page.active { display: block; }
 
-  /* ─── TOP BAR ─── */
   .top-bar {
     display: flex;
     align-items: center;
@@ -194,7 +165,6 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
-  /* ─── KPI / Cards ─── */
   .kpi-clickable { cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; }
   .kpi-clickable:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
   .bg-amber { background-color: #f59e0b !important; color: #1f2937 !important; }
@@ -270,7 +240,6 @@
   }
   .module-btn i { font-size: 1.4rem; }
 
-  /* ─── Scanner ─── */
   .scanner-container { position: relative; width: 100%; max-width: 400px; margin: 0 auto; border-radius: 12px; overflow: hidden; background: #000; }
   .scanner-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; border: 2px solid var(--gemcor-green); pointer-events: none; }
   .scanner-overlay::before { content: ''; position: absolute; top: 50%; left: 10%; right: 10%; height: 2px; background: var(--gemcor-green); animation: scanline 2s linear infinite; }
@@ -324,10 +293,6 @@
 
   #qrFileInput { display: none; }
 
-  /* ═══════════════════════════════════════════════════════════
-     PO ITEMS MODAL — Wide desktop, responsive mobile
-     ═══════════════════════════════════════════════════════════ */
-
   .po-items-modal-dialog { max-width: 1140px; width: 96%; }
   @media (min-width: 1400px) {
     .po-items-modal-dialog { max-width: 1320px; }
@@ -356,7 +321,6 @@
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
   }
 
-  /* ─── NEW ROW FLASH ANIMATION ─── */
   @keyframes poNewFlash {
     0%   { background-color: #fef3c7; box-shadow: 0 0 0 3px rgba(245,158,11,0.5); }
     100% { background-color: #ffffff; box-shadow: 0 0 0 0 rgba(245,158,11,0); }
@@ -381,7 +345,6 @@
     letter-spacing: 1px;
   }
 
-  /* ─── MOBILE: stack everything ─── */
   @media (max-width: 767.98px) {
     .po-items-modal-dialog { max-width: 100%; width: 100%; margin: 0; }
     .po-items-modal-dialog .modal-content { border-radius: 0; min-height: 100vh; }
@@ -394,139 +357,82 @@
     .po-items-list .po-item-card .btn-outline-danger { width: 100%; }
   }
 
-  /* ─── TABLET ─── */
   @media (min-width: 768px) and (max-width: 1199.98px) {
     .po-items-modal-dialog { max-width: 98%; }
     #poItemsModal .modal-body { padding: 16px; }
     .po-items-list { max-height: 45vh; }
   }
 
-  /* ═══════════════════════════════════════════════════════════
-   PIE CHART LEGEND
-   ═══════════════════════════════════════════════════════════ */
-.chart-pie-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  padding: 4px 8px 10px 8px;
-  font-size: 0.75rem;
-  border-bottom: 1px solid #f0f0f0;
-  margin-bottom: 8px;
-}
-.chart-pie-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
-}
-.chart-pie-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-.chart-pie-legend-item code {
-  font-size: 0.72rem;
-  background: #f1f5f9;
-  padding: 1px 5px;
-  border-radius: 3px;
-  color: #1e3a5f;
-}
-.chart-pie-legend-meta {
-  color: #6b7280;
-  font-weight: 600;
-  font-size: 0.7rem;
-}
-.chart-pie-legend-other {
-  background: #f9fafb;
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-@media (max-width: 767.98px) {
-  .chart-pie-legend { font-size: 0.7rem; gap: 4px 10px; }
-  .chart-pie-legend-item code { font-size: 0.68rem; }
-}
+  .analytics-card { overflow: hidden; }
+  .analytics-card .card-body { overflow: hidden; }
 
-  /* ═══════════════════════════════════════════════════════════
-   ANALYTICS CHART SIZING + PIE LEGEND
-   ═══════════════════════════════════════════════════════════ */
-.analytics-card { overflow: hidden; }
-.analytics-card .card-body { overflow: hidden; }
+  .analytics-card canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100%;
+  }
 
-/* Force canvases to fill their parent */
-.analytics-card canvas {
-  display: block;
-  width: 100% !important;
-  height: 100% !important;
-  max-width: 100%;
-}
+  .chart-pie-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 4px 4px 8px 4px;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    max-height: 90px;
+    overflow-y: auto;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .chart-pie-legend:empty { display: none; }
 
-/* Pie chart legend */
-.chart-pie-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  padding: 4px 4px 8px 4px;
-  font-size: 0.72rem;
-  line-height: 1.4;
-  max-height: 90px;
-  overflow-y: auto;
-  border-bottom: 1px solid #f0f0f0;
-}
-.chart-pie-legend:empty { display: none; }
+  .chart-pie-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+  .chart-pie-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .chart-pie-legend-item code {
+    font-size: 0.7rem;
+    background: #f1f5f9;
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: #1e3a5f;
+  }
+  .chart-pie-legend-meta {
+    color: #6b7280;
+    font-weight: 600;
+    font-size: 0.68rem;
+  }
+  .chart-pie-legend-other {
+    background: #f9fafb;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
 
-.chart-pie-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-}
-.chart-pie-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-.chart-pie-legend-item code {
-  font-size: 0.7rem;
-  background: #f1f5f9;
-  padding: 1px 5px;
-  border-radius: 3px;
-  color: #1e3a5f;
-}
-.chart-pie-legend-meta {
-  color: #6b7280;
-  font-weight: 600;
-  font-size: 0.68rem;
-}
-.chart-pie-legend-other {
-  background: #f9fafb;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-@media (max-width: 767.98px) {
-  .chart-pie-legend { max-height: none; font-size: 0.7rem; gap: 4px 10px; }
-  .chart-pie-legend-item code { font-size: 0.66rem; }
-}
-  
+  @media (max-width: 767.98px) {
+    .chart-pie-legend { max-height: none; font-size: 0.7rem; gap: 4px 10px; }
+    .chart-pie-legend-item code { font-size: 0.66rem; }
+  }
 </style>
 </head>
 <body>
 
-<!-- Loading Overlay -->
 <div id="loadingOverlay" class="d-none">
   <div class="spinner-border text-light" style="width:3rem;height:3rem"></div>
   <div class="text-light mt-3 fw-bold" id="loadingText">Loading...</div>
 </div>
 
-<!-- Sidebar Backdrop -->
 <div id="sidebarBackdrop" class="sidebar-backdrop" onclick="toggleSidebar(false)"></div>
 
 <div class="app-wrapper">
-  <!-- ─── SIDEBAR ─── -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
       <i class="bi bi-box-seam"></i>
@@ -574,14 +480,12 @@
     </div>
   </aside>
 
-  <!-- ─── MAIN CONTENT ─── -->
   <main class="main-content">
 
     <button class="sidebar-toggle" onclick="toggleSidebar(true)">
       <i class="bi bi-list"></i>
     </button>
 
-    <!-- ─── TOP BAR ─── -->
     <div class="top-bar">
       <div class="left">
         <span class="fw-bold" id="pageTitle">Dashboard</span>
@@ -598,9 +502,9 @@
       </div>
     </div>
 
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <!-- SECTION: DASHBOARD -->
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <div id="section-dashboard" class="section-page active">
       <div id="productionBanner" class="production-banner d-none">
         <i class="bi bi-person-badge"></i>
@@ -662,19 +566,18 @@
               </div>
               <div class="card-body">
                 <div class="d-flex flex-wrap gap-2">
-  <button class="btn btn-success" onclick="quickNewMrr(this)">
-    <i class="bi bi-box-arrow-in-down me-1"></i> Quick New MRR
-  </button>
-  <button class="btn btn-outline-primary" onclick="quickNewMrif(this)">
-    <i class="bi bi-box-arrow-up me-1"></i> Quick New MRIF
-  </button>
-  <button class="btn btn-outline-secondary" onclick="openQuickScan()">
-    <i class="bi bi-qr-code-scan me-1"></i> Quick Scan
-  </button>
-  <button class="btn btn-outline-dark" onclick="openProcessHistory(this)">
-    <i class="bi bi-clock-history me-1"></i> Process History
-  </button>
-</div>
+                  <button class="btn btn-success" onclick="quickNewMrr(this)">
+                    <i class="bi bi-box-arrow-in-down me-1"></i> Quick New MRR
+                  </button>
+                  <button class="btn btn-outline-primary" onclick="quickNewMrif(this)">
+                    <i class="bi bi-box-arrow-up me-1"></i> Quick New MRIF
+                  </button>
+                  <button class="btn btn-outline-secondary" onclick="openQuickScan()">
+                    <i class="bi bi-qr-code-scan me-1"></i> Quick Scan
+                  </button>
+                  <button class="btn btn-outline-dark" onclick="openProcessHistory(this)">
+                    <i class="bi bi-clock-history me-1"></i> Process History
+                  </button>
                 </div>
                 <div id="quickActionStatus" class="mt-2 small text-muted"></div>
               </div>
@@ -682,133 +585,140 @@
           </div>
         </div>
 
-       <!-- Analytics -->
-<div id="analyticsSection" class="mt-4">
-  <div class="d-flex justify-content-between align-items-center mb-2">
-    <h6 class="mb-0"><i class="bi bi-graph-up me-2"></i>Analytics Dashboard</h6>
-    <button class="btn btn-sm btn-outline-primary" onclick="loadAnalytics()">
-      <i class="bi bi-arrow-repeat me-1"></i>Refresh
-    </button>
-  </div>
+        <div id="analyticsSection" class="mt-4">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="mb-0"><i class="bi bi-graph-up me-2"></i>Analytics Dashboard</h6>
+            <button class="btn btn-sm btn-outline-primary" onclick="loadAnalytics()">
+              <i class="bi bi-arrow-repeat me-1"></i>Refresh
+            </button>
+          </div>
 
-  <div id="analyticsLoading" class="text-center py-4">
-    <div class="spinner-border text-primary"></div>
-    <div class="text-muted mt-2">Loading analytics...</div>
-  </div>
+          <div id="analyticsLoading" class="text-center py-4">
+            <div class="spinner-border text-primary"></div>
+            <div class="text-muted mt-2">Loading analytics...</div>
+          </div>
 
-  <div id="analyticsError" class="alert alert-danger d-none">
-    <i class="bi bi-exclamation-triangle-fill me-2"></i>
-    <span id="analyticsErrorText">Failed to load analytics.</span>
-    <button class="btn btn-sm btn-outline-danger ms-2" onclick="loadAnalytics()">Retry</button>
-  </div>
+          <div id="analyticsError" class="alert alert-danger d-none">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <span id="analyticsErrorText">Failed to load analytics.</span>
+            <button class="btn btn-sm btn-outline-danger ms-2" onclick="loadAnalytics()">Retry</button>
+          </div>
 
-  <div id="analyticsContent" class="d-none">
+          <div id="analyticsContent" class="d-none">
 
-    <!-- Row 1: Totals -->
-    <div class="row g-3 mb-3">
-      <div class="col-6 col-md-3">
-        <div class="card h-100 analytics-card">
-          <div class="card-body text-center">
-            <div class="text-muted small">MRIF Documents</div>
-            <div class="h3 mb-0" id="kpiMRIFCount">0</div>
-            <div class="text-muted small">Material Requests</div>
+            <div class="row g-3 mb-3">
+              <div class="col-6 col-md-3">
+                <div class="card h-100 analytics-card">
+                  <div class="card-body text-center">
+                    <div class="text-muted small">MRIF Documents</div>
+                    <div class="h3 mb-0" id="kpiMRIFCount">0</div>
+                    <div class="text-muted small">Material Requests</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="card h-100 analytics-card">
+                  <div class="card-body text-center">
+                    <div class="text-muted small">MRR Documents</div>
+                    <div class="h3 mb-0" id="kpiMRRCount">0</div>
+                    <div class="text-muted small">Receivings</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="card h-100 analytics-card">
+                  <div class="card-body text-center">
+                    <div class="text-muted small">MRS Documents</div>
+                    <div class="h3 mb-0" id="kpiMRSCount">0</div>
+                    <div class="text-muted small">Returns</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="card h-100 analytics-card">
+                  <div class="card-body text-center">
+                    <div class="text-muted small">Avg. Processing Time</div>
+                    <div class="h3 mb-0" id="avgProcessingTime">-</div>
+                    <div class="text-muted small" id="avgProcessingSub">From request to completion</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+              <div class="col-12">
+                <div class="card analytics-card">
+                  <div class="card-header">Daily Request Volume (Last 30 Days)</div>
+                  <div class="card-body" style="padding:12px;">
+                    <div style="position:relative;height:220px;">
+                      <canvas id="dailyChart"></canvas>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+              <div class="col-12 col-xl-6">
+                <div class="card analytics-card h-100">
+                  <div class="card-header">Most Requested Items</div>
+                  <div class="card-body" style="padding:12px;">
+                    <div id="topItemsLegend" class="chart-pie-legend mb-2"></div>
+                    <div style="position:relative;height:280px;">
+                      <canvas id="topItemsChart"></canvas>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-12 col-xl-6">
+                <div class="card analytics-card h-100">
+                  <div class="card-header">
+                    <i class="bi bi-person-badge me-1"></i>Top 10 Requestors (Production)
+                  </div>
+                  <div class="card-body" style="padding:12px;">
+                    <div style="position:relative;height:340px;">
+                      <canvas id="requestorChart"></canvas>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row g-3">
+              <div class="col-12">
+                <div class="card analytics-card">
+                  <div class="card-header">
+                    <i class="bi bi-shield-check me-1"></i>Warehouse Staff Performance
+                  </div>
+                  <div class="card-body" style="padding:12px;">
+                    <div style="position:relative;height:260px;">
+                      <canvas id="staffChart"></canvas>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
-      <div class="col-6 col-md-3">
-        <div class="card h-100 analytics-card">
-          <div class="card-body text-center">
-            <div class="text-muted small">MRR Documents</div>
-            <div class="h3 mb-0" id="kpiMRRCount">0</div>
-            <div class="text-muted small">Receivings</div>
-          </div>
+
+      <div id="myRequestsSection" class="d-none">
+        <div class="section-header d-flex justify-content-between align-items-center">
+          <div class="section-title"><i class="bi bi-clock-history"></i> My Requests</div>
+          <span id="myRequestsBadge" class="badge bg-danger d-none">0</span>
         </div>
-      </div>
-      <div class="col-6 col-md-3">
-        <div class="card h-100 analytics-card">
-          <div class="card-body text-center">
-            <div class="text-muted small">MRS Documents</div>
-            <div class="h3 mb-0" id="kpiMRSCount">0</div>
-            <div class="text-muted small">Returns</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-6 col-md-3">
-        <div class="card h-100 analytics-card">
-          <div class="card-body text-center">
-            <div class="text-muted small">Avg. Processing Time</div>
-            <div class="h3 mb-0" id="avgProcessingTime">-</div>
-            <div class="text-muted small" id="avgProcessingSub">From request to completion</div>
+        <div class="card">
+          <div class="card-body p-0">
+            <div id="myRequestsList" class="list-group list-group-flush"></div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Row 2: Daily Volume -->
-    <div class="row g-3 mb-3">
-      <div class="col-12">
-        <div class="card analytics-card">
-          <div class="card-header">Daily Request Volume (Last 30 Days)</div>
-          <div class="card-body" style="padding:12px;">
-            <div style="position:relative;height:220px;">
-              <canvas id="dailyChart"></canvas>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Row 3: Top Items (doughnut) + Top Requestors -->
-    <div class="row g-3 mb-3">
-      <div class="col-12 col-xl-6">
-        <div class="card analytics-card h-100">
-          <div class="card-header">Most Requested Items</div>
-          <div class="card-body" style="padding:12px;">
-            <!-- Legend (populated by JS) -->
-            <div id="topItemsLegend" class="chart-pie-legend mb-2"></div>
-            <!-- Chart -->
-            <div style="position:relative;height:280px;">
-              <canvas id="topItemsChart"></canvas>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-xl-6">
-        <div class="card analytics-card h-100">
-          <div class="card-header">
-            <i class="bi bi-person-badge me-1"></i>Top 10 Requestors (Production)
-          </div>
-          <div class="card-body" style="padding:12px;">
-            <div style="position:relative;height:340px;">
-              <canvas id="requestorChart"></canvas>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Row 4: Warehouse Staff -->
-    <div class="row g-3">
-      <div class="col-12">
-        <div class="card analytics-card">
-          <div class="card-header">
-            <i class="bi bi-shield-check me-1"></i>Warehouse Staff Performance
-          </div>
-          <div class="card-body" style="padding:12px;">
-            <div style="position:relative;height:260px;">
-              <canvas id="staffChart"></canvas>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <!-- SECTION: RELEASING (MRIF) -->
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <div id="section-releasing" class="section-page">
       <div id="mrifModuleContainer">
         <div id="quickScanCard" class="card mb-4 border-0 shadow-sm">
@@ -932,16 +842,16 @@
             </div>
           </div>
 
-        <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mt-2">
-  <div>
-    <button class="btn btn-sm btn-outline-primary" onclick="toggleSelectAll(true)">Select All</button>
-    <button class="btn btn-sm btn-outline-secondary" onclick="toggleSelectAll(false)">Deselect All</button>
-    <button class="btn btn-sm btn-success" onclick="openBatchVerify()">
-      <i class="bi bi-check-all me-1"></i> Batch Verify
-    </button>
-  </div>
-  <span class="fw-bold" id="verifyCountBottom">0/0 Verified</span>
-</div>
+          <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between mt-2">
+            <div>
+              <button class="btn btn-sm btn-outline-primary" onclick="toggleSelectAll(true)">Select All</button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="toggleSelectAll(false)">Deselect All</button>
+              <button class="btn btn-sm btn-success" onclick="openBatchVerify()">
+                <i class="bi bi-check-all me-1"></i> Batch Verify
+              </button>
+            </div>
+            <span class="fw-bold" id="verifyCountBottom">0/0 Verified</span>
+          </div>
 
           <button id="submitBtn" class="btn btn-success w-100 mt-4 py-3" onclick="onSubmit()">
             <i class="bi bi-check-circle me-2"></i>
@@ -951,9 +861,9 @@
       </div>
     </div>
 
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <!-- SECTION: RECEIVING (MRR) -->
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <div id="section-receiving" class="section-page">
       <div id="mrrModuleContainer">
         <div id="mrrQuickScan" class="card mb-4 border-0 shadow-sm">
@@ -991,9 +901,9 @@
       </div>
     </div>
 
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <!-- SECTION: RETURNS (MRS) -->
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <div id="section-returns" class="section-page">
       <div id="mrsModuleContainer">
         <div id="mrsListCard" class="card mb-4 border-0 shadow-sm d-none">
@@ -1008,9 +918,9 @@
       </div>
     </div>
 
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <!-- SECTION: NEW REQUEST -->
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <div id="section-requests" class="section-page">
       <div class="card">
         <div class="card-body text-center py-5">
@@ -1030,9 +940,9 @@
       </div>
     </div>
 
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <!-- SECTION: MY REQUESTS -->
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <div id="section-myrequests" class="section-page">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h5><i class="bi bi-clock-history me-2"></i>My Requests</h5>
@@ -1047,9 +957,9 @@
       </div>
     </div>
 
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <!-- SECTION: INVENTORY -->
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <div id="section-inventory" class="section-page">
       <div class="card">
         <div class="card-body text-center py-5">
@@ -1063,9 +973,9 @@
       </div>
     </div>
 
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <!-- SECTION: SETTINGS -->
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <div id="section-settings" class="section-page">
       <div class="card">
         <div class="card-header">Settings</div>
@@ -1080,9 +990,9 @@
       </div>
     </div>
 
-    <!-- ================================================================ -->
-    <!-- SECTION: ABOUT / INSTRUCTIONS -->
-    <!-- ================================================================ -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- SECTION: ABOUT -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
     <div id="section-about" class="section-page">
       <div class="card">
         <div class="card-header bg-primary text-white">
@@ -1147,11 +1057,10 @@
   </main>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════════════
-     MODALS
-     ═══════════════════════════════════════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- MODALS -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
 
-<!-- Qty Modal -->
 <div class="modal fade" id="qtyModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -1186,7 +1095,6 @@
   </div>
 </div>
 
-<!-- Quick Scan Modal -->
 <div class="modal fade" id="quickScanModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -1211,7 +1119,6 @@
   </div>
 </div>
 
-<!-- PO Scan Modal -->
 <div class="modal fade" id="poScanModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -1241,7 +1148,6 @@
   </div>
 </div>
 
-<!-- PO Items Modal (Wide desktop, responsive mobile) -->
 <div class="modal fade" id="poItemsModal" tabindex="-1">
   <div class="modal-dialog modal-xl modal-dialog-scrollable po-items-modal-dialog">
     <div class="modal-content">
@@ -1308,7 +1214,6 @@
   </div>
 </div>
 
-<!-- Role Modal -->
 <div class="modal fade" id="roleModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -1363,7 +1268,6 @@
   </div>
 </div>
 
-<!-- Login Modal -->
 <div class="modal fade" id="loginModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -1394,7 +1298,6 @@
   </div>
 </div>
 
-<!-- Mode Picker Modal -->
 <div class="modal fade" id="modePickerModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -1429,7 +1332,6 @@
   </div>
 </div>
 
-<!-- Settings Modal -->
 <div class="modal fade" id="settingsModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -1502,7 +1404,6 @@
   </div>
 </div>
 
-<!-- Success Modal -->
 <div class="modal fade" id="successModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content text-center">
@@ -1515,7 +1416,6 @@
   </div>
 </div>
 
-<!-- New Request Modal (wizard) -->
 <div class="modal fade" id="newRequestModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -1541,7 +1441,6 @@
         <input type="hidden" id="reqClientName">
         <input type="hidden" id="reqProject">
 
-        <!-- Step 1 -->
         <div class="wizard-panel active" id="step1">
           <div class="text-center mb-4">
             <div class="step-icon"><i class="bi bi-file-earmark-text"></i></div>
@@ -1569,7 +1468,6 @@
           </div>
         </div>
 
-        <!-- Step 2 -->
         <div class="wizard-panel" id="step2">
           <div class="text-center mb-4">
             <div class="step-icon"><i class="bi bi-hash"></i></div>
@@ -1591,7 +1489,6 @@
           </div>
         </div>
 
-        <!-- Step 3 -->
         <div class="wizard-panel" id="step3">
           <div class="text-center mb-4">
             <div class="step-icon"><i class="bi bi-person"></i></div>
@@ -1615,7 +1512,6 @@
           </div>
         </div>
 
-        <!-- Step 4 -->
         <div class="wizard-panel" id="step4">
           <div class="text-center mb-4">
             <div class="step-icon"><i class="bi bi-clipboard-check"></i></div>
@@ -1636,7 +1532,6 @@
           </div>
         </div>
 
-        <!-- Step 5 -->
         <div class="wizard-panel" id="step5">
           <div class="text-center mb-4">
             <div class="step-icon"><i class="bi bi-box-seam"></i></div>
@@ -1658,7 +1553,6 @@
           </div>
         </div>
 
-        <!-- Step 6 -->
         <div class="wizard-panel" id="step6">
           <div class="text-center mb-4">
             <div class="step-icon"><i class="bi bi-check-circle"></i></div>
@@ -1684,7 +1578,6 @@
   </div>
 </div>
 
-<!-- WH Notification Modal -->
 <div class="modal fade" id="whNotifModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -1704,7 +1597,6 @@
   </div>
 </div>
 
-<!-- Request Success Modal -->
 <div class="modal fade" id="requestSuccessModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content text-center">
@@ -1730,7 +1622,6 @@
   </div>
 </div>
 
-<!-- Toast -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3">
   <div id="liveToast" class="toast" role="alert">
     <div class="toast-header">
@@ -1741,7 +1632,6 @@
   </div>
 </div>
 
-<!-- MRIF List Modal -->
 <div class="modal fade" id="mrifListModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-scrollable">
     <div class="modal-content">
@@ -1762,7 +1652,6 @@
   </div>
 </div>
 
-<!-- MRIF Print Preview Modal -->
 <div class="modal fade" id="mrifPrintModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -1781,7 +1670,6 @@
   </div>
 </div>
 
-<!-- Pending MRIFs Modal -->
 <div class="modal fade" id="pendingMrifModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-scrollable">
     <div class="modal-content">
@@ -1801,7 +1689,6 @@
   </div>
 </div>
 
-<!-- MRR List Modal -->
 <div class="modal fade" id="mrrListModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-scrollable">
     <div class="modal-content">
@@ -1822,7 +1709,6 @@
   </div>
 </div>
 
-<!-- MRR Print Preview Modal -->
 <div class="modal fade" id="mrrPrintModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -1841,7 +1727,6 @@
   </div>
 </div>
 
-<!-- MRS List Modal -->
 <div class="modal fade" id="mrsListModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-scrollable">
     <div class="modal-content">
@@ -1862,7 +1747,6 @@
   </div>
 </div>
 
-<!-- MRS Print Preview Modal -->
 <div class="modal fade" id="mrsPrintModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -1881,7 +1765,6 @@
   </div>
 </div>
 
-<!-- Manual MRR Modal -->
 <div class="modal fade" id="manualMrrModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content" style="max-height:95vh;">
@@ -1951,7 +1834,6 @@
   </div>
 </div>
 
-<!-- Manual MRIF Modal -->
 <div class="modal fade" id="manualMrifModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content" style="max-height:95vh;">
@@ -2023,7 +1905,6 @@
   </div>
 </div>
 
-<!-- Inventory Browser Modal -->
 <div class="modal fade" id="inventoryBrowserModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -2045,7 +1926,6 @@
   </div>
 </div>
 
-<!-- QR Zoom Modal -->
 <div class="modal fade" id="qrZoomModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content text-center">
@@ -2056,7 +1936,6 @@
   </div>
 </div>
 
-<!-- Batch Verify Modal -->
 <div class="modal fade" id="batchVerifyModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -2077,7 +1956,6 @@
   </div>
 </div>
 
-<!-- Request Details Modal -->
 <div class="modal fade" id="requestDetailsModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -2100,7 +1978,6 @@
   </div>
 </div>
 
-<!-- My Request Details Modal -->
 <div class="modal fade" id="myRequestDetailsModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -2123,7 +2000,6 @@
   </div>
 </div>
 
-<!-- Partial Items Modal -->
 <div class="modal fade" id="partialItemsModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -2143,7 +2019,6 @@
   </div>
 </div>
 
-<!-- Process Partial Balance Modal -->
 <div class="modal fade" id="processPartialModal" tabindex="-1">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
@@ -2170,7 +2045,6 @@
   </div>
 </div>
 
-  <!-- Process History Modal -->
 <div class="modal fade" id="processHistoryModal" tabindex="-1">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
@@ -2184,7 +2058,6 @@
           Track who processed which document, when, and the current status. Useful for daily work back-tracking.
         </div>
 
-        <!-- Filters -->
         <div class="row g-2 mb-3">
           <div class="col-6 col-md-3">
             <label class="form-label small fw-bold">Document Type</label>
@@ -2233,16 +2106,11 @@
   </div>
 </div>
 
-<!-- Hidden containers -->
 <div id="whNotificationsList" class="d-none"></div>
 <div id="mrrPrintOnly" class="d-none"></div>
 <div id="qrImageDecoder" style="display:none;"></div>
 
-<!-- ═══════════════════════════════════════════════════════════════════════
-     SCRIPTS
-     ═══════════════════════════════════════════════════════════════════════ -->
 <script>
-  // Fill mode picker user name when the modal opens
   document.addEventListener('DOMContentLoaded', function() {
     var modalEl = document.getElementById('modePickerModal');
     if (modalEl) {
