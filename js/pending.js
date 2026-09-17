@@ -1,12 +1,12 @@
 // ============================================================
 // PENDING DOCUMENTS — MRR + MRIF + MRS
-// - PENDING → normal scanner flow (like clicking a doc from the dropdown)
-// - PARTIAL → Bal process flow (Bal.MRIF / new MRR / new MRS)
+// - PENDING → normal scanner flow
+// - PARTIAL MRR → opens Manual MRR form (editable DR/date/vendor)
+// - PARTIAL MRIF / MRS → Bal process modal
 // ============================================================
 
 var _pendingModal = null;
 
-// ─── Open the list of pending docs (all 3 types) ───
 window.openPendingMrifList = async function() {
   var modalEl = document.getElementById('pendingMrifModal');
   if (!modalEl) { showToast('Pending modal not found', 'danger'); return; }
@@ -43,7 +43,6 @@ window.openPendingMrifList = async function() {
       return;
     }
 
-    // Sort: MRIF → MRR → MRS; within each, newest first
     var typeOrder = { MRIF: 0, MRR: 1, MRS: 2 };
     docs.sort(function(a, b) {
       var ta = typeOrder[a.docType] || 99;
@@ -66,7 +65,6 @@ window.openPendingMrifList = async function() {
       var typeBadgeClass = docType === 'MRIF' ? 'bg-warning text-dark' :
                            docType === 'MRR' ? 'bg-success' :
                            docType === 'MRS' ? 'bg-danger' : 'bg-secondary';
-
       var statusBadgeClass = status === 'PARTIAL' ? 'bg-info text-dark' : 'bg-warning text-dark';
 
       var badge = '<span class="badge ' + typeBadgeClass + ' me-2">' + escapeHtmlPending(docType) + '</span>';
@@ -78,7 +76,6 @@ window.openPendingMrifList = async function() {
         ? '<div class="small text-muted ms-4"><i class="bi bi-person me-1"></i>' + escapeHtmlPending(d.requestor) + '</div>'
         : '';
 
-      // Action button label depends on status
       var actionLabel = status === 'PARTIAL' ? 'Process Balance' : 'Process';
       var actionIcon = status === 'PARTIAL' ? 'bi-arrow-right-circle' : 'bi-play-circle';
 
@@ -110,10 +107,15 @@ window.openPendingMrifList = async function() {
         if (_pendingModal) _pendingModal.hide();
 
         if (status === 'PARTIAL') {
-          // PARTIAL → Bal process flow
-          setTimeout(function() { openPendingProcessModal(docNo, docType); }, 300);
+          if (docType === 'MRR' && typeof window.prefillManualMrrFromDoc === 'function') {
+            // ★ Partial MRR → open manual MRR form pre-filled
+            setTimeout(function() { window.prefillManualMrrFromDoc(docNo); }, 300);
+          } else {
+            // MRIF / MRS partial → Bal process modal
+            setTimeout(function() { openPendingProcessModal(docNo, docType); }, 300);
+          }
         } else {
-          // PENDING (or anything else) → normal scanner flow
+          // PENDING → normal scanner flow
           setTimeout(function() { openPendingNormalFlow(docNo, docType); }, 300);
         }
       });
@@ -132,53 +134,38 @@ window.openPendingMrifList = async function() {
 // ─── Normal flow — same as clicking a doc from the dropdown ───
 window.openPendingNormalFlow = async function(docNo, docType) {
   if (!docNo || !docType) return;
-
   var sectionMap = { 'MRIF': 'releasing', 'MRR': 'receiving', 'MRS': 'returns' };
   var section = sectionMap[docType] || 'releasing';
 
-  // Navigate to the correct module section
-  if (typeof navigateTo === 'function') {
-    navigateTo(section);
-  } else if (typeof selectModule === 'function') {
-    await selectModule(docType);
-  }
+  if (typeof navigateTo === 'function') navigateTo(section);
+  else if (typeof selectModule === 'function') await selectModule(docType);
 
-  // Wait for navigation to settle
   await new Promise(function(resolve) { setTimeout(resolve, 400); });
-
-  // Force the module context
   state.currentModule = docType;
   if (typeof updateLabels === 'function') updateLabels();
 
-  // Ensure sheet ID exists
   var sheetId = getTargetSheetIdPending(docType);
   if (!sheetId) {
     showToast('⚠️ No Sheet ID for ' + docType + '. Attempting to sync...', 'warning');
     if (typeof syncModuleLinks === 'function') {
       await syncModuleLinks();
       sheetId = getTargetSheetIdPending(docType);
-      if (!sheetId) {
-        showToast('Still missing Sheet ID. Please set it manually in Settings.', 'danger');
-        return;
-      }
+      if (!sheetId) { showToast('Still missing Sheet ID.', 'danger'); return; }
     }
   }
 
   try {
     if (typeof onDocSelect === 'function') {
       await onDocSelect(docNo);
-      var displayName = (typeof cleanDocNo === 'function') ? cleanDocNo(docNo) : docNo;
-      showToast('Loaded ' + displayName, 'success');
-    } else {
-      showToast('onDocSelect not available', 'danger');
-    }
+      showToast('Loaded ' + ((typeof cleanDocNo === 'function') ? cleanDocNo(docNo) : docNo), 'success');
+    } else showToast('onDocSelect not available', 'danger');
   } catch (err) {
     console.error('[openPendingNormalFlow] Error:', err);
     showToast('Failed to load document: ' + err.message, 'danger');
   }
 };
 
-// ─── PARTIAL flow — opens the Bal processing modal ───
+// ─── PARTIAL MRIF / MRS flow ───
 window.openPendingProcessModal = async function(docNo, docType) {
   if (!docNo || !docType) return;
 
@@ -192,8 +179,7 @@ window.openPendingProcessModal = async function(docNo, docType) {
 
   var submitBtn = document.getElementById('btnSubmitProcessBalance');
   if (submitBtn) {
-    var label = docType === 'MRR' ? 'Create New MRR' :
-                docType === 'MRS' ? 'Create New MRS' : 'Create Balance MRIF';
+    var label = docType === 'MRS' ? 'Create New MRS' : 'Create Balance MRIF';
     submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>' + label;
   }
 
@@ -226,8 +212,7 @@ window.openPendingProcessModal = async function(docNo, docType) {
       return {
         itemCode: it.inventoryId || it.itemCode || '',
         description: it.description || '',
-        requestedQty: requested,
-        issuedQty: issued,
+        requestedQty: requested, issuedQty: issued,
         remainingQty: remaining > 0 ? remaining : 0,
         unit: it.unit || 'PCS',
         originalRowIndex: it.rowIndex || 0,
@@ -241,22 +226,18 @@ window.openPendingProcessModal = async function(docNo, docType) {
 
     if (processed.length === 0) {
       if (body) body.innerHTML = '<div class="alert alert-success mb-0">' +
-        '<i class="bi bi-check-circle-fill me-2"></i>' +
-        'All items in this document are already fully processed.</div>';
+        '<i class="bi bi-check-circle-fill me-2"></i>All items already fully processed.</div>';
       return;
     }
 
-    var colHeader = docType === 'MRR' ? 'Received Now' :
-                    docType === 'MRS' ? 'Returned Now' : 'Issued Now';
-
+    var colHeader = docType === 'MRS' ? 'Returned Now' : 'Issued Now';
     var infoMsg = docType === 'MRIF'
       ? 'A <strong>Bal.' + escapeHtmlPending(docNo) + '</strong> sheet will be created for any remaining quantities.'
       : 'A <strong>new ' + escapeHtmlPending(docType) + ' document</strong> will be created for the quantities you enter.';
 
     var html = '<div class="alert alert-info small py-2 mb-3">' +
       '<i class="bi bi-info-circle me-1"></i> ' +
-      'Enter the quantity you are processing <strong>right now</strong> for each item. ' +
-      infoMsg +
+      'Enter the quantity you are processing <strong>right now</strong> for each item. ' + infoMsg +
       '</div>' +
       '<div class="table-responsive"><table class="table table-sm table-bordered align-middle">' +
       '<thead class="table-light"><tr>' +
@@ -277,26 +258,17 @@ window.openPendingProcessModal = async function(docNo, docType) {
         '<td>' + escapeHtmlPending(it.description) + '</td>' +
         '<td class="text-center">' + escapeHtmlPending(it.unit) + '</td>' +
         '<td class="text-center fw-bold text-danger process-remaining-cell" data-idx="' + idx + '">' + remaining + '</td>' +
-        '<td class="text-center">' +
-          '<input type="number" class="form-control form-control-sm text-center process-qty-input" ' +
-          'data-idx="' + idx + '" value="0" min="0" max="' + remaining + '" step="1" ' +
-          'style="width:90px;margin:0 auto;" oninput="onProcessQtyInput(this)">' +
-        '</td>' +
-        '<td>' +
-          '<input type="text" class="form-control form-control-sm process-remarks-input" ' +
-          'data-idx="' + idx + '" placeholder="Optional" maxlength="200">' +
-        '</td>' +
+        '<td class="text-center"><input type="number" class="form-control form-control-sm text-center process-qty-input" data-idx="' + idx + '" value="0" min="0" max="' + remaining + '" step="1" style="width:90px;margin:0 auto;" oninput="onProcessQtyInput(this)"></td>' +
+        '<td><input type="text" class="form-control form-control-sm process-remarks-input" data-idx="' + idx + '" placeholder="Optional" maxlength="200"></td>' +
       '</tr>';
     });
 
     html += '</tbody></table></div>' +
       '<div class="mt-2 small text-muted">' +
         '<button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="fillAllRemaining()">' +
-          '<i class="bi bi-magic me-1"></i>Fill Full Remaining' +
-        '</button>' +
+          '<i class="bi bi-magic me-1"></i>Fill Full Remaining</button>' +
         '<span class="ms-1">Set all items to their full remaining quantity.</span>' +
       '</div>';
-
     if (body) body.innerHTML = html;
 
   } catch (err) {
@@ -309,7 +281,6 @@ window.openPendingProcessModal = async function(docNo, docType) {
   }
 };
 
-// ─── Submit the Bal process ───
 window.submitProcessBalance = function() {
   if (!window._processPartialDocNo || !window._processPartialItems || !window._processPartialItems.length) {
     showToast('No items to process', 'warning');
@@ -327,43 +298,29 @@ window.submitProcessBalance = function() {
       var remarks = remarksInput ? (remarksInput.value || '').trim() : '';
       if (issueNow > remaining) issueNow = remaining;
       itemsPayload.push({
-        inventoryId: it.itemCode || '',
-        description: it.description || '',
-        qty: remaining,
-        issueNow: issueNow,
-        unit: it.unit || 'PCS',
-        remarks: remarks || '',
+        inventoryId: it.itemCode || '', description: it.description || '',
+        qty: remaining, issueNow: issueNow,
+        unit: it.unit || 'PCS', remarks: remarks || '',
         originalRowIndex: it.originalRowIndex || 0
       });
     });
-    var anyIssued = itemsPayload.some(function(it) { return it.issueNow > 0; });
-    if (!anyIssued) {
-      if (!confirm('You have not entered any quantity.\n\nContinue anyway? A new document will be created as PENDING.')) return;
+    if (!itemsPayload.some(function(it) { return it.issueNow > 0; })) {
+      if (!confirm('No quantity entered. Continue anyway?')) return;
     }
-
-    // Get current user
     var currentUser = '';
-    if (typeof state !== 'undefined') {
-      currentUser = state.currentUserFullname || state.currentUser || '';
-    }
-    if (!currentUser) {
-      currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || '';
-    }
+    if (typeof state !== 'undefined') currentUser = state.currentUserFullname || state.currentUser || '';
+    if (!currentUser) currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || '';
     if (!currentUser) currentUser = 'WAREHOUSE';
 
     try {
       var payload = {
-        action: 'processBalance',
-        docType: docType,
+        action: 'processBalance', docType: docType,
         originalDocNo: window._processPartialDocNo,
-        items: itemsPayload,
-        processedBy: currentUser
+        items: itemsPayload, processedBy: currentUser
       };
       var res = await fetch(API_URL, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        redirect: 'follow'
+        method: 'POST', body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow'
       });
       var text = await res.text();
       var data;
@@ -374,21 +331,15 @@ window.submitProcessBalance = function() {
           var pm = bootstrap.Modal.getInstance(processModalEl);
           if (pm) pm.hide();
         }
-        var msgPrefix = docType === 'MRIF' ? 'Balance MRIF created: ' : 'New ' + docType + ' created: ';
-        showToast(msgPrefix + data.balDocNo + ' (' + (data.status || 'COMPLETED') + ')', 'success');
+        showToast((docType === 'MRIF' ? 'Balance MRIF created: ' : 'New ' + docType + ' created: ') + data.balDocNo + ' (' + (data.status || 'COMPLETED') + ')', 'success');
         if (typeof updatePartialCount === 'function') updatePartialCount();
         if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
         if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
-      } else {
-        showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
-      }
-    } catch(err) {
-      showToast('Error: ' + err.message, 'danger');
-    }
+      } else showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
+    } catch(err) { showToast('Error: ' + err.message, 'danger'); }
   }, 'Creating...');
 };
 
-// ─── Helpers ───
 function getTargetSheetIdPending(docType) {
   var key = 'sheetId_' + docType;
   var val = localStorage.getItem(key);
@@ -404,9 +355,6 @@ function extractDocNumPending(docNo) {
 function escapeHtmlPending(s) {
   if (s === null || s === undefined) return '';
   return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
