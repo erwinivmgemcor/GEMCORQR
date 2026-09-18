@@ -1,5 +1,7 @@
 // ============================================================
 // NETWORK LAYER — Retry, timeout, offline banner, safe fetch
+// Banner is now a floating pill (bottom-right) so it never
+// overlaps the app header.
 // ============================================================
 
 // ─── Safe fetch: retry with exponential backoff + timeout ───
@@ -17,7 +19,6 @@ window.safeFetch = async function(url, options, opts) {
       var res = await fetch(url, fetchOpts);
       clearTimeout(timer);
       if (!res.ok) {
-        // Retry on 5xx but not on 4xx
         if (res.status >= 500 && attempt < retries) {
           await new Promise(function(r) { setTimeout(r, 400 * Math.pow(2, attempt)); });
           continue;
@@ -36,91 +37,154 @@ window.safeFetch = async function(url, options, opts) {
   throw lastErr || new Error('Network failed');
 };
 
-// ─── Online/offline indicator ───
+// ─── Network status pill (bottom-right) ───
 (function setupNetworkBanner() {
-  if (document.getElementById('netBanner')) return;
+  if (document.getElementById('netPill')) return;
 
   var style = document.createElement('style');
   style.textContent = `
-    #netBanner {
+    #netPill {
       position: fixed;
-      top: 0; left: 0; right: 0;
+      bottom: 20px;
+      right: 20px;
       z-index: 99997;
-      padding: 8px 16px;
-      text-align: center;
+      padding: 10px 16px 10px 14px;
+      border-radius: 24px;
       font-weight: 600;
-      font-size: 0.9rem;
+      font-size: 0.82rem;
       color: #fff;
-      transform: translateY(-100%);
-      transition: transform 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+      transform: translateY(120%);
+      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s;
+      opacity: 0;
       pointer-events: none;
+      max-width: calc(100vw - 40px);
+      white-space: nowrap;
     }
-    #netBanner.show { transform: translateY(0); }
-    #netBanner.offline { background: #dc3545; }
-    #netBanner.slow { background: #f59e0b; }
+    #netPill.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    #netPill.offline { background: #dc3545; }
+    #netPill.slow { background: #f59e0b; color: #1f2937; }
+    #netPill.online { background: #198754; }
+    #netPill .net-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.9;
+      animation: netPulse 1.4s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    #netPill.offline .net-dot,
+    #netPill.online .net-dot { animation: none; }
+    @keyframes netPulse {
+      0%, 100% { opacity: 0.5; transform: scale(0.85); }
+      50%      { opacity: 1;   transform: scale(1); }
+    }
+    @media (max-width: 576px) {
+      #netPill {
+        bottom: 12px;
+        right: 12px;
+        font-size: 0.75rem;
+        padding: 8px 12px 8px 10px;
+      }
+    }
   `;
   document.head.appendChild(style);
 
-  var banner = document.createElement('div');
-  banner.id = 'netBanner';
-  document.body.appendChild(banner);
+  var pill = document.createElement('div');
+  pill.id = 'netPill';
+  pill.innerHTML = '<span class="net-dot"></span><span id="netPillText"></span>';
+  document.body.appendChild(pill);
 
   var _slowTimer = null;
+  var _hideTimer = null;
   var _origFetch = window.fetch;
   var _pendingCount = 0;
 
+  function _showPill(text, cls, autoHideMs) {
+    var textEl = document.getElementById('netPillText');
+    if (textEl) textEl.textContent = text;
+    pill.className = 'show ' + (cls || '');
+    if (_hideTimer) clearTimeout(_hideTimer);
+    if (autoHideMs) {
+      _hideTimer = setTimeout(function() {
+        pill.className = '';
+      }, autoHideMs);
+    }
+  }
+
+  function _hidePill() {
+    if (_hideTimer) clearTimeout(_hideTimer);
+    pill.className = '';
+  }
+
+  // Wrap fetch to detect slow requests
   window.fetch = function(input, init) {
-    var start = Date.now();
+    var url = typeof input === 'string' ? input : (input && input.url) || '';
+
+    // Skip the CDN calls (Google Fonts, QR API, etc.) — only track our API
+    var isApiCall = url.indexOf('script.google.com') !== -1 ||
+                    url.indexOf('macros/s/') !== -1;
+
     _pendingCount++;
-    if (_pendingCount > 0 && !_slowTimer) {
+    if (isApiCall && !_slowTimer && navigator.onLine) {
       _slowTimer = setTimeout(function() {
-        banner.textContent = '⚠️ Slow connection detected...';
-        banner.className = 'show slow';
+        _showPill('Slow connection...', 'slow', 0);
       }, 6000);
     }
+
     var p = _origFetch.apply(this, arguments);
     p.finally(function() {
       _pendingCount--;
       if (_pendingCount <= 0) {
         _pendingCount = 0;
-        clearTimeout(_slowTimer);
-        _slowTimer = null;
-        if (navigator.onLine) {
-          banner.className = '';
+        if (_slowTimer) {
+          clearTimeout(_slowTimer);
+          _slowTimer = null;
+        }
+        // Hide the "slow" pill once everything's done
+        if (pill.classList.contains('slow') && navigator.onLine) {
+          _hidePill();
         }
       }
     });
     return p;
   };
 
+  // Online
   window.addEventListener('online', function() {
-    banner.textContent = '✅ Back online';
-    banner.className = 'show slow';
-    setTimeout(function() { banner.className = ''; }, 2000);
-    if (typeof state !== 'undefined' && state.currentModule) {
-      // refresh in background
-      setTimeout(function() {
-        if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications();
-        if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
-      }, 500);
-    }
+    _showPill('Back online', 'online', 2000);
+    setTimeout(function() {
+      if (typeof flushOfflineQueue === 'function') flushOfflineQueue();
+      if (typeof state !== 'undefined' && state.currentModule) {
+        setTimeout(function() {
+          if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications();
+          if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
+        }, 500);
+      }
+    }, 300);
   });
 
+  // Offline
   window.addEventListener('offline', function() {
-    banner.textContent = '📡 You are offline — showing cached data';
-    banner.className = 'show offline';
+    _showPill('Offline — showing cached data', 'offline', 0);
   });
 
+  // Initial state
   if (!navigator.onLine) {
-    banner.textContent = '📡 You are offline — showing cached data';
-    banner.className = 'show offline';
+    _showPill('Offline — showing cached data', 'offline', 0);
   }
 })();
 
 // ─── Stale-while-revalidate helper ───
 window.swrFetch = async function(url, cacheKey, ttl, opts) {
   var cached = (typeof getCache === 'function') ? getCache(cacheKey) : null;
-  var fresh = null;
   var fetchPromise = safeFetch(url, null, opts)
     .then(function(res) { return res.json(); })
     .then(function(data) {
@@ -132,14 +196,11 @@ window.swrFetch = async function(url, cacheKey, ttl, opts) {
     .catch(function(e) { throw e; });
 
   if (cached) {
-    // Return cached immediately, refresh in background
     fetchPromise.catch(function() {});
     return cached;
   }
   return await fetchPromise;
 };
-
-console.log('✅ net.js loaded');
 
 // ─── Offline POST queue ───
 var QUEUE_KEY = 'ivm_offlineQueue';
@@ -197,3 +258,5 @@ window.addEventListener('online', function() {
 setTimeout(function() {
   if (navigator.onLine && _getQueue().length > 0) flushOfflineQueue();
 }, 3000);
+
+console.log('✅ net.js loaded (pill banner, bottom-right)');
