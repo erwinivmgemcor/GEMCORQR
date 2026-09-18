@@ -22,6 +22,18 @@
 <link rel="stylesheet" href="/GEMCORQR/style.css">
 
 <style>
+
+  .skeleton-box {
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.4s infinite;
+  border-radius: 8px;
+}
+@keyframes skeletonShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+  
   .app-wrapper { display: flex; min-height: 100vh; }
   .sidebar {
     width: 260px;
@@ -593,10 +605,19 @@
             </button>
           </div>
 
-          <div id="analyticsLoading" class="text-center py-4">
-            <div class="spinner-border text-primary"></div>
-            <div class="text-muted mt-2">Loading analytics...</div>
-          </div>
+          <div id="analyticsLoading" class="py-4">
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3"><div class="skeleton-box" style="height:70px;"></div></div>
+    <div class="col-6 col-md-3"><div class="skeleton-box" style="height:70px;"></div></div>
+    <div class="col-6 col-md-3"><div class="skeleton-box" style="height:70px;"></div></div>
+    <div class="col-6 col-md-3"><div class="skeleton-box" style="height:70px;"></div></div>
+  </div>
+  <div class="skeleton-box mb-3" style="height:220px;"></div>
+  <div class="row g-3">
+    <div class="col-6"><div class="skeleton-box" style="height:300px;"></div></div>
+    <div class="col-6"><div class="skeleton-box" style="height:300px;"></div></div>
+  </div>
+</div>
 
           <div id="analyticsError" class="alert alert-danger d-none">
             <i class="bi bi-exclamation-triangle-fill me-2"></i>
@@ -2122,8 +2143,9 @@
   });
 </script>
 
-<script src="/GEMCORQR/js/config.js?v=2.5.0"></script>
-<script src="/GEMCORQR/js/cache.js?v=2.5.0"></script>
+<script src="/GEMCORQR/js/config.js?v=3.0.0"></script>
+<script src="/GEMCORQR/js/net.js?v=3.0.0"></script>
+<script src="/GEMCORQR/js/cache.js?v=3.0.0"></script>
 <script src="/GEMCORQR/js/utils.js?v=2.5.0"></script>
 <script src="/GEMCORQR/js/state.js?v=2.5.0"></script>
 <script src="/GEMCORQR/js/auth.js?v=2.5.0"></script>
