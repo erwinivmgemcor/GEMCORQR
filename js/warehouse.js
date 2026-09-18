@@ -1,8 +1,8 @@
 // ============================================================
 // WAREHOUSE CORE FUNCTIONS
-// (Partial Items + Balance MRIF + Prefill Manual MRR from doc
-//  + Clear/Edit PO Items + Restore PO Items + New Row Feedback
-//  + Double-Processing Protection)
+// (Partial Items + Balance MRIF + Prefill Manual MRR
+//  + Reprocess Guard via DOCLINKS + Idempotency on writes
+//  + Clear/Edit PO Items + Restore PO Items)
 // ============================================================
 
 (function() {
@@ -20,9 +20,6 @@
     return state.currentUserFullname || state.currentUser || '';
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // PO ITEMS — SNAPSHOT SUPPORT
-  // ═══════════════════════════════════════════════════════════
   var _originalPoItems = null;
 
   window._saveOriginalPoItems = function() {
@@ -185,7 +182,7 @@
     try {
       await fetchDocItems(docNo, state.currentModule);
       checkForProgress();
-      checkIfAlreadyProcessed();
+      await checkIfAlreadyProcessed();
     } catch(err) {
       showToast('Failed to load document: ' + err.message, 'danger');
     } finally {
@@ -301,19 +298,61 @@
     startScanner();
   };
 
-  window.checkIfAlreadyProcessed = function() {
+  // ─── Reprocess guard — checks DOCLINKS status first, then remarks ───
+  window.checkIfAlreadyProcessed = async function() {
     if (state.items.length === 0) return;
-    var allDone = state.items.every(function(item) {
-      var r = String(item.remarks || '').toUpperCase();
-      return r.indexOf('SERVED') !== -1 || r.indexOf('COMPLETE') !== -1;
-    });
 
-    if (!allDone) {
-      var oldBanner = document.getElementById('alreadyProcessedBanner');
-      if (oldBanner && oldBanner.parentNode) oldBanner.parentNode.removeChild(oldBanner);
-      return;
+    // ★ First: check DOCLINKS status via API (authoritative)
+    try {
+      var docStatus = null;
+      if (state.currentDoc) {
+        var statusUrl = API_URL + '?action=getDocStatus&docNo=' + encodeURIComponent(state.currentDoc) + '&_t=' + Date.now();
+        var res = await fetch(statusUrl, { redirect: 'follow' });
+        var text = await res.text();
+        var data;
+        try { data = JSON.parse(text); } catch(e) {}
+        if (data && data.success) docStatus = data.status;
+      }
+      if (docStatus === 'COMPLETED') {
+        _blockReprocessing('This document has already been fully processed (status: COMPLETED).');
+        return;
+      }
+    } catch(e) {
+      console.warn('[checkIfAlreadyProcessed] Status check failed, falling back to remarks:', e);
     }
 
+    var allDone = state.items.every(function(item) {
+      var r = String(item.remarks || '').toUpperCase();
+      return r.indexOf('SERVED') !== -1 ||
+             r.indexOf('COMPLETE') !== -1 ||
+             r.indexOf('BALANCED') !== -1;
+    });
+
+    if (allDone) {
+      _blockReprocessing('This document has already been fully processed. All items are SERVED/COMPLETE/BALANCED.');
+    } else {
+      var oldBanner = document.getElementById('alreadyProcessedBanner');
+      if (oldBanner && oldBanner.parentNode) oldBanner.parentNode.removeChild(oldBanner);
+      var btn = document.getElementById('submitBtn');
+      var txt = document.getElementById('submitBtnText');
+      if (btn) {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50');
+        btn.style.pointerEvents = '';
+      }
+      if (txt) txt.textContent = 'Confirm & Submit';
+      var scannerContainer = document.querySelector('#activeTransactionSection .scanner-container');
+      if (scannerContainer) scannerContainer.style.display = '';
+      var manualInput = document.getElementById('manualInput');
+      if (manualInput) {
+        var group = manualInput.closest('.input-group');
+        if (group) group.style.display = '';
+      }
+      try { startScanner(); } catch(e) {}
+    }
+  };
+
+  function _blockReprocessing(msg) {
     var btn = document.getElementById('submitBtn');
     var txt = document.getElementById('submitBtnText');
     if (btn) {
@@ -341,21 +380,21 @@
       }
     });
 
-    if (!document.getElementById('alreadyProcessedBanner')) {
+    var existing = document.getElementById('alreadyProcessedBanner');
+    if (!existing) {
       var banner = document.createElement('div');
       banner.id = 'alreadyProcessedBanner';
       banner.className = 'alert alert-success mt-3 d-flex align-items-center gap-2';
       banner.innerHTML =
         '<i class="bi bi-check-circle-fill" style="font-size:1.5rem;"></i>' +
-        '<div><strong>This document has already been fully processed.</strong><br>' +
-        '<small class="text-muted">All items are marked SERVED/COMPLETE. ' +
-        'Reprocessing is blocked to prevent duplicate transactions.</small></div>';
+        '<div><strong>' + msg + '</strong><br>' +
+        '<small class="text-muted">Reprocessing is blocked to prevent duplicate transactions.</small></div>';
       var section = document.getElementById('activeTransactionSection');
       if (section) section.appendChild(banner);
     }
 
-    showToast('This document has already been fully processed.', 'info');
-  };
+    showToast(msg, 'info');
+  }
 
   window.renderItems = function() {
     var tbody = document.getElementById('itemsTable');
@@ -465,7 +504,7 @@
 
       var allDone = state.items.length > 0 && state.items.every(function(item) {
         var r = String(item.remarks || '').toUpperCase();
-        return r.indexOf('SERVED') !== -1 || r.indexOf('COMPLETE') !== -1;
+        return r.indexOf('SERVED') !== -1 || r.indexOf('COMPLETE') !== -1 || r.indexOf('BALANCED') !== -1;
       });
       if (allDone) {
         showToast('This document has already been fully processed.', 'warning');
@@ -475,7 +514,7 @@
       var verifiedItems = state.items.filter(function(i) {
         if (!i.verified) return false;
         var r = String(i.remarks || '').toUpperCase();
-        if (r.indexOf('SERVED') !== -1 || r.indexOf('COMPLETE') !== -1) return false;
+        if (r.indexOf('SERVED') !== -1 || r.indexOf('COMPLETE') !== -1 || r.indexOf('BALANCED') !== -1) return false;
         return true;
       });
 
@@ -484,7 +523,7 @@
 
       if (verified === 0) {
         if (state.items.some(function(i) { return i.verified; })) {
-          showToast('All verified items are already SERVED/COMPLETE.', 'info');
+          showToast('All verified items are already SERVED/COMPLETE/BALANCED.', 'info');
         } else {
           showToast('No items verified.', 'warning');
         }
@@ -534,25 +573,32 @@
     }, 'Submitting...');
   };
 
+  // ─── Submit transaction with idempotency ───
   window.submitTransaction = async function(verifiedItems) {
+    var idemKey = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+
     var itemsStr = verifiedItems.map(function(i) {
       return encodeURIComponent(i.inventoryId) + ',' + i.issuedQty + ',' + i.rowIndex + ',' + encodeURIComponent(i.unit || 'PIECE');
     }).join(';');
+
     var url = API_URL + '?action=submitTransaction' +
       '&docNo=' + encodeURIComponent(state.currentDoc) +
       '&docType=' + encodeURIComponent(state.currentModule) +
       '&sheetId=' + encodeURIComponent(getCleanSheetId()) +
       '&items=' + itemsStr +
       '&processedBy=' + encodeURIComponent(state.currentUser || state.warehouseName || 'WAREHOUSE') +
+      '&idemKey=' + encodeURIComponent(idemKey) +
       '&_t=' + Date.now();
-    var res = await fetch(url, { redirect: 'follow' });
+
+    var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
+    var res = await fetchFn(url, { redirect: 'follow' }, { timeout: 45000, retries: 1 });
     var text = await res.text();
     return JSON.parse(text);
   };
 
-  // ═══════════════════════════════════════════════════════════════
-  // PO ITEMS — RENDER, CLEAR, ADD, RESTORE
-  // ═══════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════
+  // PO ITEMS
+  // ═══════════════════════════════════════════════════════════
   window.renderPoItems = function() {
     var noEl = document.getElementById('poDisplayNo');
     var prfEl = document.getElementById('poDisplayPrf');
@@ -610,22 +656,11 @@
         '<div class="row g-2">' +
         '<div class="col-12 col-md-5">' +
         '<label class="form-label mb-0 small text-muted">Item Code</label>' +
-        '<input type="text" class="form-control form-control-sm po-edit-code" ' +
-          'id="po-code-' + idx + '" ' +
-          'value="' + codeVal + '" ' +
-          'placeholder="Type or pick item code..." ' +
-          'list="inventoryCodeList" ' +
-          'autocomplete="off" ' +
-          'oninput="updatePoItem(' + idx + ', \'inventoryId\', this.value); autoFillPoDescription(' + idx + ', this.value, false);" ' +
-          'onchange="autoFillPoDescription(' + idx + ', this.value, true);">' +
+        '<input type="text" class="form-control form-control-sm po-edit-code" id="po-code-' + idx + '" value="' + codeVal + '" placeholder="Type or pick item code..." list="inventoryCodeList" autocomplete="off" oninput="updatePoItem(' + idx + ', \'inventoryId\', this.value); autoFillPoDescription(' + idx + ', this.value, false);" onchange="autoFillPoDescription(' + idx + ', this.value, true);">' +
         '</div>' +
         '<div class="col-12 col-md-5">' +
         '<label class="form-label mb-0 small text-muted">Description</label>' +
-        '<input type="text" class="form-control form-control-sm po-edit-desc" ' +
-          'id="po-desc-' + idx + '" ' +
-          'value="' + descVal + '" ' +
-          'placeholder="Auto-fills from item code" ' +
-          'oninput="updatePoItem(' + idx + ', \'description\', this.value);">' +
+        '<input type="text" class="form-control form-control-sm po-edit-desc" id="po-desc-' + idx + '" value="' + descVal + '" placeholder="Auto-fills from item code" oninput="updatePoItem(' + idx + ', \'description\', this.value);">' +
         '</div>' +
         '<div class="col-6 col-md-1">' +
         '<label class="form-label mb-0 small text-muted">PO Qty</label>' +
@@ -846,18 +881,22 @@
       var receivingDate = document.getElementById('mrrReceivingDate') ? document.getElementById('mrrReceivingDate').value : '';
       var preparedBy = _getCurrentUserName() || 'WAREHOUSE';
 
+      var idemKey = 'cmrr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+
       try {
         var payload = {
           action: 'createMrrRequest',
+          _idemKey: idemKey,
           poNo: state.currentPoNo, prfNo: state.currentPoPrf,
           client: state.currentPoClient, supplier: state.currentPoSupplier,
           drNo: drNo, receivingDate: receivingDate, preparedBy: preparedBy,
           items: selected
         };
-        var res = await fetch(API_URL, {
+        var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
+        var res = await fetchFn(API_URL, {
           method: 'POST', body: JSON.stringify(payload),
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow'
-        });
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+        }, { timeout: 45000, retries: 1 });
         var text = await res.text();
         var data;
         try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
@@ -1044,7 +1083,6 @@
   }
   window._positionSuggestDropdown = _positionSuggestDropdown;
 
-  // ─── CACHED LOADERS ───
   window.loadRequestInventory = async function(forceRefresh) {
     var cacheKey = 'inventoryList';
     if (!forceRefresh) {
@@ -1165,7 +1203,6 @@
   window.openManualMrrModal = function() {
     if (!manualMrrModal) manualMrrModal = new bootstrap.Modal(document.getElementById('manualMrrModal'));
 
-    // Reset prefill flags + UI
     window._prefillMrrMode = false;
     window._prefillMrrDocNo = null;
     var titleEl = document.querySelector('#manualMrrModal .modal-title');
@@ -1194,11 +1231,7 @@
     loadIvmTeamList(false).catch(function() {});
   };
 
-  // ═══════════════════════════════════════════════════════════
-  // PREFILL MANUAL MRR MODAL FROM A PARTIAL MRR DOC
-  // Loads the original MRR, opens the Manual MRR modal with
-  // everything pre-filled but editable. On submit → processBalance.
-  // ═══════════════════════════════════════════════════════════
+  // ─── Prefill Manual MRR from a partial MRR doc ───
   window.prefillManualMrrFromDoc = async function(docNo) {
     if (!docNo) return;
     if (state.isLoading) return;
@@ -1250,13 +1283,11 @@
       window._prefillMrrMode = true;
       window._prefillMrrDocNo = docNo;
 
-      // Update modal title + button
       var titleEl = document.querySelector('#manualMrrModal .modal-title');
       if (titleEl) titleEl.innerHTML = '<i class="bi bi-arrow-right-circle me-2"></i>Process ' + docNo + ' (MRR)';
       var btn = document.getElementById('btnSubmitManualMrr');
       if (btn) btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Create New MRR';
 
-      // Fill form fields
       var poEl = document.getElementById('manualMrrPoNo');
       var drEl = document.getElementById('manualMrrDrNo');
       var vendorEl = document.getElementById('manualMrrVendor');
@@ -1265,13 +1296,12 @@
       var dateEl = document.getElementById('manualMrrDate');
 
       if (poEl) poEl.value = poNo;
-      if (drEl) drEl.value = '';              // blank — new DR for new delivery
+      if (drEl) drEl.value = '';
       if (vendorEl) vendorEl.value = vendor;
       if (siteEl) siteEl.value = receivingSite;
       if (prepEl) prepEl.value = _getCurrentUserName();
       if (dateEl) dateEl.valueAsDate = new Date();
 
-      // Fill items
       manualMrrItems = remainingItems;
       renderManualMrrItems();
       updateManualMrrSubmitButton();
@@ -1286,7 +1316,6 @@
     }
   };
 
-  // Reset prefill flags when the manual MRR modal closes
   document.addEventListener('hidden.bs.modal', function(e) {
     if (e.target && e.target.id === 'manualMrrModal') {
       window._prefillMrrMode = false;
@@ -1453,7 +1482,7 @@
     btn.disabled = !(drNo && vendor && site && hasValidItems);
   };
 
-  // ─── Submit Manual MRR (or prefill-process a partial MRR) ───
+  // ─── Submit Manual MRR (normal OR prefill) with idempotency ───
   window.submitManualMrr = function() {
     var btn = document.getElementById('btnSubmitManualMrr');
     return withButtonLoading(btn, async function() {
@@ -1482,14 +1511,14 @@
       if (items.length === 0) { showToast('Please add at least one valid item', 'warning'); return; }
 
       var isPrefill = window._prefillMrrMode === true && window._prefillMrrDocNo;
+      var idemKey = 'mmrr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
 
       try {
         var payload;
         if (isPrefill) {
-          // ★ Partial MRR processing → processBalance creates a new MRR
-          //   AND writes back to the original.
           payload = {
             action: 'processBalance',
+            _idemKey: idemKey,
             docType: 'MRR',
             originalDocNo: window._prefillMrrDocNo,
             items: items.map(function(it) {
@@ -1503,7 +1532,6 @@
               };
             }),
             processedBy: preparedBy,
-            // overrides for the new MRR doc
             drNo: drNo,
             vendor: vendor,
             receivingSite: site,
@@ -1514,6 +1542,7 @@
         } else {
           payload = {
             action: 'createMrrRequest',
+            _idemKey: idemKey,
             poNo: poNo || 'N/A',
             prfNo: '',
             client: vendor,
@@ -1527,10 +1556,11 @@
           };
         }
 
-        var res = await fetch(API_URL, {
+        var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
+        var res = await fetchFn(API_URL, {
           method: 'POST', body: JSON.stringify(payload),
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow'
-        });
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+        }, { timeout: 45000, retries: 1 });
         var text = await res.text();
         var data;
         try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
@@ -1797,19 +1827,22 @@
       if (!currentUser) currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || '';
       if (!currentUser) currentUser = 'WAREHOUSE';
 
+      var idemKey = 'pb_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+
       try {
         var payload = {
           action: 'processPartialBalance',
+          _idemKey: idemKey,
           originalDocNo: _processPartialDocNo,
           items: itemsPayload,
           processedBy: currentUser
         };
-        var res = await fetch(API_URL, {
+        var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
+        var res = await fetchFn(API_URL, {
           method: 'POST',
           body: JSON.stringify(payload),
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          redirect: 'follow'
-        });
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+        }, { timeout: 45000, retries: 1 });
         var text = await res.text();
         var data;
         try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
@@ -1846,4 +1879,4 @@
     } catch(err) {}
   };
 
-})(); // end IIFE
+})();
