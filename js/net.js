@@ -140,3 +140,60 @@ window.swrFetch = async function(url, cacheKey, ttl, opts) {
 };
 
 console.log('✅ net.js loaded');
+
+// ─── Offline POST queue ───
+var QUEUE_KEY = 'ivm_offlineQueue';
+
+function _getQueue() {
+  try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch(e) { return []; }
+}
+function _saveQueue(q) {
+  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch(e) {}
+}
+
+window.queueOfflinePost = function(url, body, label) {
+  var q = _getQueue();
+  q.push({ url: url, body: body, label: label || 'Transaction', ts: Date.now() });
+  _saveQueue(q);
+  if (typeof showToast === 'function') {
+    showToast('📥 ' + label + ' saved offline. Will sync when connection returns.', 'warning');
+  }
+};
+
+window.flushOfflineQueue = async function() {
+  if (!navigator.onLine) return;
+  var q = _getQueue();
+  if (q.length === 0) return;
+  var remaining = [];
+  var successCount = 0;
+  for (var i = 0; i < q.length; i++) {
+    try {
+      var res = await safeFetch(q[i].url, {
+        method: 'POST',
+        body: q[i].body,
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+      }, { retries: 1, timeout: 15000 });
+      var text = await res.text();
+      var data = JSON.parse(text);
+      if (data && data.success) successCount++;
+      else remaining.push(q[i]);
+    } catch(e) {
+      remaining.push(q[i]);
+    }
+  }
+  _saveQueue(remaining);
+  if (successCount > 0 && typeof showToast === 'function') {
+    showToast('✅ Synced ' + successCount + ' queued transaction(s).', 'success');
+    if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
+    if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
+  }
+};
+
+window.addEventListener('online', function() {
+  setTimeout(flushOfflineQueue, 1000);
+});
+
+// Attempt flush on load
+setTimeout(function() {
+  if (navigator.onLine && _getQueue().length > 0) flushOfflineQueue();
+}, 3000);
