@@ -155,7 +155,7 @@ function _prepChart(canvasId, instanceKey) {
   return canvas.getContext('2d');
 }
 
-// ─── Daily Request Volume ───
+// ─── Daily Transaction Volume — 3 lines (MRIF / MRR / MRS) ───
 function renderDailyChart(dailyData) {
   var ctx = _prepChart('dailyChart', '_dailyChart');
   if (!ctx) return;
@@ -174,34 +174,79 @@ function renderDailyChart(dailyData) {
       return months[dt.getMonth()] + ' ' + dt.getDate();
     } catch(e) { return d.date; }
   });
-  var counts = dailyData.map(function(d) { return d.count; });
+
+  var mrifCounts = dailyData.map(function(d) { return d.mrif || 0; });
+  var mrrCounts  = dailyData.map(function(d) { return d.mrr  || 0; });
+  var mrsCounts  = dailyData.map(function(d) { return d.mrs  || 0; });
 
   window._dailyChart = new Chart(ctx, {
     type: 'line',
     data: {
       labels: labels,
-      datasets: [{
-        label: 'Requests per Day',
-        data: counts,
-        borderColor: '#1e3a5f',
-        backgroundColor: 'rgba(30, 58, 95, 0.1)',
-        fill: true,
-        tension: 0.3,
-        pointBackgroundColor: '#1e3a5f',
-        pointRadius: 3,
-        pointHoverRadius: 5
-      }]
+      datasets: [
+        {
+          label: 'MRIF (Requests)',
+          data: mrifCounts,
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245, 158, 11, 0.10)',
+          fill: false,
+          tension: 0.3,
+          pointBackgroundColor: '#f59e0b',
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          borderWidth: 2.5
+        },
+        {
+          label: 'MRR (Receiving)',
+          data: mrrCounts,
+          borderColor: '#2e8b57',
+          backgroundColor: 'rgba(46, 139, 87, 0.10)',
+          fill: false,
+          tension: 0.3,
+          pointBackgroundColor: '#2e8b57',
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          borderWidth: 2.5
+        },
+        {
+          label: 'MRS (Returns)',
+          data: mrsCounts,
+          borderColor: '#dc3545',
+          backgroundColor: 'rgba(220, 53, 69, 0.10)',
+          fill: false,
+          tension: 0.3,
+          pointBackgroundColor: '#dc3545',
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          borderWidth: 2.5
+        }
+      ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       animation: { duration: 400 },
+      interaction: {
+        mode: 'index',
+        intersect: false
+      },
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: true,
+          position: 'top',
+          labels: {
+            boxWidth: 12,
+            boxHeight: 12,
+            padding: 12,
+            font: { size: 11, weight: '600' },
+            usePointStyle: true,
+            pointStyle: 'circle'
+          }
+        },
         tooltip: {
           callbacks: {
             label: function(context) {
-              return context.parsed.y + ' request(s)';
+              return context.dataset.label + ': ' + context.parsed.y;
             }
           }
         }
@@ -210,7 +255,7 @@ function renderDailyChart(dailyData) {
         y: {
           beginAtZero: true,
           ticks: { stepSize: 1, precision: 0 },
-          title: { display: true, text: 'Requests', font: { size: 10 } }
+          title: { display: true, text: 'Transactions', font: { size: 10 } }
         },
         x: {
           ticks: {
