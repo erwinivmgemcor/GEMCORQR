@@ -30,7 +30,6 @@ function _hasRole(role) {
   return roles && roles.indexOf(role) !== -1;
 }
 
-// ─── Init ───
 function initRole() {
   var savedUser = localStorage.getItem('ivm_username');
   var savedFullname = localStorage.getItem('ivm_userFullname');
@@ -89,7 +88,6 @@ async function preloadWarehouseLists() {
   }
 }
 
-// ─── Role picker → login ───
 function selectRole(role) {
   state.pendingRole = role;
   if (roleModal) roleModal.hide();
@@ -265,15 +263,12 @@ async function loginUser() {
   }, 'Signing in...');
 }
 
-// ─── Switch mode (both-role users only) ───
 window.switchMode = function(newRole) {
   if (newRole !== 'warehouse' && newRole !== 'production') return;
-
   if (!_hasRole(newRole)) {
     showToast('You do not have access to ' + newRole + ' mode.', 'danger');
     return;
   }
-
   localStorage.setItem('ivm_userRole', newRole);
   state.userRole = newRole;
 
@@ -282,15 +277,14 @@ window.switchMode = function(newRole) {
     var mm = bootstrap.Modal.getInstance(modeModalEl);
     if (mm) mm.hide();
   }
-
   var active = document.getElementById('activeTransactionSection');
   if (active) active.classList.add('d-none');
 
   applyRoleUI();
   showToast('Switched to ' + (newRole === 'warehouse' ? 'Warehouse' : 'Production') + ' mode.', 'success');
 
-  // Re-init chat with new context
   if (typeof initChat === 'function') setTimeout(initChat, 500);
+  if (typeof initEditRequests === 'function') setTimeout(initEditRequests, 600);
 };
 
 window.openModePicker = function() {
@@ -308,7 +302,6 @@ window.openModePicker = function() {
   m.show();
 };
 
-// ─── Logout ───
 function logoutUser() {
   if (!confirm('Logout ' + (state.currentUserFullname || state.currentUser) + '?')) return;
   state.currentUser = null;
@@ -322,10 +315,10 @@ function logoutUser() {
   localStorage.removeItem('ivm_requestorName');
   localStorage.removeItem('ivm_allowedRoles');
   localStorage.removeItem('ivm_chatUnread');
+  localStorage.removeItem('ivm_editReqCount');
   location.reload();
 }
 
-// ─── PIN (admin fallback) ───
 function showPinEntry() {
   var section = document.getElementById('pinEntrySection');
   if (section) section.classList.remove('d-none');
@@ -368,7 +361,6 @@ function verifyPin() {
   }
 }
 
-// ─── Apply Role UI ───
 function applyRoleUI() {
   var role = localStorage.getItem('ivm_userRole');
   var isProduction = (role === 'production');
@@ -458,13 +450,14 @@ function applyRoleUI() {
   if (isProduction) navigateTo('myrequests');
   else navigateTo('dashboard');
 
-  // Init chat badge
   if (state.currentUser && typeof initChat === 'function') {
     setTimeout(initChat, 800);
   }
+  if (state.currentUser && typeof initEditRequests === 'function') {
+    setTimeout(initEditRequests, 900);
+  }
 }
 
-// ─── Switch role (Settings → Switch Role button) ───
 function switchRole() {
   if (settingsModal) settingsModal.hide();
   var section = document.getElementById('pinEntrySection');
@@ -488,7 +481,6 @@ function switchRole() {
   }
 }
 
-// ─── PIN change ───
 function changePin() {
   var current = document.getElementById('currentPinInput') ? document.getElementById('currentPinInput').value : '';
   var newPin = document.getElementById('newPinInput') ? document.getElementById('newPinInput').value : '';
@@ -510,7 +502,6 @@ function changePin() {
   if (newP) newP.value = '';
 }
 
-// ─── Settings ───
 function openSettings() {
   loadSettingsToUI();
   var role = localStorage.getItem('ivm_userRole');
@@ -561,6 +552,5 @@ function saveSettings() {
   if (state.currentModule) selectModule(state.currentModule);
 }
 
-// Legacy no-ops
 function checkProductionName() {}
 function saveProductionName() {}
