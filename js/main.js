@@ -14,7 +14,7 @@ window.applySidebarRole = function(role) {
       : (state.currentUser ? state.currentUserFullname : 'Warehouse');
   }
 
-  var warehouseNavItems = ['dashboard', 'releasing', 'receiving', 'returns'];
+  var warehouseNavItems = ['dashboard', 'releasing', 'receiving', 'returns', 'editrequests'];
   var productionNavItems = ['requests', 'myrequests'];
 
   document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
@@ -42,7 +42,6 @@ window.applySidebarRole = function(role) {
   }
 };
 
-// ─── Navigation ────────────────────────────────────────────────
 function navigateTo(sectionId) {
   document.querySelectorAll('.section-page').forEach(function(el) {
     el.classList.remove('active');
@@ -116,6 +115,42 @@ function toggleSidebar(open) {
   }
 }
 
+// ─── Edit request action button helper (used in My Request Details) ───
+function _editActionButtonHtml(docNo, docType) {
+  var map = window._editReqMap || {};
+  var entry = map[docNo];
+  var safeDoc = String(docNo).replace(/'/g, "\\'");
+  var safeType = String(docType || 'MRIF').replace(/'/g, "\\'");
+
+  if (!entry) {
+    return '<button class="btn btn-sm btn-outline-warning" onclick="requestEditPermissionFromUser(\'' + safeDoc + '\', \'' + safeType + '\')">' +
+      '<i class="bi bi-pencil me-1"></i>Request Edit' +
+    '</button>';
+  }
+  if (entry.status === 'PENDING') {
+    return '<span class="btn btn-sm btn-outline-secondary disabled" title="Waiting for warehouse approval">' +
+      '<i class="bi bi-hourglass-split me-1"></i>Edit Pending Approval' +
+    '</span>';
+  }
+  if (entry.status === 'APPROVED') {
+    return '<button class="btn btn-sm btn-success" onclick="openRequestEditModal(\'' + safeDoc + '\', \'' + safeType + '\')">' +
+      '<i class="bi bi-pencil-square me-1"></i>Edit Now' +
+    '</button>';
+  }
+  if (entry.status === 'REJECTED') {
+    var reason = entry.rejectReason ? ' title="' + String(entry.rejectReason).replace(/"/g, '&quot;') + '"' : '';
+    return '<button class="btn btn-sm btn-outline-danger" onclick="requestEditPermissionFromUser(\'' + safeDoc + '\', \'' + safeType + '\')"' + reason + '>' +
+      '<i class="bi bi-x-circle me-1"></i>Rejected — Request Again' +
+    '</button>';
+  }
+  if (entry.status === 'COMPLETED') {
+    return '<button class="btn btn-sm btn-outline-warning" onclick="requestEditPermissionFromUser(\'' + safeDoc + '\', \'' + safeType + '\')">' +
+      '<i class="bi bi-pencil me-1"></i>Request Edit' +
+    '</button>';
+  }
+  return '';
+}
+
 // ─── My Request Details ───
 window.openMyRequestDetails = async function(docNo, docType) {
   var modalEl = document.getElementById('myRequestDetailsModal');
@@ -134,6 +169,17 @@ window.openMyRequestDetails = async function(docNo, docType) {
 
   content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading request details...</div></div>';
   modal.show();
+
+  // Load edit request map for this user
+  try {
+    var emUrl = API_URL + '?action=getMyEditRequests&requestor=' + encodeURIComponent(localStorage.getItem('ivm_username') || '') + '&_t=' + Date.now();
+    var emRes = await fetch(emUrl, { redirect: 'follow' });
+    var emText = await emRes.text();
+    var emData = JSON.parse(emText);
+    window._editReqMap = (emData.success && emData.map) ? emData.map : {};
+  } catch(e) {
+    window._editReqMap = {};
+  }
 
   var appUrl = window.location.origin + window.location.pathname;
   var qrData = appUrl + '?doc=' + encodeURIComponent(docNo);
@@ -222,10 +268,11 @@ window.openMyRequestDetails = async function(docNo, docType) {
   content.innerHTML =
     '<div class="text-center mb-3">' +
       '<div class="fw-bold mb-2" style="font-size:1.1rem;">' + docNo + '</div>' +
-      '<div class="mb-2">' +
+      '<div class="mb-2 d-flex justify-content-center gap-2 flex-wrap">' +
         '<button class="btn btn-sm btn-outline-primary" onclick="discussDocument(\'' + docNo + '\', \'' + (docType || 'MRIF') + '\')">' +
-          '<i class="bi bi-chat-dots me-1"></i>Discuss this request' +
+          '<i class="bi bi-chat-dots me-1"></i>Discuss' +
         '</button>' +
+        _editActionButtonHtml(docNo, docType || 'MRIF') +
       '</div>' +
       '<img id="myRequestQrImg" src="' + qrUrl + '" alt="QR" style="max-width:220px;width:100%;border:1px solid #ddd;border-radius:8px;padding:8px;background:#fff;">' +
       '<div class="mt-2">' +
@@ -269,7 +316,6 @@ window.downloadMyRequestQr = function() {
   qrImg.src = img.src;
 };
 
-// Override renderMyRequests — filter to MRIF/MRS only
 var originalRenderMyRequests = window.renderMyRequests || function() {};
 
 window.renderMyRequests = function(requests) {
@@ -338,7 +384,6 @@ window.renderMyRequests = function(requests) {
   });
 };
 
-// ─── Wrappers ───
 var originalLoadMyRequests = window.loadMyRequests || function() {};
 window.loadMyRequests = function() {
   if (typeof originalLoadMyRequests === 'function') {
@@ -353,7 +398,6 @@ window.updateWarehouseKPIs = function() {
   }
 };
 
-// ─── Test connection ───
 async function testConnection() {
   var resultDiv = document.getElementById('testResult');
   if (!resultDiv) return;
@@ -379,7 +423,6 @@ async function testConnection() {
   }
 }
 
-// ─── URL doc parameter ───
 function checkUrlDocParam() {
   var params = new URLSearchParams(window.location.search);
   var docNo = params.get('doc');
@@ -406,9 +449,7 @@ function checkUrlDocParam() {
   }
 }
 
-// ─── DOM Ready ───
 document.addEventListener('DOMContentLoaded', function() {
-  // Fill sidebar version from config.js
   var sidebarVer = document.getElementById('sidebarAppVersion');
   if (sidebarVer && typeof APP_VERSION !== 'undefined') {
     sidebarVer.textContent = 'v' + APP_VERSION;
@@ -418,7 +459,8 @@ document.addEventListener('DOMContentLoaded', function() {
     'requestSuccessModal', 'whNotifModal', 'mrifListModal', 'mrifPrintModal',
     'pendingMrifModal', 'mrrListModal', 'mrrPrintModal', 'mrsListModal',
     'mrsPrintModal', 'quickScanModal', 'roleModal', 'productionNameModal',
-    'batchVerifyModal', 'qrZoomModal', 'poScanModal', 'poItemsModal', 'loginModal'];
+    'batchVerifyModal', 'qrZoomModal', 'poScanModal', 'poItemsModal', 'loginModal',
+    'editRequestsModal', 'editRequestModal'];
 
   modalIds.forEach(function(id) {
     var el = document.getElementById(id);
@@ -444,6 +486,7 @@ document.addEventListener('DOMContentLoaded', function() {
     else if (id === 'poScanModal') state.poScanModal = new bootstrap.Modal(el);
     else if (id === 'poItemsModal') state.poItemsModal = new bootstrap.Modal(el);
     else if (id === 'loginModal') window.loginModalEl = el;
+    // editRequestsModal & editRequestModal are created lazily via getOrCreateInstance
   });
 
   if ('serviceWorker' in navigator) {
@@ -465,7 +508,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
   setTimeout(checkUrlDocParam, 1500);
 
-  // Prefetch common data during idle time
   if ('requestIdleCallback' in window) {
     requestIdleCallback(function() {
       if (typeof state !== 'undefined' && state.userRole === 'warehouse') {
