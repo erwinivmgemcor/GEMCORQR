@@ -17,11 +17,14 @@ const UNIT_OPTIONS = [
 
 // ─── Cache TTLs (milliseconds) — DEFINED ONLY HERE ──────
 const CACHE_TTL = {
-  INVENTORY: 5 * 60 * 1000,    // 5 minutes
-  VENDORS: 10 * 60 * 1000,     // 10 minutes
-  IVM_TEAM: 10 * 60 * 1000,    // 10 minutes
-  PENDING_DOCS: 1 * 60 * 1000, // 1 minute
-  REQUESTORS: 10 * 60 * 1000   // 10 minutes
+  INVENTORY: 60 * 60 * 1000,        // 60 min (was 5)
+  VENDORS: 60 * 60 * 1000,          // 60 min (was 10)
+  IVM_TEAM: 60 * 60 * 1000,         // 60 min (was 10)
+  PENDING_DOCS: 5 * 60 * 1000,      // 5 min (was 1)
+  REQUESTORS: 60 * 60 * 1000,       // 60 min (was 10)
+  DOC_ITEMS: 5 * 60 * 1000,         // 5 min — NEW
+  ANALYTICS: 5 * 60 * 1000,         // 5 min — NEW
+  MODULE_LINKS: 60 * 60 * 1000      // 60 min — NEW
 };
 
 // ─── Clear cache on version change ──────────────────────
