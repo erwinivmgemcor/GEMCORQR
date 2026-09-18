@@ -1,8 +1,9 @@
 // ============================================================
 // PENDING DOCUMENTS — MRR + MRIF + MRS
 // - PENDING → normal scanner flow
-// - PARTIAL MRR → opens Manual MRR form (editable DR/date/vendor)
+// - PARTIAL MRR → opens Manual MRR form (editable DR)
 // - PARTIAL MRIF / MRS → Bal process modal
+// All POSTs are idempotent
 // ============================================================
 
 var _pendingModal = null;
@@ -108,14 +109,11 @@ window.openPendingMrifList = async function() {
 
         if (status === 'PARTIAL') {
           if (docType === 'MRR' && typeof window.prefillManualMrrFromDoc === 'function') {
-            // ★ Partial MRR → open manual MRR form pre-filled
             setTimeout(function() { window.prefillManualMrrFromDoc(docNo); }, 300);
           } else {
-            // MRIF / MRS partial → Bal process modal
             setTimeout(function() { openPendingProcessModal(docNo, docType); }, 300);
           }
         } else {
-          // PENDING → normal scanner flow
           setTimeout(function() { openPendingNormalFlow(docNo, docType); }, 300);
         }
       });
@@ -312,16 +310,24 @@ window.submitProcessBalance = function() {
     if (!currentUser) currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || '';
     if (!currentUser) currentUser = 'WAREHOUSE';
 
+    // ★ Idempotency key — safe against slow-network double-submits
+    var idemKey = 'pb_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+
     try {
       var payload = {
-        action: 'processBalance', docType: docType,
+        action: 'processBalance',
+        _idemKey: idemKey,
+        docType: docType,
         originalDocNo: window._processPartialDocNo,
-        items: itemsPayload, processedBy: currentUser
+        items: itemsPayload,
+        processedBy: currentUser
       };
-      var res = await fetch(API_URL, {
-        method: 'POST', body: JSON.stringify(payload),
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow'
-      });
+      var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
+      var res = await fetchFn(API_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+      }, { timeout: 45000, retries: 1 });
       var text = await res.text();
       var data;
       try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
