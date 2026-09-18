@@ -6,20 +6,19 @@ var _editReqState = {
   currentUser: null,
   currentFullname: '',
   pollTimer: null,
-  badgeTimer: null
+  badgeTimer: null,
+  items: []
 };
 
 function _editReqIsMobile() {
   return window.matchMedia('(max-width: 767.98px)').matches;
 }
 
-// ─── Init (called on login / after role change) ───
 window.initEditRequests = function() {
   _editReqState.currentUser = localStorage.getItem('ivm_username') || '';
   _editReqState.currentFullname = localStorage.getItem('ivm_userFullname') || _editReqState.currentUser;
   if (!_editReqState.currentUser) return;
 
-  // Warehouse-only badge
   if (localStorage.getItem('ivm_userRole') === 'warehouse') {
     refreshEditReqBadge();
     if (_editReqState.badgeTimer) clearInterval(_editReqState.badgeTimer);
@@ -27,19 +26,15 @@ window.initEditRequests = function() {
   }
 };
 
-// Pause badge polling on hidden tab
 document.addEventListener('visibilitychange', function() {
   if (document.hidden) {
     if (_editReqState.badgeTimer) { clearInterval(_editReqState.badgeTimer); _editReqState.badgeTimer = null; }
     if (_editReqState.pollTimer) { clearInterval(_editReqState.pollTimer); _editReqState.pollTimer = null; }
   } else {
-    if (_editReqState.currentUser && localStorage.getItem('ivm_userRole') === 'warehouse') {
-      initEditRequests();
-    }
+    if (_editReqState.currentUser && localStorage.getItem('ivm_userRole') === 'warehouse') initEditRequests();
   }
 });
 
-// ─── Warehouse-side badge ───
 window.refreshEditReqBadge = async function() {
   if (localStorage.getItem('ivm_userRole') !== 'warehouse') return;
   try {
@@ -62,19 +57,14 @@ window.refreshEditReqBadge = async function() {
   } catch(e) {}
 };
 
-// ─── Warehouse opens Edit Requests modal ───
 window.openEditRequestsModal = async function() {
   var modalEl = document.getElementById('editRequestsModal');
   if (!modalEl) { showToast('Edit Requests modal not found', 'danger'); return; }
-
   var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
   var container = document.getElementById('editReqListContainer');
   if (container) container.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
-
-  // Reset filter to "All"
   var filterEl = document.getElementById('editReqFilter');
-  if (filterEl) filterEl.value = '';
-
+  if (filterEl) filterEl.value = 'PENDING';
   modal.show();
   await loadEditRequestsList();
 };
@@ -85,7 +75,6 @@ window.loadEditRequestsList = async function() {
   if (!container) return;
 
   var filter = document.getElementById('editReqFilter') ? document.getElementById('editReqFilter').value : '';
-
   container.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
   if (countEl) countEl.textContent = 'Loading...';
 
@@ -182,15 +171,10 @@ async function approveEditReqAction(editReqId) {
   if (!editReqId) return;
   if (!confirm('Approve this edit request? The production user will be able to edit their request.')) return;
   try {
-    var payload = {
-      action: 'approveEditRequest',
-      editReqId: editReqId,
-      approver: _editReqState.currentUser
-    };
+    var payload = { action: 'approveEditRequest', editReqId: editReqId, approver: _editReqState.currentUser };
     var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
     var res = await fetchFn(API_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload),
+      method: 'POST', body: JSON.stringify(payload),
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }
     }, { timeout: 30000, retries: 1 });
     var text = await res.text();
@@ -199,9 +183,7 @@ async function approveEditReqAction(editReqId) {
       showToast('Approved. Production can now edit.', 'success');
       await loadEditRequestsList();
       refreshEditReqBadge();
-    } else {
-      showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
-    }
+    } else showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
   } catch(err) { showToast('Error: ' + err.message, 'danger'); }
 }
 
@@ -211,18 +193,11 @@ async function rejectEditReqAction(editReqId) {
   if (reason === null) return;
   reason = String(reason).trim();
   if (!reason) { showToast('Rejection reason is required', 'warning'); return; }
-
   try {
-    var payload = {
-      action: 'rejectEditRequest',
-      editReqId: editReqId,
-      approver: _editReqState.currentUser,
-      reason: reason
-    };
+    var payload = { action: 'rejectEditRequest', editReqId: editReqId, approver: _editReqState.currentUser, reason: reason };
     var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
     var res = await fetchFn(API_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload),
+      method: 'POST', body: JSON.stringify(payload),
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }
     }, { timeout: 30000, retries: 1 });
     var text = await res.text();
@@ -231,17 +206,14 @@ async function rejectEditReqAction(editReqId) {
       showToast('Edit request rejected.', 'info');
       await loadEditRequestsList();
       refreshEditReqBadge();
-    } else {
-      showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
-    }
+    } else showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
   } catch(err) { showToast('Error: ' + err.message, 'danger'); }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// PRODUCTION SIDE — request edit / edit modal
+// PRODUCTION SIDE
 // ═══════════════════════════════════════════════════════════════
 
-// Fetches the map of docNo → editReq status. Cached in memory per render.
 async function _getMyEditMap() {
   try {
     var url = API_URL + '?action=getMyEditRequests&requestor=' +
@@ -263,7 +235,6 @@ window.openRequestEditModal = async function(docNo, docType) {
   _editReqState.currentUser = localStorage.getItem('ivm_username') || '';
   _editReqState.currentFullname = localStorage.getItem('ivm_userFullname') || _editReqState.currentUser;
 
-  // Verify permission first
   try {
     var permUrl = API_URL + '?action=getDocEditPermission&docNo=' + encodeURIComponent(docNo) + '&_t=' + Date.now();
     var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
@@ -279,7 +250,6 @@ window.openRequestEditModal = async function(docNo, docType) {
     return;
   }
 
-  // Load items from sheet
   var modalEl = document.getElementById('editRequestModal');
   if (!modalEl) { showToast('Edit modal not found', 'danger'); return; }
   var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
@@ -298,7 +268,8 @@ window.openRequestEditModal = async function(docNo, docType) {
               '&docType=' + docType +
               '&sheetId=' + encodeURIComponent(sheetIdClean) +
               '&_t=' + Date.now();
-    var res = await fetchFn(url, { redirect: 'follow' }, { timeout: 20000, retries: 1 });
+    var fetchFn2 = (typeof safeFetch === 'function') ? safeFetch : fetch;
+    var res = await fetchFn2(url, { redirect: 'follow' }, { timeout: 20000, retries: 1 });
     var text = await res.text();
     var data = JSON.parse(text);
     if (!data.success) throw new Error(data.error || 'Failed to load document');
@@ -306,7 +277,6 @@ window.openRequestEditModal = async function(docNo, docType) {
     var info = data.info || {};
     var items = data.items || [];
 
-    // Prefill metadata
     document.getElementById('editReqRequestor').value = info.Requestor || info.requestor || '';
     document.getElementById('editReqDepartment').value = info.Department || info.department || '';
     document.getElementById('editReqJoNo').value = info['JO No.'] || info.joNo || '';
@@ -314,7 +284,6 @@ window.openRequestEditModal = async function(docNo, docType) {
     document.getElementById('editReqClient').value = info['Client Name'] || info.clientName || '';
     document.getElementById('editReqProject').value = info.Project || info.project || '';
 
-    // Ensure inventory list is loaded for autocomplete
     if (typeof loadRequestInventory === 'function' && (!state.requestInventoryList || state.requestInventoryList.length === 0)) {
       loadRequestInventory().catch(function() {});
     }
@@ -330,7 +299,6 @@ window.openRequestEditModal = async function(docNo, docType) {
     });
 
     renderEditReqItems();
-
   } catch(err) {
     document.getElementById('editReqItemsBody').innerHTML =
       '<tr><td colspan="7" class="text-center py-3 text-danger">Failed to load: ' + _editReqEsc(err.message) + '</td></tr>';
@@ -414,7 +382,7 @@ window.editReqFilterSuggest = function(input, idx) {
       var unit = it.unit || 'PIECE';
       var el = document.createElement('div');
       el.className = 'list-group-item list-group-item-action';
-      el.style.cssText = 'padding:10px 14px;cursor:pointer;font-size:0.9rem;border-bottom:1px solid #f0f0f0;';
+      el.style.cssText = 'padding:10px 14px;cursor:pointer;font-size:0.9rem;border-bottom:1px solid #f0f0f0;background:#fff;';
       el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + _editReqEsc(code) + '</div><div class="text-muted small">' + _editReqEsc(desc) + ' <span class="badge bg-light text-dark">' + _editReqEsc(unit) + '</span></div>';
       el.onmousedown = function(e) {
         e.preventDefault();
@@ -425,7 +393,6 @@ window.editReqFilterSuggest = function(input, idx) {
     });
   }
 
-  // Position dropdown
   var rect = input.getBoundingClientRect();
   dropdown.style.left = rect.left + 'px';
   dropdown.style.width = Math.max(rect.width, 300) + 'px';
@@ -437,7 +404,6 @@ window.editReqFilterSuggest = function(input, idx) {
     dropdown.style.bottom = 'auto';
     dropdown.style.top = (rect.bottom + 2) + 'px';
   }
-
   dropdown.classList.remove('d-none');
 };
 
@@ -514,7 +480,6 @@ window.submitEditedRequest = async function() {
   }
 };
 
-// ─── Production requests permission ───
 window.requestEditPermissionFromUser = async function(docNo, docType) {
   if (!docNo) return;
   var reason = prompt('Why do you need to edit this request?', '');
@@ -551,7 +516,6 @@ window.requestEditPermissionFromUser = async function(docNo, docType) {
   } catch(err) { showToast('Error: ' + err.message, 'danger'); }
 };
 
-// ─── Helpers ───
 function _editReqEsc(s) {
   if (s === null || s === undefined) return '';
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
