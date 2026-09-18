@@ -1,8 +1,12 @@
 // ============================================================
 // NEW REQUEST FUNCTIONS
-// (Item Scanner, Remarks, Double-click protection,
-//  QR + items details modal, My Requests filtered to MRIF/MRS)
+// (Item Scanner, Remarks, Idempotency, QR + items details modal,
+//  My Requests filtered to MRIF/MRS)
 // ============================================================
+
+if (typeof state !== 'undefined' && state._reqIdemKey === undefined) {
+  state._reqIdemKey = null;
+}
 
 function openNewRequest() {
   if (state.isLoading) return;
@@ -13,6 +17,9 @@ function openNewRequest() {
 }
 
 function resetWizard() {
+  // ★ Fresh wizard → clear idempotency key
+  if (typeof state !== 'undefined') state._reqIdemKey = null;
+
   document.getElementById('reqDocType').value = '';
   document.getElementById('reqJoNo').value = '';
   document.getElementById('reqRequestor').value = '';
@@ -303,7 +310,7 @@ document.addEventListener('hidden.bs.modal', function (event) {
   if (event.target.id === 'newRequestModal') closeWizardScanner();
 });
 
-// ─── Submit New Request (with double-click protection) ───
+// ─── Submit New Request (idempotent, retries on slow network) ───
 var _isSubmittingNewRequest = false;
 
 async function submitNewRequest() {
@@ -353,48 +360,78 @@ async function submitNewRequest() {
     return;
   }
 
-  showLoading('Creating request...');
-  try {
-    var payload = {
-      action: 'createRequest',
-      docType: docType,
-      requestor: requestor,
-      department: department,
-      joNo: joNo,
-      gemSoNo: gemSoNo,
-      clientName: clientName,
-      project: project,
-      items: items,
-      timestamp: new Date().toISOString()
-    };
-    var res = await fetch(API_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      redirect: 'follow'
-    });
-    var text = await res.text();
-    var trimmed = String(text || '').trim();
-    if (!trimmed || trimmed.charAt(0) === '<') {
-      throw new Error('Server is unavailable. Please try again.');
-    }
-    var data = JSON.parse(trimmed);
-    if (data && data.success) {
-      localStorage.setItem('ivm_requestorName', requestor);
-      newRequestModal.hide();
-      showRequestQr(data.ticketNo || 'N/A', data.docNo || 'N/A');
-      var statuses = JSON.parse(localStorage.getItem('ivm_requestStatuses') || '{}');
-      statuses[data.docNo] = 'PENDING';
-      localStorage.setItem('ivm_requestStatuses', JSON.stringify(statuses));
-      loadMyRequests();
-    } else {
-      showToast('Failed: ' + ((data && data.error) || 'Unknown error'), 'danger');
-    }
-  } catch(err) {
-    showToast('Error: ' + err.message, 'danger');
-  } finally {
-    _resetSubmitState(submitBtn, origHtml);
+  // ★ Generate idempotency key once (persists across retries)
+  if (!state._reqIdemKey) {
+    state._reqIdemKey = 'req_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
   }
+
+  showLoading('Creating request...');
+
+  var payload = {
+    action: 'createRequest',
+    _idemKey: state._reqIdemKey,
+    docType: docType,
+    requestor: requestor,
+    department: department,
+    joNo: joNo,
+    gemSoNo: gemSoNo,
+    clientName: clientName,
+    project: project,
+    items: items,
+    timestamp: new Date().toISOString()
+  };
+
+  var bodyStr = JSON.stringify(payload);
+  var maxAttempts = 3;
+  var attempt = 0;
+  var lastError = null;
+
+  while (attempt < maxAttempts) {
+    attempt++;
+    try {
+      if (attempt > 1 && submitBtn) {
+        submitBtn.innerHTML = '<span class="btn-spinner"></span>Retrying (' + attempt + '/' + maxAttempts + ')...';
+      }
+      var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
+      var res = await fetchFn(API_URL, {
+        method: 'POST',
+        body: bodyStr,
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+      }, { timeout: 45000, retries: 0 });
+
+      var text = await res.text();
+      var trimmed = String(text || '').trim();
+      if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server returned invalid data');
+      var data = JSON.parse(trimmed);
+
+      if (data && data.success) {
+        state._reqIdemKey = null;
+        localStorage.setItem('ivm_requestorName', requestor);
+        newRequestModal.hide();
+        showRequestQr(data.ticketNo || 'N/A', data.docNo || 'N/A');
+        var statuses = JSON.parse(localStorage.getItem('ivm_requestStatuses') || '{}');
+        statuses[data.docNo] = 'PENDING';
+        localStorage.setItem('ivm_requestStatuses', JSON.stringify(statuses));
+        loadMyRequests();
+        _resetSubmitState(submitBtn, origHtml);
+        return;
+      } else {
+        showToast('Failed: ' + ((data && data.error) || 'Unknown error'), 'danger');
+        state._reqIdemKey = null;
+        _resetSubmitState(submitBtn, origHtml);
+        return;
+      }
+    } catch(err) {
+      lastError = err;
+      console.warn('[submitNewRequest] Attempt ' + attempt + ' failed:', err.message);
+      if (attempt < maxAttempts) {
+        await new Promise(function(r) { setTimeout(r, 1500 + attempt * 1000); });
+      }
+    }
+  }
+
+  showToast('Network is very slow. Your request was sent — check My Requests in a moment before retrying.', 'warning');
+  _resetSubmitState(submitBtn, origHtml);
 }
 
 function _resetSubmitState(btn, origHtml) {
@@ -407,6 +444,8 @@ function _resetSubmitState(btn, origHtml) {
     btn.innerHTML = origHtml || '<i class="bi bi-check-circle me-2"></i>Submit Request';
     delete btn.dataset.loading;
   }
+  // state._reqIdemKey is intentionally NOT reset here —
+  // only reset on success or server rejection.
 }
 
 // ─── QR Download / Share ───
@@ -500,10 +539,6 @@ async function loadMyRequests() {
     var data = JSON.parse(trimmed);
 
     if (data.success && data.requests) {
-      // ═══════════════════════════════════════════════════════════
-      // FILTER: Only MRIF and MRS — hide MRR from production users
-      // (MRR is a warehouse-created document, not a production request)
-      // ═══════════════════════════════════════════════════════════
       data.requests = data.requests.filter(function(req) {
         var t = (req.type || '').toUpperCase();
         return t === 'MRIF' || t === 'MRS';
@@ -568,9 +603,6 @@ function renderMyRequests(requests) {
   if (!container) return;
   container.innerHTML = '';
 
-  // ═══════════════════════════════════════════════════════════
-  // FILTER AGAIN (defense in depth — in case caller passes unfiltered)
-  // ═══════════════════════════════════════════════════════════
   var filtered = (requests || []).filter(function(req) {
     var t = (req.type || '').toUpperCase();
     return t === 'MRIF' || t === 'MRS';
@@ -922,18 +954,29 @@ async function submitManualMrif() {
     }
     if (items.length === 0) { showToast('Please add at least one valid item', 'warning'); return; }
     if (!requestor) { showToast('Please enter a requestor name', 'warning'); return; }
+
+    var idemKey = 'mmrif_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+
     var payload = {
-      action: 'createRequest', docType: 'MRIF', requestor: requestor,
-      department: department || '', joNo: joNo || '', gemSoNo: gemSoNo || '',
-      clientName: clientName || '', project: project || '',
-      items: items, timestamp: new Date().toISOString(), isManual: true
+      action: 'createRequest',
+      _idemKey: idemKey,
+      docType: 'MRIF',
+      requestor: requestor,
+      department: department || '',
+      joNo: joNo || '',
+      gemSoNo: gemSoNo || '',
+      clientName: clientName || '',
+      project: project || '',
+      items: items,
+      timestamp: new Date().toISOString(),
+      isManual: true
     };
-    var res = await fetch(API_URL, {
+    var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
+    var res = await fetchFn(API_URL, {
       method: 'POST',
       body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      redirect: 'follow'
-    });
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+    }, { timeout: 45000, retries: 1 });
     var text = await res.text();
     var trimmed = String(text || '').trim();
     if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
