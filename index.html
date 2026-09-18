@@ -453,13 +453,99 @@
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0; padding: 0;
   }
-  @media (max-width: 767.98px) {
-    .chat-wrapper { height: calc(100vh - 140px); border-radius: 0; }
-    .chat-sidebar { width: 100%; }
-    .chat-wrapper.mobile-chat-open .chat-sidebar { display: none; }
-    .chat-wrapper:not(.mobile-chat-open) .chat-main { display: none; }
-    .chat-main { width: 100%; }
-    .chat-bubble { max-width: 85%; }
+    @media (max-width: 767.98px) {
+    /* Chat wrapper: use dynamic viewport height and account for
+       the sidebar-toggle + top-bar + main padding */
+    .chat-wrapper {
+      height: calc(100dvh - 130px);
+      min-height: 400px;
+      border-radius: 8px;
+      position: relative;
+    }
+
+    /* Stack sidebar and main vertically. Only one is visible at a time */
+    .chat-sidebar {
+      width: 100%;
+      border-right: none;
+      border-radius: 8px;
+    }
+    .chat-main {
+      width: 100%;
+      border-radius: 8px;
+    }
+
+    /* When a chat is open, hide the list and show the panel */
+    .chat-wrapper.mobile-chat-open .chat-sidebar { display: none !important; }
+    .chat-wrapper.mobile-chat-open .chat-main  { display: flex !important; }
+    .chat-wrapper:not(.mobile-chat-open) .chat-main  { display: none !important; }
+    .chat-wrapper:not(.mobile-chat-open) .chat-sidebar { display: flex !important; }
+
+    /* Make sure empty state and panel take full height */
+    .chat-empty-state { padding: 24px 16px; }
+    .chat-empty-state i { font-size: 2.5rem; }
+
+    /* Chat panel header has the back button visible (d-md-none) */
+    .chat-panel-header {
+      padding: 10px 12px;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: #fff;
+    }
+    .chat-panel-header .btn-link {
+      color: var(--gemcor-blue);
+      text-decoration: none;
+      padding: 4px 8px !important;
+    }
+
+    /* Messages area: bigger padding for thumb comfort */
+    .chat-messages { padding: 12px; gap: 4px; }
+
+    /* Bubbles: near-full width */
+    .chat-bubble {
+      max-width: 85%;
+      font-size: 0.88rem;
+      padding: 8px 12px;
+    }
+    .chat-bubble-time { font-size: 0.6rem; }
+
+    /* Input row: pinned, larger tap targets */
+    .chat-input-row {
+      padding: 8px 10px;
+      gap: 6px;
+      /* Ensure it stays above mobile keyboard */
+      position: sticky;
+      bottom: 0;
+      background: #fff;
+      border-top: 1px solid var(--gemcor-border);
+    }
+    .chat-input {
+      font-size: 16px; /* prevents iOS auto-zoom */
+      padding: 10px 14px;
+      min-height: 40px;
+      max-height: 100px;
+    }
+    .chat-send-btn {
+      width: 42px;
+      height: 42px;
+      flex-shrink: 0;
+    }
+
+    /* Document banner: compact */
+    .chat-doc-banner { font-size: 0.78rem; padding: 6px 12px; }
+
+    /* Conversation list items: bigger tap zones */
+    .chat-conv-item { padding: 14px 16px; }
+
+    /* Tabs: keep full width, larger fonts */
+    .chat-tab-btn { font-size: 0.82rem; padding: 11px 6px; }
+  }
+
+  /* Ultra-small screens */
+  @media (max-width: 380px) {
+    .chat-wrapper { height: calc(100dvh - 120px); }
+    .chat-bubble { max-width: 90%; font-size: 0.85rem; }
+    .chat-conv-item { padding: 12px 12px; }
   }
 </style>
 </head>
@@ -2223,7 +2309,7 @@
 <script src="/GEMCORQR/js/analytics.js?v=3.3.0"></script>
 <script src="/GEMCORQR/js/history.js?v=3.3.0"></script>
 <script src="/GEMCORQR/js/pending.js?v=3.3.0"></script>
-<script src="/GEMCORQR/js/chat.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/chat.js?v=3.3.1"></script>
 <script src="/GEMCORQR/js/main.js?v=3.3.0"></script>
 
 </body>
