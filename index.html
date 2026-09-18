@@ -22,18 +22,7 @@
 <link rel="stylesheet" href="/GEMCORQR/style.css">
 
 <style>
-
-  .skeleton-box {
-  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
-  background-size: 200% 100%;
-  animation: skeletonShimmer 1.4s infinite;
-  border-radius: 8px;
-}
-@keyframes skeletonShimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-  
+  /* ─── SIDEBAR ─── */
   .app-wrapper { display: flex; min-height: 100vh; }
   .sidebar {
     width: 260px;
@@ -240,16 +229,8 @@
     color: #1f2937;
     width: 100%;
   }
-  .module-btn:hover {
-    border-color: var(--gemcor-blue);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-  }
-  .module-btn.active {
-    background: var(--gemcor-blue);
-    color: #fff;
-    border-color: var(--gemcor-blue);
-  }
+  .module-btn:hover { border-color: var(--gemcor-blue); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+  .module-btn.active { background: var(--gemcor-blue); color: #fff; border-color: var(--gemcor-blue); }
   .module-btn i { font-size: 1.4rem; }
 
   .scanner-container { position: relative; width: 100%; max-width: 400px; margin: 0 auto; border-radius: 12px; overflow: hidden; background: #000; }
@@ -306,48 +287,22 @@
   #qrFileInput { display: none; }
 
   .po-items-modal-dialog { max-width: 1140px; width: 96%; }
-  @media (min-width: 1400px) {
-    .po-items-modal-dialog { max-width: 1320px; }
-  }
-
-  #poItemsModal .modal-body {
-    max-height: calc(100vh - 200px);
-    overflow-y: auto;
-    padding: 20px;
-  }
-
-  .po-items-list {
-    max-height: 48vh;
-    overflow-y: auto;
-    padding: 4px;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    background: #fafbfc;
-  }
-
-  .po-items-list .po-item-card {
-    background: #fff;
-    transition: box-shadow 0.15s ease;
-  }
-  .po-items-list .po-item-card:hover {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-  }
+  @media (min-width: 1400px) { .po-items-modal-dialog { max-width: 1320px; } }
+  #poItemsModal .modal-body { max-height: calc(100vh - 200px); overflow-y: auto; padding: 20px; }
+  .po-items-list { max-height: 48vh; overflow-y: auto; padding: 4px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fafbfc; }
+  .po-items-list .po-item-card { background: #fff; transition: box-shadow 0.15s ease; }
+  .po-items-list .po-item-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
 
   @keyframes poNewFlash {
     0%   { background-color: #fef3c7; box-shadow: 0 0 0 3px rgba(245,158,11,0.5); }
     100% { background-color: #ffffff; box-shadow: 0 0 0 0 rgba(245,158,11,0); }
   }
-  .po-item-new {
-    animation: poNewFlash 2.5s ease-out;
-  }
-  .po-item-new .card-body {
-    position: relative;
-  }
+  .po-item-new { animation: poNewFlash 2.5s ease-out; }
+  .po-item-new .card-body { position: relative; }
   .po-item-new .card-body::before {
     content: 'NEW';
     position: absolute;
-    top: 6px;
-    left: 8px;
+    top: 6px; left: 8px;
     background: #f59e0b;
     color: #fff;
     font-size: 0.65rem;
@@ -363,75 +318,148 @@
     #poItemsModal .modal-body { max-height: calc(100vh - 140px); padding: 12px; }
     .po-items-list { max-height: none; border: none; background: transparent; padding: 0; }
     .po-items-list .po-item-card { padding: 8px !important; position: relative; }
-    .po-items-list .po-item-card .row.g-2 > [class*="col-"] {
-      width: 100% !important; flex: 0 0 100% !important; max-width: 100% !important;
-    }
+    .po-items-list .po-item-card .row.g-2 > [class*="col-"] { width: 100% !important; flex: 0 0 100% !important; max-width: 100% !important; }
     .po-items-list .po-item-card .btn-outline-danger { width: 100%; }
   }
-
   @media (min-width: 768px) and (max-width: 1199.98px) {
     .po-items-modal-dialog { max-width: 98%; }
     #poItemsModal .modal-body { padding: 16px; }
     .po-items-list { max-height: 45vh; }
   }
 
+  /* Analytics */
   .analytics-card { overflow: hidden; }
   .analytics-card .card-body { overflow: hidden; }
-
-  .analytics-card canvas {
-    display: block;
-    width: 100% !important;
-    height: 100% !important;
-    max-width: 100%;
-  }
-
+  .analytics-card canvas { display: block; width: 100% !important; height: 100% !important; max-width: 100%; }
   .chart-pie-legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 12px;
-    padding: 4px 4px 8px 4px;
-    font-size: 0.72rem;
-    line-height: 1.4;
-    max-height: 90px;
-    overflow-y: auto;
-    border-bottom: 1px solid #f0f0f0;
+    display: flex; flex-wrap: wrap; gap: 6px 12px;
+    padding: 4px 4px 8px 4px; font-size: 0.72rem; line-height: 1.4;
+    max-height: 90px; overflow-y: auto; border-bottom: 1px solid #f0f0f0;
   }
   .chart-pie-legend:empty { display: none; }
-
-  .chart-pie-legend-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    white-space: nowrap;
-  }
-  .chart-pie-dot {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 2px;
-    flex-shrink: 0;
-  }
-  .chart-pie-legend-item code {
-    font-size: 0.7rem;
-    background: #f1f5f9;
-    padding: 1px 5px;
-    border-radius: 3px;
-    color: #1e3a5f;
-  }
-  .chart-pie-legend-meta {
-    color: #6b7280;
-    font-weight: 600;
-    font-size: 0.68rem;
-  }
-  .chart-pie-legend-other {
-    background: #f9fafb;
-    padding: 2px 6px;
-    border-radius: 4px;
-  }
-
+  .chart-pie-legend-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .chart-pie-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  .chart-pie-legend-item code { font-size: 0.7rem; background: #f1f5f9; padding: 1px 5px; border-radius: 3px; color: #1e3a5f; }
+  .chart-pie-legend-meta { color: #6b7280; font-weight: 600; font-size: 0.68rem; }
+  .chart-pie-legend-other { background: #f9fafb; padding: 2px 6px; border-radius: 4px; }
   @media (max-width: 767.98px) {
     .chart-pie-legend { max-height: none; font-size: 0.7rem; gap: 4px 10px; }
     .chart-pie-legend-item code { font-size: 0.66rem; }
+  }
+
+  /* Skeleton */
+  .skeleton-box {
+    background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.4s infinite;
+    border-radius: 8px;
+  }
+  @keyframes skeletonShimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* ─── CHAT ─── */
+  .chat-wrapper {
+    display: flex;
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid var(--gemcor-border);
+    overflow: hidden;
+    height: calc(100vh - 180px);
+    min-height: 500px;
+  }
+  .chat-sidebar {
+    width: 340px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--gemcor-border);
+    display: flex;
+    flex-direction: column;
+    background: #fafbfc;
+  }
+  .chat-sidebar-header { border-bottom: 1px solid var(--gemcor-border); background: #fff; }
+  .chat-tabs { display: flex; }
+  .chat-tab-btn {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 12px 8px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #6c757d;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    cursor: pointer;
+  }
+  .chat-tab-btn:hover { color: var(--gemcor-blue); }
+  .chat-tab-btn.active { color: var(--gemcor-blue); border-bottom-color: var(--gemcor-blue); }
+  .chat-conv-list { flex: 1; overflow-y: auto; }
+  .chat-conv-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0f2f5;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .chat-conv-item:hover { background: #f0f4f8; }
+  .chat-conv-item.active { background: #e8f0fe; border-left: 3px solid var(--gemcor-blue); padding-left: 13px; }
+  .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #fff; }
+  .chat-empty-state {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #adb5bd; padding: 40px;
+  }
+  .chat-empty-state i { font-size: 3rem; opacity: 0.4; margin-bottom: 12px; }
+  .chat-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .chat-panel-header {
+    padding: 12px 16px; border-bottom: 1px solid var(--gemcor-border);
+    display: flex; align-items: center; background: #fff;
+  }
+  .chat-doc-banner {
+    padding: 8px 16px; background: #f0f7ff; border-bottom: 1px solid #dbeafe;
+    font-size: 0.85rem; color: #1e40af;
+  }
+  .chat-messages {
+    flex: 1; overflow-y: auto; padding: 16px; background: #f5f7fa;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .chat-bubble {
+    max-width: 72%; padding: 8px 12px; border-radius: 14px;
+    font-size: 0.9rem; line-height: 1.35; word-wrap: break-word; white-space: pre-wrap;
+  }
+  .chat-bubble-me { align-self: flex-end; background: var(--gemcor-blue); color: #fff; border-bottom-right-radius: 4px; }
+  .chat-bubble-them { align-self: flex-start; background: #fff; border: 1px solid #e5e7eb; color: #1f2937; border-bottom-left-radius: 4px; }
+  .chat-bubble-sender {
+    font-size: 0.68rem; font-weight: 700; color: var(--gemcor-blue);
+    margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .chat-bubble-time { font-size: 0.65rem; opacity: 0.7; margin-top: 3px; text-align: right; }
+  .chat-bubble-them .chat-bubble-time { color: #6c757d; opacity: 1; }
+  .chat-date-sep { text-align: center; font-size: 0.7rem; color: #6c757d; margin: 8px 0; }
+  .chat-date-sep::before, .chat-date-sep::after {
+    content: ''; display: inline-block; width: 30px; height: 1px;
+    background: #d1d5db; vertical-align: middle; margin: 0 8px;
+  }
+  .chat-input-row {
+    padding: 10px 12px; border-top: 1px solid var(--gemcor-border);
+    display: flex; gap: 8px; align-items: flex-end; background: #fff;
+  }
+  .chat-input {
+    flex: 1; border: 1px solid #dee2e6; border-radius: 20px;
+    padding: 8px 14px; font-size: 0.9rem; resize: none; outline: none;
+    max-height: 120px; font-family: inherit; line-height: 1.35;
+  }
+  .chat-input:focus { border-color: var(--gemcor-blue); }
+  .chat-send-btn {
+    border-radius: 50%; width: 40px; height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; padding: 0;
+  }
+  @media (max-width: 767.98px) {
+    .chat-wrapper { height: calc(100vh - 140px); border-radius: 0; }
+    .chat-sidebar { width: 100%; }
+    .chat-wrapper.mobile-chat-open .chat-sidebar { display: none; }
+    .chat-wrapper:not(.mobile-chat-open) .chat-main { display: none; }
+    .chat-main { width: 100%; }
+    .chat-bubble { max-width: 85%; }
   }
 </style>
 </head>
@@ -470,6 +498,10 @@
         <i class="bi bi-clock-history"></i> My Requests
         <span class="badge d-none" id="myRequestsBadgeSidebar">0</span>
       </div>
+      <div class="nav-item" data-section="messages" onclick="navigateTo('messages')">
+        <i class="bi bi-chat-dots"></i> Messages
+        <span class="badge bg-danger d-none" id="chatBadgeSidebar">0</span>
+      </div>
       <div class="nav-item" data-section="inventory" onclick="navigateTo('inventory')">
         <i class="bi bi-box-seam"></i> Inventory
       </div>
@@ -487,7 +519,7 @@
       </div>
     </nav>
     <div class="sidebar-footer">
-      <div id="appVersion">v3.1.0</div>
+      <div id="sidebarAppVersion">v2.1.0</div>
       <div id="sidebarRole" class="small">Warehouse</div>
     </div>
   </aside>
@@ -514,9 +546,7 @@
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════════ -->
-    <!-- SECTION: DASHBOARD -->
-    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- DASHBOARD -->
     <div id="section-dashboard" class="section-page active">
       <div id="productionBanner" class="production-banner d-none">
         <i class="bi bi-person-badge"></i>
@@ -606,18 +636,18 @@
           </div>
 
           <div id="analyticsLoading" class="py-4">
-  <div class="row g-3 mb-3">
-    <div class="col-6 col-md-3"><div class="skeleton-box" style="height:70px;"></div></div>
-    <div class="col-6 col-md-3"><div class="skeleton-box" style="height:70px;"></div></div>
-    <div class="col-6 col-md-3"><div class="skeleton-box" style="height:70px;"></div></div>
-    <div class="col-6 col-md-3"><div class="skeleton-box" style="height:70px;"></div></div>
-  </div>
-  <div class="skeleton-box mb-3" style="height:220px;"></div>
-  <div class="row g-3">
-    <div class="col-6"><div class="skeleton-box" style="height:300px;"></div></div>
-    <div class="col-6"><div class="skeleton-box" style="height:300px;"></div></div>
-  </div>
-</div>
+            <div class="row g-3 mb-3">
+              <div class="col-6 col-md-3"><div class="skeleton-box" style="height:70px;"></div></div>
+              <div class="col-6 col-md-3"><div class="skeleton-box" style="height:70px;"></div></div>
+              <div class="col-6 col-md-3"><div class="skeleton-box" style="height:70px;"></div></div>
+              <div class="col-6 col-md-3"><div class="skeleton-box" style="height:70px;"></div></div>
+            </div>
+            <div class="skeleton-box mb-3" style="height:220px;"></div>
+            <div class="row g-3">
+              <div class="col-6"><div class="skeleton-box" style="height:300px;"></div></div>
+              <div class="col-6"><div class="skeleton-box" style="height:300px;"></div></div>
+            </div>
+          </div>
 
           <div id="analyticsError" class="alert alert-danger d-none">
             <i class="bi bi-exclamation-triangle-fill me-2"></i>
@@ -626,7 +656,6 @@
           </div>
 
           <div id="analyticsContent" class="d-none">
-
             <div class="row g-3 mb-3">
               <div class="col-6 col-md-3">
                 <div class="card h-100 analytics-card">
@@ -719,7 +748,6 @@
                 </div>
               </div>
             </div>
-
           </div>
         </div>
       </div>
@@ -737,9 +765,7 @@
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════════ -->
-    <!-- SECTION: RELEASING (MRIF) -->
-    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- RELEASING (MRIF) -->
     <div id="section-releasing" class="section-page">
       <div id="mrifModuleContainer">
         <div id="quickScanCard" class="card mb-4 border-0 shadow-sm">
@@ -882,9 +908,7 @@
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════════ -->
-    <!-- SECTION: RECEIVING (MRR) -->
-    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- RECEIVING (MRR) -->
     <div id="section-receiving" class="section-page">
       <div id="mrrModuleContainer">
         <div id="mrrQuickScan" class="card mb-4 border-0 shadow-sm">
@@ -922,9 +946,7 @@
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════════ -->
-    <!-- SECTION: RETURNS (MRS) -->
-    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- RETURNS (MRS) -->
     <div id="section-returns" class="section-page">
       <div id="mrsModuleContainer">
         <div id="mrsListCard" class="card mb-4 border-0 shadow-sm d-none">
@@ -939,9 +961,7 @@
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════════ -->
-    <!-- SECTION: NEW REQUEST -->
-    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- NEW REQUEST -->
     <div id="section-requests" class="section-page">
       <div class="card">
         <div class="card-body text-center py-5">
@@ -961,9 +981,7 @@
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════════ -->
-    <!-- SECTION: MY REQUESTS -->
-    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- MY REQUESTS -->
     <div id="section-myrequests" class="section-page">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h5><i class="bi bi-clock-history me-2"></i>My Requests</h5>
@@ -978,9 +996,7 @@
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════════ -->
-    <!-- SECTION: INVENTORY -->
-    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- INVENTORY -->
     <div id="section-inventory" class="section-page">
       <div class="card">
         <div class="card-body text-center py-5">
@@ -994,9 +1010,7 @@
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════════ -->
-    <!-- SECTION: SETTINGS -->
-    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- SETTINGS -->
     <div id="section-settings" class="section-page">
       <div class="card">
         <div class="card-header">Settings</div>
@@ -1011,9 +1025,7 @@
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════════ -->
-    <!-- SECTION: ABOUT -->
-    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- ABOUT -->
     <div id="section-about" class="section-page">
       <div class="card">
         <div class="card-header bg-primary text-white">
@@ -1061,6 +1073,13 @@
             <li>Click any request to view the <strong>QR code</strong> and the <strong>full list of requested items</strong>.</li>
           </ul>
 
+          <h6><i class="bi bi-chat-dots"></i> Messages</h6>
+          <ul>
+            <li><strong>Chats tab</strong> – direct messages with other users.</li>
+            <li><strong>Documents tab</strong> – discussions attached to specific documents (MRIF/MRR/MRS).</li>
+            <li>Click <strong>Discuss this request</strong> on any document to open its thread.</li>
+          </ul>
+
           <hr>
           <div class="text-center mt-4">
             <p class="mt-2">
@@ -1072,6 +1091,52 @@
             <p class="small text-muted">© 2026 GEMCOR WMS – All rights reserved.</p>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- MESSAGES -->
+    <div id="section-messages" class="section-page">
+      <div class="chat-wrapper" id="chatWrapper">
+        <aside class="chat-sidebar" id="chatSidebar">
+          <div class="chat-sidebar-header">
+            <div class="chat-tabs">
+              <button class="chat-tab-btn active" data-tab="chats" onclick="switchChatTab('chats')">
+                <i class="bi bi-people me-1"></i>Chats
+              </button>
+              <button class="chat-tab-btn" data-tab="documents" onclick="switchChatTab('documents')">
+                <i class="bi bi-file-earmark-text me-1"></i>Documents
+              </button>
+            </div>
+          </div>
+          <div class="chat-conv-list" id="chatConversationList">
+            <div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
+          </div>
+        </aside>
+
+        <main class="chat-main">
+          <div class="chat-empty-state" id="chatEmptyState">
+            <i class="bi bi-chat-square-dots"></i>
+            <h5>Select a conversation</h5>
+            <p class="text-muted small mb-0">Pick a chat or document thread to start.</p>
+          </div>
+
+          <div class="chat-panel" id="chatPanel" style="display:none;">
+            <div class="chat-panel-header">
+              <button class="btn btn-sm btn-link p-0 d-md-none me-2" id="chatBackBtn" title="Back">
+                <i class="bi bi-arrow-left fs-5"></i>
+              </button>
+              <div class="fw-bold flex-grow-1" id="chatWithName">Chat</div>
+            </div>
+            <div id="chatDocBanner" class="chat-doc-banner" style="display:none;"></div>
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="chat-input-row">
+              <textarea id="chatInput" class="chat-input" placeholder="Type a message..." rows="1" maxlength="500"></textarea>
+              <button class="btn btn-primary chat-send-btn" id="chatSendBtn" title="Send">
+                <i class="bi bi-send-fill"></i>
+              </button>
+            </div>
+          </div>
+        </main>
       </div>
     </div>
 
@@ -1203,7 +1268,7 @@
             <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllPoItems(true)">
               <i class="bi bi-check-all me-1"></i>All
             </button>
-            <button type="button" class="btn btn-sm btn-outline-warning" onclick="restorePoItems()" title="Undo all Clears and reset to original PO items">
+            <button type="button" class="btn btn-sm btn-outline-warning" onclick="restorePoItems()">
               <i class="bi bi-arrow-counterclockwise me-1"></i>Restore PO Items
             </button>
             <button type="button" class="btn btn-sm btn-success" onclick="addPoManualItem()">
@@ -1414,7 +1479,7 @@
           </div>
         </div>
         <div class="mt-2 text-center text-muted small">
-          <span id="appVersion">v3.1.0</span>
+          <span id="appVersion">v2.1.0</span>
         </div>
       </div>
       <div class="modal-footer">
@@ -2143,22 +2208,23 @@
   });
 </script>
 
-<script src="/GEMCORQR/js/config.js?v=3.0.0"></script>
-<script src="/GEMCORQR/js/net.js?v=3.0.1"></script>
-<script src="/GEMCORQR/js/cache.js?v=3.0.0"></script>
-<script src="/GEMCORQR/js/utils.js?v=2.5.0"></script>
-<script src="/GEMCORQR/js/state.js?v=2.5.0"></script>
-<script src="/GEMCORQR/js/auth.js?v=2.5.0"></script>
-<script src="/GEMCORQR/js/scanner.js?v=2.5.0"></script>
-<script src="/GEMCORQR/js/warehouse.js?v=3.1.0"></script>
-<script src="/GEMCORQR/js/requests.js?v=3.1.0"></script>
-<script src="/GEMCORQR/js/inventory.js?v=2.5.0"></script>
-<script src="/GEMCORQR/js/prints.js?v=2.7.0"></script>
-<script src="/GEMCORQR/js/notifications.js?v=2.5.3"></script>
-<script src="/GEMCORQR/js/analytics.js?v=2.9.0"></script>
-<script src="/GEMCORQR/js/history.js?v=2.5.0"></script>
-<script src="/GEMCORQR/js/pending.js?v=3.1.0"></script>
-<script src="/GEMCORQR/js/main.js?v=2.5.0"></script>
+<script src="/GEMCORQR/js/config.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/net.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/cache.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/utils.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/state.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/auth.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/scanner.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/warehouse.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/requests.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/inventory.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/prints.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/notifications.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/analytics.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/history.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/pending.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/chat.js?v=3.3.0"></script>
+<script src="/GEMCORQR/js/main.js?v=3.3.0"></script>
 
 </body>
 </html>
