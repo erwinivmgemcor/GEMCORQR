@@ -1,5 +1,5 @@
 // ============================================================
-// CHAT — Document-attached + General DMs
+// CHAT — Document-attached + General DMs (mobile-ready)
 // ============================================================
 
 var _chatState = {
@@ -13,6 +13,20 @@ var _chatState = {
   badgeTimer: null,
   lastMsgTs: 0
 };
+
+function _isMobileChat() {
+  return window.matchMedia('(max-width: 767.98px)').matches;
+}
+
+function _chatShowPanel() {
+  var wrapper = document.getElementById('chatWrapper');
+  if (wrapper) wrapper.classList.add('mobile-chat-open');
+}
+
+function _chatShowList() {
+  var wrapper = document.getElementById('chatWrapper');
+  if (wrapper) wrapper.classList.remove('mobile-chat-open');
+}
 
 window.initChat = function() {
   _chatState.currentUser = localStorage.getItem('ivm_username') || '';
@@ -33,6 +47,17 @@ document.addEventListener('visibilitychange', function() {
       if (_chatState.openType === 'user') openDmConversation(_chatState.openWith);
       else if (_chatState.openType === 'doc') openDocConversation(_chatState.openWith, _chatState.openDocType);
     }
+  }
+});
+
+// If screen resizes past mobile breakpoint while chat open, reset the panel state
+window.addEventListener('resize', function() {
+  var wrapper = document.getElementById('chatWrapper');
+  if (!wrapper) return;
+  if (!_isMobileChat()) {
+    wrapper.classList.remove('mobile-chat-open');
+  } else if (_chatState.openWith) {
+    wrapper.classList.add('mobile-chat-open');
   }
 });
 
@@ -60,10 +85,22 @@ window.refreshChatBadge = async function() {
 window.openChatSection = function() {
   _chatState.currentUser = localStorage.getItem('ivm_username') || '';
   _chatState.currentFullname = localStorage.getItem('ivm_userFullname') || _chatState.currentUser;
+
   var emptyEl = document.getElementById('chatEmptyState');
   var panelEl = document.getElementById('chatPanel');
+
+  // On mobile, always start on the list unless a conversation was already open
+  if (_isMobileChat()) {
+    if (_chatState.openWith) {
+      _chatShowPanel();
+    } else {
+      _chatShowList();
+    }
+  }
+
   if (emptyEl) emptyEl.style.display = _chatState.openWith ? 'none' : '';
   if (panelEl) panelEl.style.display = _chatState.openWith ? '' : 'none';
+
   loadChatList();
   refreshChatBadge();
 };
@@ -169,6 +206,10 @@ window.openDmConversation = async function(otherUsername) {
   _chatState.openType = 'user';
   _chatState.openDocType = null;
   _chatState.lastMsgTs = 0;
+
+  // ★ Mobile: show chat panel
+  if (_isMobileChat()) _chatShowPanel();
+
   document.querySelectorAll('.chat-conv-item').forEach(function(el) {
     el.classList.toggle('active', el.getAttribute('data-username') === otherUsername);
   });
@@ -176,6 +217,7 @@ window.openDmConversation = async function(otherUsername) {
   var panelEl = document.getElementById('chatPanel');
   if (emptyEl) emptyEl.style.display = 'none';
   if (panelEl) panelEl.style.display = '';
+
   var fullname = otherUsername;
   document.querySelectorAll('.chat-conv-item').forEach(function(el) {
     if (el.getAttribute('data-username') === otherUsername) {
@@ -189,14 +231,17 @@ window.openDmConversation = async function(otherUsername) {
   if (docBanner) docBanner.style.display = 'none';
   var messagesEl = document.getElementById('chatMessages');
   if (messagesEl) messagesEl.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>';
+
   var readUrl = API_URL + '?action=markConversationRead&username=' + encodeURIComponent(_chatState.currentUser) + '&with=' + encodeURIComponent(otherUsername) + '&_t=' + Date.now();
   var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
   fetchFn(readUrl, { redirect: 'follow' }, { timeout: 15000, retries: 0 }).catch(function() {});
   await loadDmMessages(otherUsername, 0, false);
+
   setTimeout(function() {
     var input = document.getElementById('chatInput');
-    if (input && window.innerWidth > 768) input.focus();
+    if (input) input.focus();
   }, 300);
+
   if (_chatState.pollTimer) clearInterval(_chatState.pollTimer);
   _chatState.pollTimer = setInterval(function() {
     if (_chatState.openWith && _chatState.openType === 'user') loadDmMessages(_chatState.openWith, _chatState.lastMsgTs, true);
@@ -209,6 +254,10 @@ window.openDocConversation = async function(docNo, docType) {
   _chatState.openType = 'doc';
   _chatState.openDocType = docType || '';
   _chatState.lastMsgTs = 0;
+
+  // ★ Mobile: show chat panel
+  if (_isMobileChat()) _chatShowPanel();
+
   document.querySelectorAll('.chat-conv-item').forEach(function(el) {
     el.classList.toggle('active', el.getAttribute('data-doc') === docNo);
   });
@@ -225,14 +274,17 @@ window.openDocConversation = async function(docNo, docType) {
   }
   var messagesEl = document.getElementById('chatMessages');
   if (messagesEl) messagesEl.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>';
+
   var readUrl = API_URL + '?action=markDocThreadRead&docNo=' + encodeURIComponent(docNo) + '&username=' + encodeURIComponent(_chatState.currentUser) + '&_t=' + Date.now();
   var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
   fetchFn(readUrl, { redirect: 'follow' }, { timeout: 15000, retries: 0 }).catch(function() {});
   await loadDocMessages(docNo, 0, false);
+
   setTimeout(function() {
     var input = document.getElementById('chatInput');
-    if (input && window.innerWidth > 768) input.focus();
+    if (input) input.focus();
   }, 300);
+
   if (_chatState.pollTimer) clearInterval(_chatState.pollTimer);
   _chatState.pollTimer = setInterval(function() {
     if (_chatState.openWith && _chatState.openType === 'doc') loadDocMessages(_chatState.openWith, _chatState.lastMsgTs, true);
@@ -244,6 +296,10 @@ window.closeChatConversation = function() {
   _chatState.openWith = null;
   _chatState.openType = null;
   if (_chatState.pollTimer) { clearInterval(_chatState.pollTimer); _chatState.pollTimer = null; }
+
+  // ★ Mobile: back to list
+  if (_isMobileChat()) _chatShowList();
+
   var emptyEl = document.getElementById('chatEmptyState');
   var panelEl = document.getElementById('chatPanel');
   if (emptyEl) emptyEl.style.display = '';
@@ -414,4 +470,4 @@ document.addEventListener('DOMContentLoaded', function() {
   if (backBtn) backBtn.addEventListener('click', closeChatConversation);
 });
 
-console.log('✅ chat.js loaded');
+console.log('✅ chat.js loaded (mobile-ready)');
