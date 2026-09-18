@@ -14,32 +14,18 @@ window.applySidebarRole = function(role) {
       : (state.currentUser ? state.currentUserFullname : 'Warehouse');
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // SIDEBAR VISIBILITY RULES
-  // ──────────────────────────────────────────────────────────
-  // Warehouse-only items:  Dashboard, Releasing, Receiving, Returns
-  // Production-only items: New Request, My Requests
-  // Shared items:          Inventory, Settings, About, Logout
-  // Both-mode only:        Switch Mode (handled separately)
-  // ═══════════════════════════════════════════════════════════
-
   var warehouseNavItems = ['dashboard', 'releasing', 'receiving', 'returns'];
   var productionNavItems = ['requests', 'myrequests'];
 
   document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
     var section = el.dataset.section;
-
-    // Skip the Switch Mode item (handled by applyRoleUI)
     if (section === 'switchmode') return;
 
     if (warehouseNavItems.indexOf(section) !== -1) {
-      // Show only for warehouse mode
       el.style.display = isProduction ? 'none' : 'flex';
     } else if (productionNavItems.indexOf(section) !== -1) {
-      // Show only for production mode
       el.style.display = isProduction ? 'flex' : 'none';
     } else {
-      // Shared: always show (Inventory, Settings, About, Logout)
       el.style.display = 'flex';
     }
   });
@@ -78,6 +64,7 @@ function navigateTo(sectionId) {
     returns: 'Returns (MRS)',
     requests: 'New Request',
     myrequests: 'My Requests',
+    messages: 'Messages',
     inventory: 'Inventory',
     settings: 'Settings',
     about: 'About / Instructions'
@@ -111,6 +98,10 @@ function navigateTo(sectionId) {
   if (sectionId === 'myrequests') {
     if (typeof loadMyRequests === 'function') setTimeout(loadMyRequests, 100);
   }
+
+  if (sectionId === 'messages') {
+    if (typeof openChatSection === 'function') setTimeout(openChatSection, 50);
+  }
 }
 
 function toggleSidebar(open) {
@@ -125,9 +116,7 @@ function toggleSidebar(open) {
   }
 }
 
-// ══════════════════════════════════════════════════════════════
-// OPEN MY REQUEST DETAILS
-// ══════════════════════════════════════════════════════════════
+// ─── My Request Details ───
 window.openMyRequestDetails = async function(docNo, docType) {
   var modalEl = document.getElementById('myRequestDetailsModal');
   if (!modalEl) {
@@ -233,6 +222,11 @@ window.openMyRequestDetails = async function(docNo, docType) {
   content.innerHTML =
     '<div class="text-center mb-3">' +
       '<div class="fw-bold mb-2" style="font-size:1.1rem;">' + docNo + '</div>' +
+      '<div class="mb-2">' +
+        '<button class="btn btn-sm btn-outline-primary" onclick="discussDocument(\'' + docNo + '\', \'' + (docType || 'MRIF') + '\')">' +
+          '<i class="bi bi-chat-dots me-1"></i>Discuss this request' +
+        '</button>' +
+      '</div>' +
       '<img id="myRequestQrImg" src="' + qrUrl + '" alt="QR" style="max-width:220px;width:100%;border:1px solid #ddd;border-radius:8px;padding:8px;background:#fff;">' +
       '<div class="mt-2">' +
         '<button class="btn btn-sm btn-success" onclick="downloadMyRequestQr()"><i class="bi bi-download me-1"></i>Download QR</button>' +
@@ -275,13 +269,10 @@ window.downloadMyRequestQr = function() {
   qrImg.src = img.src;
 };
 
-// ─── Override renderMyRequests — filter to MRIF/MRS only ────
+// Override renderMyRequests — filter to MRIF/MRS only
 var originalRenderMyRequests = window.renderMyRequests || function() {};
 
 window.renderMyRequests = function(requests) {
-  // ═══════════════════════════════════════════════════════════
-  // FILTER: Only show MRIF and MRS — MRR is warehouse-created
-  // ═══════════════════════════════════════════════════════════
   requests = (requests || []).filter(function(req) {
     var t = (req.type || '').toUpperCase();
     return t === 'MRIF' || t === 'MRS';
@@ -417,21 +408,18 @@ function checkUrlDocParam() {
 
 // ─── DOM Ready ───
 document.addEventListener('DOMContentLoaded', function() {
+  // Fill sidebar version from config.js
+  var sidebarVer = document.getElementById('sidebarAppVersion');
+  if (sidebarVer && typeof APP_VERSION !== 'undefined') {
+    sidebarVer.textContent = 'v' + APP_VERSION;
+  }
+
   var modalIds = ['qtyModal', 'successModal', 'settingsModal', 'newRequestModal',
     'requestSuccessModal', 'whNotifModal', 'mrifListModal', 'mrifPrintModal',
     'pendingMrifModal', 'mrrListModal', 'mrrPrintModal', 'mrsListModal',
     'mrsPrintModal', 'quickScanModal', 'roleModal', 'productionNameModal',
     'batchVerifyModal', 'qrZoomModal', 'poScanModal', 'poItemsModal', 'loginModal'];
-// Prefetch common data during idle time
-if ('requestIdleCallback' in window) {
-  requestIdleCallback(function() {
-    if (typeof state !== 'undefined' && state.userRole === 'warehouse') {
-      if (typeof loadRequestInventory === 'function') loadRequestInventory().catch(function(){});
-      if (typeof loadVendorList === 'function') loadVendorList().catch(function(){});
-      if (typeof loadIvmTeamList === 'function') loadIvmTeamList().catch(function(){});
-    }
-  }, { timeout: 3000 });
-}
+
   modalIds.forEach(function(id) {
     var el = document.getElementById(id);
     if (!el) return;
@@ -476,6 +464,17 @@ if ('requestIdleCallback' in window) {
   if (dateInput) dateInput.valueAsDate = new Date();
 
   setTimeout(checkUrlDocParam, 1500);
+
+  // Prefetch common data during idle time
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(function() {
+      if (typeof state !== 'undefined' && state.userRole === 'warehouse') {
+        if (typeof loadRequestInventory === 'function') loadRequestInventory().catch(function(){});
+        if (typeof loadVendorList === 'function') loadVendorList().catch(function(){});
+        if (typeof loadIvmTeamList === 'function') loadIvmTeamList().catch(function(){});
+      }
+    }, { timeout: 3000 });
+  }
 
   document.addEventListener('click', function(e) {
     var sidebar = document.getElementById('sidebar');
