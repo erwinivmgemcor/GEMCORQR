@@ -422,7 +422,16 @@ document.addEventListener('DOMContentLoaded', function() {
     'pendingMrifModal', 'mrrListModal', 'mrrPrintModal', 'mrsListModal',
     'mrsPrintModal', 'quickScanModal', 'roleModal', 'productionNameModal',
     'batchVerifyModal', 'qrZoomModal', 'poScanModal', 'poItemsModal', 'loginModal'];
-
+// Prefetch common data during idle time
+if ('requestIdleCallback' in window) {
+  requestIdleCallback(function() {
+    if (typeof state !== 'undefined' && state.userRole === 'warehouse') {
+      if (typeof loadRequestInventory === 'function') loadRequestInventory().catch(function(){});
+      if (typeof loadVendorList === 'function') loadVendorList().catch(function(){});
+      if (typeof loadIvmTeamList === 'function') loadIvmTeamList().catch(function(){});
+    }
+  }, { timeout: 3000 });
+}
   modalIds.forEach(function(id) {
     var el = document.getElementById(id);
     if (!el) return;
