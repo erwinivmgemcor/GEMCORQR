@@ -3,10 +3,54 @@
 // - PENDING → normal scanner flow
 // - PARTIAL MRR → opens Manual MRR form (editable DR)
 // - PARTIAL MRIF / MRS → Bal process modal
-// All POSTs are idempotent
+// - Prep Status coloring: Red=NEW, Green=PREPARED, Yellow=PICKED_UP
 // ============================================================
 
 var _pendingModal = null;
+var _pendingPrepMap = {};
+
+function _prepClass(status) {
+  var s = String(status || 'NEW').toUpperCase();
+  if (s === 'PREPARED') return 'prep-prepared';
+  if (s === 'PICKED_UP') return 'prep-pickedup';
+  return 'prep-new';
+}
+
+function _prepLabel(status) {
+  var s = String(status || 'NEW').toUpperCase();
+  if (s === 'PREPARED') return 'PREPARED';
+  if (s === 'PICKED_UP') return 'PICKED UP';
+  return 'NOT PREPARED';
+}
+
+function _prepIcon(status) {
+  var s = String(status || 'NEW').toUpperCase();
+  if (s === 'PREPARED') return 'bi-check-circle-fill';
+  if (s === 'PICKED_UP') return 'bi-box-arrow-up-right';
+  return 'bi-exclamation-circle-fill';
+}
+
+// Action button per prep status (warehouse only)
+function _prepActionButton(docNo, prepStatus) {
+  var s = String(prepStatus || 'NEW').toUpperCase();
+  var safeDoc = String(docNo).replace(/'/g, "\\'");
+  if (s === 'NEW') {
+    return '<button class="btn btn-sm btn-success btn-prep-action" ' +
+      'onclick="event.stopPropagation();markPrepStatus(\'' + safeDoc + '\', \'PREPARED\')" ' +
+      'title="Mark this MRIF as prepared / ready for pickup">' +
+      '<i class="bi bi-check-circle me-1"></i>Mark Prepared' +
+    '</button>';
+  }
+  if (s === 'PREPARED') {
+    return '<button class="btn btn-sm btn-warning btn-prep-action" ' +
+      'onclick="event.stopPropagation();markPrepStatus(\'' + safeDoc + '\', \'PICKED_UP\')" ' +
+      'title="Mark this MRIF as picked up by production">' +
+      '<i class="bi bi-box-arrow-up-right me-1"></i>Mark Picked Up' +
+    '</button>';
+  }
+  // PICKED_UP — no further action
+  return '<span class="text-muted small"><i class="bi bi-check2-all me-1"></i>Done</span>';
+}
 
 window.openPendingMrifList = async function() {
   var modalEl = document.getElementById('pendingMrifModal');
@@ -14,7 +58,7 @@ window.openPendingMrifList = async function() {
   if (!_pendingModal) _pendingModal = new bootstrap.Modal(modalEl);
 
   var titleEl = modalEl.querySelector('.modal-title');
-  if (titleEl) titleEl.innerHTML = '<i class="bi bi-clock-history me-2"></i>Pending & Partial Documents';
+  if (titleEl) titleEl.innerHTML = '<i class="bi bi-clock-history me-2"></i>Pending &amp; Partial Documents';
 
   var container = document.getElementById('pendingMrifListContainer');
   if (container) {
@@ -24,15 +68,27 @@ window.openPendingMrifList = async function() {
   }
   _pendingModal.show();
 
+  // Fetch documents AND prep statuses in parallel
   try {
-    var url = API_URL + '?action=getAllPendingDocs&_t=' + Date.now();
-    var res = await fetch(url, { redirect: 'follow' });
-    var text = await res.text();
-    var trimmed = String(text || '').trim();
-    if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
-    var data = JSON.parse(trimmed);
+    var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
 
-    var docs = (data && data.documents) || [];
+    var docsUrl = API_URL + '?action=getAllPendingDocs&_t=' + Date.now();
+    var prepUrl = API_URL + '?action=getPrepStatuses&_t=' + Date.now();
+
+    var results = await Promise.all([
+      fetchFn(docsUrl, { redirect: 'follow' }, { timeout: 20000, retries: 1 }),
+      fetchFn(prepUrl, { redirect: 'follow' }, { timeout: 20000, retries: 1 })
+    ]);
+
+    var docsText = await results[0].text();
+    var prepText = await results[1].text();
+
+    var docsData = JSON.parse(docsText);
+    var prepData = JSON.parse(prepText);
+
+    _pendingPrepMap = (prepData && prepData.success && prepData.statuses) ? prepData.statuses : {};
+
+    var docs = (docsData && docsData.documents) || [];
 
     if (!container) return;
     if (docs.length === 0) {
@@ -52,9 +108,11 @@ window.openPendingMrifList = async function() {
       return extractDocNumPending(b.docNo) - extractDocNumPending(a.docNo);
     });
 
+    var isWarehouse = (localStorage.getItem('ivm_userRole') === 'warehouse');
+
     var html = '<div class="list-group-item bg-light d-flex justify-content-between align-items-center">' +
       '<span class="fw-bold">Document</span>' +
-      '<span class="fw-bold">Action</span>' +
+      '<span class="fw-bold">' + (isWarehouse ? 'Prep Action' : 'Status') + '</span>' +
       '</div>';
 
     docs.forEach(function(d) {
@@ -63,44 +121,56 @@ window.openPendingMrifList = async function() {
       var status = (d.status || '').toUpperCase();
       var isBal = !!d.isBal || docNo.toUpperCase().indexOf('BAL.') === 0;
 
+      var prepEntry = _pendingPrepMap[docNo] || { prepStatus: 'NEW' };
+      var prepStatus = prepEntry.prepStatus || 'NEW';
+      var prepClass = _prepClass(prepStatus);
+      var prepLabel = _prepLabel(prepStatus);
+      var prepIcon = _prepIcon(prepStatus);
+
       var typeBadgeClass = docType === 'MRIF' ? 'bg-warning text-dark' :
                            docType === 'MRR' ? 'bg-success' :
                            docType === 'MRS' ? 'bg-danger' : 'bg-secondary';
-      var statusBadgeClass = status === 'PARTIAL' ? 'bg-info text-dark' : 'bg-warning text-dark';
+      var statusBadgeClass = status === 'PARTIAL' ? 'bg-info text-dark' : 'bg-secondary';
 
       var badge = '<span class="badge ' + typeBadgeClass + ' me-2">' + escapeHtmlPending(docType) + '</span>';
       var balTag = isBal ? ' <span class="badge bg-info text-dark">BAL</span>' : '';
       var statusTag = ' <span class="badge ' + statusBadgeClass + '">' + escapeHtmlPending(status) + '</span>';
-      var icon = isBal ? 'bi-layers-fill text-info' : 'bi-file-earmark-text text-warning';
+      var prepTag = ' <span class="prep-badge"><i class="bi ' + prepIcon + ' me-1"></i>' + prepLabel + '</span>';
 
       var requestorInfo = d.requestor
         ? '<div class="small text-muted ms-4"><i class="bi bi-person me-1"></i>' + escapeHtmlPending(d.requestor) + '</div>'
         : '';
 
-      var actionLabel = status === 'PARTIAL' ? 'Process Balance' : 'Process';
-      var actionIcon = status === 'PARTIAL' ? 'bi-arrow-right-circle' : 'bi-play-circle';
+      // For warehouse users, show the prep action button
+      var rightSide;
+      if (isWarehouse) {
+        rightSide = _prepActionButton(docNo, prepStatus);
+      } else {
+        rightSide = '<span class="prep-badge"><i class="bi ' + prepIcon + ' me-1"></i>' + prepLabel + '</span>';
+      }
 
-      html += '<div class="list-group-item pending-mrif-item"' +
+      html += '<div class="list-group-item pending-mrif-item ' + prepClass + '"' +
         ' data-docno="' + escapeHtmlPending(docNo) + '"' +
         ' data-doctype="' + escapeHtmlPending(docType) + '"' +
         ' data-status="' + escapeHtmlPending(status) + '">' +
-        '<div class="d-flex justify-content-between align-items-center">' +
-          '<div class="flex-grow-1">' +
-            '<i class="bi ' + icon + ' me-2"></i>' +
+        '<div class="d-flex justify-content-between align-items-center flex-wrap gap-2">' +
+          '<div class="flex-grow-1" style="min-width:0;">' +
+            '<i class="bi bi-file-earmark-text me-2"></i>' +
             badge +
-            '<strong>' + escapeHtmlPending(docNo) + '</strong>' + balTag + statusTag +
+            '<strong>' + escapeHtmlPending(docNo) + '</strong>' + balTag + statusTag + prepTag +
             requestorInfo +
           '</div>' +
-          '<button class="btn btn-sm btn-dark btn-process-balance">' +
-            '<i class="bi ' + actionIcon + ' me-1"></i>' + actionLabel +
-          '</button>' +
+          '<div class="flex-shrink-0">' + rightSide + '</div>' +
         '</div>' +
       '</div>';
     });
     container.innerHTML = html;
 
+    // Row click → process document (not the buttons)
     container.querySelectorAll('.pending-mrif-item').forEach(function(el) {
-      el.addEventListener('click', function() {
+      el.addEventListener('click', function(ev) {
+        // If click was on the prep action button or its children, ignore
+        if (ev.target.closest('.btn-prep-action')) return;
         var docNo = this.getAttribute('data-docno');
         var docType = this.getAttribute('data-doctype');
         var status = (this.getAttribute('data-status') || '').toUpperCase();
@@ -126,6 +196,40 @@ window.openPendingMrifList = async function() {
         '<i class="bi bi-exclamation-triangle-fill me-2"></i>Failed to load: ' + escapeHtmlPending(err.message) +
         '</div>';
     }
+  }
+};
+
+// ─── Set prep status from the app ───
+window.markPrepStatus = async function(docNo, newStatus) {
+  if (!docNo || !newStatus) return;
+  var confirmMsg = newStatus === 'PREPARED'
+    ? 'Mark ' + docNo + ' as PREPARED?\n\nThis means the items are physically ready and awaiting pickup by production.'
+    : 'Mark ' + docNo + ' as PICKED UP?\n\nThis means production has taken the items.';
+  if (!confirm(confirmMsg)) return;
+
+  var user = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
+  try {
+    var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
+    var res = await fetchFn(API_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'setPrepStatus',
+        docNo: docNo,
+        prepStatus: newStatus,
+        updatedBy: user
+      }),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+    }, { timeout: 30000, retries: 1 });
+    var text = await res.text();
+    var data = JSON.parse(text);
+    if (data.success) {
+      showToast('Updated to ' + newStatus.replace('_', ' '), 'success');
+      openPendingMrifList(); // refresh
+    } else {
+      showToast(data.error || 'Failed to update', 'danger');
+    }
+  } catch(e) {
+    showToast('Error: ' + e.message, 'danger');
   }
 };
 
@@ -195,7 +299,8 @@ window.openPendingProcessModal = async function(docNo, docType) {
               '&docType=' + encodeURIComponent(docType) +
               '&sheetId=' + encodeURIComponent(sheetId) +
               '&_t=' + Date.now();
-    var res = await fetch(url, { redirect: 'follow' });
+    var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
+    var res = await fetchFn(url, { redirect: 'follow' }, { timeout: 20000, retries: 1 });
     var text = await res.text();
     var trimmed = String(text || '').trim();
     if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
@@ -310,7 +415,6 @@ window.submitProcessBalance = function() {
     if (!currentUser) currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || '';
     if (!currentUser) currentUser = 'WAREHOUSE';
 
-    // ★ Idempotency key — safe against slow-network double-submits
     var idemKey = 'pb_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
 
     try {
