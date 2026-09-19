@@ -2,6 +2,17 @@
 // MAIN - DOM Ready & Initialization
 // ============================================================
 
+// Local HTML escaper (defensive — sheet/user data rendered into innerHTML)
+function _escMain(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 window.applySidebarRole = function(role) {
   var isProduction = (role === 'production');
   var isWarehouse = (role === 'warehouse');
@@ -170,7 +181,6 @@ window.openMyRequestDetails = async function(docNo, docType) {
   content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading request details...</div></div>';
   modal.show();
 
-  // Load edit request map for this user
   try {
     var emUrl = API_URL + '?action=getMyEditRequests&requestor=' + encodeURIComponent(localStorage.getItem('ivm_username') || '') + '&_t=' + Date.now();
     var emRes = await fetch(emUrl, { redirect: 'follow' });
@@ -207,13 +217,16 @@ window.openMyRequestDetails = async function(docNo, docType) {
       var info = data.info || {};
       var items = data.items || [];
 
-      var requestor = info.Requestor || info.requestor || '';
-      var dept = info.Department || info.department || '';
-      var dateStr = info.Date || info.date || info['Date Prepared'] || '';
-      var joNo = info['JO No.'] || info.joNo || '';
-      var gemSo = info['GEM SO No.'] || info.gemSoNo || '';
-      var client = info['Client Name'] || info.clientName || '';
-      var project = info.Project || info.project || '';
+      // ✅ Escaped values
+      var requestor = _escMain(info.Requestor || info.requestor || '');
+      var dept = _escMain(info.Department || info.department || '');
+      var dateStr = _escMain(info.Date || info.date || info['Date Prepared'] || '');
+      var joNo = _escMain(info['JO No.'] || info.joNo || '');
+      var gemSo = _escMain(info['GEM SO No.'] || info.gemSoNo || '');
+      var client = _escMain(info['Client Name'] || info.clientName || '');
+      var project = _escMain(info.Project || info.project || '');
+      var safeDocType = _escMain(docType || 'MRIF');
+      var safeDocNo = _escMain(docNo);
 
       metaHtml = '<div class="row g-2 mb-3">' +
         (requestor ? '<div class="col-md-6"><strong>Requestor:</strong> ' + requestor + '</div>' : '') +
@@ -223,7 +236,7 @@ window.openMyRequestDetails = async function(docNo, docType) {
         (gemSo ? '<div class="col-md-6"><strong>GEM SO No.:</strong> ' + gemSo + '</div>' : '') +
         (client ? '<div class="col-md-6"><strong>Client:</strong> ' + client + '</div>' : '') +
         (project ? '<div class="col-md-6"><strong>Project:</strong> ' + project + '</div>' : '') +
-        '<div class="col-md-6"><strong>Type:</strong> <span class="badge bg-secondary">' + (docType || 'MRIF') + '</span></div>' +
+        '<div class="col-md-6"><strong>Type:</strong> <span class="badge bg-secondary">' + safeDocType + '</span></div>' +
         '</div>';
 
       if (items.length > 0) {
@@ -239,11 +252,11 @@ window.openMyRequestDetails = async function(docNo, docType) {
           '</tr></thead><tbody>';
 
         items.forEach(function(it, idx) {
-          var code = it.inventoryId || it.itemCode || it.code || '';
-          var desc = it.description || it.desc || '';
+          var code = _escMain(it.inventoryId || it.itemCode || it.code || '');
+          var desc = _escMain(it.description || it.desc || '');
           var qty = it.expectedQty || it.qty || it.requestedQty || 0;
-          var unit = it.unit || 'PIECE';
-          var remarks = it.remarks || 'PENDING';
+          var unit = _escMain(it.unit || 'PIECE');
+          var remarks = _escMain(it.remarks || 'PENDING');
           itemsHtml += '<tr>' +
             '<td>' + (idx + 1) + '</td>' +
             '<td><code>' + code + '</code></td>' +
@@ -258,18 +271,21 @@ window.openMyRequestDetails = async function(docNo, docType) {
         itemsHtml = '<div class="alert alert-info">No items found in this request.</div>';
       }
     } else {
-      itemsHtml = '<div class="alert alert-warning">Could not load items: ' + ((data && data.error) || 'Unknown error') + '</div>';
+      itemsHtml = '<div class="alert alert-warning">Could not load items: ' + _escMain((data && data.error) || 'Unknown error') + '</div>';
     }
   } catch(err) {
     console.error('[openMyRequestDetails] Error:', err);
-    itemsHtml = '<div class="alert alert-warning">Could not load items: ' + err.message + '</div>';
+    itemsHtml = '<div class="alert alert-warning">Could not load items: ' + _escMain(err.message) + '</div>';
   }
+
+  var safeDocNo2 = _escMain(docNo);
+  var safeDocType2 = _escMain(docType || 'MRIF');
 
   content.innerHTML =
     '<div class="text-center mb-3">' +
-      '<div class="fw-bold mb-2" style="font-size:1.1rem;">' + docNo + '</div>' +
+      '<div class="fw-bold mb-2" style="font-size:1.1rem;">' + safeDocNo2 + '</div>' +
       '<div class="mb-2 d-flex justify-content-center gap-2 flex-wrap">' +
-        '<button class="btn btn-sm btn-outline-primary" onclick="discussDocument(\'' + docNo + '\', \'' + (docType || 'MRIF') + '\')">' +
+        '<button class="btn btn-sm btn-outline-primary" onclick="discussDocument(\'' + String(docNo).replace(/'/g, "\\'") + '\', \'' + String(docType || 'MRIF').replace(/'/g, "\\'") + '\')">' +
           '<i class="bi bi-chat-dots me-1"></i>Discuss' +
         '</button>' +
         _editActionButtonHtml(docNo, docType || 'MRIF') +
@@ -325,7 +341,6 @@ window.renderMyRequests = async function(requests) {
     return t === 'MRIF' || t === 'MRS';
   });
 
-  // Load prep statuses for color-coding
   var prepMap = {};
   try {
     var prepUrl = API_URL + '?action=getPrepStatuses&_t=' + Date.now();
@@ -351,7 +366,6 @@ window.renderMyRequests = async function(requests) {
     return '<span class="prep-badge"><i class="bi ' + icon + ' me-1"></i>' + label + '</span>';
   }
 
-  // Call the original renderer (if it was defined elsewhere) with filtered list
   if (typeof originalRenderMyRequests === 'function') {
     try { originalRenderMyRequests(requests); } catch(e) { console.warn('[renderMyRequests] Original error:', e); }
   }
@@ -384,11 +398,14 @@ window.renderMyRequests = async function(requests) {
     var badgeClass = isCompleted ? 'success' : (isPartial ? 'info' : 'warning');
     var statusText = isCompleted ? 'COMPLETED' : (isPartial ? 'PARTIAL' : 'PENDING');
     var icon = isCompleted ? 'bi-check-circle-fill' : (isPartial ? 'bi-hourglass-split' : 'bi-clock');
-    var docNo = req.docNo || '';
-    var docType = req.type || 'MRIF';
+    var docNoRaw = req.docNo || '';
+    var docNo = _escMain(docNoRaw);
+    var docType = _escMain(req.type || 'MRIF');
+    var itemCode = _escMain(req.itemCode || '');
+    var qty = parseInt(req.qty, 10) || 0;
 
-    var prepClass = prepCls(docNo);
-    var prepBadge = prepTag(docNo);
+    var prepClass = prepCls(docNoRaw);
+    var prepBadge = prepTag(docNoRaw);
 
     var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + ' ' + prepClass + '" ' +
       'data-docno="' + docNo + '" data-doctype="' + docType + '" ' +
@@ -396,8 +413,8 @@ window.renderMyRequests = async function(requests) {
         '<div class="d-flex justify-content-between align-items-start">' +
           '<div class="flex-grow-1">' +
             '<div class="fw-bold">' + docNo + ' <span class="badge bg-secondary">' + docType + '</span> ' + prepBadge + '</div>' +
-            '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
-            '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
+            '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + _escMain(dateStr) + '</div>' +
+            '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + itemCode + ' <span class="badge bg-light text-dark">x' + qty + '</span></div>' +
             '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i> Click to view QR &amp; requested items</div>' +
           '</div>' +
           '<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + statusText + '</span>' +
