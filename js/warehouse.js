@@ -711,6 +711,7 @@
             if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications();
             if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
             if (typeof updatePartialCount === 'function') updatePartialCount();
+            if (typeof loadAllRequests === 'function') loadAllRequests();
           }, 1500);
         } else {
           var errMsg = (result && result.error) ? result.error : 'Submission failed';
