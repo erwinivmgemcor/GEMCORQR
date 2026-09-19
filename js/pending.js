@@ -3,9 +3,10 @@
 // - PENDING → normal scanner flow
 // - PARTIAL MRR → opens Manual MRR form (editable DR)
 // - PARTIAL MRIF / MRS → Bal process modal
-// - NOTE: Prep color coding removed from this view.
-//   Prep status is now visualized in the "All Requests" page.
-//   The Mark Prepared / Mark Picked Up actions remain here.
+// - NOTE: Prep actions (Mark Prepared / Mark Picked Up) removed
+//   from this modal. Prep status is now handled entirely on the
+//   All Requests page via color coding. Rows here are simply
+//   clickable to process the document.
 // ============================================================
 
 var _pendingModal = null;
@@ -32,28 +33,6 @@ function _prepIcon(status) {
   return 'bi-exclamation-circle-fill';
 }
 
-// Action button per prep status (warehouse only)
-function _prepActionButton(docNo, prepStatus) {
-  var s = String(prepStatus || 'NEW').toUpperCase();
-  var safeDoc = String(docNo).replace(/'/g, "\\'");
-  if (s === 'NEW') {
-    return '<button class="btn btn-sm btn-success btn-prep-action" ' +
-      'onclick="event.stopPropagation();markPrepStatus(\'' + safeDoc + '\', \'PREPARED\')" ' +
-      'title="Mark this MRIF as prepared / ready for pickup">' +
-      '<i class="bi bi-check-circle me-1"></i>Mark Prepared' +
-    '</button>';
-  }
-  if (s === 'PREPARED') {
-    return '<button class="btn btn-sm btn-warning btn-prep-action" ' +
-      'onclick="event.stopPropagation();markPrepStatus(\'' + safeDoc + '\', \'PICKED_UP\')" ' +
-      'title="Mark this MRIF as picked up by production">' +
-      '<i class="bi bi-box-arrow-up-right me-1"></i>Mark Picked Up' +
-    '</button>';
-  }
-  // PICKED_UP — no further action
-  return '<span class="text-muted small"><i class="bi bi-check2-all me-1"></i>Done</span>';
-}
-
 window.openPendingMrifList = async function() {
   var modalEl = document.getElementById('pendingMrifModal');
   if (!modalEl) { showToast('Pending modal not found', 'danger'); return; }
@@ -70,7 +49,6 @@ window.openPendingMrifList = async function() {
   }
   _pendingModal.show();
 
-  // Fetch documents AND prep statuses in parallel
   try {
     var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
 
@@ -110,12 +88,7 @@ window.openPendingMrifList = async function() {
       return extractDocNumPending(b.docNo) - extractDocNumPending(a.docNo);
     });
 
-    var isWarehouse = (localStorage.getItem('ivm_userRole') === 'warehouse');
-
-    var html = '<div class="list-group-item bg-light d-flex justify-content-between align-items-center">' +
-      '<span class="fw-bold">Document</span>' +
-      '<span class="fw-bold">' + (isWarehouse ? 'Prep Action' : 'Status') + '</span>' +
-      '</div>';
+    var html = '';
 
     docs.forEach(function(d) {
       var docNo = d.docNo || '';
@@ -123,7 +96,6 @@ window.openPendingMrifList = async function() {
       var status = (d.status || '').toUpperCase();
       var isBal = !!d.isBal || docNo.toUpperCase().indexOf('BAL.') === 0;
 
-      // Prep status is still needed for the action button — but NOT rendered as a colored badge.
       var prepEntry = _pendingPrepMap[docNo] || { prepStatus: 'NEW' };
       var prepStatus = prepEntry.prepStatus || 'NEW';
 
@@ -140,36 +112,28 @@ window.openPendingMrifList = async function() {
         ? '<div class="small text-muted ms-4"><i class="bi bi-person me-1"></i>' + escapeHtmlPending(d.requestor) + '</div>'
         : '';
 
-      // For warehouse users, show the prep action button
-      var rightSide;
-      if (isWarehouse) {
-        rightSide = _prepActionButton(docNo, prepStatus);
-      } else {
-        rightSide = '<span class="badge ' + statusBadgeClass + '">' + escapeHtmlPending(status) + '</span>';
-      }
-
-      // NOTE: No prepClass on the row, no prep badge in the content.
-      html += '<div class="list-group-item pending-mrif-item"' +
+      // Single-column row. Whole row is clickable to process.
+      html += '<div class="list-group-item pending-mrif-item d-flex justify-content-between align-items-center"' +
         ' data-docno="' + escapeHtmlPending(docNo) + '"' +
         ' data-doctype="' + escapeHtmlPending(docType) + '"' +
-        ' data-status="' + escapeHtmlPending(status) + '">' +
-        '<div class="d-flex justify-content-between align-items-center flex-wrap gap-2">' +
-          '<div class="flex-grow-1" style="min-width:0;">' +
-            '<i class="bi bi-file-earmark-text me-2"></i>' +
-            badge +
-            '<strong>' + escapeHtmlPending(docNo) + '</strong>' + balTag + statusTag +
-            requestorInfo +
-          '</div>' +
-          '<div class="flex-shrink-0">' + rightSide + '</div>' +
+        ' data-status="' + escapeHtmlPending(status) + '"' +
+        ' style="cursor:pointer;">' +
+        '<div class="flex-grow-1" style="min-width:0;">' +
+          '<i class="bi bi-file-earmark-text me-2"></i>' +
+          badge +
+          '<strong>' + escapeHtmlPending(docNo) + '</strong>' + balTag + statusTag +
+          requestorInfo +
+        '</div>' +
+        '<div class="flex-shrink-0 text-muted">' +
+          '<i class="bi bi-chevron-right"></i>' +
         '</div>' +
       '</div>';
     });
     container.innerHTML = html;
 
-    // Row click → process document (not the buttons)
+    // Row click → process document
     container.querySelectorAll('.pending-mrif-item').forEach(function(el) {
       el.addEventListener('click', function(ev) {
-        if (ev.target.closest('.btn-prep-action')) return;
         var docNo = this.getAttribute('data-docno');
         var docType = this.getAttribute('data-doctype');
         var status = (this.getAttribute('data-status') || '').toUpperCase();
@@ -198,7 +162,7 @@ window.openPendingMrifList = async function() {
   }
 };
 
-// ─── Set prep status from the app ───
+// ─── Set prep status (still available — used by All Requests color flow) ───
 window.markPrepStatus = async function(docNo, newStatus) {
   if (!docNo || !newStatus) return;
   var confirmMsg = newStatus === 'PREPARED'
@@ -223,9 +187,7 @@ window.markPrepStatus = async function(docNo, newStatus) {
     var data = JSON.parse(text);
     if (data.success) {
       showToast('Updated to ' + newStatus.replace('_', ' '), 'success');
-      // Refresh both views so the All Requests badge colors update too.
       if (typeof loadAllRequests === 'function') loadAllRequests();
-      openPendingMrifList();
     } else {
       showToast(data.error || 'Failed to update', 'danger');
     }
