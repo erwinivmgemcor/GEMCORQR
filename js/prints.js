@@ -1,11 +1,20 @@
 // ============================================================
 // PRINT PREVIEW FUNCTIONS
-// (Bulk Print + Bal.MRIF support + Newest-First Sort
-//  + Remarks cleaning — hides system status from prints
-//  + Correct sheet ID lookup by docType — fixes history eye button)
+// (+ escaping applied to sheet/user data rendered into HTML)
 // ============================================================
 
-// ─── Helper: Display doc number (strips -dept suffix, keeps "Bal." prefix) ───
+// Local HTML escaper for print data
+function _escPrint(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ─── Helper: Display doc number ───
 function _displayDocNo(docNo) {
   if (!docNo) return '';
   if (docNo.indexOf('Bal.') === 0) {
@@ -16,7 +25,7 @@ function _displayDocNo(docNo) {
   return cleanDocNo(docNo);
 }
 
-// ─── Helper: Extract trailing numeric series from doc number ───
+// ─── Helper: Extract trailing numeric series ───
 function _extractDocNumber(docNo) {
   if (!docNo) return 0;
   var m = String(docNo).match(/(\d{4,})/);
@@ -38,7 +47,7 @@ function _cleanRemarksForPrint(remarks) {
   return s;
 }
 
-// ─── Helper: Get the correct sheet ID by docType (bypasses state.currentModule) ───
+// ─── Helper: Get the correct sheet ID by docType ───
 function _getSheetIdForDocType(docType) {
   var key = 'sheetId_' + (docType || 'MRIF');
   var val = localStorage.getItem(key);
@@ -130,6 +139,7 @@ function renderDocumentList(container, docs, docType) {
 
   filtered.forEach(function(d) {
     var docNo = typeof d === 'string' ? d : (d.docNo || d.name || d.sheetName || '');
+    var docNoSafe = _escPrint(docNo);
     var isBal = docNo.toUpperCase().indexOf('BAL.') === 0;
     var el = document.createElement('div');
     el.className = 'list-group-item d-flex align-items-center';
@@ -138,10 +148,10 @@ function renderDocumentList(container, docs, docType) {
     var badge = isBal ? ' <span class="badge bg-info text-dark">BAL</span>' : '';
     el.innerHTML =
       '<div class="form-check me-3">' +
-        '<input type="checkbox" class="doc-checkbox" data-docno="' + docNo + '" data-doc-type="' + docType + '">' +
+        '<input type="checkbox" class="doc-checkbox" data-docno="' + docNoSafe + '" data-doc-type="' + _escPrint(docType) + '">' +
       '</div>' +
-      '<div class="flex-grow-1"><i class="bi ' + icon + ' me-2 text-' + color + '"></i><strong>' + docNo + '</strong>' + badge + '</div>' +
-      '<button class="btn btn-sm btn-outline-primary print-single-btn" data-docno="' + docNo + '" data-doc-type="' + docType + '">' +
+      '<div class="flex-grow-1"><i class="bi ' + icon + ' me-2 text-' + color + '"></i><strong>' + docNoSafe + '</strong>' + badge + '</div>' +
+      '<button class="btn btn-sm btn-outline-primary print-single-btn" data-docno="' + docNoSafe + '" data-doc-type="' + _escPrint(docType) + '">' +
         '<i class="bi bi-eye me-1"></i> View / Print' +
       '</button>';
     container.appendChild(el);
@@ -245,13 +255,13 @@ function renderBulkPrintPreview(documents, docType) {
 
 // ─── Build single MRIF HTML ────
 function buildSingleMrifHtml(docNo, info, items) {
-  var requestor = info.Requestor || info.requestor || info.requestorName || '';
-  var department = info.Department || info.department || info.dept || '';
+  var requestor = _escPrint(info.Requestor || info.requestor || info.requestorName || '');
+  var department = _escPrint(info.Department || info.department || info.dept || '');
   var dateRaw = info.Date || info.date || info['Date Prepared'] || info.datePrepared || '';
-  var gemSo = info['GEM SO No.'] || info.gemSoNo || info.gemSo || '';
-  var joNo = info['JO No.'] || info.joNo || '';
-  var client = info['Client Name'] || info.clientName || info.client || '';
-  var project = info.Project || info.project || '';
+  var gemSo = _escPrint(info['GEM SO No.'] || info.gemSoNo || info.gemSo || '');
+  var joNo = _escPrint(info['JO No.'] || info.joNo || '');
+  var client = _escPrint(info['Client Name'] || info.clientName || info.client || '');
+  var project = _escPrint(info.Project || info.project || '');
 
   var isBal = docNo.indexOf('Bal.') === 0;
   var displayDocNo = _displayDocNo(docNo);
@@ -265,19 +275,21 @@ function buildSingleMrifHtml(docNo, info, items) {
       dateStr = months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
     }
   } catch(e) {}
+  dateStr = _escPrint(dateStr);
 
   var itemsHtml = '';
   if (items && items.length > 0) {
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
-      var code = it.inventoryId || it.itemCode || it.code || '';
-      var desc = it.description || it.desc || '';
+      var codeRaw = it.inventoryId || it.itemCode || it.code || '';
+      var code = _escPrint(codeRaw);
+      var desc = _escPrint(it.description || it.desc || '');
       var qty = it.expectedQty || it.qty || it.requestedQty || 0;
       var issued = it.actualQty || it.issuedQty || it.atlQty || 0;
       var issuedDisplay = (issued === 0 || issued === '') ? '' : issued;
-      var unit = it.unit || 'PIECE';
-      var remarks = _cleanRemarksForPrint(it.remarks || '');
-      var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
+      var unit = _escPrint(it.unit || 'PIECE');
+      var remarks = _escPrint(_cleanRemarksForPrint(it.remarks || ''));
+      var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(codeRaw);
       itemsHtml += '<tr>' +
         '<td class="td-center">' + (i + 1) + '</td>' +
         '<td class="td-center">' + code + '</td>' +
@@ -301,7 +313,7 @@ function buildSingleMrifHtml(docNo, info, items) {
     '<div class="mrif-header">' +
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
       '<div class="mrif-docno">' +
-        '<div><span class="mrif-dn-label">MRIF No.:</span><span class="mrif-dn-box">' + displayDocNo + '</span></div>' +
+        '<div><span class="mrif-dn-label">MRIF No.:</span><span class="mrif-dn-box">' + _escPrint(displayDocNo) + '</span></div>' +
         '<div class="mrif-doc-qr"><img src="' + mrifQrUrl + '" alt="MRIF QR" style="width:90px;height:90px;margin-top:4px;"></div>' +
       '</div>' +
     '</div>' +
@@ -362,13 +374,13 @@ function buildSingleMrifHtml(docNo, info, items) {
 
 // ─── Build single MRR HTML ────
 function buildSingleMrrHtml(docNo, info, items) {
-  var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
-  var vendor = info['Vendor/Client'] || info.vendor || info.client || '';
+  var receivingSite = _escPrint(info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON');
+  var vendor = _escPrint(info['Vendor/Client'] || info.vendor || info.client || '');
   var datePrepared = info['Date Prepared'] || info.datePrepared || '';
-  var poNo = info['PO No.'] || info.poNo || '';
-  var drNo = info['DR No.'] || info['DR No / SI No.'] || info['DR No'] || info.drNo || info['D.R. No.'] || info.dr || '';
+  var poNo = _escPrint(info['PO No.'] || info.poNo || '');
+  var drNo = _escPrint(info['DR No.'] || info['DR No / SI No.'] || info['DR No'] || info.drNo || info['D.R. No.'] || info.dr || '');
   var receivingDate = info['Receiving Date'] || info.receivingDate || '';
-  var preparedBy = info['Prepared By'] || info.preparedBy || '';
+  var preparedBy = _escPrint(info['Prepared By'] || info.preparedBy || '');
 
   function formatDate(val) {
     if (!val || val === '') return '';
@@ -386,20 +398,20 @@ function buildSingleMrrHtml(docNo, info, items) {
     return String(val).replace(/\s*GMT.*$/, '').replace(/\s*Standard.*$/, '').trim();
   }
 
-  var dateStr = formatDate(datePrepared);
-  var recDateStr = formatDate(receivingDate);
+  var dateStr = _escPrint(formatDate(datePrepared));
+  var recDateStr = _escPrint(formatDate(receivingDate));
 
   var itemsHtml = '';
   if (items && items.length > 0) {
     for (var idx = 0; idx < items.length; idx++) {
       var it = items[idx];
-      var code = it.inventoryId || it.itemCode || '';
-      var desc = it.description || it.desc || it.itemDescription || '';
+      var code = _escPrint(it.inventoryId || it.itemCode || '');
+      var desc = _escPrint(it.description || it.desc || it.itemDescription || '');
       var requestedQty = it.recQty || it.expectedQty || it.qty || it.quantity || 0;
       var receivedQty = it.atlQty || it.actualQty || it.issuedQty || it.actual || 0;
       var receivedDisplay = (receivedQty === 0 || receivedQty === '') ? '' : receivedQty;
-      var unit = it.unit || it.uom || 'PIECE';
-      var remarks = _cleanRemarksForPrint(it.remarks || it.status || it.note || '');
+      var unit = _escPrint(it.unit || it.uom || 'PIECE');
+      var remarks = _escPrint(_cleanRemarksForPrint(it.remarks || it.status || it.note || ''));
       itemsHtml += '<tr>' +
         '<td class="td-center" style="width:5%">' + (idx + 1) + '</td>' +
         '<td class="td-center" style="width:16%">' + code + '</td>' +
@@ -420,7 +432,7 @@ function buildSingleMrrHtml(docNo, info, items) {
     '<div class="mrr-header">' +
       '<div class="mrr-logo"><img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'"></div>' +
       '<div class="mrr-docno">' +
-        '<div><span class="mrr-dn-label">Receipt No.:</span><span class="mrr-dn-box">' + cleanDocNo(docNo) + '</span></div>' +
+        '<div><span class="mrr-dn-label">Receipt No.:</span><span class="mrr-dn-box">' + _escPrint(cleanDocNo(docNo)) + '</span></div>' +
         '<div class="mrr-doc-qr"><img src="' + mrrQrUrl + '" alt="MRR QR"></div>' +
       '</div>' +
     '</div>' +
@@ -501,13 +513,13 @@ function buildSingleMrrHtml(docNo, info, items) {
 
 // ─── Build single MRS HTML ────
 function buildSingleMrsHtml(docNo, info, items) {
-  var requestor = info.Requestor || info.requestor || info.requestorName || '';
-  var department = info.Department || info.department || info.dept || '';
+  var requestor = _escPrint(info.Requestor || info.requestor || info.requestorName || '');
+  var department = _escPrint(info.Department || info.department || info.dept || '');
   var dateRaw = info.Date || info.date || info['Date Prepared'] || info.datePrepared || '';
-  var gemSo = info['GEM SO No.'] || info.gemSoNo || info.gemSo || '';
-  var joNo = info['JO No.'] || info.joNo || '';
-  var client = info['Client Name'] || info.clientName || info.client || '';
-  var project = info.Project || info.project || '';
+  var gemSo = _escPrint(info['GEM SO No.'] || info.gemSoNo || info.gemSo || '');
+  var joNo = _escPrint(info['JO No.'] || info.joNo || '');
+  var client = _escPrint(info['Client Name'] || info.clientName || info.client || '');
+  var project = _escPrint(info.Project || info.project || '');
 
   var dateStr = dateRaw;
   try {
@@ -517,19 +529,21 @@ function buildSingleMrsHtml(docNo, info, items) {
       dateStr = months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
     }
   } catch(e) {}
+  dateStr = _escPrint(dateStr);
 
   var itemsHtml = '';
   if (items && items.length > 0) {
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
-      var code = it.inventoryId || it.itemCode || it.code || '';
-      var desc = it.description || it.desc || '';
+      var codeRaw = it.inventoryId || it.itemCode || it.code || '';
+      var code = _escPrint(codeRaw);
+      var desc = _escPrint(it.description || it.desc || '');
       var qtyReturned = it.expectedQty || it.qty || it.requestedQty || 0;
       var actualReturned = it.actualQty || it.issuedQty || it.atlQty || 0;
       var actualDisplay = (actualReturned === 0 || actualReturned === '') ? '' : actualReturned;
-      var unit = it.unit || 'PIECE';
-      var remarks = _cleanRemarksForPrint(it.remarks || '');
-      var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
+      var unit = _escPrint(it.unit || 'PIECE');
+      var remarks = _escPrint(_cleanRemarksForPrint(it.remarks || ''));
+      var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(codeRaw);
       itemsHtml += '<tr>' +
         '<td class="td-center">' + (i + 1) + '</td>' +
         '<td class="td-center">' + code + '</td>' +
@@ -553,7 +567,7 @@ function buildSingleMrsHtml(docNo, info, items) {
     '<div class="mrif-header">' +
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
       '<div class="mrif-docno">' +
-        '<div><span class="mrif-dn-label">MRS No.:</span><span class="mrif-dn-box">' + cleanDocNo(docNo) + '</span></div>' +
+        '<div><span class="mrif-dn-label">MRS No.:</span><span class="mrif-dn-box">' + _escPrint(cleanDocNo(docNo)) + '</span></div>' +
         '<div class="mrif-doc-qr"><img src="' + mrsQrUrl + '" alt="MRS QR" style="width:90px;height:90px;margin-top:4px;"></div>' +
       '</div>' +
     '</div>' +
@@ -613,7 +627,6 @@ function buildSingleMrsHtml(docNo, info, items) {
 }
 
 // ─── Single document print functions ────
-// FIX: look up sheet ID by docType, not by state.currentModule
 async function openMrifPrint(docNo) {
   if (state.isLoading) return;
   showLoading('Loading ' + _displayDocNo(docNo) + '...');
@@ -796,7 +809,7 @@ async function openMrifList() {
     var docs = await loadDocumentListForModule('MRIF');
     renderDocumentList(container, docs, 'MRIF');
   } catch(err) {
-    if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + err.message + '</div>';
+    if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + _escPrint(err.message) + '</div>';
   }
 }
 
@@ -809,7 +822,7 @@ async function openMrrList() {
     var docs = await loadDocumentListForModule('MRR');
     renderDocumentList(container, docs, 'MRR');
   } catch(err) {
-    if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + err.message + '</div>';
+    if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + _escPrint(err.message) + '</div>';
   }
 }
 
@@ -822,6 +835,6 @@ async function openMrsList() {
     var docs = await loadDocumentListForModule('MRS');
     renderDocumentList(container, docs, 'MRS');
   } catch(err) {
-    if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + err.message + '</div>';
+    if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + _escPrint(err.message) + '</div>';
   }
 }
