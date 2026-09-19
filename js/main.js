@@ -115,7 +115,7 @@ function toggleSidebar(open) {
   }
 }
 
-// ─── Edit request action button helper (used in My Request Details) ───
+// ─── Edit request action button helper ───
 function _editActionButtonHtml(docNo, docType) {
   var map = window._editReqMap || {};
   var entry = map[docNo];
@@ -316,14 +316,42 @@ window.downloadMyRequestQr = function() {
   qrImg.src = img.src;
 };
 
+// ─── Render My Requests with Prep Status coloring ───
 var originalRenderMyRequests = window.renderMyRequests || function() {};
 
-window.renderMyRequests = function(requests) {
+window.renderMyRequests = async function(requests) {
   requests = (requests || []).filter(function(req) {
     var t = (req.type || '').toUpperCase();
     return t === 'MRIF' || t === 'MRS';
   });
 
+  // Load prep statuses for color-coding
+  var prepMap = {};
+  try {
+    var prepUrl = API_URL + '?action=getPrepStatuses&_t=' + Date.now();
+    var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
+    var res = await fetchFn(prepUrl, { redirect: 'follow' }, { timeout: 15000, retries: 0 });
+    var text = await res.text();
+    var data = JSON.parse(text);
+    if (data && data.success) prepMap = data.statuses || {};
+  } catch(e) { /* silent — fallback to no coloring */ }
+
+  function prepCls(docNo) {
+    var p = prepMap[docNo];
+    var s = p ? String(p.prepStatus || 'NEW').toUpperCase() : 'NEW';
+    if (s === 'PREPARED') return 'prep-prepared';
+    if (s === 'PICKED_UP') return 'prep-pickedup';
+    return 'prep-new';
+  }
+  function prepTag(docNo) {
+    var p = prepMap[docNo];
+    var s = p ? String(p.prepStatus || 'NEW').toUpperCase() : 'NEW';
+    var label = s === 'PREPARED' ? 'PREPARED' : (s === 'PICKED_UP' ? 'PICKED UP' : 'NOT PREPARED');
+    var icon = s === 'PREPARED' ? 'bi-check-circle-fill' : (s === 'PICKED_UP' ? 'bi-box-arrow-up-right' : 'bi-exclamation-circle-fill');
+    return '<span class="prep-badge"><i class="bi ' + icon + ' me-1"></i>' + label + '</span>';
+  }
+
+  // Call the original renderer (if it was defined elsewhere) with filtered list
   if (typeof originalRenderMyRequests === 'function') {
     try { originalRenderMyRequests(requests); } catch(e) { console.warn('[renderMyRequests] Original error:', e); }
   }
@@ -359,12 +387,15 @@ window.renderMyRequests = function(requests) {
     var docNo = req.docNo || '';
     var docType = req.type || 'MRIF';
 
-    var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + '" ' +
+    var prepClass = prepCls(docNo);
+    var prepBadge = prepTag(docNo);
+
+    var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + ' ' + prepClass + '" ' +
       'data-docno="' + docNo + '" data-doctype="' + docType + '" ' +
       'style="cursor:pointer;">' +
         '<div class="d-flex justify-content-between align-items-start">' +
           '<div class="flex-grow-1">' +
-            '<div class="fw-bold">' + docNo + ' <span class="badge bg-secondary">' + docType + '</span></div>' +
+            '<div class="fw-bold">' + docNo + ' <span class="badge bg-secondary">' + docType + '</span> ' + prepBadge + '</div>' +
             '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
             '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
             '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i> Click to view QR &amp; requested items</div>' +
@@ -384,6 +415,7 @@ window.renderMyRequests = function(requests) {
   });
 };
 
+// ─── Wrappers ───
 var originalLoadMyRequests = window.loadMyRequests || function() {};
 window.loadMyRequests = function() {
   if (typeof originalLoadMyRequests === 'function') {
@@ -398,6 +430,7 @@ window.updateWarehouseKPIs = function() {
   }
 };
 
+// ─── Test connection ───
 async function testConnection() {
   var resultDiv = document.getElementById('testResult');
   if (!resultDiv) return;
@@ -423,6 +456,7 @@ async function testConnection() {
   }
 }
 
+// ─── URL doc parameter ───
 function checkUrlDocParam() {
   var params = new URLSearchParams(window.location.search);
   var docNo = params.get('doc');
@@ -449,6 +483,7 @@ function checkUrlDocParam() {
   }
 }
 
+// ─── DOM Ready ───
 document.addEventListener('DOMContentLoaded', function() {
   var sidebarVer = document.getElementById('sidebarAppVersion');
   if (sidebarVer && typeof APP_VERSION !== 'undefined') {
@@ -486,7 +521,6 @@ document.addEventListener('DOMContentLoaded', function() {
     else if (id === 'poScanModal') state.poScanModal = new bootstrap.Modal(el);
     else if (id === 'poItemsModal') state.poItemsModal = new bootstrap.Modal(el);
     else if (id === 'loginModal') window.loginModalEl = el;
-    // editRequestsModal & editRequestModal are created lazily via getOrCreateInstance
   });
 
   if ('serviceWorker' in navigator) {
