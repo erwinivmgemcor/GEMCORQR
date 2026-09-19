@@ -587,13 +587,24 @@
   .prep-legend-mini .prep-legend-swatch.green  { background: #198754; }
   .prep-legend-mini .prep-legend-swatch.yellow { background: #ffc107; }
 
-    /* ─── ALL REQUESTS CARD ─── */
+       /* ─── ALL REQUESTS CARD ─── */
   .all-request-card {
     border-left: 4px solid #0d6efd;
     transition: background 0.15s;
   }
   .all-request-card:hover { background: #f0f4f8; }
-  .all-request-card.completed { border-left-color: #198754; }
+
+  /* Active (non-completed) docs get prep-status coloring */
+  .all-request-card.prep-new       { border-left-color: #dc3545; background: #fff5f5; }
+  .all-request-card.prep-prepared  { border-left-color: #198754; background: #f4fbf7; }
+  .all-request-card.prep-pickedup  { border-left-color: #ffc107; background: #fffaf0; }
+
+  /* Completed docs always use a neutral green border */
+  .all-request-card.completed      { border-left-color: #198754; background: #f8fbf9; }
+  .all-request-card.completed:hover { background: #eef7f1; }
+
+  /* Partial docs (not yet picked up) keep cyan unless prep says otherwise */
+  .all-request-card.partial:not(.prep-prepared):not(.prep-pickedup) { border-left-color: #0dcaf0; }
 
     /* ═══════════════════════════════════════════════════════════
      LAYOUT SAFETY — prevents sections from being pushed down
@@ -2010,21 +2021,7 @@
         <h5 class="modal-title"><i class="bi bi-clock-history me-2"></i>Pending MRIFs</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-            <div class="modal-body p-0">
-        <div class="prep-legend m-2">
-          <div class="prep-legend-item">
-            <span class="prep-legend-swatch red"></span>
-            <strong>NOT PREPARED</strong>
-          </div>
-          <div class="prep-legend-item">
-            <span class="prep-legend-swatch green"></span>
-            <strong>PREPARED</strong> (ready for pickup)
-          </div>
-          <div class="prep-legend-item">
-            <span class="prep-legend-swatch yellow"></span>
-            <strong>PICKED UP</strong> (by production)
-          </div>
-        </div>
+                  <div class="modal-body p-0">
         <div id="pendingMrifListContainer" class="list-group list-group-flush">
           <div class="list-group-item text-center py-3 text-muted">Loading...</div>
         </div>
