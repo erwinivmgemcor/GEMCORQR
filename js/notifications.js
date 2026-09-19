@@ -14,10 +14,20 @@
 (function() {
   "use strict";
 
-  // ─── Update KPIs (Pending count comes from the unified getAllPendingDocs source) ───
+  // ─── Local HTML escaper (defensive — sheet/user data) ───
+  function _esc(s) {
+    if (s === null || s === undefined) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // ─── Update KPIs ───
   window.updateWarehouseKPIs = async function() {
     try {
-      // ─── Pending count from unified pending source ───
       var pendingUrl = API_URL + '?action=getAllPendingDocs&_t=' + Date.now();
       var pendingRes = await fetch(pendingUrl, { redirect: 'follow' });
       var pendingText = await pendingRes.text();
@@ -26,7 +36,6 @@
       var allPending = (pendingData && pendingData.documents) || [];
       var pendingCount = allPending.length;
 
-      // ─── Total / Completed from sheet-count endpoint ───
       var sheetId = getCleanSheetId() || '';
       var countUrl = API_URL + '?action=getPendingDocCount&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
       var countRes = await fetch(countUrl, { redirect: 'follow' });
@@ -140,18 +149,21 @@
     }
     requests.slice(0, 5).forEach(function(req) {
       var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
-      var docNo = req.docNo || '';
-      var type = req.type || 'MRIF';
+      var docNo = _esc(req.docNo || '');
+      var type = _esc(req.type || 'MRIF');
+      var requestor = _esc(req.requestor || 'Unknown');
+      var itemCode = _esc(req.itemCode || '');
+      var qty = parseInt(req.qty, 10) || 0;
       var html = '<div class="list-group-item wh-notif-item py-2" data-docno="' + docNo + '" data-type="' + type + '">' +
         '<div class="d-flex justify-content-between align-items-start">' +
         '<div>' +
         '<div class="doc-no">' + docNo + ' <span class="badge bg-secondary">' + type + '</span></div>' +
-        '<div class="requestor"><i class="bi bi-person me-1"></i>' + (req.requestor || 'Unknown') + '</div>' +
-        '<div class="timestamp"><i class="bi bi-clock me-1"></i>' + dateStr + '</div>' +
+        '<div class="requestor"><i class="bi bi-person me-1"></i>' + requestor + '</div>' +
+        '<div class="timestamp"><i class="bi bi-clock me-1"></i>' + _esc(dateStr) + '</div>' +
         '</div>' +
         '<span class="badge bg-warning text-dark">PENDING</span>' +
         '</div>' +
-        '<div class="small mt-1 text-muted">' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
+        '<div class="small mt-1 text-muted">' + itemCode + ' <span class="badge bg-light text-dark">x' + qty + '</span></div>' +
         '</div>';
       container.innerHTML += html;
     });
@@ -176,18 +188,21 @@
     }
     requests.forEach(function(req) {
       var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
-      var docNo = req.docNo || '';
-      var type = req.type || 'MRIF';
+      var docNo = _esc(req.docNo || '');
+      var type = _esc(req.type || 'MRIF');
+      var requestor = _esc(req.requestor || 'Unknown');
+      var itemCode = _esc(req.itemCode || '');
+      var qty = parseInt(req.qty, 10) || 0;
       var html = '<div class="list-group-item wh-notif-item py-3" data-docno="' + docNo + '" data-type="' + type + '">' +
         '<div class="d-flex justify-content-between align-items-start">' +
         '<div>' +
         '<div class="doc-no">' + docNo + ' <span class="badge bg-secondary">' + type + '</span></div>' +
-        '<div class="requestor"><i class="bi bi-person me-1"></i>' + (req.requestor || 'Unknown') + '</div>' +
-        '<div class="timestamp"><i class="bi bi-clock me-1"></i>' + dateStr + '</div>' +
+        '<div class="requestor"><i class="bi bi-person me-1"></i>' + requestor + '</div>' +
+        '<div class="timestamp"><i class="bi bi-clock me-1"></i>' + _esc(dateStr) + '</div>' +
         '</div>' +
         '<span class="badge bg-warning text-dark">PENDING</span>' +
         '</div>' +
-        '<div class="small mt-1 text-muted">' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
+        '<div class="small mt-1 text-muted">' + itemCode + ' <span class="badge bg-light text-dark">x' + qty + '</span></div>' +
         '</div>';
       container.innerHTML += html;
     });
