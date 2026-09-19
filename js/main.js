@@ -151,11 +151,35 @@ function toggleSidebar(open) {
 }
 
 // ─── Edit request action button helper ───
-function _editActionButtonHtml(docNo, docType) {
-  var map = window._editReqMap || {};
-  var entry = map[docNo];
+// docStatus (optional): current document status. If provided and NOT 'PENDING',
+//   the edit button is replaced with a lock chip. Only PENDING docs are editable.
+function _editActionButtonHtml(docNo, docType, docStatus) {
   var safeDoc = String(docNo).replace(/'/g, "\\'");
   var safeType = String(docType || 'MRIF').replace(/'/g, "\\'");
+  var statusUpper = String(docStatus || '').toUpperCase();
+
+  // If we know the doc status, gate on it first.
+  if (statusUpper && statusUpper !== 'PENDING') {
+    if (statusUpper === 'COMPLETED') {
+      return '<span class="btn btn-sm btn-outline-success disabled" title="This document is fully processed — no more edits allowed">' +
+        '<i class="bi bi-lock-fill me-1"></i>Edit Locked (Completed)' +
+      '</span>';
+    }
+    if (statusUpper === 'PARTIAL') {
+      return '<span class="btn btn-sm btn-outline-secondary disabled" title="Partially-issued documents cannot be edited">' +
+        '<i class="bi bi-lock-fill me-1"></i>Edit Locked (Partial)' +
+      '</span>';
+    }
+    // Any other non-pending status
+    return '<span class="btn btn-sm btn-outline-secondary disabled" title="Document is not editable in its current status">' +
+      '<i class="bi bi-lock-fill me-1"></i>Edit Locked' +
+    '</span>';
+  }
+
+  // From here down, docStatus was blank OR 'PENDING'.
+  // Check the edit-request map as before.
+  var map = window._editReqMap || {};
+  var entry = map[docNo];
 
   if (!entry) {
     return '<button class="btn btn-sm btn-outline-warning" onclick="requestEditPermissionFromUser(\'' + safeDoc + '\', \'' + safeType + '\')">' +
@@ -179,6 +203,8 @@ function _editActionButtonHtml(docNo, docType) {
     '</button>';
   }
   if (entry.status === 'COMPLETED') {
+    // Prior edit was completed; but the doc might still be PENDING now.
+    // Only allow a fresh request if doc is PENDING (already gated above).
     return '<button class="btn btn-sm btn-outline-warning" onclick="requestEditPermissionFromUser(\'' + safeDoc + '\', \'' + safeType + '\')">' +
       '<i class="bi bi-pencil me-1"></i>Request Edit' +
     '</button>';
@@ -187,11 +213,13 @@ function _editActionButtonHtml(docNo, docType) {
 }
 
 // ─── My Request Details ───
+// opts.warehouse = true   → shows Process Request button instead of edit
+// opts.status    = current doc status ('PENDING'|'PARTIAL'|'COMPLETED')
 window.openMyRequestDetails = async function(docNo, docType, opts) {
   opts = opts || {};
   var isWarehouseView = opts.warehouse === true;
-  var docStatus = String(opts.status || '').toUpperCase();
-  var isCompletedDoc = (docStatus === 'COMPLETED');
+  var docStatusRaw = String(opts.status || '').toUpperCase();
+  var isCompletedDoc = (docStatusRaw === 'COMPLETED');
 
   var modalEl = document.getElementById('myRequestDetailsModal');
   if (!modalEl) {
@@ -328,7 +356,8 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
       '</button>';
     }
   } else {
-    actionButtons += _editActionButtonHtml(docNo, docType || 'MRIF');
+    // Production side — pass the doc status so the edit button can hide itself
+    actionButtons += _editActionButtonHtml(docNo, docType || 'MRIF', docStatusRaw);
   }
 
   content.innerHTML =
@@ -378,8 +407,8 @@ window.downloadMyRequestQr = function() {
 };
 
 // ─── Render My Requests (production view) ───
-// Prep status shown ONLY for PENDING / PARTIAL docs. Completed docs get
-// a clean "COMPLETED" badge alone — no confusing "NOT PREPARED" label.
+// - Prep status shown ONLY for PENDING / PARTIAL docs.
+// - Row click passes the doc status so the modal can gate the edit button.
 var originalRenderMyRequests = window.renderMyRequests || function() {};
 
 window.renderMyRequests = async function(requests) {
@@ -436,7 +465,7 @@ window.renderMyRequests = async function(requests) {
     var itemCode = _escMain(req.itemCode || '');
     var qty = parseInt(req.qty, 10) || 0;
 
-    // ★ Prep status only applies to active docs. Completed docs show no prep badge.
+    // ★ Prep status only applies to active docs.
     var prepClass = '';
     var prepBadge = '';
     if (!isCompleted) {
@@ -446,7 +475,7 @@ window.renderMyRequests = async function(requests) {
     }
 
     var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + ' ' + prepClass + '" ' +
-      'data-docno="' + docNo + '" data-doctype="' + docType + '" ' +
+      'data-docno="' + docNo + '" data-doctype="' + docType + '" data-status="' + _escMain(status) + '" ' +
       'style="cursor:pointer;">' +
         '<div class="d-flex justify-content-between align-items-start">' +
           '<div class="flex-grow-1">' +
@@ -465,7 +494,8 @@ window.renderMyRequests = async function(requests) {
     el.addEventListener('click', function() {
       var docNo = this.getAttribute('data-docno');
       var docType = this.getAttribute('data-doctype') || 'MRIF';
-      if (docNo) openMyRequestDetails(docNo, docType);
+      var status = this.getAttribute('data-status') || 'PENDING';
+      if (docNo) openMyRequestDetails(docNo, docType, { status: status });
     });
   });
 };
@@ -487,7 +517,6 @@ window.updateWarehouseKPIs = function() {
 
 // ═══════════════════════════════════════════════════════════════
 // ALL REQUESTS (Warehouse view — active + completed)
-// Prep status coloring is applied HERE now, per user request.
 // ═══════════════════════════════════════════════════════════════
 
 window.loadAllRequests = async function() {
@@ -518,7 +547,6 @@ window.loadAllRequests = async function() {
 
     var allDocs = data.documents || [];
 
-    // Badge always reflects true PENDING + PARTIAL count
     var activeCount = allDocs.filter(function(d) {
       var s = (d.status || 'PENDING').toUpperCase();
       return s === 'PENDING' || s === 'PARTIAL';
@@ -529,7 +557,6 @@ window.loadAllRequests = async function() {
       badge.classList.toggle('d-none', activeCount === 0);
     }
 
-    // Fetch prep statuses (needed to color active rows)
     var prepMap = {};
     if (statusFilter !== 'completed') {
       try {
@@ -539,7 +566,7 @@ window.loadAllRequests = async function() {
         var prepText = await prepRes.text();
         var prepData = JSON.parse(prepText);
         if (prepData && prepData.success) prepMap = prepData.statuses || {};
-      } catch(e) { /* silent — fallback to no coloring */ }
+      } catch(e) { /* silent */ }
     }
 
     var docs = allDocs.filter(function(d) {
@@ -612,7 +639,6 @@ function renderAllRequests(docs, statusFilter, prepMap) {
 
     var balTag = isBal ? ' <span class="badge bg-info text-dark">BAL</span>' : '';
 
-    // ★ Prep coloring: ONLY for active (non-completed) docs
     var prepClass = '';
     var prepBadge = '';
     if (!isCompleted) {
@@ -621,7 +647,6 @@ function renderAllRequests(docs, statusFilter, prepMap) {
       prepBadge = _prepTagFromStatus(prepStatus);
     }
 
-    // Processed-by line for completed docs
     var processedByLine = '';
     if (isCompleted && req.processedBy) {
       var processedAtStr = req.processedAt ? new Date(req.processedAt).toLocaleString() : '';
