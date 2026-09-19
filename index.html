@@ -542,6 +542,28 @@
   .prep-legend-swatch.red { background: #dc3545; }
   .prep-legend-swatch.green { background: #198754; }
   .prep-legend-swatch.yellow { background: #ffc107; }
+
+    .prep-legend-mini {
+    display: flex;
+    gap: 12px;
+    font-size: 0.7rem;
+    color: #6c757d;
+    flex-wrap: wrap;
+  }
+  .prep-legend-mini .prep-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .prep-legend-mini .prep-legend-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .prep-legend-mini .prep-legend-swatch.red    { background: #dc3545; }
+  .prep-legend-mini .prep-legend-swatch.green  { background: #198754; }
+  .prep-legend-mini .prep-legend-swatch.yellow { background: #ffc107; }
 </style>
 </head>
 <body>
@@ -875,16 +897,20 @@
           </div>
         </div>
 
-        <div id="docPickerSection">
-          <div class="card">
-            <div class="card-header">
-              <strong><i class="bi bi-file-earmark-text me-2"></i>Select Document</strong>
+              <div class="card-body">
+            <div class="d-flex gap-2 mb-2">
+              <input type="text" id="docSearch" class="form-control doc-search" placeholder="Search document..." oninput="debouncedFilterDocs()">
+              <button class="btn btn-outline-secondary" onclick="refreshPrepColorsNow(this)" title="Refresh prep status colors">
+                <i class="bi bi-palette"></i>
+              </button>
             </div>
-            <div class="card-body">
-              <input type="text" id="docSearch" class="form-control doc-search mb-2" placeholder="Search document..." oninput="debouncedFilterDocs()">
-              <select id="docSelect" class="form-select" onchange="onDocSelect(this.value)">
-                <option value="">-- Select Document --</option>
-              </select>
+            <select id="docSelect" class="form-select" onchange="onDocSelect(this.value)">
+              <option value="">-- Select Document --</option>
+            </select>
+            <div class="prep-legend-mini mt-2">
+              <span class="prep-legend-item"><span class="prep-legend-swatch red"></span>Not Prepared</span>
+              <span class="prep-legend-item"><span class="prep-legend-swatch green"></span>Prepared</span>
+              <span class="prep-legend-item"><span class="prep-legend-swatch yellow"></span>Picked Up</span>
             </div>
           </div>
         </div>
@@ -2442,7 +2468,7 @@
 <script src="/GEMCORQR/js/state.js?v=3.4.0"></script>
 <script src="/GEMCORQR/js/auth.js?v=3.4.0"></script>
 <script src="/GEMCORQR/js/scanner.js?v=3.4.0"></script>
-<script src="/GEMCORQR/js/warehouse.js?v=3.4.0"></script>
+<script src="/GEMCORQR/js/warehouse.js?v=3.6.0"></script>
 <script src="/GEMCORQR/js/requests.js?v=3.4.0"></script>
 <script src="/GEMCORQR/js/inventory.js?v=3.4.0"></script>
 <script src="/GEMCORQR/js/prints.js?v=3.4.0"></script>
