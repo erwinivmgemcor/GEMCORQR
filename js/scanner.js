@@ -120,6 +120,17 @@ function startQuickScanner() {
     });
   }).catch(err => showToast('Camera access denied', 'danger'));
 }
+
+// ✅ Local helpers to safely toggle the document picker without throwing on null
+function _showDocPicker() {
+  var dp = document.getElementById('docPickerSection');
+  if (dp) dp.classList.remove('d-none');
+}
+function _hideActiveTransaction() {
+  var at = document.getElementById('activeTransactionSection');
+  if (at) at.classList.add('d-none');
+}
+
 async function onQuickScanSuccess(decodedText) {
   if (state.quickScanner) {
     state.quickScanner.stop().catch(()=>{});
@@ -135,7 +146,7 @@ async function onQuickScanSuccess(decodedText) {
     if (extractedDoc.indexOf('MRR') === 0) mod = 'MRR';
     else if (extractedDoc.indexOf('MRS') === 0) mod = 'MRS';
     playSuccessBeep();
-    
+
     var sheetKey = 'sheetId_' + mod;
     var sheetId = localStorage.getItem(sheetKey);
     if (!sheetId || !extractSheetId(sheetId)) {
@@ -147,7 +158,7 @@ async function onQuickScanSuccess(decodedText) {
         return;
       }
     }
-    
+
     showToast('Loading document ' + cleanDocNo(extractedDoc) + '...', 'success');
     try {
       await selectModule(mod);
@@ -155,8 +166,8 @@ async function onQuickScanSuccess(decodedText) {
     } catch(err) {
       console.error('[QuickScan] Error loading document:', err);
       showToast('Failed to load document: ' + err.message, 'danger');
-      document.getElementById('docPickerSection').classList.remove('d-none');
-      document.getElementById('activeTransactionSection').classList.add('d-none');
+      _showDocPicker();
+      _hideActiveTransaction();
     }
     return;
   }
@@ -184,8 +195,8 @@ async function onQuickScanSuccess(decodedText) {
       } catch(err) {
         console.error('[QuickScan] Error loading document:', err);
         showToast('Failed to load document: ' + err.message, 'danger');
-        document.getElementById('docPickerSection').classList.remove('d-none');
-        document.getElementById('activeTransactionSection').classList.add('d-none');
+        _showDocPicker();
+        _hideActiveTransaction();
       }
       return;
     }
@@ -208,8 +219,11 @@ async function onQuickScanSuccess(decodedText) {
     const item = state.items.find(i => i.inventoryId.toLowerCase() === decodedText.toLowerCase());
     if (item) {
       playSuccessBeep();
-      document.getElementById('docPickerSection').classList.add('d-none');
-      document.getElementById('activeTransactionSection').classList.remove('d-none');
+      _hideActiveTransaction === null; // no-op guard
+      var picker2 = document.getElementById('docPickerSection');
+      if (picker2) picker2.classList.add('d-none');
+      var active2 = document.getElementById('activeTransactionSection');
+      if (active2) active2.classList.remove('d-none');
       openQtyModal(item);
       return;
     }
@@ -220,30 +234,23 @@ async function onQuickScanSuccess(decodedText) {
 }
 
 // ─── Upload QR Image (Desktop) ─────────────────────────────────────
-// Call this function from the file input's onchange event.
-// It reads the selected image file, decodes the QR code using html5-qrcode,
-// and then processes the result as if it were a live scan.
 function handleQrFileUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
-  
-  // Reset the input so the same file can be re-uploaded
+
   event.target.value = '';
-  
+
   showLoading('Decoding QR image...');
-  
+
   const reader = new FileReader();
   reader.onload = function(e) {
     const imageData = e.target.result;
-    
-    // Use a hidden container as a dummy element for the decoder
-    // This container must exist in the DOM (added to index.html)
+
     const scanner = new Html5Qrcode('qrImageDecoder');
     scanner.decodeFromImage(imageData, null)
       .then(function(decodedText) {
         hideLoading();
         console.log('[QR Upload] Decoded:', decodedText);
-        // Process the decoded text as a successful scan
         onScanSuccess(decodedText);
       })
       .catch(function(err) {
