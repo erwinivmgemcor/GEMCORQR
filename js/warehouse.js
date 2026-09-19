@@ -2,6 +2,7 @@
 // WAREHOUSE CORE FUNCTIONS
 // (Partial Items + Balance MRIF + Prefill Manual MRR
 //  + Reprocess Guard via DOCLINKS + Idempotency on writes
+//  + Prep Status color coding on document dropdown
 //  + Clear/Edit PO Items + Restore PO Items)
 // ============================================================
 
@@ -26,6 +27,103 @@
     try {
       _originalPoItems = JSON.parse(JSON.stringify(state.poItemsData || []));
     } catch(e) { _originalPoItems = []; }
+  };
+
+  // ═══════════════════════════════════════════════════════════
+  // PREP STATUS CACHE (60s) + helpers
+  // ═══════════════════════════════════════════════════════════
+  window._prepStatusCache = null;
+  window._prepStatusFetchedAt = 0;
+  window._prepStatusFetching = null;
+
+  window.fetchPrepStatusesCached = async function(forceRefresh) {
+    var now = Date.now();
+    if (!forceRefresh && window._prepStatusCache && (now - window._prepStatusFetchedAt) < 60000) {
+      return window._prepStatusCache;
+    }
+    if (window._prepStatusFetching) return window._prepStatusFetching;
+
+    window._prepStatusFetching = (async function() {
+      try {
+        var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
+        var url = API_URL + '?action=getPrepStatuses&_t=' + Date.now();
+        var res = await fetchFn(url, { redirect: 'follow' }, { timeout: 15000, retries: 1 });
+        var text = await res.text();
+        var data = JSON.parse(text);
+        window._prepStatusCache = (data && data.success && data.statuses) ? data.statuses : {};
+        window._prepStatusFetchedAt = Date.now();
+        return window._prepStatusCache;
+      } catch(e) {
+        console.warn('[fetchPrepStatusesCached] failed:', e);
+        if (!window._prepStatusCache) window._prepStatusCache = {};
+        return window._prepStatusCache;
+      } finally {
+        window._prepStatusFetching = null;
+      }
+    })();
+    return window._prepStatusFetching;
+  };
+
+  function _prepStatusOf(docNo) {
+    var map = window._prepStatusCache || {};
+    var entry = map[docNo];
+    var s = entry ? String(entry.prepStatus || 'NEW').toUpperCase() : 'NEW';
+    if (s !== 'PREPARED' && s !== 'PICKED_UP') s = 'NEW';
+    return s;
+  }
+  function _prepEmojiOf(s) {
+    if (s === 'PREPARED') return '🟢';
+    if (s === 'PICKED_UP') return '🟡';
+    return '🔴';
+  }
+  function _prepBgOf(s) {
+    if (s === 'PREPARED') return '#f4fbf7';
+    if (s === 'PICKED_UP') return '#fffaf0';
+    return '#fff5f5';
+  }
+  function _prepFgOf(s) {
+    if (s === 'PREPARED') return '#145c32';
+    if (s === 'PICKED_UP') return '#8a6100';
+    return '#a71d2a';
+  }
+  function _prepBorderOf(s) {
+    if (s === 'PREPARED') return '#198754';
+    if (s === 'PICKED_UP') return '#ffc107';
+    return '#dc3545';
+  }
+  window._prepStatusOf = _prepStatusOf;
+  window._prepEmojiOf = _prepEmojiOf;
+  window._prepBgOf = _prepBgOf;
+  window._prepFgOf = _prepFgOf;
+  window._prepBorderOf = _prepBorderOf;
+
+  // ─── Manual refresh button handler ───
+  window.refreshPrepColorsNow = async function(btn) {
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    }
+    try {
+      await fetchPrepStatusesCached(true);
+      if (state.docList && state.docList.length) {
+        await populateDocSelect(state.docList);
+      }
+      var sel = document.getElementById('docSelect');
+      if (sel && sel.value) {
+        var prep = _prepStatusOf(sel.value);
+        sel.style.background = _prepBgOf(prep);
+        sel.style.color = _prepFgOf(prep);
+        sel.style.borderLeft = '4px solid ' + _prepBorderOf(prep);
+      }
+      if (typeof showToast === 'function') showToast('Prep colors refreshed', 'success');
+    } catch(e) {
+      if (typeof showToast === 'function') showToast('Failed: ' + e.message, 'danger');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-palette"></i>';
+      }
+    }
   };
 
   // ─── Core ──────────────────────────────────────────────
@@ -111,11 +209,13 @@
     if (!forceRefresh) {
       var cached = getCache(cacheKey);
       if (cached) {
-        populateDocSelect(cached);
+        fetchPrepStatusesCached(false).then(function() { populateDocSelect(cached); });
         _fetchPendingDocsFromServer(sheetId).then(function(docs) {
           setCache(cacheKey, docs, 5 * 60 * 1000);
           var sel = document.getElementById('docSelect');
-          if (sel && document.activeElement !== sel) populateDocSelect(docs);
+          if (sel && document.activeElement !== sel) {
+            fetchPrepStatusesCached(false).then(function() { populateDocSelect(docs); });
+          }
         }).catch(function() {});
         return cached;
       }
@@ -123,7 +223,8 @@
     try {
       var docs = await _fetchPendingDocsFromServer(sheetId);
       setCache(cacheKey, docs, 5 * 60 * 1000);
-      populateDocSelect(docs);
+      await fetchPrepStatusesCached(forceRefresh);
+      await populateDocSelect(docs);
       return docs;
     } catch(err) {
       showToast('Failed to load documents: ' + err.message, 'danger');
@@ -131,14 +232,41 @@
     }
   };
 
-  window.populateDocSelect = function(docs) {
+  window.populateDocSelect = async function(docs) {
     var sel = document.getElementById('docSelect');
     if (!sel) return;
-    var html = '<option value="">-- Select Document --</option>';
     state.docList = docs;
+
+    // Fetch prep statuses first (async, cached 60s)
+    try { await fetchPrepStatusesCached(); } catch(e) {}
+
+    // Sort: newest first (by trailing number), Bal docs next to parent
+    docs.sort(function(a, b) {
+      var na = (typeof a === 'string' ? a : (a.docNo || a.name || '')).toUpperCase();
+      var nb = (typeof b === 'string' ? b : (b.docNo || b.name || '')).toUpperCase();
+      var numA = 0, numB = 0;
+      var ma = na.match(/(\d{4,})/); if (ma) numA = parseInt(ma[1], 10);
+      var mb = nb.match(/(\d{4,})/); if (mb) numB = parseInt(mb[1], 10);
+      if (numA !== numB) return numB - numA;
+      var isBalA = na.indexOf('BAL.') === 0 ? 1 : 0;
+      var isBalB = nb.indexOf('BAL.') === 0 ? 1 : 0;
+      if (isBalA !== isBalB) return isBalA - isBalB;
+      return nb.localeCompare(na);
+    });
+
+    var html = '<option value="">-- Select Document --</option>';
     docs.forEach(function(d) {
       var val = typeof d === 'string' ? d : (d.docNo || d.name || d);
-      html += '<option value="' + val + '">' + cleanDocNo(val) + '</option>';
+      var display = cleanDocNo(val);
+      var prep = _prepStatusOf(val);
+      var emoji = _prepEmojiOf(prep);
+      var bg = _prepBgOf(prep);
+      var fg = _prepFgOf(prep);
+
+      html += '<option value="' + val + '"' +
+        ' style="background-color:' + bg + '; color:' + fg + '; font-weight:600;"' +
+        ' data-prep="' + prep + '"' +
+        '>' + emoji + ' ' + display + '</option>';
     });
     sel.innerHTML = html;
   };
@@ -152,7 +280,14 @@
     state.docList.forEach(function(d) {
       var val = typeof d === 'string' ? d : (d.docNo || d.name || d);
       if (cleanDocNo(val).toLowerCase().indexOf(term) !== -1) {
-        html += '<option value="' + val + '">' + cleanDocNo(val) + '</option>';
+        var prep = _prepStatusOf(val);
+        var emoji = _prepEmojiOf(prep);
+        var bg = _prepBgOf(prep);
+        var fg = _prepFgOf(prep);
+        html += '<option value="' + val + '"' +
+          ' style="background-color:' + bg + '; color:' + fg + '; font-weight:600;"' +
+          ' data-prep="' + prep + '"' +
+          '>' + emoji + ' ' + cleanDocNo(val) + '</option>';
       }
     });
     sel.innerHTML = html;
@@ -178,6 +313,17 @@
     if (active) active.classList.remove('d-none');
     var title = document.getElementById('docTitle');
     if (title) title.textContent = cleanDocNo(docNo);
+
+    // Color the select to match the currently selected doc's prep status
+    var sel = document.getElementById('docSelect');
+    if (sel) {
+      var prep = _prepStatusOf(docNo);
+      sel.style.background = _prepBgOf(prep);
+      sel.style.color = _prepFgOf(prep);
+      sel.style.fontWeight = '600';
+      sel.style.borderLeft = '4px solid ' + _prepBorderOf(prep);
+    }
+
     showLoading('Loading document...');
     try {
       await fetchDocItems(docNo, state.currentModule);
@@ -212,7 +358,13 @@
     var active = document.getElementById('activeTransactionSection');
     if (active) active.classList.add('d-none');
     var sel = document.getElementById('docSelect');
-    if (sel) sel.value = '';
+    if (sel) {
+      sel.value = '';
+      sel.style.background = '';
+      sel.style.color = '';
+      sel.style.fontWeight = '';
+      sel.style.borderLeft = '';
+    }
     var banner = document.getElementById('resumeBanner');
     if (banner) banner.classList.add('d-none');
   };
@@ -298,11 +450,10 @@
     startScanner();
   };
 
-  // ─── Reprocess guard — checks DOCLINKS status first, then remarks ───
+  // ─── Reprocess guard ───
   window.checkIfAlreadyProcessed = async function() {
     if (state.items.length === 0) return;
 
-    // ★ First: check DOCLINKS status via API (authoritative)
     try {
       var docStatus = null;
       if (state.currentDoc) {
@@ -573,7 +724,6 @@
     }, 'Submitting...');
   };
 
-  // ─── Submit transaction with idempotency ───
   window.submitTransaction = async function(verifiedItems) {
     var idemKey = 'tx_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
 
@@ -1231,7 +1381,6 @@
     loadIvmTeamList(false).catch(function() {});
   };
 
-  // ─── Prefill Manual MRR from a partial MRR doc ───
   window.prefillManualMrrFromDoc = async function(docNo) {
     if (!docNo) return;
     if (state.isLoading) return;
@@ -1482,7 +1631,6 @@
     btn.disabled = !(drNo && vendor && site && hasValidItems);
   };
 
-  // ─── Submit Manual MRR (normal OR prefill) with idempotency ───
   window.submitManualMrr = function() {
     var btn = document.getElementById('btnSubmitManualMrr');
     return withButtonLoading(btn, async function() {
@@ -1879,4 +2027,4 @@
     } catch(err) {}
   };
 
-})();
+})(); // end IIFE
