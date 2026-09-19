@@ -75,7 +75,29 @@
     color: rgba(255,255,255,0.5);
   }
 
-  .main-content { flex: 1; padding: 16px 20px; background: var(--gemcor-bg); min-width: 0; }
+  .main-content {
+    flex: 1;
+    padding: 16px 20px;
+    background: var(--gemcor-bg);
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    align-content: flex-start;
+    overflow-x: hidden;
+  }
+  .main-content > .sidebar-toggle,
+  .main-content > .top-bar,
+  .main-content > .section-page {
+    flex: 0 0 auto;
+    align-self: stretch;
+    margin-top: 0;
+    min-height: 0;
+  }
+  .main-content > .section-page.active {
+    display: block;
+  }
   .section-page { display: none; animation: fadeIn 0.25s ease; }
   .section-page.active { display: block; }
 
@@ -564,6 +586,61 @@
   .prep-legend-mini .prep-legend-swatch.red    { background: #dc3545; }
   .prep-legend-mini .prep-legend-swatch.green  { background: #198754; }
   .prep-legend-mini .prep-legend-swatch.yellow { background: #ffc107; }
+
+    /* ═══════════════════════════════════════════════════════════
+     LAYOUT SAFETY — prevents sections from being pushed down
+     ═══════════════════════════════════════════════════════════ */
+
+  /* Ensure the app-wrapper stretches properly */
+  .app-wrapper { align-items: stretch; }
+
+  /* Fix the sidebar to not interfere with content flow */
+  .sidebar {
+    align-self: flex-start;
+    height: 100vh;
+    max-height: 100vh;
+  }
+
+  /* Guarantee every section starts at the top of its container */
+  .section-page {
+    display: none;
+    animation: fadeIn 0.25s ease;
+    margin-top: 0;
+    padding-top: 0;
+    position: relative;
+  }
+  .section-page.active {
+    display: block;
+  }
+
+  /* Chat wrapper: don't allow it to overflow past the viewport */
+  .chat-wrapper {
+    max-height: calc(100vh - 120px);
+  }
+
+  /* Make sure no section artificially inflates its own height */
+  #section-messages,
+  #section-returns,
+  #section-receiving,
+  #section-releasing,
+  #section-dashboard,
+  #section-requests,
+  #section-myrequests,
+  #section-inventory,
+  #section-settings,
+  #section-about {
+    height: auto;
+    max-height: none;
+  }
+
+  /* On desktop, sidebar stays in flow */
+  @media (min-width: 769px) {
+    .sidebar {
+      position: sticky;
+      top: 0;
+    }
+    .sidebar-toggle { display: none !important; }
+  }
 </style>
 </head>
 <body>
