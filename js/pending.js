@@ -3,7 +3,9 @@
 // - PENDING → normal scanner flow
 // - PARTIAL MRR → opens Manual MRR form (editable DR)
 // - PARTIAL MRIF / MRS → Bal process modal
-// - Prep Status coloring: Red=NEW, Green=PREPARED, Yellow=PICKED_UP
+// - NOTE: Prep color coding removed from this view.
+//   Prep status is now visualized in the "All Requests" page.
+//   The Mark Prepared / Mark Picked Up actions remain here.
 // ============================================================
 
 var _pendingModal = null;
@@ -121,11 +123,9 @@ window.openPendingMrifList = async function() {
       var status = (d.status || '').toUpperCase();
       var isBal = !!d.isBal || docNo.toUpperCase().indexOf('BAL.') === 0;
 
+      // Prep status is still needed for the action button — but NOT rendered as a colored badge.
       var prepEntry = _pendingPrepMap[docNo] || { prepStatus: 'NEW' };
       var prepStatus = prepEntry.prepStatus || 'NEW';
-      var prepClass = _prepClass(prepStatus);
-      var prepLabel = _prepLabel(prepStatus);
-      var prepIcon = _prepIcon(prepStatus);
 
       var typeBadgeClass = docType === 'MRIF' ? 'bg-warning text-dark' :
                            docType === 'MRR' ? 'bg-success' :
@@ -135,7 +135,6 @@ window.openPendingMrifList = async function() {
       var badge = '<span class="badge ' + typeBadgeClass + ' me-2">' + escapeHtmlPending(docType) + '</span>';
       var balTag = isBal ? ' <span class="badge bg-info text-dark">BAL</span>' : '';
       var statusTag = ' <span class="badge ' + statusBadgeClass + '">' + escapeHtmlPending(status) + '</span>';
-      var prepTag = ' <span class="prep-badge"><i class="bi ' + prepIcon + ' me-1"></i>' + prepLabel + '</span>';
 
       var requestorInfo = d.requestor
         ? '<div class="small text-muted ms-4"><i class="bi bi-person me-1"></i>' + escapeHtmlPending(d.requestor) + '</div>'
@@ -146,10 +145,11 @@ window.openPendingMrifList = async function() {
       if (isWarehouse) {
         rightSide = _prepActionButton(docNo, prepStatus);
       } else {
-        rightSide = '<span class="prep-badge"><i class="bi ' + prepIcon + ' me-1"></i>' + prepLabel + '</span>';
+        rightSide = '<span class="badge ' + statusBadgeClass + '">' + escapeHtmlPending(status) + '</span>';
       }
 
-      html += '<div class="list-group-item pending-mrif-item ' + prepClass + '"' +
+      // NOTE: No prepClass on the row, no prep badge in the content.
+      html += '<div class="list-group-item pending-mrif-item"' +
         ' data-docno="' + escapeHtmlPending(docNo) + '"' +
         ' data-doctype="' + escapeHtmlPending(docType) + '"' +
         ' data-status="' + escapeHtmlPending(status) + '">' +
@@ -157,7 +157,7 @@ window.openPendingMrifList = async function() {
           '<div class="flex-grow-1" style="min-width:0;">' +
             '<i class="bi bi-file-earmark-text me-2"></i>' +
             badge +
-            '<strong>' + escapeHtmlPending(docNo) + '</strong>' + balTag + statusTag + prepTag +
+            '<strong>' + escapeHtmlPending(docNo) + '</strong>' + balTag + statusTag +
             requestorInfo +
           '</div>' +
           '<div class="flex-shrink-0">' + rightSide + '</div>' +
@@ -169,7 +169,6 @@ window.openPendingMrifList = async function() {
     // Row click → process document (not the buttons)
     container.querySelectorAll('.pending-mrif-item').forEach(function(el) {
       el.addEventListener('click', function(ev) {
-        // If click was on the prep action button or its children, ignore
         if (ev.target.closest('.btn-prep-action')) return;
         var docNo = this.getAttribute('data-docno');
         var docType = this.getAttribute('data-doctype');
@@ -224,7 +223,9 @@ window.markPrepStatus = async function(docNo, newStatus) {
     var data = JSON.parse(text);
     if (data.success) {
       showToast('Updated to ' + newStatus.replace('_', ' '), 'success');
-      openPendingMrifList(); // refresh
+      // Refresh both views so the All Requests badge colors update too.
+      if (typeof loadAllRequests === 'function') loadAllRequests();
+      openPendingMrifList();
     } else {
       showToast(data.error || 'Failed to update', 'danger');
     }
@@ -445,6 +446,7 @@ window.submitProcessBalance = function() {
         if (typeof updatePartialCount === 'function') updatePartialCount();
         if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
         if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
+        if (typeof loadAllRequests === 'function') loadAllRequests();
       } else showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
     } catch(err) { showToast('Error: ' + err.message, 'danger'); }
   }, 'Creating...');
