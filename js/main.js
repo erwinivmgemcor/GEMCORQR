@@ -25,7 +25,8 @@ window.applySidebarRole = function(role) {
       : (state.currentUser ? state.currentUserFullname : 'Warehouse');
   }
 
-  var warehouseNavItems = ['dashboard', 'releasing', 'receiving', 'returns', 'editrequests'];
+  // Warehouse-only nav items. 'allrequests' is new — shows only for warehouse.
+  var warehouseNavItems = ['dashboard', 'allrequests', 'releasing', 'receiving', 'returns', 'editrequests'];
   var productionNavItems = ['requests', 'myrequests'];
 
   document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el) {
@@ -69,6 +70,7 @@ function navigateTo(sectionId) {
 
   var titles = {
     dashboard: 'Dashboard',
+    allrequests: 'All Requests',
     releasing: 'Releasing (MRIF)',
     receiving: 'Receiving (MRR)',
     returns: 'Returns (MRS)',
@@ -103,6 +105,10 @@ function navigateTo(sectionId) {
     var role = localStorage.getItem('ivm_userRole');
     if (role === 'warehouse' && !window.analyticsLoaded) setTimeout(loadAnalytics, 300);
     if (role === 'warehouse' && typeof updatePartialCount === 'function') setTimeout(updatePartialCount, 500);
+  }
+
+  if (sectionId === 'allrequests') {
+    if (typeof loadAllRequests === 'function') setTimeout(loadAllRequests, 100);
   }
 
   if (sectionId === 'myrequests') {
@@ -162,8 +168,12 @@ function _editActionButtonHtml(docNo, docType) {
   return '';
 }
 
-// ─── My Request Details ───
-window.openMyRequestDetails = async function(docNo, docType) {
+// ─── My Request Details (also used by Warehouse's All Requests view) ───
+// Third arg `opts.warehouse === true` swaps the edit button for a Process Request button.
+window.openMyRequestDetails = async function(docNo, docType, opts) {
+  opts = opts || {};
+  var isWarehouseView = opts.warehouse === true;
+
   var modalEl = document.getElementById('myRequestDetailsModal');
   if (!modalEl) {
     if (typeof openRequestDetails === 'function') {
@@ -181,14 +191,19 @@ window.openMyRequestDetails = async function(docNo, docType) {
   content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading request details...</div></div>';
   modal.show();
 
-  try {
-    var emUrl = API_URL + '?action=getMyEditRequests&requestor=' + encodeURIComponent(localStorage.getItem('ivm_username') || '') + '&_t=' + Date.now();
-    var emRes = await fetch(emUrl, { redirect: 'follow' });
-    var emText = await emRes.text();
-    var emData = JSON.parse(emText);
-    window._editReqMap = (emData.success && emData.map) ? emData.map : {};
-  } catch(e) {
+  // Edit request map is only relevant for production side
+  if (isWarehouseView) {
     window._editReqMap = {};
+  } else {
+    try {
+      var emUrl = API_URL + '?action=getMyEditRequests&requestor=' + encodeURIComponent(localStorage.getItem('ivm_username') || '') + '&_t=' + Date.now();
+      var emRes = await fetch(emUrl, { redirect: 'follow' });
+      var emText = await emRes.text();
+      var emData = JSON.parse(emText);
+      window._editReqMap = (emData.success && emData.map) ? emData.map : {};
+    } catch(e) {
+      window._editReqMap = {};
+    }
   }
 
   var appUrl = window.location.origin + window.location.pathname;
@@ -217,7 +232,6 @@ window.openMyRequestDetails = async function(docNo, docType) {
       var info = data.info || {};
       var items = data.items || [];
 
-      // ✅ Escaped values
       var requestor = _escMain(info.Requestor || info.requestor || '');
       var dept = _escMain(info.Department || info.department || '');
       var dateStr = _escMain(info.Date || info.date || info['Date Prepared'] || '');
@@ -280,15 +294,21 @@ window.openMyRequestDetails = async function(docNo, docType) {
 
   var safeDocNo2 = _escMain(docNo);
   var safeDocType2 = _escMain(docType || 'MRIF');
+  var jsDoc = String(docNo).replace(/'/g, "\\'");
+  var jsType = String(docType || 'MRIF').replace(/'/g, "\\'");
 
   content.innerHTML =
     '<div class="text-center mb-3">' +
       '<div class="fw-bold mb-2" style="font-size:1.1rem;">' + safeDocNo2 + '</div>' +
       '<div class="mb-2 d-flex justify-content-center gap-2 flex-wrap">' +
-        '<button class="btn btn-sm btn-outline-primary" onclick="discussDocument(\'' + String(docNo).replace(/'/g, "\\'") + '\', \'' + String(docType || 'MRIF').replace(/'/g, "\\'") + '\')">' +
+        '<button class="btn btn-sm btn-outline-primary" onclick="discussDocument(\'' + jsDoc + '\', \'' + jsType + '\')">' +
           '<i class="bi bi-chat-dots me-1"></i>Discuss' +
         '</button>' +
-        _editActionButtonHtml(docNo, docType || 'MRIF') +
+        (isWarehouseView
+          ? '<button class="btn btn-sm btn-success" onclick="processRequestFromDetails(\'' + jsDoc + '\', \'' + jsType + '\')">' +
+              '<i class="bi bi-play-circle me-1"></i>Process Request' +
+            '</button>'
+          : _editActionButtonHtml(docNo, docType || 'MRIF')) +
       '</div>' +
       '<img id="myRequestQrImg" src="' + qrUrl + '" alt="QR" style="max-width:220px;width:100%;border:1px solid #ddd;border-radius:8px;padding:8px;background:#fff;">' +
       '<div class="mt-2">' +
@@ -332,7 +352,7 @@ window.downloadMyRequestQr = function() {
   qrImg.src = img.src;
 };
 
-// ─── Render My Requests with Prep Status coloring ───
+// ─── Render My Requests with Prep Status coloring (production view) ───
 var originalRenderMyRequests = window.renderMyRequests || function() {};
 
 window.renderMyRequests = async function(requests) {
@@ -445,6 +465,147 @@ window.updateWarehouseKPIs = function() {
   if (typeof originalUpdateWarehouseKPIs === 'function') {
     try { originalUpdateWarehouseKPIs(); } catch(e) {}
   }
+};
+
+// ═══════════════════════════════════════════════════════════════
+// ALL REQUESTS (Warehouse view)
+// ═══════════════════════════════════════════════════════════════
+
+window.loadAllRequests = async function() {
+  var container = document.getElementById('allRequestsListPage');
+  if (!container) return;
+
+  container.innerHTML = '<div class="list-group-item text-muted text-center py-3">' +
+    '<div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading all requests...</div>';
+
+  var filterEl = document.getElementById('allRequestsFilter');
+  var filterRaw = filterEl ? filterEl.value : 'MRIF,MRS';
+  var allowedTypes = (filterRaw || 'MRIF,MRS').split(',').map(function(s) { return s.trim().toUpperCase(); });
+
+  try {
+    var url = API_URL + '?action=getAllPendingDocs&_t=' + Date.now();
+    var res = await fetch(url, { redirect: 'follow' });
+    var text = await res.text();
+    var trimmed = String(text || '').trim();
+    if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
+    var data = JSON.parse(trimmed);
+    if (!data.success) throw new Error(data.error || 'Failed to load requests');
+
+    var docs = (data.documents || []).filter(function(d) {
+      var t = (d.docType || '').toUpperCase();
+      return allowedTypes.indexOf(t) !== -1;
+    });
+
+    docs.sort(function(a, b) {
+      var ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      var tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return tb - ta;
+    });
+
+    var badge = document.getElementById('allRequestsBadgeSidebar');
+    if (badge) {
+      badge.textContent = docs.length;
+      badge.classList.toggle('d-none', docs.length === 0);
+    }
+
+    renderAllRequests(docs);
+  } catch(err) {
+    console.error('[loadAllRequests] Error:', err);
+    container.innerHTML = '<div class="list-group-item text-danger text-center py-3">' +
+      '<i class="bi bi-exclamation-triangle-fill me-2"></i>Failed to load: ' + _escMain(err.message) + '</div>';
+  }
+};
+
+function renderAllRequests(docs) {
+  var container = document.getElementById('allRequestsListPage');
+  if (!container) return;
+
+  if (!docs || docs.length === 0) {
+    container.innerHTML = '<div class="list-group-item text-muted text-center py-4">' +
+      '<i class="bi bi-inbox fs-3 d-block mb-2"></i>' +
+      '<div>No active requests right now.</div>' +
+      '<div class="small mt-1">New requests from production will appear here automatically.</div>' +
+      '</div>';
+    return;
+  }
+
+  var html = '';
+  docs.forEach(function(req) {
+    var docNoRaw = req.docNo || '';
+    var docNo = _escMain(docNoRaw);
+    var docType = _escMain((req.docType || 'MRIF').toUpperCase());
+    var status = (req.status || 'PENDING').toUpperCase();
+    var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
+    var requestor = _escMain(req.requestor || 'Unknown');
+    var itemSummary = _escMain(req.itemSummary || '—');
+    var isBal = req.isBal || docNoRaw.toUpperCase().indexOf('BAL.') === 0;
+
+    var isCompleted = status === 'COMPLETED';
+    var isPartial = status === 'PARTIAL';
+    var badgeClass = isCompleted ? 'success' : (isPartial ? 'info text-dark' : 'warning text-dark');
+    var icon = isCompleted ? 'bi-check-circle-fill' : (isPartial ? 'bi-hourglass-split' : 'bi-clock');
+
+    var typeBadgeClass = docType === 'MRIF' ? 'bg-warning text-dark'
+                        : docType === 'MRR' ? 'bg-success'
+                        : docType === 'MRS' ? 'bg-danger'
+                        : 'bg-secondary';
+
+    var balTag = isBal ? ' <span class="badge bg-info text-dark">BAL</span>' : '';
+
+    html += '<div class="list-group-item request-card all-request-card ' + (isCompleted ? 'completed' : '') + '" ' +
+      'data-docno="' + docNo + '" data-doctype="' + docType + '" style="cursor:pointer;">' +
+        '<div class="d-flex justify-content-between align-items-start flex-wrap gap-2">' +
+          '<div class="flex-grow-1" style="min-width:0;">' +
+            '<div class="fw-bold">' + docNo +
+              ' <span class="badge ' + typeBadgeClass + '">' + docType + '</span>' + balTag +
+            '</div>' +
+            '<div class="small text-muted">' +
+              '<i class="bi bi-person me-1"></i>' + requestor +
+              ' &nbsp; <i class="bi bi-calendar me-1"></i>' + _escMain(dateStr) +
+            '</div>' +
+            '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + itemSummary + '</div>' +
+            '<div class="small text-muted mt-1">' +
+              '<i class="bi bi-info-circle me-1"></i> Click to view details, discuss, or process' +
+            '</div>' +
+          '</div>' +
+          '<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + status + '</span>' +
+        '</div>' +
+      '</div>';
+  });
+
+  container.innerHTML = html;
+
+  container.querySelectorAll('.all-request-card').forEach(function(el) {
+    el.addEventListener('click', function() {
+      var docNo = this.getAttribute('data-docno');
+      var docType = this.getAttribute('data-doctype') || 'MRIF';
+      if (docNo) openMyRequestDetails(docNo, docType, { warehouse: true });
+    });
+  });
+}
+
+window.processRequestFromDetails = function(docNo, docType) {
+  if (!docNo || !docType) return;
+
+  var modalEl = document.getElementById('myRequestDetailsModal');
+  if (modalEl) {
+    var m = bootstrap.Modal.getInstance(modalEl);
+    if (m) m.hide();
+  }
+
+  setTimeout(function() {
+    if (typeof openPendingNormalFlow === 'function') {
+      openPendingNormalFlow(docNo, docType);
+      return;
+    }
+    var sectionMap = { 'MRIF': 'releasing', 'MRR': 'receiving', 'MRS': 'returns' };
+    if (typeof navigateTo === 'function') navigateTo(sectionMap[docType] || 'releasing');
+    setTimeout(function() {
+      if (typeof selectModule === 'function' && typeof onDocSelect === 'function') {
+        selectModule(docType).then(function() { onDocSelect(docNo); });
+      }
+    }, 300);
+  }, 300);
 };
 
 // ─── Test connection ───
