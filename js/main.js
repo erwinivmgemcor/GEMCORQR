@@ -13,6 +13,25 @@ function _escMain(s) {
     .replace(/'/g, '&#39;');
 }
 
+// ─── Local prep-status helpers (used by All Requests renderer) ───
+function _prepStatusFromMap(prepMap, docNo) {
+  var p = prepMap[docNo];
+  var s = p ? String(p.prepStatus || 'NEW').toUpperCase() : 'NEW';
+  if (s !== 'PREPARED' && s !== 'PICKED_UP') s = 'NEW';
+  return s;
+}
+function _prepClassFromStatus(s) {
+  if (s === 'PREPARED') return 'prep-prepared';
+  if (s === 'PICKED_UP') return 'prep-pickedup';
+  return 'prep-new';
+}
+function _prepTagFromStatus(s) {
+  var label = s === 'PREPARED' ? 'PREPARED' : (s === 'PICKED_UP' ? 'PICKED UP' : 'NOT PREPARED');
+  var icon = s === 'PREPARED' ? 'bi-check-circle-fill'
+           : (s === 'PICKED_UP' ? 'bi-box-arrow-up-right' : 'bi-exclamation-circle-fill');
+  return '<span class="prep-badge"><i class="bi ' + icon + ' me-1"></i>' + label + '</span>';
+}
+
 window.applySidebarRole = function(role) {
   var isProduction = (role === 'production');
   var isWarehouse = (role === 'warehouse');
@@ -167,9 +186,7 @@ function _editActionButtonHtml(docNo, docType) {
   return '';
 }
 
-// ─── My Request Details (also used by Warehouse All Requests view) ───
-// opts.warehouse = true → shows Process Request button instead of edit
-// opts.status    = current doc status, so we can hide Process Request when already COMPLETED
+// ─── My Request Details ───
 window.openMyRequestDetails = async function(docNo, docType, opts) {
   opts = opts || {};
   var isWarehouseView = opts.warehouse === true;
@@ -296,7 +313,6 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
   var jsDoc = String(docNo).replace(/'/g, "\\'");
   var jsType = String(docType || 'MRIF').replace(/'/g, "\\'");
 
-  // ─── Action buttons ───
   var actionButtons = '<button class="btn btn-sm btn-outline-primary" onclick="discussDocument(\'' + jsDoc + '\', \'' + jsType + '\')">' +
     '<i class="bi bi-chat-dots me-1"></i>Discuss' +
   '</button>';
@@ -361,7 +377,9 @@ window.downloadMyRequestQr = function() {
   qrImg.src = img.src;
 };
 
-// ─── Render My Requests with Prep Status coloring (production view) ───
+// ─── Render My Requests (production view) ───
+// Prep status shown ONLY for PENDING / PARTIAL docs. Completed docs get
+// a clean "COMPLETED" badge alone — no confusing "NOT PREPARED" label.
 var originalRenderMyRequests = window.renderMyRequests || function() {};
 
 window.renderMyRequests = async function(requests) {
@@ -379,21 +397,6 @@ window.renderMyRequests = async function(requests) {
     var data = JSON.parse(text);
     if (data && data.success) prepMap = data.statuses || {};
   } catch(e) { /* silent — fallback to no coloring */ }
-
-  function prepCls(docNo) {
-    var p = prepMap[docNo];
-    var s = p ? String(p.prepStatus || 'NEW').toUpperCase() : 'NEW';
-    if (s === 'PREPARED') return 'prep-prepared';
-    if (s === 'PICKED_UP') return 'prep-pickedup';
-    return 'prep-new';
-  }
-  function prepTag(docNo) {
-    var p = prepMap[docNo];
-    var s = p ? String(p.prepStatus || 'NEW').toUpperCase() : 'NEW';
-    var label = s === 'PREPARED' ? 'PREPARED' : (s === 'PICKED_UP' ? 'PICKED UP' : 'NOT PREPARED');
-    var icon = s === 'PREPARED' ? 'bi-check-circle-fill' : (s === 'PICKED_UP' ? 'bi-box-arrow-up-right' : 'bi-exclamation-circle-fill');
-    return '<span class="prep-badge"><i class="bi ' + icon + ' me-1"></i>' + label + '</span>';
-  }
 
   if (typeof originalRenderMyRequests === 'function') {
     try { originalRenderMyRequests(requests); } catch(e) { console.warn('[renderMyRequests] Original error:', e); }
@@ -421,7 +424,7 @@ window.renderMyRequests = async function(requests) {
 
   requests.forEach(function(req) {
     var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
-    var status = req.status || 'PENDING';
+    var status = (req.status || 'PENDING').toUpperCase();
     var isCompleted = (status === 'COMPLETED');
     var isPartial = (status === 'PARTIAL');
     var badgeClass = isCompleted ? 'success' : (isPartial ? 'info' : 'warning');
@@ -433,8 +436,14 @@ window.renderMyRequests = async function(requests) {
     var itemCode = _escMain(req.itemCode || '');
     var qty = parseInt(req.qty, 10) || 0;
 
-    var prepClass = prepCls(docNoRaw);
-    var prepBadge = prepTag(docNoRaw);
+    // ★ Prep status only applies to active docs. Completed docs show no prep badge.
+    var prepClass = '';
+    var prepBadge = '';
+    if (!isCompleted) {
+      var prepStatus = _prepStatusFromMap(prepMap, docNoRaw);
+      prepClass = _prepClassFromStatus(prepStatus);
+      prepBadge = _prepTagFromStatus(prepStatus);
+    }
 
     var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + ' ' + prepClass + '" ' +
       'data-docno="' + docNo + '" data-doctype="' + docType + '" ' +
@@ -478,6 +487,7 @@ window.updateWarehouseKPIs = function() {
 
 // ═══════════════════════════════════════════════════════════════
 // ALL REQUESTS (Warehouse view — active + completed)
+// Prep status coloring is applied HERE now, per user request.
 // ═══════════════════════════════════════════════════════════════
 
 window.loadAllRequests = async function() {
@@ -493,8 +503,6 @@ window.loadAllRequests = async function() {
   var statusFilter = statusEl ? statusEl.value : 'all';
   var allowedTypes = (filterRaw || 'MRIF,MRS').split(',').map(function(s) { return s.trim().toUpperCase(); });
 
-  // When statusFilter is 'active' we can use the lightweight pending endpoint;
-  // otherwise we need completed docs too.
   var includeCompleted = (statusFilter !== 'active');
 
   try {
@@ -510,8 +518,7 @@ window.loadAllRequests = async function() {
 
     var allDocs = data.documents || [];
 
-    // Badge counts always reflect the true number of pending/partial docs,
-    // regardless of what the status filter currently shows.
+    // Badge always reflects true PENDING + PARTIAL count
     var activeCount = allDocs.filter(function(d) {
       var s = (d.status || 'PENDING').toUpperCase();
       return s === 'PENDING' || s === 'PARTIAL';
@@ -522,7 +529,19 @@ window.loadAllRequests = async function() {
       badge.classList.toggle('d-none', activeCount === 0);
     }
 
-    // Apply type + status filters for display
+    // Fetch prep statuses (needed to color active rows)
+    var prepMap = {};
+    if (statusFilter !== 'completed') {
+      try {
+        var prepUrl = API_URL + '?action=getPrepStatuses&_t=' + Date.now();
+        var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
+        var prepRes = await fetchFn(prepUrl, { redirect: 'follow' }, { timeout: 15000, retries: 0 });
+        var prepText = await prepRes.text();
+        var prepData = JSON.parse(prepText);
+        if (prepData && prepData.success) prepMap = prepData.statuses || {};
+      } catch(e) { /* silent — fallback to no coloring */ }
+    }
+
     var docs = allDocs.filter(function(d) {
       var t = (d.docType || '').toUpperCase();
       if (allowedTypes.indexOf(t) === -1) return false;
@@ -538,7 +557,7 @@ window.loadAllRequests = async function() {
       return tb - ta;
     });
 
-    renderAllRequests(docs, statusFilter);
+    renderAllRequests(docs, statusFilter, prepMap);
   } catch(err) {
     console.error('[loadAllRequests] Error:', err);
     container.innerHTML = '<div class="list-group-item text-danger text-center py-3">' +
@@ -546,9 +565,10 @@ window.loadAllRequests = async function() {
   }
 };
 
-function renderAllRequests(docs, statusFilter) {
+function renderAllRequests(docs, statusFilter, prepMap) {
   var container = document.getElementById('allRequestsListPage');
   if (!container) return;
+  prepMap = prepMap || {};
 
   if (!docs || docs.length === 0) {
     var emptyMsg = 'No requests found.';
@@ -579,8 +599,8 @@ function renderAllRequests(docs, statusFilter) {
     var itemSummary = _escMain(req.itemSummary || '—');
     var isBal = req.isBal || docNoRaw.toUpperCase().indexOf('BAL.') === 0;
 
-    var isCompleted = status === 'COMPLETED';
-    var isPartial = status === 'PARTIAL';
+    var isCompleted = (status === 'COMPLETED');
+    var isPartial = (status === 'PARTIAL');
 
     var badgeClass = isCompleted ? 'success' : (isPartial ? 'info text-dark' : 'warning text-dark');
     var icon = isCompleted ? 'bi-check-circle-fill' : (isPartial ? 'bi-hourglass-split' : 'bi-clock');
@@ -592,11 +612,16 @@ function renderAllRequests(docs, statusFilter) {
 
     var balTag = isBal ? ' <span class="badge bg-info text-dark">BAL</span>' : '';
 
-    var cardClass = 'all-request-card';
-    if (isCompleted) cardClass += ' completed';
-    else if (isPartial) cardClass += ' partial';
+    // ★ Prep coloring: ONLY for active (non-completed) docs
+    var prepClass = '';
+    var prepBadge = '';
+    if (!isCompleted) {
+      var prepStatus = _prepStatusFromMap(prepMap, docNoRaw);
+      prepClass = _prepClassFromStatus(prepStatus);
+      prepBadge = _prepTagFromStatus(prepStatus);
+    }
 
-    // Show processed-by + processed-at if available
+    // Processed-by line for completed docs
     var processedByLine = '';
     if (isCompleted && req.processedBy) {
       var processedAtStr = req.processedAt ? new Date(req.processedAt).toLocaleString() : '';
@@ -606,12 +631,17 @@ function renderAllRequests(docs, statusFilter) {
         '</div>';
     }
 
-    html += '<div class="list-group-item request-card ' + cardClass + '" ' +
+    var cardClass = 'all-request-card ' + prepClass;
+    if (isCompleted) cardClass += ' completed';
+    else if (isPartial) cardClass += ' partial';
+
+    html += '<div class="list-group-item ' + cardClass + '" ' +
       'data-docno="' + docNo + '" data-doctype="' + docType + '" data-status="' + _escMain(status) + '" style="cursor:pointer;">' +
         '<div class="d-flex justify-content-between align-items-start flex-wrap gap-2">' +
           '<div class="flex-grow-1" style="min-width:0;">' +
             '<div class="fw-bold">' + docNo +
               ' <span class="badge ' + typeBadgeClass + '">' + docType + '</span>' + balTag +
+              ' ' + prepBadge +
             '</div>' +
             '<div class="small text-muted">' +
               '<i class="bi bi-person me-1"></i>' + requestor +
