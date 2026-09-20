@@ -1,7 +1,8 @@
 // ============================================================
 // NEW REQUEST FUNCTIONS
 // (Item Scanner, Remarks, Idempotency, QR + items details modal,
-//  My Requests filtered to MRIF/MRS)
+//  My Requests filtered to MRIF/MRS,
+//  Auto-fill requestor from login on wizard open)
 // ============================================================
 
 if (typeof state !== 'undefined' && state._reqIdemKey === undefined) {
@@ -14,6 +15,14 @@ function openNewRequest() {
   loadRequestInventory();
   loadRequestorList();
   newRequestModal.show();
+
+  // ★ Fallback: if the requestor list is cached/empty and doesn't auto-populate
+  // within a moment, force auto-fill from the login anyway.
+  setTimeout(function() {
+    if (typeof window.autoFillRequestorFromLogin === 'function') {
+      try { window.autoFillRequestorFromLogin(state.requestorList || []); } catch(e) {}
+    }
+  }, 500);
 }
 
 function resetWizard() {
@@ -48,6 +57,20 @@ function resetWizard() {
 
 function goToStep(step) {
   closeWizardScanner();
+
+  // ★ Before leaving step 3, cache the user-entered department (if editable)
+  if (step === 4) {
+    var step3Dept = document.getElementById('step3Department');
+    if (step3Dept && !step3Dept.hasAttribute('readonly')) {
+      var deptVal = (step3Dept.value || '').trim();
+      if (deptVal) {
+        try { localStorage.setItem('ivm_userDepartment', deptVal); } catch(e) {}
+      }
+      var reqDept = document.getElementById('reqDepartment');
+      if (reqDept) reqDept.value = deptVal;
+    }
+  }
+
   document.querySelectorAll('.wizard-step').forEach(function(el) {
     var s = parseInt(el.getAttribute('data-step'));
     el.classList.remove('active', 'completed');
@@ -125,7 +148,16 @@ function onStep3RequestorChange() {
   var dept = selected ? selected.dataset.department : '';
   document.getElementById('reqRequestor').value = name;
   document.getElementById('reqDepartment').value = dept || '';
-  document.getElementById('step3Department').value = dept || '';
+
+  var step3Dept = document.getElementById('step3Department');
+  if (step3Dept) {
+    step3Dept.value = dept || '';
+    // If the field is editable (user isn't in the master list), remember their input
+    if (!step3Dept.hasAttribute('readonly') && dept) {
+      try { localStorage.setItem('ivm_userDepartment', dept); } catch(e) {}
+    }
+  }
+
   document.getElementById('btnStep3Next').disabled = !name;
 }
 
@@ -360,7 +392,6 @@ async function submitNewRequest() {
     return;
   }
 
-  // ★ Generate idempotency key once (persists across retries)
   if (!state._reqIdemKey) {
     state._reqIdemKey = 'req_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
   }
