@@ -3,7 +3,8 @@
 // (Partial Items + Balance MRIF + Prefill Manual MRR
 //  + Reprocess Guard via DOCLINKS + Idempotency on writes
 //  + Prep Status color coding on document dropdown
-//  + Clear/Edit PO Items + Restore PO Items)
+//  + Clear/Edit PO Items + Restore PO Items
+//  + Auto-fill requestor from login)
 // ============================================================
 
 (function() {
@@ -1291,13 +1292,117 @@
     var sel3 = document.getElementById('step3Requestor');
     [sel, sel3].forEach(function(s) {
       if (!s) return;
+      // Hidden inputs don't have innerHTML in a useful way, but harmless for selects
+      if (s.tagName === 'INPUT') return;
       var html = '<option value="">-- Select Requestor --</option>';
       list.forEach(function(r) {
         html += '<option value="' + r.name + '" data-department="' + (r.department || '') + '">' + r.name + '</option>';
       });
       s.innerHTML = html;
     });
+
+    // ★ Auto-fill the requestor + department from the logged-in user
+    _autoFillRequestorFromLogin(list);
   }
+
+  function _autoFillRequestorFromLogin(list) {
+    list = list || [];
+
+    // ─── 1. Get the logged-in user's full name ───
+    var fullname = '';
+    try {
+      if (typeof state !== 'undefined' && state.currentUserFullname) {
+        fullname = String(state.currentUserFullname).trim();
+      }
+    } catch(e) {}
+    if (!fullname) {
+      fullname = String(localStorage.getItem('ivm_userFullname') || '').trim();
+    }
+    if (!fullname) {
+      fullname = String(localStorage.getItem('ivm_requestorName') || '').trim();
+    }
+    if (!fullname) {
+      // Last resort: use username
+      fullname = String(localStorage.getItem('ivm_username') || '').trim();
+    }
+    if (!fullname) return;
+
+    // ─── 2. Try to find a matching entry in the requestor master list ───
+    var matched = null;
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i].name || '').trim().toLowerCase() === fullname.toLowerCase()) {
+        matched = list[i];
+        break;
+      }
+    }
+
+    var step3Sel = document.getElementById('step3Requestor');
+    var step3Dept = document.getElementById('step3Department');
+    var reqHidden = document.getElementById('reqRequestor');
+    var reqDept = document.getElementById('reqDepartment');
+
+    // ─── 3. Select the requestor in the visible dropdown ───
+    if (step3Sel) {
+      if (matched) {
+        step3Sel.value = matched.name;
+      } else {
+        // Add the logged-in user as a "(You)" option at the top
+        var existing = step3Sel.querySelector('option[value="' + CSS.escape(fullname) + '"]');
+        if (!existing) {
+          var opt = document.createElement('option');
+          opt.value = fullname;
+          opt.textContent = fullname + ' (You)';
+          opt.setAttribute('data-department', localStorage.getItem('ivm_userDepartment') || '');
+          // Insert right after the placeholder
+          if (step3Sel.options.length > 0) {
+            step3Sel.insertBefore(opt, step3Sel.options[1] || null);
+          } else {
+            step3Sel.appendChild(opt);
+          }
+        }
+        step3Sel.value = fullname;
+      }
+    }
+
+    // ─── 4. Fill department ───
+    var deptValue = '';
+    var isEditable = false;
+
+    if (matched) {
+      deptValue = matched.department || '';
+      isEditable = false;
+    } else {
+      deptValue = localStorage.getItem('ivm_userDepartment') || '';
+      isEditable = true; // not found in master → let the user type it
+    }
+
+    if (step3Dept) {
+      step3Dept.value = deptValue;
+      if (isEditable) {
+        step3Dept.removeAttribute('readonly');
+        step3Dept.placeholder = 'Enter your department';
+      } else {
+        step3Dept.setAttribute('readonly', 'readonly');
+      }
+    }
+
+    // ─── 5. Sync the hidden inputs that the wizard reads at submit time ───
+    if (reqHidden) reqHidden.value = matched ? matched.name : fullname;
+    if (reqDept) reqDept.value = deptValue;
+
+    // ─── 6. Enable Next on step 3 ───
+    var btnStep3Next = document.getElementById('btnStep3Next');
+    if (btnStep3Next) btnStep3Next.disabled = !fullname;
+
+    // ─── 7. Pre-fill the review screen (in case the user jumps to step 4) ───
+    var reviewRequestor = document.getElementById('reviewRequestor');
+    if (reviewRequestor) reviewRequestor.textContent = matched ? matched.name : fullname;
+    var reviewDepartment = document.getElementById('reviewDepartment');
+    if (reviewDepartment) reviewDepartment.textContent = deptValue || '-';
+  }
+
+  // Expose so requests.js can also call it if the list is empty/slow
+  window.autoFillRequestorFromLogin = _autoFillRequestorFromLogin;
 
   window.loadVendorList = async function(forceRefresh) {
     var cacheKey = 'vendorList';
