@@ -587,7 +587,7 @@
   .prep-legend-mini .prep-legend-swatch.green  { background: #198754; }
   .prep-legend-mini .prep-legend-swatch.yellow { background: #ffc107; }
 
-       /* ─── ALL REQUESTS CARD ─── */
+    /* ─── ALL REQUESTS CARD ─── */
   .all-request-card {
     border-left: 4px solid #0d6efd;
     transition: background 0.15s;
@@ -660,6 +660,73 @@
       top: 0;
     }
     .sidebar-toggle { display: none !important; }
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     PRINT-ONLY MODE (public PDF view — no app shell)
+     ═══════════════════════════════════════════════════════════ */
+  body.print-only-mode .app-wrapper,
+  body.print-only-mode #loadingOverlay,
+  body.print-only-mode #sidebarBackdrop,
+  body.print-only-mode .modal,
+  body.print-only-mode .modal-backdrop,
+  body.print-only-mode .toast-container,
+  body.print-only-mode #whNotificationsList,
+  body.print-only-mode #mrrPrintOnly,
+  body.print-only-mode #qrImageDecoder {
+    display: none !important;
+  }
+
+  body.print-only-mode {
+    background: #e5e5e5 !important;
+  }
+
+  #printOnlyView {
+    background: #e5e5e5;
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  #printOnlyView .print-only-toolbar {
+    background: #fff;
+    padding: 12px 20px;
+    border-radius: 8px;
+    margin: 0 auto 16px;
+    max-width: 8.5in;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border: 1px solid var(--gemcor-border);
+  }
+
+  #printOnlyView .print-only-sheet-wrap {
+    background: #fff;
+    max-width: 8.5in;
+    margin: 0 auto;
+    border-radius: 4px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    overflow-x: auto;
+  }
+
+  @media (max-width: 900px) {
+    #printOnlyView { padding: 10px; }
+    #printOnlyView .print-only-toolbar { padding: 10px 12px; font-size: 0.85rem; }
+    #printOnlyView .print-only-toolbar .btn { font-size: 0.8rem; padding: 6px 10px; }
+  }
+
+  @media print {
+    body.print-only-mode { background: #fff !important; }
+    #printOnlyView { padding: 0 !important; background: #fff !important; }
+    #printOnlyView .print-only-toolbar { display: none !important; }
+    #printOnlyView .print-only-sheet-wrap {
+      box-shadow: none !important;
+      border-radius: 0 !important;
+      max-width: 100% !important;
+      overflow: visible !important;
+    }
   }
 </style>
 </head>
@@ -986,6 +1053,11 @@
             <option value="MRIF">MRIF only</option>
             <option value="MRS">MRS only</option>
           </select>
+          <select id="allRequestsStatusFilter" class="form-select form-select-sm" style="width:auto;" onchange="loadAllRequests()">
+            <option value="all" selected>All Statuses</option>
+            <option value="active">Active (Pending + Partial)</option>
+            <option value="completed">Completed Only</option>
+          </select>
           <button class="btn btn-sm btn-outline-primary" onclick="loadAllRequests()">
             <i class="bi bi-arrow-clockwise me-1"></i>Refresh
           </button>
@@ -993,7 +1065,7 @@
       </div>
       <div class="alert alert-info small py-2">
         <i class="bi bi-info-circle me-1"></i>
-        All active requests from production staff. Click a request to view details, chat with the requestor, or process it in the scanner.
+        All requests from production staff, including completed ones. Click a request to view details, chat with the requestor, or process it in the scanner.
       </div>
       <div class="card">
         <div class="card-body p-0">
@@ -1026,7 +1098,6 @@
           </div>
         </div>
 
-        <!-- ✅ FIXED: document picker is now wrapped in a proper card and has its expected ID -->
         <div id="docPickerSection" class="card mb-4 border-0 shadow-sm">
           <div class="card-body">
             <div class="d-flex gap-2 mb-2">
@@ -1289,8 +1360,9 @@
 
           <h6><i class="bi bi-inbox-fill"></i> All Requests</h6>
           <ul>
-            <li>Warehouse-only view of all active requests from production.</li>
-            <li>Click any request to view its QR, discuss with the requestor, or process it directly.</li>
+            <li>Warehouse view of all requests from production, including completed ones.</li>
+            <li>Filter by document type and by status (All / Active / Completed).</li>
+            <li>Click any request to view its QR, discuss with the requestor, or process it.</li>
           </ul>
 
           <h6><i class="bi bi-box-arrow-up"></i> Releasing (MRIF)</h6>
@@ -1336,6 +1408,13 @@
             <li>Production can request permission to edit their own <strong>PENDING</strong> documents.</li>
             <li>Warehouse approves or rejects the request from the <strong>Edit Requests</strong> sidebar menu.</li>
             <li>Once approved, the production user sees an <strong>Edit Now</strong> button on their request — edits are saved back to the sheet.</li>
+          </ul>
+
+          <h6><i class="bi bi-printer"></i> Print & PDF</h6>
+          <ul>
+            <li>Each printed document has its own QR code that opens a <strong>read-only print view</strong>.</li>
+            <li>Anyone with the printed sheet can scan and download the PDF, but <strong>cannot access the WMS</strong>.</li>
+            <li>The production request QR (in My Requests) is different — it opens the live system and requires login.</li>
           </ul>
 
           <hr>
@@ -2021,7 +2100,7 @@
         <h5 class="modal-title"><i class="bi bi-clock-history me-2"></i>Pending MRIFs</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-                  <div class="modal-body p-0">
+      <div class="modal-body p-0">
         <div id="pendingMrifListContainer" class="list-group list-group-flush">
           <div class="list-group-item text-center py-3 text-muted">Loading...</div>
         </div>
@@ -2572,6 +2651,34 @@
 <div id="mrrPrintOnly" class="d-none"></div>
 <div id="qrImageDecoder" style="display:none;"></div>
 
+<!-- ═══════════════════════════════════════════════════════════════
+     PRINT-ONLY VIEW (hidden by default; only shown when
+     ?view=print is present in the URL — this is a public, read-only
+     preview that anyone with the printed QR code can open.
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="printOnlyView" class="d-none">
+  <div class="print-only-toolbar d-print-none">
+    <div>
+      <strong><i class="bi bi-file-earmark-text me-2"></i>Document Print View</strong>
+      <div class="small text-muted">Read-only preview. Log in to the system to process documents.</div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <button class="btn btn-outline-secondary btn-sm" onclick="window.close()">
+        <i class="bi bi-x-lg me-1"></i>Close
+      </button>
+      <button class="btn btn-primary btn-sm" onclick="window.print()">
+        <i class="bi bi-printer me-1"></i>Print / Save as PDF
+      </button>
+    </div>
+  </div>
+  <div class="print-only-sheet-wrap" id="printOnlyContent">
+    <div class="text-center py-5">
+      <div class="spinner-border text-primary"></div>
+      <div class="text-muted mt-2">Loading document...</div>
+    </div>
+  </div>
+</div>
+
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     var modalEl = document.getElementById('modePickerModal');
@@ -2594,14 +2701,14 @@
 <script defer src="/GEMCORQR/js/warehouse.js?v=3.6.0"></script>
 <script defer src="/GEMCORQR/js/requests.js?v=3.4.0"></script>
 <script defer src="/GEMCORQR/js/inventory.js?v=3.4.0"></script>
-<script defer src="/GEMCORQR/js/prints.js?v=3.4.0"></script>
+<script defer src="/GEMCORQR/js/prints.js?v=3.6.0"></script>
 <script defer src="/GEMCORQR/js/notifications.js?v=3.4.0"></script>
 <script defer src="/GEMCORQR/js/analytics.js?v=3.4.0"></script>
 <script defer src="/GEMCORQR/js/history.js?v=3.4.0"></script>
-<script defer src="/GEMCORQR/js/pending.js?v=3.5.0"></script>
+<script defer src="/GEMCORQR/js/pending.js?v=3.6.0"></script>
 <script defer src="/GEMCORQR/js/chat.js?v=3.4.0"></script>
 <script defer src="/GEMCORQR/js/editRequests.js?v=3.4.0"></script>
-<script defer src="/GEMCORQR/js/main.js?v=3.6.0"></script>
+<script defer src="/GEMCORQR/js/main.js?v=3.7.0"></script>
 
 </body>
 </html>
