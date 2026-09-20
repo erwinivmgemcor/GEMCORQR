@@ -1,6 +1,6 @@
 // ============================================================
 // PRINT PREVIEW FUNCTIONS
-// (+ escaping applied to sheet/user data rendered into HTML)
+// (+ print-only QR that opens a public read-only view)
 // ============================================================
 
 // Local HTML escaper for print data
@@ -14,7 +14,17 @@ function _escPrint(s) {
     .replace(/'/g, '&#39;');
 }
 
-// ─── Helper: Display doc number ───
+// ─── Helper: Build the "print-only" URL that the printed QR points to ───
+// This is deliberately DIFFERENT from the production request QR
+// (which points to ?doc=X and opens the interactive system).
+// The print URL uses ?view=print which opens a public read-only preview.
+function _printQrData(docNo) {
+  if (!docNo) return '';
+  var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
+  return base + '?doc=' + encodeURIComponent(docNo) + '&view=print';
+}
+
+// ─── Helper: Display doc number (strips -dept suffix, keeps "Bal." prefix) ───
 function _displayDocNo(docNo) {
   if (!docNo) return '';
   if (docNo.indexOf('Bal.') === 0) {
@@ -307,7 +317,8 @@ function buildSingleMrifHtml(docNo, info, items) {
 
   itemsHtml += '<tr><td class="td-center" colspan="8">&nbsp;</td></tr>';
 
-  var mrifQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
+  // ★ Print-only QR — scans to ?doc=X&view=print (read-only PDF view)
+  var mrifQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(_printQrData(docNo));
 
   return '<div class="mrif-print-sheet">' +
     '<div class="mrif-header">' +
@@ -426,7 +437,8 @@ function buildSingleMrrHtml(docNo, info, items) {
     itemsHtml += '<tr><td class="td-center" colspan="7" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
   }
 
-  var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
+  // ★ Print-only QR
+  var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(_printQrData(docNo));
 
   return '<div class="mrr-print-sheet">' +
     '<div class="mrr-header">' +
@@ -561,7 +573,8 @@ function buildSingleMrsHtml(docNo, info, items) {
 
   itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
 
-  var mrsQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(docNo);
+  // ★ Print-only QR
+  var mrsQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(_printQrData(docNo));
 
   return '<div class="mrif-print-sheet">' +
     '<div class="mrif-header">' +
