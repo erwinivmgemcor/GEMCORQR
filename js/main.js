@@ -170,14 +170,12 @@ function _editActionButtonHtml(docNo, docType, docStatus) {
         '<i class="bi bi-lock-fill me-1"></i>Edit Locked (Partial)' +
       '</span>';
     }
-    // Any other non-pending status
     return '<span class="btn btn-sm btn-outline-secondary disabled" title="Document is not editable in its current status">' +
       '<i class="bi bi-lock-fill me-1"></i>Edit Locked' +
     '</span>';
   }
 
   // From here down, docStatus was blank OR 'PENDING'.
-  // Check the edit-request map as before.
   var map = window._editReqMap || {};
   var entry = map[docNo];
 
@@ -203,8 +201,6 @@ function _editActionButtonHtml(docNo, docType, docStatus) {
     '</button>';
   }
   if (entry.status === 'COMPLETED') {
-    // Prior edit was completed; but the doc might still be PENDING now.
-    // Only allow a fresh request if doc is PENDING (already gated above).
     return '<button class="btn btn-sm btn-outline-warning" onclick="requestEditPermissionFromUser(\'' + safeDoc + '\', \'' + safeType + '\')">' +
       '<i class="bi bi-pencil me-1"></i>Request Edit' +
     '</button>';
@@ -213,8 +209,6 @@ function _editActionButtonHtml(docNo, docType, docStatus) {
 }
 
 // ─── My Request Details ───
-// opts.warehouse = true   → shows Process Request button instead of edit
-// opts.status    = current doc status ('PENDING'|'PARTIAL'|'COMPLETED')
 window.openMyRequestDetails = async function(docNo, docType, opts) {
   opts = opts || {};
   var isWarehouseView = opts.warehouse === true;
@@ -356,7 +350,6 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
       '</button>';
     }
   } else {
-    // Production side — pass the doc status so the edit button can hide itself
     actionButtons += _editActionButtonHtml(docNo, docType || 'MRIF', docStatusRaw);
   }
 
@@ -407,8 +400,6 @@ window.downloadMyRequestQr = function() {
 };
 
 // ─── Render My Requests (production view) ───
-// - Prep status shown ONLY for PENDING / PARTIAL docs.
-// - Row click passes the doc status so the modal can gate the edit button.
 var originalRenderMyRequests = window.renderMyRequests || function() {};
 
 window.renderMyRequests = async function(requests) {
@@ -425,7 +416,7 @@ window.renderMyRequests = async function(requests) {
     var text = await res.text();
     var data = JSON.parse(text);
     if (data && data.success) prepMap = data.statuses || {};
-  } catch(e) { /* silent — fallback to no coloring */ }
+  } catch(e) { /* silent */ }
 
   if (typeof originalRenderMyRequests === 'function') {
     try { originalRenderMyRequests(requests); } catch(e) { console.warn('[renderMyRequests] Original error:', e); }
@@ -465,7 +456,6 @@ window.renderMyRequests = async function(requests) {
     var itemCode = _escMain(req.itemCode || '');
     var qty = parseInt(req.qty, 10) || 0;
 
-    // ★ Prep status only applies to active docs.
     var prepClass = '';
     var prepBadge = '';
     if (!isCompleted) {
@@ -775,6 +765,20 @@ function checkUrlDocParam() {
 
 // ─── DOM Ready ───
 document.addEventListener('DOMContentLoaded', function() {
+  // ★ PRINT-ONLY MODE — must be the FIRST thing we check.
+  // If the URL has ?view=print, we show a standalone read-only preview
+  // and completely skip the interactive app (no login, no sidebar, no scanner).
+  var _urlParams = new URLSearchParams(window.location.search);
+  var _urlDoc = _urlParams.get('doc');
+  var _urlView = (_urlParams.get('view') || '').toLowerCase();
+  if (_urlDoc && _urlView === 'print') {
+    document.body.classList.add('print-only-mode');
+    var _pv = document.getElementById('printOnlyView');
+    if (_pv) _pv.classList.remove('d-none');
+    enterPrintOnlyMode(_urlDoc);
+    return; // ← skip all normal app init
+  }
+
   var sidebarVer = document.getElementById('sidebarAppVersion');
   if (sidebarVer && typeof APP_VERSION !== 'undefined') {
     sidebarVer.textContent = 'v' + APP_VERSION;
@@ -851,3 +855,63 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+// PRINT-ONLY MODE — public read-only view of a document
+// Triggered by ?doc=X&view=print. No login required, no navigation,
+// no processing. Just the printable sheet + Print/Save-as-PDF.
+// ═══════════════════════════════════════════════════════════════
+
+async function enterPrintOnlyMode(docNo) {
+  var content = document.getElementById('printOnlyContent');
+  if (!content) return;
+
+  var upper = String(docNo).toUpperCase();
+  var docType = 'MRIF';
+  if (upper.indexOf('BAL.MRR') === 0)       docType = 'MRR';
+  else if (upper.indexOf('BAL.MRS') === 0)  docType = 'MRS';
+  else if (upper.indexOf('BAL.MRIF') === 0) docType = 'MRIF';
+  else if (upper.indexOf('MRR') === 0)      docType = 'MRR';
+  else if (upper.indexOf('MRS') === 0)      docType = 'MRS';
+  else                                      docType = 'MRIF';
+
+  try { document.title = docNo + ' — Print View'; } catch(e) {}
+
+  try {
+    var sheetKey = 'sheetId_' + docType;
+    var sheetIdVal = localStorage.getItem(sheetKey) || '';
+    var sheetIdClean = sheetIdVal
+      ? (typeof extractSheetId === 'function' ? extractSheetId(sheetIdVal) : sheetIdVal)
+      : '';
+
+    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
+              '&docType=' + docType +
+              '&sheetId=' + encodeURIComponent(sheetIdClean) +
+              '&_t=' + Date.now();
+
+    var res = await fetch(url, { redirect: 'follow' });
+    var text = await res.text();
+    var trimmed = String(text || '').trim();
+    if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
+    var data = JSON.parse(trimmed);
+    if (!data || !data.success) throw new Error((data && data.error) || 'Document not found');
+
+    var info = data.info || {};
+    var items = data.items || [];
+
+    var html = '';
+    if (docType === 'MRIF')      html = buildSingleMrifHtml(docNo, info, items);
+    else if (docType === 'MRR')  html = buildSingleMrrHtml(docNo, info, items);
+    else if (docType === 'MRS')  html = buildSingleMrsHtml(docNo, info, items);
+
+    content.innerHTML = html;
+  } catch (err) {
+    content.innerHTML =
+      '<div class="text-center py-5">' +
+        '<i class="bi bi-exclamation-triangle-fill text-danger" style="font-size:3rem"></i>' +
+        '<h5 class="mt-3">Document Not Available</h5>' +
+        '<p class="text-muted mb-3">' + (typeof _escMain === 'function' ? _escMain(err.message) : err.message) + '</p>' +
+        '<p class="small text-muted">If you are the document owner, please verify the QR code is intact.</p>' +
+      '</div>';
+  }
+}
