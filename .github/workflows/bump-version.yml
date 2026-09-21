@@ -1,0 +1,81 @@
+name: Auto-bump version
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'js/config.js'
+      - 'sw.js'
+      - '**/*.md'
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, '[skip-bump]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read current version
+        id: readver
+        run: |
+          LAST=$(grep -oP "APP_VERSION\s*=\s*'\K[^']+" js/config.js || echo "0.0.0")
+          echo "last=$LAST" >> $GITHUB_OUTPUT
+          echo "Current version: $LAST"
+
+      - name: Compute next version
+        id: nextver
+        run: |
+          LAST="${{ steps.readver.outputs.last }}"
+          MAJOR=$(echo "$LAST" | cut -d. -f1)
+          MINOR=$(echo "$LAST" | cut -d. -f2)
+          PATCH=$(echo "$LAST" | cut -d. -f3)
+          [ -z "$MAJOR" ] && MAJOR=0
+          [ -z "$MINOR" ] && MINOR=0
+          [ -z "$PATCH" ] && PATCH=0
+          NEW_PATCH=$((PATCH + 1))
+          NEW="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          echo "new=$NEW" >> $GITHUB_OUTPUT
+          echo "New version: $NEW"
+
+      - name: Stamp build info
+        id: build
+        run: |
+          BUILD=$(date -u +"%Y%m%d-%H%M")
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "build=${BUILD}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Update js/config.js
+        run: |
+          NEW="${{ steps.nextver.outputs.new }}"
+          BUILD="${{ steps.build.outputs.build }}"
+          sed -i "s|APP_VERSION\s*=\s*'[^']*'|APP_VERSION = '${NEW}'|" js/config.js
+          if grep -qE "APP_BUILD\s*=" js/config.js; then
+            sed -i "s|APP_BUILD\s*=\s*'[^']*'|APP_BUILD = '${BUILD}'|" js/config.js
+          else
+            sed -i "/APP_VERSION\s*=/a const APP_BUILD   = '${BUILD}';" js/config.js
+          fi
+
+      - name: Update sw.js
+        run: |
+          NEW="${{ steps.nextver.outputs.new }}"
+          sed -i "s|const CACHE_NAME = '[^']*'|const CACHE_NAME = 'gemcor-wms-v${NEW}'|" sw.js
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/config.js sw.js
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+            exit 0
+          fi
+          NEW="${{ steps.nextver.outputs.new }}"
+          git commit -m "chore(release): bump to v${NEW} [skip-bump]"
+          git push
