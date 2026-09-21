@@ -8,6 +8,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbwVA3jgdDU1_O07bQ0CktKH
 
 const DEFAULT_PIN = '0000';
 const APP_VERSION = '2.3.0';
+const APP_BUILD   = '';  // auto-filled by the GitHub Action (or leave blank)
 
 const UNIT_OPTIONS = [
   'ASSEMB', 'BOX', 'CAN', 'GAL', 'KG', 'LENGTH', 'LITERS',
