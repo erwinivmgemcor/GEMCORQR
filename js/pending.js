@@ -186,8 +186,14 @@ window.markPrepStatus = async function(docNo, newStatus) {
     var text = await res.text();
     var data = JSON.parse(text);
     if (data.success) {
-      showToast('Updated to ' + newStatus.replace('_', ' '), 'success');
+           showToast('Updated to ' + newStatus.replace('_', ' '), 'success');
       if (typeof loadAllRequests === 'function') loadAllRequests();
+      // Close the details modal so the user sees the refreshed list
+      var m = document.getElementById('myRequestDetailsModal');
+      if (m) {
+        var bm = bootstrap.Modal.getInstance(m);
+        if (bm) bm.hide();
+      }
     } else {
       showToast(data.error || 'Failed to update', 'danger');
     }
