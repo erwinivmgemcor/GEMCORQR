@@ -259,15 +259,7 @@
     docs.forEach(function(d) {
       var val = typeof d === 'string' ? d : (d.docNo || d.name || d);
       var display = cleanDocNo(val);
-      var prep = _prepStatusOf(val);
-      var emoji = _prepEmojiOf(prep);
-      var bg = _prepBgOf(prep);
-      var fg = _prepFgOf(prep);
-
-      html += '<option value="' + val + '"' +
-        ' style="background-color:' + bg + '; color:' + fg + '; font-weight:600;"' +
-        ' data-prep="' + prep + '"' +
-        '>' + emoji + ' ' + display + '</option>';
+      html += '<option value="' + val + '">' + display + '</option>';
     });
     sel.innerHTML = html;
   };
@@ -278,17 +270,10 @@
     if (!sel) return;
     var html = '<option value="">-- Select Document --</option>';
     if (!state.docList) { sel.innerHTML = html; return; }
-    state.docList.forEach(function(d) {
+       state.docList.forEach(function(d) {
       var val = typeof d === 'string' ? d : (d.docNo || d.name || d);
       if (cleanDocNo(val).toLowerCase().indexOf(term) !== -1) {
-        var prep = _prepStatusOf(val);
-        var emoji = _prepEmojiOf(prep);
-        var bg = _prepBgOf(prep);
-        var fg = _prepFgOf(prep);
-        html += '<option value="' + val + '"' +
-          ' style="background-color:' + bg + '; color:' + fg + '; font-weight:600;"' +
-          ' data-prep="' + prep + '"' +
-          '>' + emoji + ' ' + cleanDocNo(val) + '</option>';
+        html += '<option value="' + val + '">' + cleanDocNo(val) + '</option>';
       }
     });
     sel.innerHTML = html;
@@ -316,13 +301,13 @@
     if (title) title.textContent = cleanDocNo(docNo);
 
     // Color the select to match the currently selected doc's prep status
-    var sel = document.getElementById('docSelect');
+        var sel = document.getElementById('docSelect');
     if (sel) {
-      var prep = _prepStatusOf(docNo);
-      sel.style.background = _prepBgOf(prep);
-      sel.style.color = _prepFgOf(prep);
-      sel.style.fontWeight = '600';
-      sel.style.borderLeft = '4px solid ' + _prepBorderOf(prep);
+      sel.value = '';
+      sel.style.background = '';
+      sel.style.color = '';
+      sel.style.fontWeight = '';
+      sel.style.borderLeft = '';
     }
 
     showLoading('Loading document...');
