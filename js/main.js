@@ -779,10 +779,21 @@ document.addEventListener('DOMContentLoaded', function() {
     return; // ← skip all normal app init
   }
 
+  var sidebarVerText = document.getElementById('sidebarAppVersionText');
+if (sidebarVerText && typeof APP_VERSION !== 'undefined') {
+  sidebarVerText.textContent = 'v' + APP_VERSION;
+} else {
   var sidebarVer = document.getElementById('sidebarAppVersion');
   if (sidebarVer && typeof APP_VERSION !== 'undefined') {
     sidebarVer.textContent = 'v' + APP_VERSION;
   }
+}
+
+// Optional: show build number / hash under the version
+var sidebarBuild = document.getElementById('sidebarBuild');
+if (sidebarBuild && typeof APP_BUILD !== 'undefined' && APP_BUILD) {
+  sidebarBuild.textContent = 'build ' + APP_BUILD;
+}
 
   var modalIds = ['qtyModal', 'successModal', 'settingsModal', 'newRequestModal',
     'requestSuccessModal', 'whNotifModal', 'mrifListModal', 'mrifPrintModal',
