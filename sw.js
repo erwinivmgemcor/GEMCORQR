@@ -1,9 +1,10 @@
-const CACHE_NAME = 'gemcor-wms-v2.3.1';
+const CACHE_NAME = 'gemcor-wms-v2.3.0';
 const urlsToCache = [
   '/GEMCORQR/',
   '/GEMCORQR/index.html',
   '/GEMCORQR/style.css',
   '/GEMCORQR/gemcor-logo.png',
+  '/GEMCORQR/manifest.json',
   '/GEMCORQR/js/config.js',
   '/GEMCORQR/js/net.js',
   '/GEMCORQR/js/cache.js',
@@ -29,8 +30,7 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(urlsToCache))
-    // ⚠️ IMPORTANT: NO self.skipWaiting() here.
-    // We want the new SW to WAIT so our update banner can prompt the user.
+    // No skipWaiting — we want the update banner to prompt users
   );
 });
 
@@ -45,7 +45,7 @@ self.addEventListener('activate', event => {
   );
 });
 
-// When the app's update banner sends SKIP_WAITING, take over now.
+// When the app's update banner sends SKIP_WAITING, take over now
 self.addEventListener('message', event => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
