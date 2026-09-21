@@ -335,7 +335,7 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
   var jsDoc = String(docNo).replace(/'/g, "\\'");
   var jsType = String(docType || 'MRIF').replace(/'/g, "\\'");
 
-  var actionButtons = '<button class="btn btn-sm btn-outline-primary" onclick="discussDocument(\'' + jsDoc + '\', \'' + jsType + '\')">' +
+   var actionButtons = '<button class="btn btn-sm btn-outline-primary" onclick="discussDocument(\'' + jsDoc + '\', \'' + jsType + '\')">' +
     '<i class="bi bi-chat-dots me-1"></i>Discuss' +
   '</button>';
 
@@ -345,6 +345,31 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
         '<i class="bi bi-check-circle-fill me-1"></i>Completed' +
       '</span>';
     } else {
+      // ★ Prep status buttons — visible only for active docs
+      var prepStatus = String(opts.prepStatus || 'NEW').toUpperCase();
+      var prepBadgeHtml = '';
+      if (prepStatus === 'PREPARED') {
+        prepBadgeHtml =
+          '<span class="btn btn-sm btn-success disabled" title="Marked as prepared">' +
+            '<i class="bi bi-check-circle-fill me-1"></i>Prepared' +
+          '</span>' +
+          '<button class="btn btn-sm btn-warning" onclick="markPrepStatus(\'' + jsDoc + '\', \'PICKED_UP\')">' +
+            '<i class="bi bi-box-arrow-up-right me-1"></i>Mark Picked Up' +
+          '</button>';
+      } else if (prepStatus === 'PICKED_UP') {
+        prepBadgeHtml =
+          '<span class="btn btn-sm btn-warning disabled" title="Picked up by production">' +
+            '<i class="bi bi-box-arrow-up-right me-1"></i>Picked Up' +
+          '</span>';
+      } else {
+        prepBadgeHtml =
+          '<button class="btn btn-sm btn-outline-danger" onclick="markPrepStatus(\'' + jsDoc + '\', \'PREPARED\')">' +
+            '<i class="bi bi-check-circle me-1"></i>Mark Prepared' +
+          '</button>';
+      }
+      actionButtons += prepBadgeHtml;
+
+      // Process button
       actionButtons += '<button class="btn btn-sm btn-success" onclick="processRequestFromDetails(\'' + jsDoc + '\', \'' + jsType + '\')">' +
         '<i class="bi bi-play-circle me-1"></i>Process Request' +
       '</button>';
@@ -650,8 +675,9 @@ function renderAllRequests(docs, statusFilter, prepMap) {
     if (isCompleted) cardClass += ' completed';
     else if (isPartial) cardClass += ' partial';
 
+        var prepForAttr = isCompleted ? 'NONE' : _prepStatusFromMap(prepMap, docNoRaw);
     html += '<div class="list-group-item ' + cardClass + '" ' +
-      'data-docno="' + docNo + '" data-doctype="' + docType + '" data-status="' + _escMain(status) + '" style="cursor:pointer;">' +
+      'data-docno="' + docNo + '" data-doctype="' + docType + '" data-status="' + _escMain(status) + '" data-prep="' + prepForAttr + '" style="cursor:pointer;">' +
         '<div class="d-flex justify-content-between align-items-start flex-wrap gap-2">' +
           '<div class="flex-grow-1" style="min-width:0;">' +
             '<div class="fw-bold">' + docNo +
@@ -681,7 +707,8 @@ function renderAllRequests(docs, statusFilter, prepMap) {
       var docNo = this.getAttribute('data-docno');
       var docType = this.getAttribute('data-doctype') || 'MRIF';
       var status = this.getAttribute('data-status') || 'PENDING';
-      if (docNo) openMyRequestDetails(docNo, docType, { warehouse: true, status: status });
+      var prep = this.getAttribute('data-prep') || 'NEW';
+      if (docNo) openMyRequestDetails(docNo, docType, { warehouse: true, status: status, prepStatus: prep });
     });
   });
 }
