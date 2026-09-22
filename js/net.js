@@ -29,6 +29,13 @@ window.safeFetch = async function(url, options, opts) {
     } catch (e) {
       clearTimeout(timer);
       lastErr = e;
+
+      // ★ If we timed out via AbortController, do NOT retry —
+      //   the server likely received the request. Retrying duplicates writes.
+      if (e.name === 'AbortError') {
+        throw e;
+      }
+
       if (attempt < retries) {
         await new Promise(function(r) { setTimeout(r, 400 * Math.pow(2, attempt)); });
       }
