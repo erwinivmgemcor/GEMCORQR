@@ -1036,12 +1036,20 @@ async function submitManualMrif() {
     var trimmed = String(text || '').trim();
     if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
     var data = JSON.parse(trimmed);
-    if (data && data.success) {
+        if (data && data.success) {
       if (manualMrifModal) manualMrifModal.hide();
-      showToast('Manual MRIF created: ' + data.docNo, 'success');
+      var newMrifDocNo = data.docNo || data.balDocNo || '';
+      showToast('Manual MRIF created: ' + newMrifDocNo, 'success');
       await fetchPendingDocs();
       await loadWarehouseNotifications();
       await updateWarehouseKPIs();
+
+      // ★ Auto-open print preview
+      if (newMrifDocNo && typeof window.autoOpenPrintPreview === 'function') {
+        setTimeout(function() {
+          window.autoOpenPrintPreview(newMrifDocNo, 'MRIF');
+        }, 400);
+      }
     } else {
       showToast('Failed: ' + ((data && data.error) || 'Unknown error'), 'danger');
     }
