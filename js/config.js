@@ -7,7 +7,7 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbwVA3jgdDU1_O07bQ0CktKHaFEwsImBiO83Sc3zA919FN07svtGyYQNwqRHXJ1Vtvc2/exec';
 
 const DEFAULT_PIN = '0000';
-const APP_VERSION = '2.3.13';
+const APP_VERSION = '2.3.3';
 const APP_BUILD = '20260922-0218-1d8eaad';
 
 const UNIT_OPTIONS = [
