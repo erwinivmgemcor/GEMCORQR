@@ -404,19 +404,26 @@ window.submitProcessBalance = function() {
       var text = await res.text();
       var data;
       try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
-      if (data && data.success) {
+            if (data && data.success) {
         var processModalEl = document.getElementById('processPartialModal');
         if (processModalEl) {
           var pm = bootstrap.Modal.getInstance(processModalEl);
           if (pm) pm.hide();
         }
-        showToast((docType === 'MRIF' ? 'Balance MRIF created: ' : 'New ' + docType + ' created: ') + data.balDocNo + ' (' + (data.status || 'COMPLETED') + ')', 'success');
+        var newBalanceDoc = data.balDocNo || data.docNo || '';
+        showToast((docType === 'MRIF' ? 'Balance MRIF created: ' : 'New ' + docType + ' created: ') + newBalanceDoc + ' (' + (data.status || 'COMPLETED') + ')', 'success');
         if (typeof updatePartialCount === 'function') updatePartialCount();
         if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
         if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
         if (typeof loadAllRequests === 'function') loadAllRequests();
+
+        // ★ Auto-open print preview
+        if (newBalanceDoc && typeof autoOpenPrintPreview === 'function') {
+          setTimeout(function() {
+            autoOpenPrintPreview(newBalanceDoc, docType);
+          }, 400);
+        }
       } else showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
-    } catch(err) { showToast('Error: ' + err.message, 'danger'); }
   }, 'Creating...');
 };
 
