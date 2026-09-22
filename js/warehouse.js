@@ -1048,10 +1048,18 @@
         var text = await res.text();
         var data;
         try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
-        if (data && data.success) {
+                if (data && data.success) {
           closePoItemsModal();
-          showToast('MRR created: ' + data.docNo + ' — Prepared by ' + preparedBy, 'success');
+          var newPoDocNo = data.docNo || data.balDocNo || '';
+          showToast('MRR created: ' + newPoDocNo + ' — Prepared by ' + preparedBy, 'success');
           fetchPendingDocs(true);
+
+          // ★ Auto-open print preview
+          if (newPoDocNo && typeof autoOpenPrintPreview === 'function') {
+            setTimeout(function() {
+              autoOpenPrintPreview(newPoDocNo, 'MRR');
+            }, 400);
+          }
         } else {
           showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
         }
@@ -1814,15 +1822,27 @@
         var text = await res.text();
         var data;
         try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
-        if (data && data.success) {
+               if (data && data.success) {
           if (manualMrrModal) manualMrrModal.hide();
+
+          var newMrrDocNo = '';
           if (isPrefill) {
-            showToast('New MRR created: ' + data.balDocNo + ' (' + (data.status || 'COMPLETED') + ')', 'success');
+            newMrrDocNo = data.balDocNo || data.docNo || '';
+            showToast('New MRR created: ' + newMrrDocNo + ' (' + (data.status || 'COMPLETED') + ')', 'success');
           } else {
-            showToast('Manual MRR created: ' + data.docNo + ' — Prepared by ' + preparedBy, 'success');
+            newMrrDocNo = data.docNo || data.balDocNo || '';
+            showToast('Manual MRR created: ' + newMrrDocNo + ' — Prepared by ' + preparedBy, 'success');
           }
+
           fetchPendingDocs(true);
           updateWarehouseKPIs();
+
+          // ★ Auto-open print preview
+          if (newMrrDocNo && typeof autoOpenPrintPreview === 'function') {
+            setTimeout(function() {
+              autoOpenPrintPreview(newMrrDocNo, 'MRR');
+            }, 400);
+          }
         } else {
           showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
         }
