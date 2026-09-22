@@ -413,24 +413,35 @@ async function submitNewRequest() {
   };
 
   var bodyStr = JSON.stringify(payload);
-  var maxAttempts = 3;
+   var maxAttempts = 2;                 // ★ only 1 retry
   var attempt = 0;
   var lastError = null;
+  var lastWasTimeout = false;
 
   while (attempt < maxAttempts) {
     attempt++;
     try {
       if (attempt > 1 && submitBtn) {
-        submitBtn.innerHTML = '<span class="btn-spinner"></span>Retrying (' + attempt + '/' + maxAttempts + ')...';
+        submitBtn.innerHTML = '<span class="btn-spinner"></span>Still working... (' + attempt + '/' + maxAttempts + ')';
       }
-      var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
-      var res = await fetchFn(API_URL, {
-        method: 'POST',
-        body: bodyStr,
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }
-      }, { timeout: 45000, retries: 0 });
 
-      var text = await res.text();
+      // ★ Use plain fetch here with a very long timeout. Apps Script can take
+      //   up to 60s to create a doc. Retrying before that just duplicates.
+      var ctrl = new AbortController();
+      var timer = setTimeout(function() { ctrl.abort(); }, 90000); // 90 seconds
+      var res;
+      try {
+        res = await fetch(API_URL, {
+          method: 'POST',
+          body: bodyStr,
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          signal: ctrl.signal
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+
+            var text = await res.text();
       var trimmed = String(text || '').trim();
       if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server returned invalid data');
       var data = JSON.parse(trimmed);
@@ -454,14 +465,27 @@ async function submitNewRequest() {
       }
     } catch(err) {
       lastError = err;
+      lastWasTimeout = (err.name === 'AbortError');
       console.warn('[submitNewRequest] Attempt ' + attempt + ' failed:', err.message);
+
+      // ★ If it was a timeout (server never answered), DO NOT auto-retry —
+      //   the server likely still got it, and retrying creates duplicates.
+      if (lastWasTimeout) break;
+
+      // Only retry on genuine network errors where the request never reached the server
       if (attempt < maxAttempts) {
-        await new Promise(function(r) { setTimeout(r, 1500 + attempt * 1000); });
+        await new Promise(function(r) { setTimeout(r, 2000); });
       }
     }
   }
 
-  showToast('Network is very slow. Your request was sent — check My Requests in a moment before retrying.', 'warning');
+  // ★ If we broke out due to timeout, keep the idem key so a manual retry
+  //   is idempotent on the server side.
+  if (lastWasTimeout) {
+    showToast('The server is taking longer than expected. Please check My Requests in a moment before retrying — your request may already be created.', 'warning', 10000);
+  } else {
+    showToast('Could not reach the server. Please check your connection and try again.', 'danger');
+  }
   _resetSubmitState(submitBtn, origHtml);
 }
 
