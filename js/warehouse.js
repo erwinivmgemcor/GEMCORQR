@@ -683,7 +683,7 @@
       //   doesn't fire on the same doc during the in-flight request.
       window._recentlyProcessedDoc = state.currentDoc;
       try {
-        var result = await submitTransaction(verifiedItems);
+               var result = await submitTransaction(verifiedItems);
         if (result && result.success) {
           var allComplete = true;
           var anyProcessed = false;
@@ -697,19 +697,30 @@
           var newStatus = allComplete && anyProcessed ? 'COMPLETED' : (anyProcessed ? 'PARTIAL' : 'PENDING');
           var statusUrl = API_URL + '?action=updateDocStatus&docNo=' + encodeURIComponent(state.currentDoc) + '&status=' + newStatus + '&_t=' + Date.now();
           fetch(statusUrl, { redirect: 'follow' }).catch(function() {});
-          clearDocProgress(state.currentDoc);
-                    if (successModal) successModal.show();
-          setTimeout(function() {
-            if (successModal) successModal.hide();
-            changeDocument();
-            isSubmitting = false;
-            window._recentlyProcessedDoc = null;   // ← clear the flag
-            if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
-            if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications();
-            if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
-            if (typeof updatePartialCount === 'function') updatePartialCount();
-            if (typeof loadAllRequests === 'function') loadAllRequests();
-          }, 1500);
+
+          // ★ Remember which doc we just processed so we can print it
+          var processedDoc = state.currentDoc;
+          var processedType = state.currentModule;
+          clearDocProgress(processedDoc);
+
+          // Short success toast + close the transaction UI
+          showToast('Submitted: ' + cleanDocNo(processedDoc) + ' (' + newStatus + ')', 'success');
+
+          changeDocument();
+          isSubmitting = false;
+          window._recentlyProcessedDoc = null;
+          if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
+          if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications();
+          if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
+          if (typeof updatePartialCount === 'function') updatePartialCount();
+          if (typeof loadAllRequests === 'function') loadAllRequests();
+
+          // ★ Auto-open print preview of the processed document
+          if (processedDoc && typeof autoOpenPrintPreview === 'function') {
+            setTimeout(function() {
+              autoOpenPrintPreview(processedDoc, processedType);
+            }, 500);
+          }
         } else {
           var errMsg = (result && result.error) ? result.error : 'Submission failed';
           showToast(errMsg, 'danger');
