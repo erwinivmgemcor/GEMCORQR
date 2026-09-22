@@ -23,6 +23,78 @@ function _printQrData(docNo) {
   var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
   return base + '?doc=' + encodeURIComponent(docNo) + '&view=print';
 }
+// ─── Auto-open print preview after a doc is created ───
+// Called by create flows (Manual MRR, MRR from PO, Manual MRIF, Balance MRIF).
+// Waits a moment for the server to finish writing, then fetches the doc and
+// shows the print preview modal. Only the X button closes it.
+function autoOpenPrintPreview(docNo, docType) {
+  if (!docNo || !docType) return;
+  var cleanDoc = String(docNo).trim();
+  var cleanType = String(docType).toUpperCase();
+
+  showLoading('Preparing print preview...');
+
+  // Give the server a moment to finalize the write
+  setTimeout(function() {
+    var url = API_URL + '?action=getDocItems' +
+              '&docNo=' + encodeURIComponent(cleanDoc) +
+              '&docType=' + cleanType +
+              '&sheetId=' + encodeURIComponent(_getSheetIdForDocType(cleanType)) +
+              '&_t=' + Date.now();
+
+    fetch(url, { redirect: 'follow' })
+      .then(function(res) { return res.text(); })
+      .then(function(text) {
+        var data;
+        try { data = JSON.parse(text); } catch(e) { data = {}; }
+        hideLoading();
+
+        if (!data || !data.success) {
+          // Fallback: just navigate to the module and let user pick the doc
+          if (typeof showToast === 'function') {
+            showToast('Document created: ' + cleanDoc + '. Open the module to print it.', 'success');
+          }
+          _navigateToModuleForDocType(cleanType);
+          return;
+        }
+
+        var info = data.info || {};
+        var items = data.items || [];
+
+        if (cleanType === 'MRIF') {
+          renderMrifPrint(cleanDoc, info, items);
+          if (typeof mrifListModal !== 'undefined' && mrifListModal) mrifListModal.hide();
+          setTimeout(function() { if (mrifPrintModal) mrifPrintModal.show(); }, 200);
+        } else if (cleanType === 'MRR') {
+          renderMrrPrint(cleanDoc, info, items);
+          if (typeof mrrListModal !== 'undefined' && mrrListModal) mrrListModal.hide();
+          setTimeout(function() { if (mrrPrintModal) mrrPrintModal.show(); }, 200);
+        } else if (cleanType === 'MRS') {
+          renderMrsPrint(cleanDoc, info, items);
+          if (typeof mrsListModal !== 'undefined' && mrsListModal) mrsListModal.hide();
+          setTimeout(function() { if (mrsPrintModal) mrsPrintModal.show(); }, 200);
+        }
+      })
+      .catch(function(err) {
+        hideLoading();
+        console.warn('[autoOpenPrintPreview] failed:', err);
+        if (typeof showToast === 'function') {
+          showToast('Document created: ' + cleanDoc + '. Open the module to print it.', 'success');
+        }
+        _navigateToModuleForDocType(cleanType);
+      });
+  }, 700);
+}
+
+// Small helper used by the fallback path
+function _navigateToModuleForDocType(docType) {
+  var map = { 'MRIF': 'releasing', 'MRR': 'receiving', 'MRS': 'returns' };
+  var section = map[docType] || 'releasing';
+  if (typeof navigateTo === 'function') navigateTo(section);
+}
+
+// Expose globally
+window.autoOpenPrintPreview = autoOpenPrintPreview;
 
 // ─── Helper: Display doc number (strips -dept suffix, keeps "Bal." prefix) ───
 function _displayDocNo(docNo) {
