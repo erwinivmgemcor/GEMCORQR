@@ -440,6 +440,13 @@
   window.checkIfAlreadyProcessed = async function() {
     if (state.items.length === 0) return;
 
+    // ★ Skip if we just submitted this doc and the modal is still closing —
+    //   otherwise the server's eventual-consistency lag can show
+    //   "already fully processed" on a doc we just submitted.
+    if (window._recentlyProcessedDoc && window._recentlyProcessedDoc === state.currentDoc) {
+      return;
+    }
+
     try {
       var docStatus = null;
       if (state.currentDoc) {
@@ -671,7 +678,10 @@
         if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly newly-verified items will be sent.')) return;
       }
 
-      isSubmitting = true;
+            isSubmitting = true;
+      // ★ Mark this doc as currently being submitted so the reprocess check
+      //   doesn't fire on the same doc during the in-flight request.
+      window._recentlyProcessedDoc = state.currentDoc;
       try {
         var result = await submitTransaction(verifiedItems);
         if (result && result.success) {
@@ -688,11 +698,12 @@
           var statusUrl = API_URL + '?action=updateDocStatus&docNo=' + encodeURIComponent(state.currentDoc) + '&status=' + newStatus + '&_t=' + Date.now();
           fetch(statusUrl, { redirect: 'follow' }).catch(function() {});
           clearDocProgress(state.currentDoc);
-          if (successModal) successModal.show();
+                    if (successModal) successModal.show();
           setTimeout(function() {
             if (successModal) successModal.hide();
             changeDocument();
             isSubmitting = false;
+            window._recentlyProcessedDoc = null;   // ← clear the flag
             if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
             if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications();
             if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
