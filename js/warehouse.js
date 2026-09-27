@@ -745,7 +745,7 @@
       '&docType=' + encodeURIComponent(state.currentModule) +
       '&sheetId=' + encodeURIComponent(getCleanSheetId()) +
       '&items=' + itemsStr +
-      '&processedBy=' + encodeURIComponent(state.currentUser || state.warehouseName || 'WAREHOUSE') +
+      '&processedBy=' + encodeURIComponent(_getCurrentUserName() || state.warehouseName || 'WAREHOUSE') +
       '&idemKey=' + encodeURIComponent(idemKey) +
       '&_t=' + Date.now();
 
