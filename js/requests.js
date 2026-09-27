@@ -1,8 +1,6 @@
 // ============================================================
 // NEW REQUEST FUNCTIONS
-// (Item Scanner, Remarks, Idempotency, QR + items details modal,
-//  My Requests filtered to MRIF/MRS,
-//  Auto-fill requestor from login on wizard open)
+// v3 — Auto-print Manual MRIF, no retry on abort, longer timeouts
 // ============================================================
 
 if (typeof state !== 'undefined' && state._reqIdemKey === undefined) {
@@ -15,9 +13,6 @@ function openNewRequest() {
   loadRequestInventory();
   loadRequestorList();
   newRequestModal.show();
-
-  // ★ Fallback: if the requestor list is cached/empty and doesn't auto-populate
-  // within a moment, force auto-fill from the login anyway.
   setTimeout(function() {
     if (typeof window.autoFillRequestorFromLogin === 'function') {
       try { window.autoFillRequestorFromLogin(state.requestorList || []); } catch(e) {}
@@ -26,9 +21,7 @@ function openNewRequest() {
 }
 
 function resetWizard() {
-  // ★ Fresh wizard → clear idempotency key
   if (typeof state !== 'undefined') state._reqIdemKey = null;
-
   document.getElementById('reqDocType').value = '';
   document.getElementById('reqJoNo').value = '';
   document.getElementById('reqRequestor').value = '';
@@ -36,41 +29,31 @@ function resetWizard() {
   document.getElementById('reqGemSoNo').value = '';
   document.getElementById('reqClientName').value = '';
   document.getElementById('reqProject').value = '';
-
   document.querySelectorAll('.doc-type-card').forEach(function(c) { c.classList.remove('selected'); });
   document.getElementById('btnStep1Next').disabled = true;
-
   document.getElementById('step2JoNo').value = '';
   document.getElementById('joNoStatus').innerHTML = '';
-
   document.getElementById('step3Requestor').value = '';
   document.getElementById('step3Department').value = '';
   document.getElementById('btnStep3Next').disabled = true;
-
   document.getElementById('step5ItemsContainer').innerHTML = '';
   addStep5ItemRow();
   document.getElementById('btnStep5Next').disabled = true;
-
   closeWizardScanner();
   goToStep(1);
 }
 
 function goToStep(step) {
   closeWizardScanner();
-
-  // ★ Before leaving step 3, cache the user-entered department (if editable)
   if (step === 4) {
     var step3Dept = document.getElementById('step3Department');
     if (step3Dept && !step3Dept.hasAttribute('readonly')) {
       var deptVal = (step3Dept.value || '').trim();
-      if (deptVal) {
-        try { localStorage.setItem('ivm_userDepartment', deptVal); } catch(e) {}
-      }
+      if (deptVal) { try { localStorage.setItem('ivm_userDepartment', deptVal); } catch(e) {} }
       var reqDept = document.getElementById('reqDepartment');
       if (reqDept) reqDept.value = deptVal;
     }
   }
-
   document.querySelectorAll('.wizard-step').forEach(function(el) {
     var s = parseInt(el.getAttribute('data-step'));
     el.classList.remove('active', 'completed');
@@ -124,7 +107,7 @@ async function lookupSofDataWizard() {
       document.getElementById('reqGemSoNo').value = data.gemSoNo || '';
       document.getElementById('reqClientName').value = data.clientName || '';
       document.getElementById('reqProject').value = data.project || '';
-      document.getElementById('joNoStatus').innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> JO No. found! SO data auto-filled.</span>';
+      document.getElementById('joNoStatus').innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> JO No. found!</span>';
       showToast('JO No. found! Auto-filled SO data.', 'success');
     } else {
       document.getElementById('reqGemSoNo').value = '';
@@ -136,9 +119,7 @@ async function lookupSofDataWizard() {
   } catch(err) {
     document.getElementById('joNoStatus').innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> Lookup failed.</span>';
     showToast('SOF lookup failed: ' + err.message, 'danger');
-  } finally {
-    hideLoading();
-  }
+  } finally { hideLoading(); }
 }
 
 function onStep3RequestorChange() {
@@ -148,16 +129,13 @@ function onStep3RequestorChange() {
   var dept = selected ? selected.dataset.department : '';
   document.getElementById('reqRequestor').value = name;
   document.getElementById('reqDepartment').value = dept || '';
-
   var step3Dept = document.getElementById('step3Department');
   if (step3Dept) {
     step3Dept.value = dept || '';
-    // If the field is editable (user isn't in the master list), remember their input
     if (!step3Dept.hasAttribute('readonly') && dept) {
       try { localStorage.setItem('ivm_userDepartment', dept); } catch(e) {}
     }
   }
-
   document.getElementById('btnStep3Next').disabled = !name;
 }
 
@@ -178,8 +156,7 @@ function addStep5ItemRow() {
   div.className = 'step5-item-row';
   div.innerHTML =
     '<div class="row g-2 align-items-end">' +
-      '<div class="col-8 col-md-4">' +
-        '<label class="form-label small">Item</label>' +
+      '<div class="col-8 col-md-4"><label class="form-label small">Item</label>' +
         '<div class="input-group">' +
           '<input type="text" class="form-control req-item-search" placeholder="Type to search or scan..." oninput="filterStep5Items(this,' + idx + ')" onfocus="filterStep5Items(this,' + idx + ')">' +
           '<button class="btn btn-outline-secondary scan-wizard-btn" type="button" onclick="openWizardScanner(' + idx + ')" title="Scan QR Code"><i class="bi bi-qr-code-scan"></i></button>' +
@@ -267,7 +244,6 @@ function populateFinalReview() {
   });
 }
 
-// ─── Wizard Scanner ───
 var wizardScanner = null;
 var wizardScannerRowIndex = null;
 
@@ -305,9 +281,7 @@ function onWizardScanSuccess(decodedText) {
     var lowerCode = code.toLowerCase();
     for (var j = 0; j < state.requestInventoryList.length; j++) {
       var it2 = state.requestInventoryList[j];
-      if (it2.inventoryId.toLowerCase().indexOf(lowerCode) !== -1 || it2.code.toLowerCase().indexOf(lowerCode) !== -1) {
-        matchedItem = it2; break;
-      }
+      if (it2.inventoryId.toLowerCase().indexOf(lowerCode) !== -1 || it2.code.toLowerCase().indexOf(lowerCode) !== -1) { matchedItem = it2; break; }
     }
   }
   var row = document.querySelector('#step5ItemsContainer .step5-item-row:nth-child(' + (idx+1) + ')');
@@ -335,14 +309,13 @@ function onWizardScanSuccess(decodedText) {
     if (searchInput) searchInput.value = code;
     if (codeInput) codeInput.value = code;
     checkStep5Items();
-    showToast('Scanned code: ' + code + ' (not in inventory, you can edit manually)', 'warning');
+    showToast('Scanned code: ' + code + ' (not in inventory)', 'warning');
   }
 }
 document.addEventListener('hidden.bs.modal', function (event) {
   if (event.target.id === 'newRequestModal') closeWizardScanner();
 });
 
-// ─── Submit New Request (idempotent, retries on slow network) ───
 var _isSubmittingNewRequest = false;
 
 async function submitNewRequest() {
@@ -370,11 +343,7 @@ async function submitNewRequest() {
   var clientName = document.getElementById('reqClientName').value.trim();
   var project = document.getElementById('reqProject').value.trim();
 
-  if (!requestor) {
-    showToast('Select a requestor', 'warning');
-    _resetSubmitState(submitBtn, origHtml);
-    return;
-  }
+  if (!requestor) { showToast('Select a requestor', 'warning'); _resetSubmitState(submitBtn, origHtml); return; }
 
   var items = [];
   document.querySelectorAll('#step5ItemsContainer .step5-item-row').forEach(function(row) {
@@ -386,11 +355,7 @@ async function submitNewRequest() {
     if (code && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty, unit: unit, remarks: remarks });
   });
 
-  if (items.length === 0) {
-    showToast('Add at least one item', 'warning');
-    _resetSubmitState(submitBtn, origHtml);
-    return;
-  }
+  if (items.length === 0) { showToast('Add at least one item', 'warning'); _resetSubmitState(submitBtn, origHtml); return; }
 
   if (!state._reqIdemKey) {
     state._reqIdemKey = 'req_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
@@ -399,21 +364,14 @@ async function submitNewRequest() {
   showLoading('Creating request...');
 
   var payload = {
-    action: 'createRequest',
-    _idemKey: state._reqIdemKey,
-    docType: docType,
-    requestor: requestor,
-    department: department,
-    joNo: joNo,
-    gemSoNo: gemSoNo,
-    clientName: clientName,
-    project: project,
-    items: items,
-    timestamp: new Date().toISOString()
+    action: 'createRequest', _idemKey: state._reqIdemKey,
+    docType: docType, requestor: requestor, department: department,
+    joNo: joNo, gemSoNo: gemSoNo, clientName: clientName, project: project,
+    items: items, timestamp: new Date().toISOString()
   };
 
   var bodyStr = JSON.stringify(payload);
-   var maxAttempts = 2;                 // ★ only 1 retry
+  var maxAttempts = 2;
   var attempt = 0;
   var lastError = null;
   var lastWasTimeout = false;
@@ -425,10 +383,8 @@ async function submitNewRequest() {
         submitBtn.innerHTML = '<span class="btn-spinner"></span>Still working... (' + attempt + '/' + maxAttempts + ')';
       }
 
-      // ★ Use plain fetch here with a very long timeout. Apps Script can take
-      //   up to 60s to create a doc. Retrying before that just duplicates.
       var ctrl = new AbortController();
-      var timer = setTimeout(function() { ctrl.abort(); }, 90000); // 90 seconds
+      var timer = setTimeout(function() { ctrl.abort(); }, 90000);
       var res;
       try {
         res = await fetch(API_URL, {
@@ -437,11 +393,9 @@ async function submitNewRequest() {
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           signal: ctrl.signal
         });
-      } finally {
-        clearTimeout(timer);
-      }
+      } finally { clearTimeout(timer); }
 
-            var text = await res.text();
+      var text = await res.text();
       var trimmed = String(text || '').trim();
       if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server returned invalid data');
       var data = JSON.parse(trimmed);
@@ -467,22 +421,15 @@ async function submitNewRequest() {
       lastError = err;
       lastWasTimeout = (err.name === 'AbortError');
       console.warn('[submitNewRequest] Attempt ' + attempt + ' failed:', err.message);
-
-      // ★ If it was a timeout (server never answered), DO NOT auto-retry —
-      //   the server likely still got it, and retrying creates duplicates.
       if (lastWasTimeout) break;
-
-      // Only retry on genuine network errors where the request never reached the server
       if (attempt < maxAttempts) {
         await new Promise(function(r) { setTimeout(r, 2000); });
       }
     }
   }
 
-  // ★ If we broke out due to timeout, keep the idem key so a manual retry
-  //   is idempotent on the server side.
   if (lastWasTimeout) {
-    showToast('The server is taking longer than expected. Please check My Requests in a moment before retrying — your request may already be created.', 'warning', 10000);
+    showToast('The server is taking longer than expected. Please check My Requests in a moment — your request may already be created.', 'warning', 10000);
   } else {
     showToast('Could not reach the server. Please check your connection and try again.', 'danger');
   }
@@ -499,11 +446,8 @@ function _resetSubmitState(btn, origHtml) {
     btn.innerHTML = origHtml || '<i class="bi bi-check-circle me-2"></i>Submit Request';
     delete btn.dataset.loading;
   }
-  // state._reqIdemKey is intentionally NOT reset here —
-  // only reset on success or server rejection.
 }
 
-// ─── QR Download / Share ───
 function downloadRequestQr() {
   if (!lastQrDocNo || !lastQrTicketNo) { showToast('No QR to download', 'warning'); return; }
   var img = document.getElementById('requestQrImg');
@@ -545,14 +489,8 @@ async function shareRequestQr() {
     var response = await fetch(img.src);
     var blob = await response.blob();
     var file = new File([blob], 'QR-' + lastQrDocNo + '.png', { type: 'image/png' });
-    await navigator.share({
-      title: 'GEMCOR Request QR',
-      text: 'Ticket: ' + lastQrTicketNo + '\nDoc: ' + lastQrDocNo,
-      files: [file]
-    });
-  } catch(err) {
-    if (err.name !== 'AbortError') showToast('Share failed: ' + err.message, 'danger');
-  }
+    await navigator.share({ title: 'GEMCOR Request QR', text: 'Ticket: ' + lastQrTicketNo + '\nDoc: ' + lastQrDocNo, files: [file] });
+  } catch(err) { if (err.name !== 'AbortError') showToast('Share failed: ' + err.message, 'danger'); }
 }
 
 function showRequestQr(ticketNo, docNo) {
@@ -576,7 +514,6 @@ function showRequestQr(ticketNo, docNo) {
   requestSuccessModal.show();
 }
 
-// ─── Load My Requests (MRIF + MRS only) ───
 async function loadMyRequests() {
   var requestor = localStorage.getItem('ivm_requestorName');
   if (!requestor) return;
@@ -588,17 +525,15 @@ async function loadMyRequests() {
     var trimmed = String(text || '').trim();
     if (!trimmed || trimmed.charAt(0) === '<') {
       var listEl = document.getElementById('myRequestsList');
-      if (listEl) listEl.innerHTML = '<div class="list-group-item text-warning text-center py-3">Server unavailable. Please try again later.</div>';
+      if (listEl) listEl.innerHTML = '<div class="list-group-item text-warning text-center py-3">Server unavailable.</div>';
       return;
     }
     var data = JSON.parse(trimmed);
-
     if (data.success && data.requests) {
       data.requests = data.requests.filter(function(req) {
         var t = (req.type || '').toUpperCase();
         return t === 'MRIF' || t === 'MRS';
       });
-
       data.requests.sort(function(a, b) {
         var ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
         var tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
@@ -637,10 +572,7 @@ async function loadMyRequests() {
       if (kpiPending) kpiPending.textContent = pendingCount;
       if (kpiCompleted) kpiCompleted.textContent = readyCount;
 
-      if (hasNewReady) {
-        playSuccessBeep();
-        showToast('Your request has been processed by the warehouse!', 'success');
-      }
+      if (hasNewReady) { playSuccessBeep(); showToast('Your request has been processed by the warehouse!', 'success'); }
     } else {
       var listEl2 = document.getElementById('myRequestsList');
       if (listEl2) listEl2.innerHTML = '<div class="list-group-item text-muted text-center py-3">No requests found</div>';
@@ -648,11 +580,10 @@ async function loadMyRequests() {
   } catch(e) {
     console.error('[loadMyRequests] Error:', e);
     var listEl3 = document.getElementById('myRequestsList');
-    if (listEl3) listEl3.innerHTML = '<div class="list-group-item text-danger text-center py-3">Failed to load requests. Check your connection.</div>';
+    if (listEl3) listEl3.innerHTML = '<div class="list-group-item text-danger text-center py-3">Failed to load requests.</div>';
   } finally { hideLoading(); }
 }
 
-// ─── Render My Requests ───
 function renderMyRequests(requests) {
   var container = document.getElementById('myRequestsList');
   if (!container) return;
@@ -664,9 +595,7 @@ function renderMyRequests(requests) {
   });
 
   if (filtered.length === 0) {
-    container.innerHTML = '<div class="list-group-item text-muted text-center py-4">' +
-      '<i class="bi bi-inbox fs-3 d-block mb-2"></i>' +
-      'No requests found.</div>';
+    container.innerHTML = '<div class="list-group-item text-muted text-center py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i>No requests found.</div>';
     return;
   }
 
@@ -682,14 +611,13 @@ function renderMyRequests(requests) {
     var docType = req.type || 'MRIF';
 
     var html = '<div class="list-group-item request-card ' + (isCompleted ? 'completed' : '') + '" ' +
-      'data-docno="' + docNo + '" data-doctype="' + docType + '" ' +
-      'style="cursor:pointer;">' +
+      'data-docno="' + docNo + '" data-doctype="' + docType + '" style="cursor:pointer;">' +
         '<div class="d-flex justify-content-between align-items-start">' +
           '<div class="flex-grow-1">' +
             '<div class="fw-bold">' + docNo + ' <span class="badge bg-secondary">' + docType + '</span></div>' +
             '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
             '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + (req.itemCode || '') + ' <span class="badge bg-light text-dark">x' + (req.qty || 0) + '</span></div>' +
-            '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i> Click to view QR &amp; requested items</div>' +
+            '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i> Click to view QR</div>' +
           '</div>' +
           '<span class="badge bg-' + badgeClass + '"><i class="bi ' + icon + ' me-1"></i>' + statusText + '</span>' +
         '</div>' +
@@ -702,22 +630,18 @@ function renderMyRequests(requests) {
       var docNo = this.getAttribute('data-docno');
       var docType = this.getAttribute('data-doctype') || 'MRIF';
       if (!docNo) return;
-      if (typeof window.openMyRequestDetails === 'function') {
-        window.openMyRequestDetails(docNo, docType);
-      } else if (typeof openRequestDetails === 'function') {
-        openRequestDetails(docNo, docType);
-      }
+      if (typeof window.openMyRequestDetails === 'function') window.openMyRequestDetails(docNo, docType);
+      else if (typeof openRequestDetails === 'function') openRequestDetails(docNo, docType);
     });
   });
 }
 
-// ─── Request Details ───
 async function openRequestDetails(docNo, docType) {
   if (!docNo) return;
   var modal = document.getElementById('requestDetailsModal');
   if (!modal) return;
   var content = document.getElementById('requestDetailsContent');
-  content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading request details...</div></div>';
+  content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
   var bsModal = new bootstrap.Modal(modal);
   bsModal.show();
   try {
@@ -725,9 +649,7 @@ async function openRequestDetails(docNo, docType) {
     var sheetIdVal = localStorage.getItem(sheetKey);
     var sheetIdClean = sheetIdVal ? extractSheetId(sheetIdVal) : '';
     var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
-              '&docType=' + (docType || 'MRIF') +
-              '&sheetId=' + encodeURIComponent(sheetIdClean) +
-              '&_t=' + Date.now();
+              '&docType=' + (docType || 'MRIF') + '&sheetId=' + encodeURIComponent(sheetIdClean) + '&_t=' + Date.now();
     var res = await fetch(url, { redirect: 'follow' });
     var text = await res.text();
     var data;
@@ -738,7 +660,7 @@ async function openRequestDetails(docNo, docType) {
     content.innerHTML = buildRequestDetailsHtml(docNo, docType, info, items);
   } catch(err) {
     console.error('[openRequestDetails] Error:', err);
-    content.innerHTML = '<div class="alert alert-danger">Failed to load request details: ' + err.message + '</div>';
+    content.innerHTML = '<div class="alert alert-danger">Failed to load: ' + err.message + '</div>';
   }
 }
 
@@ -771,48 +693,32 @@ function buildRequestDetailsHtml(docNo, docType, info, items) {
       var unit = it.unit || 'PIECE';
       var remarks = it.remarks || 'PENDING';
       var issuedDisplay = (issued === 0) ? '' : issued;
-      itemsHtml += '<tr>' +
-        '<td>' + (idx + 1) + '</td>' +
-        '<td><code>' + code + '</code></td>' +
-        '<td>' + desc + '</td>' +
-        '<td class="text-center">' + qty + '</td>' +
-        '<td class="text-center">' + issuedDisplay + '</td>' +
-        '<td class="text-center">' + unit + '</td>' +
-        '<td>' + remarks + '</td>' +
-        '</tr>';
+      itemsHtml += '<tr><td>' + (idx + 1) + '</td><td><code>' + code + '</code></td><td>' + desc + '</td>' +
+        '<td class="text-center">' + qty + '</td><td class="text-center">' + issuedDisplay + '</td>' +
+        '<td class="text-center">' + unit + '</td><td>' + remarks + '</td></tr>';
     });
   } else {
     itemsHtml = '<tr><td colspan="7" class="text-center text-muted py-3">No items found</td></tr>';
   }
 
-  return '<div class="request-details">' +
-    '<div class="row g-2 mb-3">' +
-      '<div class="col-md-6"><strong>Document:</strong> ' + docNo + '</div>' +
-      '<div class="col-md-6"><strong>Type:</strong> <span class="badge bg-primary">' + (docType || 'MRIF') + '</span></div>' +
-      (requestor !== '—' ? '<div class="col-md-6"><strong>Requestor:</strong> ' + requestor + '</div>' : '') +
-      (department !== '—' ? '<div class="col-md-6"><strong>Department:</strong> ' + department + '</div>' : '') +
-      (dateStr !== '—' ? '<div class="col-md-6"><strong>Date:</strong> ' + dateStr + '</div>' : '') +
-      (!isMRR && gemSo !== '—' ? '<div class="col-md-6"><strong>GEM SO No.:</strong> ' + gemSo + '</div>' : '') +
-      (!isMRR && joNo !== '—' ? '<div class="col-md-6"><strong>JO No.:</strong> ' + joNo + '</div>' : '') +
-      (!isMRR && client !== '—' ? '<div class="col-md-6"><strong>Client:</strong> ' + client + '</div>' : '') +
-      (!isMRR && project !== '—' ? '<div class="col-md-6"><strong>Project:</strong> ' + project + '</div>' : '') +
-    '</div>' +
-    '<hr>' +
-    '<div class="table-responsive">' +
-      '<table class="table table-sm table-bordered">' +
-        '<thead class="table-light"><tr>' +
-          '<th>#</th><th>Item Code</th><th>Description</th>' +
-          '<th class="text-center">' + (isMRR ? 'Rec. Qty' : 'Req. Qty') + '</th>' +
-          '<th class="text-center">' + (isMRR ? 'ATL Qty' : 'Issued Qty') + '</th>' +
-          '<th class="text-center">Unit</th><th>Remarks</th>' +
-        '</tr></thead>' +
-        '<tbody>' + itemsHtml + '</tbody>' +
-      '</table>' +
-    '</div>' +
-  '</div>';
+  return '<div class="request-details"><div class="row g-2 mb-3">' +
+    '<div class="col-md-6"><strong>Document:</strong> ' + docNo + '</div>' +
+    '<div class="col-md-6"><strong>Type:</strong> <span class="badge bg-primary">' + (docType || 'MRIF') + '</span></div>' +
+    (requestor !== '—' ? '<div class="col-md-6"><strong>Requestor:</strong> ' + requestor + '</div>' : '') +
+    (department !== '—' ? '<div class="col-md-6"><strong>Department:</strong> ' + department + '</div>' : '') +
+    (dateStr !== '—' ? '<div class="col-md-6"><strong>Date:</strong> ' + dateStr + '</div>' : '') +
+    (!isMRR && gemSo !== '—' ? '<div class="col-md-6"><strong>GEM SO No.:</strong> ' + gemSo + '</div>' : '') +
+    (!isMRR && joNo !== '—' ? '<div class="col-md-6"><strong>JO No.:</strong> ' + joNo + '</div>' : '') +
+    (!isMRR && client !== '—' ? '<div class="col-md-6"><strong>Client:</strong> ' + client + '</div>' : '') +
+    (!isMRR && project !== '—' ? '<div class="col-md-6"><strong>Project:</strong> ' + project + '</div>' : '') +
+    '</div><hr><div class="table-responsive"><table class="table table-sm table-bordered">' +
+      '<thead class="table-light"><tr><th>#</th><th>Item Code</th><th>Description</th>' +
+        '<th class="text-center">' + (isMRR ? 'Rec. Qty' : 'Req. Qty') + '</th>' +
+        '<th class="text-center">' + (isMRR ? 'ATL Qty' : 'Issued Qty') + '</th>' +
+        '<th class="text-center">Unit</th><th>Remarks</th></tr></thead>' +
+      '<tbody>' + itemsHtml + '</tbody></table></div></div>';
 }
 
-// ─── Manual MRIF ───
 function openManualMrifModal() {
   if (!manualMrifModal) manualMrifModal = new bootstrap.Modal(document.getElementById('manualMrifModal'));
   document.getElementById('manualMrifRequestor').value = '';
@@ -937,10 +843,7 @@ function filterManualMrifItems(input, idx) {
         document.getElementById('manualMrifCode' + idx).value = code;
         document.getElementById('manualMrifDesc' + idx).value = desc;
         var row = input.closest('tr');
-        if (row) {
-          var descInput = row.querySelector('td:nth-child(3) input');
-          if (descInput) descInput.value = desc;
-        }
+        if (row) { var descInput = row.querySelector('td:nth-child(3) input'); if (descInput) descInput.value = desc; }
         var unitSelect = row.querySelector('.manual-mrif-unit');
         if (unitSelect && unitSelect.querySelector('option[value="' + unit + '"]')) unitSelect.value = unit;
         if (manualMrifItems[idx]) {
@@ -1011,44 +914,31 @@ async function submitManualMrif() {
     if (!requestor) { showToast('Please enter a requestor name', 'warning'); return; }
 
     var idemKey = 'mmrif_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
-
     var payload = {
-      action: 'createRequest',
-      _idemKey: idemKey,
-      docType: 'MRIF',
-      requestor: requestor,
-      department: department || '',
-      joNo: joNo || '',
-      gemSoNo: gemSoNo || '',
-      clientName: clientName || '',
-      project: project || '',
-      items: items,
-      timestamp: new Date().toISOString(),
-      isManual: true
+      action: 'createRequest', _idemKey: idemKey,
+      docType: 'MRIF', requestor: requestor, department: department || '',
+      joNo: joNo || '', gemSoNo: gemSoNo || '',
+      clientName: clientName || '', project: project || '',
+      items: items, timestamp: new Date().toISOString(), isManual: true
     };
     var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
     var res = await fetchFn(API_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload),
+      method: 'POST', body: JSON.stringify(payload),
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }
-    }, { timeout: 45000, retries: 1 });
+    }, { timeout: 90000, retries: 1 });
     var text = await res.text();
     var trimmed = String(text || '').trim();
     if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
     var data = JSON.parse(trimmed);
-        if (data && data.success) {
+    if (data && data.success) {
       if (manualMrifModal) manualMrifModal.hide();
       var newMrifDocNo = data.docNo || data.balDocNo || '';
       showToast('Manual MRIF created: ' + newMrifDocNo, 'success');
       await fetchPendingDocs();
       await loadWarehouseNotifications();
       await updateWarehouseKPIs();
-
-      // ★ Auto-open print preview
       if (newMrifDocNo && typeof window.autoOpenPrintPreview === 'function') {
-        setTimeout(function() {
-          window.autoOpenPrintPreview(newMrifDocNo, 'MRIF');
-        }, 400);
+        setTimeout(function() { window.autoOpenPrintPreview(newMrifDocNo, 'MRIF'); }, 400);
       }
     } else {
       showToast('Failed: ' + ((data && data.error) || 'Unknown error'), 'danger');
