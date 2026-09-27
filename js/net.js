@@ -1,14 +1,14 @@
 // ============================================================
 // NETWORK LAYER — Retry, timeout, offline banner, safe fetch
-// Banner is now a floating pill (bottom-right) so it never
-// overlaps the app header.
+// ★ v2 — No retry on AbortError (prevents duplicate writes)
+//       Longer timeouts (60s default)
+//       Better error messages
 // ============================================================
 
-// ─── Safe fetch: retry with exponential backoff + timeout ───
 window.safeFetch = async function(url, options, opts) {
   opts = opts || {};
   var retries = opts.retries != null ? opts.retries : 2;
-  var timeout = opts.timeout || 20000;
+  var timeout = opts.timeout || 60000;   // ★ was 20s, now 60s default
   var lastErr = null;
 
   for (var attempt = 0; attempt <= retries; attempt++) {
@@ -20,7 +20,7 @@ window.safeFetch = async function(url, options, opts) {
       clearTimeout(timer);
       if (!res.ok) {
         if (res.status >= 500 && attempt < retries) {
-          await new Promise(function(r) { setTimeout(r, 400 * Math.pow(2, attempt)); });
+          await new Promise(function(r) { setTimeout(r, 800 * Math.pow(2, attempt)); });
           continue;
         }
         throw new Error('HTTP ' + res.status);
@@ -30,14 +30,14 @@ window.safeFetch = async function(url, options, opts) {
       clearTimeout(timer);
       lastErr = e;
 
-      // ★ If we timed out via AbortController, do NOT retry —
-      //   the server likely received the request. Retrying duplicates writes.
+      // ★ CRITICAL: If we timed out, DO NOT retry.
+      // The server likely received the request. Retrying duplicates writes.
       if (e.name === 'AbortError') {
         throw e;
       }
 
       if (attempt < retries) {
-        await new Promise(function(r) { setTimeout(r, 400 * Math.pow(2, attempt)); });
+        await new Promise(function(r) { setTimeout(r, 800 * Math.pow(2, attempt)); });
       }
     }
   }
@@ -51,41 +51,24 @@ window.safeFetch = async function(url, options, opts) {
   var style = document.createElement('style');
   style.textContent = `
     #netPill {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 99997;
-      padding: 10px 16px 10px 14px;
-      border-radius: 24px;
-      font-weight: 600;
-      font-size: 0.82rem;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      position: fixed; bottom: 20px; right: 20px; z-index: 99997;
+      padding: 10px 16px 10px 14px; border-radius: 24px;
+      font-weight: 600; font-size: 0.82rem; color: #fff;
+      display: flex; align-items: center; gap: 8px;
       box-shadow: 0 6px 20px rgba(0,0,0,0.25);
       transform: translateY(120%);
       transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s;
-      opacity: 0;
-      pointer-events: none;
-      max-width: calc(100vw - 40px);
-      white-space: nowrap;
+      opacity: 0; pointer-events: none;
+      max-width: calc(100vw - 40px); white-space: nowrap;
     }
-    #netPill.show {
-      transform: translateY(0);
-      opacity: 1;
-    }
+    #netPill.show { transform: translateY(0); opacity: 1; }
     #netPill.offline { background: #dc3545; }
-    #netPill.slow { background: #f59e0b; color: #1f2937; }
-    #netPill.online { background: #198754; }
+    #netPill.slow    { background: #f59e0b; color: #1f2937; }
+    #netPill.online  { background: #198754; }
     #netPill .net-dot {
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      background: currentColor;
-      opacity: 0.9;
-      animation: netPulse 1.4s ease-in-out infinite;
-      flex-shrink: 0;
+      width: 9px; height: 9px; border-radius: 50%;
+      background: currentColor; opacity: 0.9;
+      animation: netPulse 1.4s ease-in-out infinite; flex-shrink: 0;
     }
     #netPill.offline .net-dot,
     #netPill.online .net-dot { animation: none; }
@@ -94,12 +77,7 @@ window.safeFetch = async function(url, options, opts) {
       50%      { opacity: 1;   transform: scale(1); }
     }
     @media (max-width: 576px) {
-      #netPill {
-        bottom: 12px;
-        right: 12px;
-        font-size: 0.75rem;
-        padding: 8px 12px 8px 10px;
-      }
+      #netPill { bottom: 12px; right: 12px; font-size: 0.75rem; padding: 8px 12px 8px 10px; }
     }
   `;
   document.head.appendChild(style);
@@ -120,9 +98,7 @@ window.safeFetch = async function(url, options, opts) {
     pill.className = 'show ' + (cls || '');
     if (_hideTimer) clearTimeout(_hideTimer);
     if (autoHideMs) {
-      _hideTimer = setTimeout(function() {
-        pill.className = '';
-      }, autoHideMs);
+      _hideTimer = setTimeout(function() { pill.className = ''; }, autoHideMs);
     }
   }
 
@@ -131,13 +107,9 @@ window.safeFetch = async function(url, options, opts) {
     pill.className = '';
   }
 
-  // Wrap fetch to detect slow requests
   window.fetch = function(input, init) {
     var url = typeof input === 'string' ? input : (input && input.url) || '';
-
-    // Skip the CDN calls (Google Fonts, QR API, etc.) — only track our API
-    var isApiCall = url.indexOf('script.google.com') !== -1 ||
-                    url.indexOf('macros/s/') !== -1;
+    var isApiCall = url.indexOf('script.google.com') !== -1 || url.indexOf('macros/s/') !== -1;
 
     _pendingCount++;
     if (isApiCall && !_slowTimer && navigator.onLine) {
@@ -151,20 +123,13 @@ window.safeFetch = async function(url, options, opts) {
       _pendingCount--;
       if (_pendingCount <= 0) {
         _pendingCount = 0;
-        if (_slowTimer) {
-          clearTimeout(_slowTimer);
-          _slowTimer = null;
-        }
-        // Hide the "slow" pill once everything's done
-        if (pill.classList.contains('slow') && navigator.onLine) {
-          _hidePill();
-        }
+        if (_slowTimer) { clearTimeout(_slowTimer); _slowTimer = null; }
+        if (pill.classList.contains('slow') && navigator.onLine) _hidePill();
       }
     });
     return p;
   };
 
-  // Online
   window.addEventListener('online', function() {
     _showPill('Back online', 'online', 2000);
     setTimeout(function() {
@@ -178,15 +143,11 @@ window.safeFetch = async function(url, options, opts) {
     }, 300);
   });
 
-  // Offline
   window.addEventListener('offline', function() {
     _showPill('Offline — showing cached data', 'offline', 0);
   });
 
-  // Initial state
-  if (!navigator.onLine) {
-    _showPill('Offline — showing cached data', 'offline', 0);
-  }
+  if (!navigator.onLine) _showPill('Offline — showing cached data', 'offline', 0);
 })();
 
 // ─── Stale-while-revalidate helper ───
@@ -240,7 +201,7 @@ window.flushOfflineQueue = async function() {
         method: 'POST',
         body: q[i].body,
         headers: { 'Content-Type': 'text/plain;charset=utf-8' }
-      }, { retries: 1, timeout: 15000 });
+      }, { retries: 1, timeout: 30000 });
       var text = await res.text();
       var data = JSON.parse(text);
       if (data && data.success) successCount++;
@@ -261,9 +222,8 @@ window.addEventListener('online', function() {
   setTimeout(flushOfflineQueue, 1000);
 });
 
-// Attempt flush on load
 setTimeout(function() {
   if (navigator.onLine && _getQueue().length > 0) flushOfflineQueue();
 }, 3000);
 
-console.log('✅ net.js loaded (pill banner, bottom-right)');
+console.log('✅ net.js loaded (v2 — no retry on abort, 60s timeout)');
