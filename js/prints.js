@@ -1,9 +1,11 @@
 // ============================================================
 // PRINT PREVIEW FUNCTIONS
-// (+ print-only QR that opens a public read-only view)
+// - Print-only QR opens a public read-only PDF view
+// - Lazy-loads QR images
+// - Auto-open print preview after create/process
 // ============================================================
 
-// Local HTML escaper for print data
+// ─── Local HTML escaper ───
 function _escPrint(s) {
   if (s === null || s === undefined) return '';
   return String(s)
@@ -13,6 +15,14 @@ function _escPrint(s) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+// ─── Build the print-only URL ───
+function _printQrData(docNo) {
+  if (!docNo) return '';
+  var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
+  return base + '?doc=' + encodeURIComponent(docNo) + '&view=print';
+}
+
 // ─── Auto-open print preview after create/process ───
 function autoOpenPrintPreview(docNo, docType) {
   if (!docNo || !docType) return;
@@ -79,90 +89,7 @@ function _navigateToModuleForDocType(docType) {
 
 window.autoOpenPrintPreview = autoOpenPrintPreview;
 
-
-// ─── Helper: Build the "print-only" URL that the printed QR points to ───
-// This is deliberately DIFFERENT from the production request QR
-// (which points to ?doc=X and opens the interactive system).
-// The print URL uses ?view=print which opens a public read-only preview.
-function _printQrData(docNo) {
-  if (!docNo) return '';
-  var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
-  return base + '?doc=' + encodeURIComponent(docNo) + '&view=print';
-}
-// ─── Auto-open print preview after a doc is created ───
-// Called by create flows (Manual MRR, MRR from PO, Manual MRIF, Balance MRIF).
-// Waits a moment for the server to finish writing, then fetches the doc and
-// shows the print preview modal. Only the X button closes it.
-function autoOpenPrintPreview(docNo, docType) {
-  if (!docNo || !docType) return;
-  var cleanDoc = String(docNo).trim();
-  var cleanType = String(docType).toUpperCase();
-
-  showLoading('Preparing print preview...');
-
-  // Give the server a moment to finalize the write
-  setTimeout(function() {
-    var url = API_URL + '?action=getDocItems' +
-              '&docNo=' + encodeURIComponent(cleanDoc) +
-              '&docType=' + cleanType +
-              '&sheetId=' + encodeURIComponent(_getSheetIdForDocType(cleanType)) +
-              '&_t=' + Date.now();
-
-    fetch(url, { redirect: 'follow' })
-      .then(function(res) { return res.text(); })
-      .then(function(text) {
-        var data;
-        try { data = JSON.parse(text); } catch(e) { data = {}; }
-        hideLoading();
-
-        if (!data || !data.success) {
-          // Fallback: just navigate to the module and let user pick the doc
-          if (typeof showToast === 'function') {
-            showToast('Document created: ' + cleanDoc + '. Open the module to print it.', 'success');
-          }
-          _navigateToModuleForDocType(cleanType);
-          return;
-        }
-
-        var info = data.info || {};
-        var items = data.items || [];
-
-        if (cleanType === 'MRIF') {
-          renderMrifPrint(cleanDoc, info, items);
-          if (typeof mrifListModal !== 'undefined' && mrifListModal) mrifListModal.hide();
-          setTimeout(function() { if (mrifPrintModal) mrifPrintModal.show(); }, 200);
-        } else if (cleanType === 'MRR') {
-          renderMrrPrint(cleanDoc, info, items);
-          if (typeof mrrListModal !== 'undefined' && mrrListModal) mrrListModal.hide();
-          setTimeout(function() { if (mrrPrintModal) mrrPrintModal.show(); }, 200);
-        } else if (cleanType === 'MRS') {
-          renderMrsPrint(cleanDoc, info, items);
-          if (typeof mrsListModal !== 'undefined' && mrsListModal) mrsListModal.hide();
-          setTimeout(function() { if (mrsPrintModal) mrsPrintModal.show(); }, 200);
-        }
-      })
-      .catch(function(err) {
-        hideLoading();
-        console.warn('[autoOpenPrintPreview] failed:', err);
-        if (typeof showToast === 'function') {
-          showToast('Document created: ' + cleanDoc + '. Open the module to print it.', 'success');
-        }
-        _navigateToModuleForDocType(cleanType);
-      });
-  }, 700);
-}
-
-// Small helper used by the fallback path
-function _navigateToModuleForDocType(docType) {
-  var map = { 'MRIF': 'releasing', 'MRR': 'receiving', 'MRS': 'returns' };
-  var section = map[docType] || 'releasing';
-  if (typeof navigateTo === 'function') navigateTo(section);
-}
-
-// Expose globally
-window.autoOpenPrintPreview = autoOpenPrintPreview;
-
-// ─── Helper: Display doc number (strips -dept suffix, keeps "Bal." prefix) ───
+// ─── Display doc number ───
 function _displayDocNo(docNo) {
   if (!docNo) return '';
   if (docNo.indexOf('Bal.') === 0) {
@@ -173,19 +100,16 @@ function _displayDocNo(docNo) {
   return cleanDocNo(docNo);
 }
 
-// ─── Helper: Extract trailing numeric series ───
 function _extractDocNumber(docNo) {
   if (!docNo) return 0;
   var m = String(docNo).match(/(\d{4,})/);
   return m ? parseInt(m[1], 10) : 0;
 }
 
-// ─── Helper: Is this a Bal. document? ───
 function _isBalDoc(docNo) {
   return String(docNo || '').toUpperCase().indexOf('BAL.') === 0;
 }
 
-// ─── Helper: Strip system status from Remarks before printing ───
 function _cleanRemarksForPrint(remarks) {
   if (!remarks) return '';
   var s = String(remarks).trim();
@@ -195,22 +119,19 @@ function _cleanRemarksForPrint(remarks) {
   return s;
 }
 
-// ─── Helper: Get the correct sheet ID by docType ───
 function _getSheetIdForDocType(docType) {
   var key = 'sheetId_' + (docType || 'MRIF');
   var val = localStorage.getItem(key);
   return val ? (typeof extractSheetId === 'function' ? extractSheetId(val) : val) : '';
 }
 
-// ─── Helper: load document list for a module ────
+// ─── Load document list for a module ────
 async function loadDocumentListForModule(docType) {
   var id = _getSheetIdForDocType(docType);
-
   if (!id) {
     showToast('⚠️ No Sheet ID for ' + docType + '. Please sync or enter it in Settings.', 'warning');
     return [];
   }
-
   try {
     const url = API_URL + '?action=getPendingDocs&docType=' + docType + '&sheetId=' + id + '&_t=' + Date.now();
     const res = await fetch(url, { redirect: 'follow' });
@@ -218,10 +139,7 @@ async function loadDocumentListForModule(docType) {
     const text = await res.text();
     let data;
     try { data = JSON.parse(text); } catch(e) { data = {}; }
-    if (data.error) {
-      showToast('Error: ' + data.error, 'danger');
-      return [];
-    }
+    if (data.error) { showToast('Error: ' + data.error, 'danger'); return []; }
     const docs = Array.isArray(data) ? data : (data.docs || data.documents || []);
     return docs;
   } catch(err) {
@@ -231,7 +149,7 @@ async function loadDocumentListForModule(docType) {
   }
 }
 
-// ─── Render document list with checkboxes (NEWEST FIRST) ────
+// ─── Render document list ────
 function renderDocumentList(container, docs, docType) {
   if (!container) return;
   container.innerHTML = '';
@@ -240,11 +158,7 @@ function renderDocumentList(container, docs, docType) {
     return;
   }
 
-  var ignoreList = [
-    'MONITORING', 'SUMMARY', 'SYNC', 'SERVED', 'INVENTORYCODES',
-    'REQUESTOR LIST', 'SOF MONITORING 2026', 'GEMCOR PRF PO',
-    'Sheet1', 'LINKS', 'Copy of INVENTORYCODES', 'DOCLINKS', 'PARTIAL ITEMS'
-  ];
+  var ignoreList = ['MONITORING','SUMMARY','SYNC','SERVED','INVENTORYCODES','REQUESTOR LIST','SOF MONITORING 2026','GEMCOR PRF PO','Sheet1','LINKS','Copy of INVENTORYCODES','DOCLINKS','PARTIAL ITEMS'];
 
   var filtered = docs.filter(function(d) {
     var name = d.docNo || d.sheetName || '';
@@ -291,7 +205,7 @@ function renderDocumentList(container, docs, docType) {
     var isBal = docNo.toUpperCase().indexOf('BAL.') === 0;
     var el = document.createElement('div');
     el.className = 'list-group-item d-flex align-items-center';
-    var color = docType === 'MRR' ? 'success' : (isBal ? 'info' : (docType === 'MRIF' ? 'warning' : 'warning'));
+    var color = docType === 'MRR' ? 'success' : (isBal ? 'info' : 'warning');
     var icon = isBal ? 'bi-layers-fill' : 'bi-file-earmark-text';
     var badge = isBal ? ' <span class="badge bg-info text-dark">BAL</span>' : '';
     el.innerHTML =
@@ -324,20 +238,14 @@ function toggleAllDocs(checked) {
 function getSelectedDocs() {
   var selected = [];
   document.querySelectorAll('.doc-checkbox:checked').forEach(cb => {
-    selected.push({
-      docNo: cb.getAttribute('data-docno'),
-      docType: cb.getAttribute('data-doc-type')
-    });
+    selected.push({ docNo: cb.getAttribute('data-docno'), docType: cb.getAttribute('data-doc-type') });
   });
   return selected;
 }
 
 async function printSelectedDocs() {
   var selected = getSelectedDocs();
-  if (selected.length === 0) {
-    showToast('Please select at least one document', 'warning');
-    return;
-  }
+  if (selected.length === 0) { showToast('Please select at least one document', 'warning'); return; }
 
   var docType = selected[0].docType;
   var docNos = selected.map(s => s.docNo);
@@ -345,7 +253,6 @@ async function printSelectedDocs() {
   showLoading('Loading ' + docNos.length + ' documents...');
   try {
     var sheetIdClean = _getSheetIdForDocType(docType);
-
     var url = API_URL + '?action=getMultipleDocItems&docNos=' + encodeURIComponent(docNos.join(',')) +
               '&docType=' + docType + '&sheetId=' + encodeURIComponent(sheetIdClean) + '&_t=' + Date.now();
     var res = await fetch(url, { redirect: 'follow' });
@@ -376,9 +283,7 @@ async function printSelectedDocs() {
   } catch(err) {
     console.error('[printSelectedDocs] Error:', err);
     showToast('Error: ' + err.message, 'danger');
-  } finally {
-    hideLoading();
-  }
+  } finally { hideLoading(); }
 }
 
 function renderBulkPrintPreview(documents, docType) {
@@ -401,7 +306,7 @@ function renderBulkPrintPreview(documents, docType) {
   container.innerHTML = combinedHtml;
 }
 
-// ─── Build single MRIF HTML ────
+// ─── Build MRIF print ────
 function buildSingleMrifHtml(docNo, info, items) {
   var requestor = _escPrint(info.Requestor || info.requestor || info.requestorName || '');
   var department = _escPrint(info.Department || info.department || info.dept || '');
@@ -441,7 +346,7 @@ function buildSingleMrifHtml(docNo, info, items) {
       itemsHtml += '<tr>' +
         '<td class="td-center">' + (i + 1) + '</td>' +
         '<td class="td-center">' + code + '</td>' +
-        '<td class="td-center"><img src="' + qrUrl + '" style="width:32px;height:32px;display:block;margin:0 auto;" alt=""></td>' +
+        '<td class="td-center"><img src="' + qrUrl + '" style="width:32px;height:32px;display:block;margin:0 auto;" alt="" loading="lazy"></td>' +
         '<td class="td-left">' + desc + '</td>' +
         '<td class="td-center">' + qty + '</td>' +
         '<td class="td-center">' + issuedDisplay + '</td>' +
@@ -452,10 +357,8 @@ function buildSingleMrifHtml(docNo, info, items) {
   } else {
     itemsHtml += '<tr><td class="td-center" colspan="8" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
   }
-
   itemsHtml += '<tr><td class="td-center" colspan="8">&nbsp;</td></tr>';
 
-  // ★ Print-only QR — scans to ?doc=X&view=print (read-only PDF view)
   var mrifQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(_printQrData(docNo));
 
   return '<div class="mrif-print-sheet">' +
@@ -463,65 +366,37 @@ function buildSingleMrifHtml(docNo, info, items) {
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
       '<div class="mrif-docno">' +
         '<div><span class="mrif-dn-label">MRIF No.:</span><span class="mrif-dn-box">' + _escPrint(displayDocNo) + '</span></div>' +
-        '<div class="mrif-doc-qr"><img src="' + mrifQrUrl + '" alt="MRIF QR" style="width:90px;height:90px;margin-top:4px;"></div>' +
+        '<div class="mrif-doc-qr"><img src="' + mrifQrUrl + '" alt="MRIF QR" style="width:90px;height:90px;margin-top:4px;" loading="lazy"></div>' +
       '</div>' +
     '</div>' +
     '<div class="mrif-title">' + titleText + '</div>' +
     '<table class="mrif-meta">' +
-      '<tr>' +
-        '<td class="meta-label">REQUESTOR:</td>' +
-        '<td class="meta-value" colspan="2">' + requestor + '</td>' +
-        '<td class="meta-label-right">GEM SO No.:</td>' +
-        '<td class="meta-blue">' + gemSo + '</td>' +
-        '<td class="meta-label-right">JO No.:</td>' +
-        '<td class="meta-blue">' + joNo + '</td>' +
-      '</tr>' +
-      '<tr>' +
-        '<td class="meta-label">DEPARTMENT/SECTION:</td>' +
-        '<td class="meta-value" colspan="4">' + department + '</td>' +
-        '<td class="meta-label-right">CLIENT NAME:</td>' +
-        '<td class="meta-value">' + client + '</td>' +
-      '</tr>' +
-      '<tr>' +
-        '<td class="meta-label">DATE:</td>' +
-        '<td class="meta-blue" colspan="2">' + dateStr + '</td>' +
-        '<td class="meta-label-right">PROJECT:</td>' +
-        '<td class="meta-value" colspan="3">' + project + '</td>' +
-      '</tr>' +
+      '<tr><td class="meta-label">REQUESTOR:</td><td class="meta-value" colspan="2">' + requestor + '</td><td class="meta-label-right">GEM SO No.:</td><td class="meta-blue">' + gemSo + '</td><td class="meta-label-right">JO No.:</td><td class="meta-blue">' + joNo + '</td></tr>' +
+      '<tr><td class="meta-label">DEPARTMENT/SECTION:</td><td class="meta-value" colspan="4">' + department + '</td><td class="meta-label-right">CLIENT NAME:</td><td class="meta-value">' + client + '</td></tr>' +
+      '<tr><td class="meta-label">DATE:</td><td class="meta-blue" colspan="2">' + dateStr + '</td><td class="meta-label-right">PROJECT:</td><td class="meta-value" colspan="3">' + project + '</td></tr>' +
     '</table>' +
     '<table class="mrif-items">' +
-      '<thead>' +
-        '<tr>' +
-          '<th style="width:5%">ITEM<br>NO.</th>' +
-          '<th style="width:14%">ITEM<br>CODE</th>' +
-          '<th style="width:7%">QR<br>IMG</th>' +
-          '<th style="width:34%">ITEM DESCRIPTION</th>' +
-          '<th style="width:9%">REQ.<br>QTY</th>' +
-          '<th style="width:9%">ISSUED<br>QTY</th>' +
-          '<th style="width:7%">UNIT</th>' +
-          '<th style="width:15%">REMARKS</th>' +
-        '</tr>' +
-      '</thead>' +
+      '<thead><tr>' +
+        '<th style="width:5%">ITEM<br>NO.</th>' +
+        '<th style="width:14%">ITEM<br>CODE</th>' +
+        '<th style="width:7%">QR<br>IMG</th>' +
+        '<th style="width:34%">ITEM DESCRIPTION</th>' +
+        '<th style="width:9%">REQ.<br>QTY</th>' +
+        '<th style="width:9%">ISSUED<br>QTY</th>' +
+        '<th style="width:7%">UNIT</th>' +
+        '<th style="width:15%">REMARKS</th>' +
+      '</tr></thead>' +
       '<tbody>' + itemsHtml + '</tbody>' +
     '</table>' +
     '<div class="mrif-sigs">' +
-      '<div class="mrif-sig">' +
-        '<div class="mrif-sig-line">ANGEL / JOMAR / RICHEL / ERWIN / MARCEL</div>' +
-        '<div class="mrif-sig-label">ISSUED BY</div>' +
-      '</div>' +
-      '<div class="mrif-sig">' +
-        '<div class="mrif-sig-line">&nbsp;</div>' +
-        '<div class="mrif-sig-label">CHECKED BY</div>' +
-      '</div>' +
-      '<div class="mrif-sig">' +
-        '<div class="mrif-sig-line">&nbsp;</div>' +
-        '<div class="mrif-sig-label">RECEIVED BY/DATE</div>' +
-      '</div>' +
+      '<div class="mrif-sig"><div class="mrif-sig-line">ANGEL / JOMAR / RICHEL / ERWIN / MARCEL</div><div class="mrif-sig-label">ISSUED BY</div></div>' +
+      '<div class="mrif-sig"><div class="mrif-sig-line">&nbsp;</div><div class="mrif-sig-label">CHECKED BY</div></div>' +
+      '<div class="mrif-sig"><div class="mrif-sig-line">&nbsp;</div><div class="mrif-sig-label">RECEIVED BY/DATE</div></div>' +
     '</div>' +
   '</div>';
 }
 
-// ─── Build single MRR HTML ────
+// ─── Build MRR print ────
 function buildSingleMrrHtml(docNo, info, items) {
   var receivingSite = _escPrint(info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON');
   var vendor = _escPrint(info['Vendor/Client'] || info.vendor || info.client || '');
@@ -575,7 +450,6 @@ function buildSingleMrrHtml(docNo, info, items) {
     itemsHtml += '<tr><td class="td-center" colspan="7" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
   }
 
-  // ★ Print-only QR
   var mrrQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(_printQrData(docNo));
 
   return '<div class="mrr-print-sheet">' +
@@ -583,85 +457,52 @@ function buildSingleMrrHtml(docNo, info, items) {
       '<div class="mrr-logo"><img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'"></div>' +
       '<div class="mrr-docno">' +
         '<div><span class="mrr-dn-label">Receipt No.:</span><span class="mrr-dn-box">' + _escPrint(cleanDocNo(docNo)) + '</span></div>' +
-        '<div class="mrr-doc-qr"><img src="' + mrrQrUrl + '" alt="MRR QR"></div>' +
+        '<div class="mrr-doc-qr"><img src="' + mrrQrUrl + '" alt="MRR QR" loading="lazy"></div>' +
       '</div>' +
     '</div>' +
     '<div class="mrr-title">MATERIALS RECEIVING REPORT</div>' +
     '<table class="mrr-meta-table">' +
-      '<tr>' +
-        '<td class="mrr-meta-label">RECEIVING SITE:</td>' +
-        '<td class="mrr-meta-value" colspan="5">' + receivingSite + '</td>' +
-        '<td class="mrr-meta-label-right">PO No. / SOF No.:</td>' +
-        '<td class="mrr-meta-value-right">' + poNo + '</td>' +
-      '</tr>' +
-      '<tr>' +
-        '<td class="mrr-meta-label">VENDOR:</td>' +
-        '<td class="mrr-meta-value" colspan="5">' + vendor + '</td>' +
-        '<td class="mrr-meta-label-right">DR No / SI No.:</td>' +
-        '<td class="mrr-meta-value-right">' + drNo + '</td>' +
-      '</tr>' +
-      '<tr>' +
-        '<td class="mrr-meta-label">DATE PREPARED:</td>' +
-        '<td class="mrr-meta-value" colspan="2">' + dateStr + '</td>' +
-        '<td class="mrr-meta-label-right">RECEIVING DATE:</td>' +
-        '<td class="mrr-meta-value-right" colspan="4">' + recDateStr + '</td>' +
-      '</tr>' +
+      '<tr><td class="mrr-meta-label">RECEIVING SITE:</td><td class="mrr-meta-value" colspan="5">' + receivingSite + '</td><td class="mrr-meta-label-right">PO No. / SOF No.:</td><td class="mrr-meta-value-right">' + poNo + '</td></tr>' +
+      '<tr><td class="mrr-meta-label">VENDOR:</td><td class="mrr-meta-value" colspan="5">' + vendor + '</td><td class="mrr-meta-label-right">DR No / SI No.:</td><td class="mrr-meta-value-right">' + drNo + '</td></tr>' +
+      '<tr><td class="mrr-meta-label">DATE PREPARED:</td><td class="mrr-meta-value" colspan="2">' + dateStr + '</td><td class="mrr-meta-label-right">RECEIVING DATE:</td><td class="mrr-meta-value-right" colspan="4">' + recDateStr + '</td></tr>' +
     '</table>' +
     '<table class="mrr-items">' +
-      '<thead>' +
-        '<tr>' +
-          '<th style="width:5%">ITEM<br>NO.</th>' +
-          '<th style="width:16%">ITEM<br>CODE</th>' +
-          '<th style="width:35%">ITEM DESCRIPTION</th>' +
-          '<th style="width:10%">REQUESTED<br>QTY</th>' +
-          '<th style="width:10%">RECEIVED<br>QTY</th>' +
-          '<th style="width:8%">UNIT</th>' +
-          '<th style="width:16%">REMARKS</th>' +
-        '</tr>' +
-      '</thead>' +
+      '<thead><tr>' +
+        '<th style="width:5%">ITEM<br>NO.</th>' +
+        '<th style="width:16%">ITEM<br>CODE</th>' +
+        '<th style="width:35%">ITEM DESCRIPTION</th>' +
+        '<th style="width:10%">REQUESTED<br>QTY</th>' +
+        '<th style="width:10%">RECEIVED<br>QTY</th>' +
+        '<th style="width:8%">UNIT</th>' +
+        '<th style="width:16%">REMARKS</th>' +
+      '</tr></thead>' +
       '<tbody>' + itemsHtml + '</tbody>' +
     '</table>' +
     '<div class="mrr-checkboxes">' +
-      '<div class="mrr-cb-section">' +
-        '<div class="mrr-cb-title">ISSUES IN SUPPLIER PERFORMANCE:</div>' +
+      '<div class="mrr-cb-section"><div class="mrr-cb-title">ISSUES IN SUPPLIER PERFORMANCE:</div>' +
         '<div class="mrr-cb-row">' +
           '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> PRODUCT/SERVICE</span>' +
           '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> DELIVERY</span>' +
           '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> CUSTOMER RELATIONS</span>' +
           '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> SUPPORT FUNCTION</span>' +
           '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> PRICE</span>' +
-        '</div>' +
-      '</div>' +
-      '<div class="mrr-cb-section">' +
-        '<div class="mrr-cb-title">ACTION TAKEN IF REJECT / PARTIAL ACCEPTANCE:</div>' +
+        '</div></div>' +
+      '<div class="mrr-cb-section"><div class="mrr-cb-title">ACTION TAKEN IF REJECT / PARTIAL ACCEPTANCE:</div>' +
         '<div class="mrr-cb-row">' +
           '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> RETURN TO SUPPLIER</span>' +
           '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> ITEMS REPLACED BY SUPPLIER</span>' +
           '<span class="mrr-cb-item"><span class="mrr-cb-circle">( )</span> OTHERS</span>' +
-        '</div>' +
-      '</div>' +
+        '</div></div>' +
     '</div>' +
     '<div class="mrr-sigs">' +
-      '<div class="mrr-sig">' +
-        '<div class="mrr-sig-name">' + preparedBy + '</div>' +
-        '<div class="mrr-sig-line"></div>' +
-        '<div class="mrr-sig-label">PREPARED BY</div>' +
-      '</div>' +
-      '<div class="mrr-sig">' +
-        '<div class="mrr-sig-name"></div>' +
-        '<div class="mrr-sig-line"></div>' +
-        '<div class="mrr-sig-label">CHECKED BY</div>' +
-      '</div>' +
-      '<div class="mrr-sig">' +
-        '<div class="mrr-sig-name"></div>' +
-        '<div class="mrr-sig-line"></div>' +
-        '<div class="mrr-sig-label">RECEIVED BY / DATE</div>' +
-      '</div>' +
+      '<div class="mrr-sig"><div class="mrr-sig-name">' + preparedBy + '</div><div class="mrr-sig-line"></div><div class="mrr-sig-label">PREPARED BY</div></div>' +
+      '<div class="mrr-sig"><div class="mrr-sig-name"></div><div class="mrr-sig-line"></div><div class="mrr-sig-label">CHECKED BY</div></div>' +
+      '<div class="mrr-sig"><div class="mrr-sig-name"></div><div class="mrr-sig-line"></div><div class="mrr-sig-label">RECEIVED BY / DATE</div></div>' +
     '</div>' +
   '</div>';
 }
 
-// ─── Build single MRS HTML ────
+// ─── Build MRS print ────
 function buildSingleMrsHtml(docNo, info, items) {
   var requestor = _escPrint(info.Requestor || info.requestor || info.requestorName || '');
   var department = _escPrint(info.Department || info.department || info.dept || '');
@@ -697,7 +538,7 @@ function buildSingleMrsHtml(docNo, info, items) {
       itemsHtml += '<tr>' +
         '<td class="td-center">' + (i + 1) + '</td>' +
         '<td class="td-center">' + code + '</td>' +
-        '<td class="td-center"><img src="' + qrUrl + '" style="width:32px;height:32px;display:block;margin:0 auto;" alt=""></td>' +
+        '<td class="td-center"><img src="' + qrUrl + '" style="width:32px;height:32px;display:block;margin:0 auto;" alt="" loading="lazy"></td>' +
         '<td class="td-left">' + desc + '</td>' +
         '<td class="td-center">' + qtyReturned + '</td>' +
         '<td class="td-center">' + actualDisplay + '</td>' +
@@ -708,10 +549,8 @@ function buildSingleMrsHtml(docNo, info, items) {
   } else {
     itemsHtml += '<tr><td class="td-center" colspan="7" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
   }
-
   itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
 
-  // ★ Print-only QR
   var mrsQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(_printQrData(docNo));
 
   return '<div class="mrif-print-sheet">' +
@@ -719,65 +558,37 @@ function buildSingleMrsHtml(docNo, info, items) {
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
       '<div class="mrif-docno">' +
         '<div><span class="mrif-dn-label">MRS No.:</span><span class="mrif-dn-box">' + _escPrint(cleanDocNo(docNo)) + '</span></div>' +
-        '<div class="mrif-doc-qr"><img src="' + mrsQrUrl + '" alt="MRS QR" style="width:90px;height:90px;margin-top:4px;"></div>' +
+        '<div class="mrif-doc-qr"><img src="' + mrsQrUrl + '" alt="MRS QR" style="width:90px;height:90px;margin-top:4px;" loading="lazy"></div>' +
       '</div>' +
     '</div>' +
     '<div class="mrif-title">MATERIALS RETURN SLIP</div>' +
     '<table class="mrif-meta">' +
-      '<tr>' +
-        '<td class="meta-label">REQUESTOR:</td>' +
-        '<td class="meta-value" colspan="2">' + requestor + '</td>' +
-        '<td class="meta-label-right">GEM SO No.:</td>' +
-        '<td class="meta-blue">' + gemSo + '</td>' +
-        '<td class="meta-label-right">JO No.:</td>' +
-        '<td class="meta-blue">' + joNo + '</td>' +
-      '</tr>' +
-      '<tr>' +
-        '<td class="meta-label">DEPARTMENT/SECTION:</td>' +
-        '<td class="meta-value" colspan="4">' + department + '</td>' +
-        '<td class="meta-label-right">CLIENT NAME:</td>' +
-        '<td class="meta-value">' + client + '</td>' +
-      '</tr>' +
-      '<tr>' +
-        '<td class="meta-label">DATE:</td>' +
-        '<td class="meta-blue" colspan="2">' + dateStr + '</td>' +
-        '<td class="meta-label-right">PROJECT:</td>' +
-        '<td class="meta-value" colspan="3">' + project + '</td>' +
-      '</tr>' +
+      '<tr><td class="meta-label">REQUESTOR:</td><td class="meta-value" colspan="2">' + requestor + '</td><td class="meta-label-right">GEM SO No.:</td><td class="meta-blue">' + gemSo + '</td><td class="meta-label-right">JO No.:</td><td class="meta-blue">' + joNo + '</td></tr>' +
+      '<tr><td class="meta-label">DEPARTMENT/SECTION:</td><td class="meta-value" colspan="4">' + department + '</td><td class="meta-label-right">CLIENT NAME:</td><td class="meta-value">' + client + '</td></tr>' +
+      '<tr><td class="meta-label">DATE:</td><td class="meta-blue" colspan="2">' + dateStr + '</td><td class="meta-label-right">PROJECT:</td><td class="meta-value" colspan="3">' + project + '</td></tr>' +
     '</table>' +
     '<table class="mrif-items">' +
-      '<thead>' +
-        '<tr>' +
-          '<th style="width:5%">ITEM<br>NO.</th>' +
-          '<th style="width:14%">ITEM<br>CODE</th>' +
-          '<th style="width:7%">QR<br>IMG</th>' +
-          '<th style="width:34%">ITEM DESCRIPTION</th>' +
-          '<th style="width:9%">QTY<br>RETURNED</th>' +
-          '<th style="width:9%">ATL QTY<br>(Actual)</th>' +
-          '<th style="width:7%">UNIT</th>' +
-          '<th style="width:15%">REMARKS</th>' +
-        '</tr>' +
-      '</thead>' +
+      '<thead><tr>' +
+        '<th style="width:5%">ITEM<br>NO.</th>' +
+        '<th style="width:14%">ITEM<br>CODE</th>' +
+        '<th style="width:7%">QR<br>IMG</th>' +
+        '<th style="width:34%">ITEM DESCRIPTION</th>' +
+        '<th style="width:9%">QTY<br>RETURNED</th>' +
+        '<th style="width:9%">ATL QTY<br>(Actual)</th>' +
+        '<th style="width:7%">UNIT</th>' +
+        '<th style="width:15%">REMARKS</th>' +
+      '</tr></thead>' +
       '<tbody>' + itemsHtml + '</tbody>' +
     '</table>' +
     '<div class="mrif-sigs">' +
-      '<div class="mrif-sig">' +
-        '<div class="mrif-sig-line"></div>' +
-        '<div class="mrif-sig-label">ISSUED BY</div>' +
-      '</div>' +
-      '<div class="mrif-sig">' +
-        '<div class="mrif-sig-line"></div>' +
-        '<div class="mrif-sig-label">CHECKED BY</div>' +
-      '</div>' +
-      '<div class="mrif-sig">' +
-        '<div class="mrif-sig-line"></div>' +
-        '<div class="mrif-sig-label">RECEIVED BY/DATE</div>' +
-      '</div>' +
+      '<div class="mrif-sig"><div class="mrif-sig-line"></div><div class="mrif-sig-label">ISSUED BY</div></div>' +
+      '<div class="mrif-sig"><div class="mrif-sig-line"></div><div class="mrif-sig-label">CHECKED BY</div></div>' +
+      '<div class="mrif-sig"><div class="mrif-sig-line"></div><div class="mrif-sig-label">RECEIVED BY/DATE</div></div>' +
     '</div>' +
   '</div>';
 }
 
-// ─── Single document print functions ────
+// ─── Open single doc print ────
 async function openMrifPrint(docNo) {
   if (state.isLoading) return;
   showLoading('Loading ' + _displayDocNo(docNo) + '...');
@@ -796,9 +607,7 @@ async function openMrifPrint(docNo) {
   } catch(err) {
     console.error('[openMrifPrint] Error:', err);
     showToast('Failed to load document: ' + err.message, 'danger');
-  } finally {
-    hideLoading();
-  }
+  } finally { hideLoading(); }
 }
 
 async function openMrrPrint(docNo) {
@@ -819,9 +628,7 @@ async function openMrrPrint(docNo) {
   } catch(err) {
     console.error('[openMrrPrint] Error:', err);
     showToast('Failed to load document: ' + err.message, 'danger');
-  } finally {
-    hideLoading();
-  }
+  } finally { hideLoading(); }
 }
 
 async function openMrsPrint(docNo) {
@@ -842,12 +649,10 @@ async function openMrsPrint(docNo) {
   } catch(err) {
     console.error('[openMrsPrint] Error:', err);
     showToast('Failed to load document: ' + err.message, 'danger');
-  } finally {
-    hideLoading();
-  }
+  } finally { hideLoading(); }
 }
 
-// ─── Direct render functions ────
+// ─── Render print functions ────
 function renderMrifPrint(docNo, info, items) {
   var container = document.getElementById('mrifPrintContent');
   if (!container) return;
@@ -866,7 +671,7 @@ function renderMrsPrint(docNo, info, items) {
   container.innerHTML = buildSingleMrsHtml(docNo, info, items);
 }
 
-// ─── Print functions ────
+// ─── Print ────
 function printMrif() { printWithIframe('mrifPrintContent', 'MRIF Print'); }
 function printMrr() { printWithIframe('mrrPrintContent', 'MRR Print'); }
 function printMrs() { printWithIframe('mrsPrintContent', 'MRS Print'); }
