@@ -1,7 +1,7 @@
 // ============================================================
 // AUTO-UPDATE SYSTEM
 // - Detects new service worker versions
-// - Shows a prominent "New version available" banner
+// - Shows "New version available" banner
 // - One-click update (no hard-refresh needed)
 // - Sidebar version footer is clickable (manual check)
 // ============================================================
@@ -14,7 +14,6 @@
   var _updateReady = false;
   var _reloading = false;
 
-  // ─── Styles ───
   function _ensureStyles() {
     if (document.getElementById('updateBannerStyles')) return;
     var style = document.createElement('style');
@@ -49,7 +48,6 @@
     document.head.appendChild(style);
   }
 
-  // ─── Banner ───
   function _ensureBanner() {
     var el = document.getElementById('updateBanner');
     if (el) return el;
@@ -58,29 +56,18 @@
     el = document.createElement('div');
     el.id = 'updateBanner';
     el.style.cssText = [
-      'position:fixed',
-      'top:16px',
-      'left:50%',
-      'transform:translateX(-50%) translateY(-150%)',
-      'z-index:99999',
+      'position:fixed','top:16px','left:50%',
+      'transform:translateX(-50%) translateY(-150%)','z-index:99999',
       'background:linear-gradient(135deg, #1e3a5f 0%, #2a4a73 100%)',
-      'color:#fff',
-      'padding:14px 20px',
-      'border-radius:14px',
+      'color:#fff','padding:14px 20px','border-radius:14px',
       'box-shadow:0 12px 40px rgba(0,0,0,0.35)',
-      'display:flex',
-      'align-items:center',
-      'gap:16px',
-      'font-family:inherit',
-      'font-size:0.9rem',
-      'font-weight:600',
+      'display:flex','align-items:center','gap:16px',
+      'font-family:inherit','font-size:0.9rem','font-weight:600',
       'max-width:calc(100vw - 32px)',
       'transition:transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s',
-      'opacity:0',
-      'pointer-events:none',
+      'opacity:0','pointer-events:none',
       'border:1px solid rgba(255,255,255,0.15)',
-      'flex-wrap:wrap',
-      'justify-content:center'
+      'flex-wrap:wrap','justify-content:center'
     ].join(';');
 
     el.innerHTML =
@@ -131,14 +118,12 @@
     el.style.pointerEvents = 'none';
   }
 
-  // ─── Toggle the pulsing dot in the sidebar footer ───
   function _flagSidebarVersion(show) {
     var dot = document.getElementById('sidebarUpdateDot');
     if (!dot) return;
     dot.classList.toggle('d-none', !show);
   }
 
-  // ─── Apply update ───
   function applyUpdate() {
     if (_reloading) return;
     _reloading = true;
@@ -162,7 +147,6 @@
     }
   }
 
-  // ─── Watch installing SW ───
   function _watchInstalling(worker) {
     worker.addEventListener('statechange', function() {
       if (worker.state === 'installed' && navigator.serviceWorker.controller) {
@@ -172,7 +156,6 @@
     });
   }
 
-  // ─── Manual "check for updates" (triggered by clicking the version) ───
   function checkForUpdates() {
     if (!_registration) {
       if (typeof showToast === 'function') {
@@ -192,8 +175,6 @@
         } else {
           if (typeof showToast === 'function') {
             showToast('✅ You are on the latest version.', 'success');
-          } else {
-            alert('✅ You are on the latest version.');
           }
         }
       })
@@ -203,15 +184,11 @@
       });
   }
 
-  // ─── Setup ───
   function _setup() {
     _ensureStyles();
 
-    // ── Click handler: attach on the whole sidebar footer area, delegate ──
-    // This is safe even if main.js later replaces the inner text content.
     document.addEventListener('click', function(e) {
       var el = e.target;
-      // Walk up to find #sidebarAppVersion (works even if the click lands on the dot or text)
       while (el && el !== document.body) {
         if (el.id === 'sidebarAppVersion') {
           checkForUpdates();
@@ -221,7 +198,6 @@
       }
     });
 
-    // Expose for debugging / programmatic use
     window.checkForUpdates = checkForUpdates;
     window.applyAppUpdate = applyUpdate;
     window.showUpdateBanner = showBanner;
@@ -233,38 +209,32 @@
       .then(function(reg) {
         _registration = reg;
 
-        // If an update is already waiting on load
         if (reg.waiting && navigator.serviceWorker.controller) {
           _updateReady = true;
           showBanner();
         }
 
-        // New SW installs after page loads
         reg.addEventListener('updatefound', function() {
           var newWorker = reg.installing;
           if (!newWorker) return;
           _watchInstalling(newWorker);
         });
 
-        // Poll every 15 min
         setInterval(function() {
           if (!navigator.onLine) return;
           reg.update().catch(function() {});
         }, CHECK_INTERVAL_MS);
 
-        // Check when the tab regains focus
         document.addEventListener('visibilitychange', function() {
           if (!document.hidden && navigator.onLine) {
             reg.update().catch(function() {});
           }
         });
 
-        // Check when coming back online
         window.addEventListener('online', function() {
           reg.update().catch(function() {});
         });
 
-        // Quick boot checks at 20s and 60s
         setTimeout(function() { reg.update().catch(function() {}); }, 20000);
         setTimeout(function() { reg.update().catch(function() {}); }, 60000);
       })
