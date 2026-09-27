@@ -13,6 +13,72 @@ function _escPrint(s) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+// ─── Auto-open print preview after create/process ───
+function autoOpenPrintPreview(docNo, docType) {
+  if (!docNo || !docType) return;
+  var cleanDoc = String(docNo).trim();
+  var cleanType = String(docType).toUpperCase();
+
+  showLoading('Preparing print preview...');
+
+  setTimeout(function() {
+    var url = API_URL + '?action=getDocItems' +
+              '&docNo=' + encodeURIComponent(cleanDoc) +
+              '&docType=' + cleanType +
+              '&sheetId=' + encodeURIComponent(_getSheetIdForDocType(cleanType)) +
+              '&_t=' + Date.now();
+
+    fetch(url, { redirect: 'follow' })
+      .then(function(res) { return res.text(); })
+      .then(function(text) {
+        var data;
+        try { data = JSON.parse(text); } catch(e) { data = {}; }
+        hideLoading();
+
+        if (!data || !data.success) {
+          if (typeof showToast === 'function') {
+            showToast('Document created: ' + cleanDoc + '. Open the module to print it.', 'success');
+          }
+          _navigateToModuleForDocType(cleanType);
+          return;
+        }
+
+        var info = data.info || {};
+        var items = data.items || [];
+
+        if (cleanType === 'MRIF') {
+          renderMrifPrint(cleanDoc, info, items);
+          if (typeof mrifListModal !== 'undefined' && mrifListModal) mrifListModal.hide();
+          setTimeout(function() { if (mrifPrintModal) mrifPrintModal.show(); }, 200);
+        } else if (cleanType === 'MRR') {
+          renderMrrPrint(cleanDoc, info, items);
+          if (typeof mrrListModal !== 'undefined' && mrrListModal) mrrListModal.hide();
+          setTimeout(function() { if (mrrPrintModal) mrrPrintModal.show(); }, 200);
+        } else if (cleanType === 'MRS') {
+          renderMrsPrint(cleanDoc, info, items);
+          if (typeof mrsListModal !== 'undefined' && mrsListModal) mrsListModal.hide();
+          setTimeout(function() { if (mrsPrintModal) mrsPrintModal.show(); }, 200);
+        }
+      })
+      .catch(function(err) {
+        hideLoading();
+        console.warn('[autoOpenPrintPreview] failed:', err);
+        if (typeof showToast === 'function') {
+          showToast('Document created: ' + cleanDoc + '. Open the module to print it.', 'success');
+        }
+        _navigateToModuleForDocType(cleanType);
+      });
+  }, 700);
+}
+
+function _navigateToModuleForDocType(docType) {
+  var map = { 'MRIF': 'releasing', 'MRR': 'receiving', 'MRS': 'returns' };
+  var section = map[docType] || 'releasing';
+  if (typeof navigateTo === 'function') navigateTo(section);
+}
+
+window.autoOpenPrintPreview = autoOpenPrintPreview;
+
 
 // ─── Helper: Build the "print-only" URL that the printed QR points to ───
 // This is deliberately DIFFERENT from the production request QR
