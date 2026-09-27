@@ -1,31 +1,26 @@
 // ============================================================
 // WAREHOUSE NOTIFICATIONS
+// ★ v2 — 5 min polling, cache-first, no aggressive refresh
 // ============================================================
 
 (function() {
   if (typeof getCache === 'undefined') {
-    window.getCache = function(key) { return null; };
-    window.setCache = function(key, data, ttl) { /* no-op */ };
-    window.clearCache = function(key) { /* no-op */ };
-    console.warn('⚠️ cache.js not loaded – caching disabled for notifications.');
+    window.getCache = function() { return null; };
+    window.setCache = function() {};
+    window.clearCache = function() {};
   }
 })();
 
 (function() {
   "use strict";
 
-  // ─── Local HTML escaper (defensive — sheet/user data) ───
+  var POLL_INTERVAL = 5 * 60 * 1000;   // ★ 5 min
+
   function _esc(s) {
     if (s === null || s === undefined) return '';
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  // ─── Update KPIs ───
   window.updateWarehouseKPIs = async function() {
     try {
       var pendingUrl = API_URL + '?action=getAllPendingDocs&_t=' + Date.now();
@@ -55,15 +50,10 @@
       if (kpiNotifications) kpiNotifications.textContent = pendingCount;
       if (kpiCompleted) kpiCompleted.textContent = completedCount;
 
-      console.log('[KPI] Total:', totalCount, 'Pending:', pendingCount, 'Completed:', completedCount);
-
-      if (typeof updatePartialCount === 'function') {
-        updatePartialCount();
-      }
+      if (typeof updatePartialCount === 'function') updatePartialCount();
     } catch(e) { console.error('[KPI] Error:', e); }
   };
 
-  // ─── Process notifications ───
   function processNotifications(requests) {
     if (!requests) requests = [];
     var today = new Date();
@@ -81,7 +71,6 @@
       return true;
     });
     filtered.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
-    console.log('[WH Notifications] Filtered count:', filtered.length);
 
     var prevCount = parseInt(localStorage.getItem('ivm_whNotifCount') || '0');
     var newCount = filtered.length;
@@ -99,11 +88,9 @@
       badge.classList.toggle('d-none', newCount === 0);
     }
 
-    updateWarehouseKPIs();
     renderWarehouseNotifications(filtered);
   }
 
-  // ─── Load warehouse notifications ───
   window.loadWarehouseNotifications = async function(forceRefresh) {
     if (localStorage.getItem('ivm_userRole') === 'production') return;
 
@@ -111,9 +98,7 @@
     if (!forceRefresh) {
       const cached = getCache(cacheKey);
       if (cached) {
-        console.log('[WH Notifications] Loaded from cache:', cached.length);
         processNotifications(cached);
-        setTimeout(function() { refreshNotifications(); }, 2000);
         return;
       }
     }
@@ -125,9 +110,8 @@
       var url = API_URL + '?action=getPendingRequests&_t=' + Date.now();
       var res = await fetch(url);
       var data = await res.json();
-      console.log('[WH Notifications] Response:', data);
       if (data.success && data.requests) {
-        setCache('pendingRequests', data.requests, 30 * 1000);
+        setCache('pendingRequests', data.requests, 5 * 60 * 1000);
         processNotifications(data.requests);
       } else {
         processNotifications([]);
@@ -138,46 +122,25 @@
     }
   }
 
-  // ─── Render warehouse notifications (dropdown) ───
   window.renderWarehouseNotifications = function(requests) {
     var container = document.getElementById('whNotificationsList');
     if (!container) return;
     container.innerHTML = '';
-    if (requests.length === 0) {
-      container.innerHTML = '<div class="list-group-item text-muted text-center py-3">No pending requests</div>';
-      return;
-    }
+    if (requests.length === 0) return;
     requests.slice(0, 5).forEach(function(req) {
       var dateStr = req.timestamp ? new Date(req.timestamp).toLocaleString() : '';
       var docNo = _esc(req.docNo || '');
       var type = _esc(req.type || 'MRIF');
       var requestor = _esc(req.requestor || 'Unknown');
-      var itemCode = _esc(req.itemCode || '');
-      var qty = parseInt(req.qty, 10) || 0;
-      var html = '<div class="list-group-item wh-notif-item py-2" data-docno="' + docNo + '" data-type="' + type + '">' +
+      container.innerHTML += '<div class="list-group-item wh-notif-item py-2">' +
         '<div class="d-flex justify-content-between align-items-start">' +
-        '<div>' +
-        '<div class="doc-no">' + docNo + ' <span class="badge bg-secondary">' + type + '</span></div>' +
+        '<div><div class="doc-no">' + docNo + ' <span class="badge bg-secondary">' + type + '</span></div>' +
         '<div class="requestor"><i class="bi bi-person me-1"></i>' + requestor + '</div>' +
-        '<div class="timestamp"><i class="bi bi-clock me-1"></i>' + _esc(dateStr) + '</div>' +
-        '</div>' +
-        '<span class="badge bg-warning text-dark">PENDING</span>' +
-        '</div>' +
-        '<div class="small mt-1 text-muted">' + itemCode + ' <span class="badge bg-light text-dark">x' + qty + '</span></div>' +
-        '</div>';
-      container.innerHTML += html;
+        '<div class="timestamp"><i class="bi bi-clock me-1"></i>' + _esc(dateStr) + '</div></div>' +
+        '<span class="badge bg-warning text-dark">PENDING</span></div></div>';
     });
-    container.querySelectorAll('.wh-notif-item').forEach(function(el) {
-      el.addEventListener('click', function() {
-        processRequestFromNotification(this.getAttribute('data-docno'), this.getAttribute('data-type'));
-      });
-    });
-    if (requests.length > 5) {
-      container.innerHTML += '<div class="list-group-item text-center text-muted small py-2">+' + (requests.length - 5) + ' more pending requests</div>';
-    }
   };
 
-  // ─── Render WH notification modal ───
   window.renderWhNotifModal = function(requests) {
     var container = document.getElementById('whNotifModalList');
     if (!container) return;
@@ -191,30 +154,13 @@
       var docNo = _esc(req.docNo || '');
       var type = _esc(req.type || 'MRIF');
       var requestor = _esc(req.requestor || 'Unknown');
-      var itemCode = _esc(req.itemCode || '');
-      var qty = parseInt(req.qty, 10) || 0;
-      var html = '<div class="list-group-item wh-notif-item py-3" data-docno="' + docNo + '" data-type="' + type + '">' +
-        '<div class="d-flex justify-content-between align-items-start">' +
-        '<div>' +
-        '<div class="doc-no">' + docNo + ' <span class="badge bg-secondary">' + type + '</span></div>' +
+      container.innerHTML += '<div class="list-group-item wh-notif-item py-3">' +
+        '<div><div class="doc-no">' + docNo + ' <span class="badge bg-secondary">' + type + '</span></div>' +
         '<div class="requestor"><i class="bi bi-person me-1"></i>' + requestor + '</div>' +
-        '<div class="timestamp"><i class="bi bi-clock me-1"></i>' + _esc(dateStr) + '</div>' +
-        '</div>' +
-        '<span class="badge bg-warning text-dark">PENDING</span>' +
-        '</div>' +
-        '<div class="small mt-1 text-muted">' + itemCode + ' <span class="badge bg-light text-dark">x' + qty + '</span></div>' +
-        '</div>';
-      container.innerHTML += html;
-    });
-    container.querySelectorAll('.wh-notif-item').forEach(function(el) {
-      el.addEventListener('click', function() {
-        if (whNotifModal) whNotifModal.hide();
-        processRequestFromNotification(this.getAttribute('data-docno'), this.getAttribute('data-type'));
-      });
+        '<div class="timestamp"><i class="bi bi-clock me-1"></i>' + _esc(dateStr) + '</div></div></div>';
     });
   };
 
-  // ─── Open notification modal ───
   window.openWhNotifications = function() {
     if (!whNotifModal && document.getElementById('whNotifModal')) {
       whNotifModal = new bootstrap.Modal(document.getElementById('whNotifModal'));
@@ -226,7 +172,7 @@
   async function loadAndRenderWhModal() {
     var container = document.getElementById('whNotifModalList');
     if (container) {
-      container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div><div class="small text-muted mt-1">Loading...</div></div>';
+      container.innerHTML = '<div class="list-group-item text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>';
     }
     try {
       var url = API_URL + '?action=getPendingRequests&_t=' + Date.now();
@@ -235,67 +181,42 @@
       if (data.success && data.requests) {
         var today = new Date();
         var todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
-        var currentMrifId = localStorage.getItem('sheetId_MRIF') || '';
         var filtered = data.requests.filter(function(req) {
           var reqDate = new Date(req.timestamp);
           var reqStr = reqDate.getFullYear() + '-' + String(reqDate.getMonth()+1).padStart(2,'0') + '-' + String(reqDate.getDate()).padStart(2,'0');
           var type = (req.type || '').toUpperCase();
-          if (reqStr !== todayStr || type !== 'MRIF') return false;
-          if (currentMrifId && req.url) {
-            var reqUrl = String(req.url || '');
-            if (reqUrl.indexOf(currentMrifId) === -1) return false;
-          }
-          return true;
+          return reqStr === todayStr && type === 'MRIF';
         });
-        filtered.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
         renderWhNotifModal(filtered);
       } else {
         renderWhNotifModal([]);
       }
     } catch(e) {
-      console.error('[WH Modal] Error:', e);
       renderWhNotifModal([]);
     }
   }
 
-  // ─── Process request from notification ───
   window.processRequestFromNotification = async function(docNo, docType) {
-    console.log('[WH] Processing request:', docNo, docType);
-
-    if (typeof navigateTo === 'function') {
-      navigateTo('releasing');
-    } else {
-      await selectModule(docType);
-    }
-
+    if (typeof navigateTo === 'function') navigateTo('releasing');
     await new Promise(resolve => setTimeout(resolve, 300));
-
     state.currentModule = docType;
     updateLabels();
-
     var sheetId = getCleanSheetId();
     if (!sheetId) {
-      showToast('⚠️ No Sheet ID for ' + docType + '. Attempting to sync...', 'warning');
       await syncModuleLinks();
       sheetId = getCleanSheetId();
-      if (!sheetId) {
-        showToast('Still missing Sheet ID. Please set it manually in Settings.', 'danger');
-        return;
-      }
+      if (!sheetId) return;
     }
-
     try {
       await onDocSelect(docNo);
       showToast('Loaded ' + cleanDocNo(docNo), 'success');
     } catch(err) {
-      console.error('[WH] Error loading document:', err);
       showToast('Failed to load document: ' + err.message, 'danger');
     }
   };
 
-  // ─── Clear notifications ───
   window.clearWhNotifications = function() {
-    if (!confirm('Clear all warehouse notifications? This will reset the badge count.')) return;
+    if (!confirm('Clear all warehouse notifications?')) return;
     localStorage.setItem('ivm_whNotifCount', '0');
     var badge = document.getElementById('whNotifBadge');
     if (badge) badge.classList.add('d-none');
@@ -303,21 +224,17 @@
     showToast('Notifications cleared', 'info');
   };
 
-  // ─── Start / stop polling ───
   window.startNotificationPolling = function() {
     if (window._whPollInterval) clearInterval(window._whPollInterval);
     loadWarehouseNotifications();
     window._whPollInterval = setInterval(function() {
       if (!state.isLoading) loadWarehouseNotifications();
-    }, 30000);
+    }, POLL_INTERVAL);
   };
 
   window.stopNotificationPolling = function() {
-    if (window._whPollInterval) {
-      clearInterval(window._whPollInterval);
-      window._whPollInterval = null;
-    }
+    if (window._whPollInterval) { clearInterval(window._whPollInterval); window._whPollInterval = null; }
   };
 
-  console.log('✅ notifications.js loaded');
+  console.log('✅ notifications.js loaded (5 min poll)');
 })();
