@@ -1,10 +1,7 @@
 // ============================================================
 // WAREHOUSE CORE FUNCTIONS
-// (Partial Items + Balance MRIF + Prefill Manual MRR
-//  + Reprocess Guard via DOCLINKS + Idempotency on writes
-//  + Prep Status color coding on document dropdown
-//  + Clear/Edit PO Items + Restore PO Items
-//  + Auto-fill requestor from login)
+// v3 — Includes: auto-print after process, normalize processedBy,
+//      fixed ProcessedBy name, no retry on abort
 // ============================================================
 
 (function() {
@@ -25,13 +22,12 @@
   var _originalPoItems = null;
 
   window._saveOriginalPoItems = function() {
-    try {
-      _originalPoItems = JSON.parse(JSON.stringify(state.poItemsData || []));
-    } catch(e) { _originalPoItems = []; }
+    try { _originalPoItems = JSON.parse(JSON.stringify(state.poItemsData || [])); }
+    catch(e) { _originalPoItems = []; }
   };
 
   // ═══════════════════════════════════════════════════════════
-  // PREP STATUS CACHE (60s) + helpers
+  // PREP STATUS CACHE
   // ═══════════════════════════════════════════════════════════
   window._prepStatusCache = null;
   window._prepStatusFetchedAt = 0;
@@ -55,12 +51,9 @@
         window._prepStatusFetchedAt = Date.now();
         return window._prepStatusCache;
       } catch(e) {
-        console.warn('[fetchPrepStatusesCached] failed:', e);
         if (!window._prepStatusCache) window._prepStatusCache = {};
         return window._prepStatusCache;
-      } finally {
-        window._prepStatusFetching = null;
-      }
+      } finally { window._prepStatusFetching = null; }
     })();
     return window._prepStatusFetching;
   };
@@ -72,62 +65,31 @@
     if (s !== 'PREPARED' && s !== 'PICKED_UP') s = 'NEW';
     return s;
   }
-  function _prepEmojiOf(s) {
-    if (s === 'PREPARED') return '🟢';
-    if (s === 'PICKED_UP') return '🟡';
-    return '🔴';
-  }
-  function _prepBgOf(s) {
-    if (s === 'PREPARED') return '#f4fbf7';
-    if (s === 'PICKED_UP') return '#fffaf0';
-    return '#fff5f5';
-  }
-  function _prepFgOf(s) {
-    if (s === 'PREPARED') return '#145c32';
-    if (s === 'PICKED_UP') return '#8a6100';
-    return '#a71d2a';
-  }
-  function _prepBorderOf(s) {
-    if (s === 'PREPARED') return '#198754';
-    if (s === 'PICKED_UP') return '#ffc107';
-    return '#dc3545';
-  }
+  function _prepEmojiOf(s) { return s === 'PREPARED' ? '🟢' : (s === 'PICKED_UP' ? '🟡' : '🔴'); }
+  function _prepBgOf(s) { return s === 'PREPARED' ? '#f4fbf7' : (s === 'PICKED_UP' ? '#fffaf0' : '#fff5f5'); }
+  function _prepFgOf(s) { return s === 'PREPARED' ? '#145c32' : (s === 'PICKED_UP' ? '#8a6100' : '#a71d2a'); }
+  function _prepBorderOf(s) { return s === 'PREPARED' ? '#198754' : (s === 'PICKED_UP' ? '#ffc107' : '#dc3545'); }
+
   window._prepStatusOf = _prepStatusOf;
   window._prepEmojiOf = _prepEmojiOf;
   window._prepBgOf = _prepBgOf;
   window._prepFgOf = _prepFgOf;
   window._prepBorderOf = _prepBorderOf;
 
-  // ─── Manual refresh button handler ───
   window.refreshPrepColorsNow = async function(btn) {
-    if (btn) {
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-    }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
     try {
       await fetchPrepStatusesCached(true);
-      if (state.docList && state.docList.length) {
-        await populateDocSelect(state.docList);
-      }
-      var sel = document.getElementById('docSelect');
-      if (sel && sel.value) {
-        var prep = _prepStatusOf(sel.value);
-        sel.style.background = _prepBgOf(prep);
-        sel.style.color = _prepFgOf(prep);
-        sel.style.borderLeft = '4px solid ' + _prepBorderOf(prep);
-      }
+      if (state.docList && state.docList.length) await populateDocSelect(state.docList);
       if (typeof showToast === 'function') showToast('Prep colors refreshed', 'success');
     } catch(e) {
       if (typeof showToast === 'function') showToast('Failed: ' + e.message, 'danger');
     } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-palette"></i>';
-      }
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-palette"></i>'; }
     }
   };
 
-  // ─── Core ──────────────────────────────────────────────
+  // ─── Core ───
   window.getCleanSheetId = function() {
     var key = 'sheetId_' + state.currentModule;
     var val = localStorage.getItem(key);
@@ -143,8 +105,7 @@
       var text = await res.text();
       var data;
       try { data = JSON.parse(text); } catch(e) {
-        showToast('Sync error: Invalid response', 'danger');
-        return;
+        showToast('Sync error: Invalid response', 'danger'); return;
       }
       if (data && data.success && data.links) {
         var links = data.links;
@@ -161,9 +122,7 @@
       }
     } catch(err) {
       showToast('Sync error: ' + err.message, 'danger');
-    } finally {
-      hideLoading();
-    }
+    } finally { hideLoading(); }
   };
 
   window.selectModule = async function(mod) {
@@ -238,10 +197,6 @@
     if (!sel) return;
     state.docList = docs;
 
-    // Fetch prep statuses first (async, cached 60s)
-    try { await fetchPrepStatusesCached(); } catch(e) {}
-
-    // Sort: newest first (by trailing number), Bal docs next to parent
     docs.sort(function(a, b) {
       var na = (typeof a === 'string' ? a : (a.docNo || a.name || '')).toUpperCase();
       var nb = (typeof b === 'string' ? b : (b.docNo || b.name || '')).toUpperCase();
@@ -270,7 +225,7 @@
     if (!sel) return;
     var html = '<option value="">-- Select Document --</option>';
     if (!state.docList) { sel.innerHTML = html; return; }
-       state.docList.forEach(function(d) {
+    state.docList.forEach(function(d) {
       var val = typeof d === 'string' ? d : (d.docNo || d.name || d);
       if (cleanDocNo(val).toLowerCase().indexOf(term) !== -1) {
         html += '<option value="' + val + '">' + cleanDocNo(val) + '</option>';
@@ -300,16 +255,6 @@
     var title = document.getElementById('docTitle');
     if (title) title.textContent = cleanDocNo(docNo);
 
-    // Color the select to match the currently selected doc's prep status
-        var sel = document.getElementById('docSelect');
-    if (sel) {
-      sel.value = '';
-      sel.style.background = '';
-      sel.style.color = '';
-      sel.style.fontWeight = '';
-      sel.style.borderLeft = '';
-    }
-
     showLoading('Loading document...');
     try {
       await fetchDocItems(docNo, state.currentModule);
@@ -317,9 +262,7 @@
       await checkIfAlreadyProcessed();
     } catch(err) {
       showToast('Failed to load document: ' + err.message, 'danger');
-    } finally {
-      hideLoading();
-    }
+    } finally { hideLoading(); }
   };
 
   window.changeDocument = function() {
@@ -344,13 +287,7 @@
     var active = document.getElementById('activeTransactionSection');
     if (active) active.classList.add('d-none');
     var sel = document.getElementById('docSelect');
-    if (sel) {
-      sel.value = '';
-      sel.style.background = '';
-      sel.style.color = '';
-      sel.style.fontWeight = '';
-      sel.style.borderLeft = '';
-    }
+    if (sel) sel.value = '';
     var banner = document.getElementById('resumeBanner');
     if (banner) banner.classList.add('d-none');
   };
@@ -440,9 +377,6 @@
   window.checkIfAlreadyProcessed = async function() {
     if (state.items.length === 0) return;
 
-    // ★ Skip if we just submitted this doc and the modal is still closing —
-    //   otherwise the server's eventual-consistency lag can show
-    //   "already fully processed" on a doc we just submitted.
     if (window._recentlyProcessedDoc && window._recentlyProcessedDoc === state.currentDoc) {
       return;
     }
@@ -467,31 +401,22 @@
 
     var allDone = state.items.every(function(item) {
       var r = String(item.remarks || '').toUpperCase();
-      return r.indexOf('SERVED') !== -1 ||
-             r.indexOf('COMPLETE') !== -1 ||
-             r.indexOf('BALANCED') !== -1;
+      return r.indexOf('SERVED') !== -1 || r.indexOf('COMPLETE') !== -1 || r.indexOf('BALANCED') !== -1;
     });
 
     if (allDone) {
-      _blockReprocessing('This document has already been fully processed. All items are SERVED/COMPLETE/BALANCED.');
+      _blockReprocessing('This document has already been fully processed.');
     } else {
       var oldBanner = document.getElementById('alreadyProcessedBanner');
       if (oldBanner && oldBanner.parentNode) oldBanner.parentNode.removeChild(oldBanner);
       var btn = document.getElementById('submitBtn');
       var txt = document.getElementById('submitBtnText');
-      if (btn) {
-        btn.disabled = false;
-        btn.classList.remove('opacity-50');
-        btn.style.pointerEvents = '';
-      }
+      if (btn) { btn.disabled = false; btn.classList.remove('opacity-50'); btn.style.pointerEvents = ''; }
       if (txt) txt.textContent = 'Confirm & Submit';
       var scannerContainer = document.querySelector('#activeTransactionSection .scanner-container');
       if (scannerContainer) scannerContainer.style.display = '';
       var manualInput = document.getElementById('manualInput');
-      if (manualInput) {
-        var group = manualInput.closest('.input-group');
-        if (group) group.style.display = '';
-      }
+      if (manualInput) { var group = manualInput.closest('.input-group'); if (group) group.style.display = ''; }
       try { startScanner(); } catch(e) {}
     }
   };
@@ -499,28 +424,18 @@
   function _blockReprocessing(msg) {
     var btn = document.getElementById('submitBtn');
     var txt = document.getElementById('submitBtnText');
-    if (btn) {
-      btn.disabled = true;
-      btn.classList.add('opacity-50');
-      btn.style.pointerEvents = 'none';
-    }
+    if (btn) { btn.disabled = true; btn.classList.add('opacity-50'); btn.style.pointerEvents = 'none'; }
     if (txt) txt.textContent = '✅ Already Processed';
-
     try { stopScanner(); } catch(e) {}
-
     var scannerContainer = document.querySelector('#activeTransactionSection .scanner-container');
     if (scannerContainer) scannerContainer.style.display = 'none';
     var manualInput = document.getElementById('manualInput');
-    if (manualInput) {
-      var group = manualInput.closest('.input-group');
-      if (group) group.style.display = 'none';
-    }
+    if (manualInput) { var group = manualInput.closest('.input-group'); if (group) group.style.display = 'none'; }
 
     document.querySelectorAll('#activeTransactionSection button').forEach(function(b) {
       var onclick = b.getAttribute('onclick') || '';
       if (onclick.indexOf('openBatchVerify') !== -1 || onclick.indexOf('toggleSelectAll') !== -1) {
-        b.disabled = true;
-        b.classList.add('opacity-50');
+        b.disabled = true; b.classList.add('opacity-50');
       }
     });
 
@@ -529,14 +444,12 @@
       var banner = document.createElement('div');
       banner.id = 'alreadyProcessedBanner';
       banner.className = 'alert alert-success mt-3 d-flex align-items-center gap-2';
-      banner.innerHTML =
-        '<i class="bi bi-check-circle-fill" style="font-size:1.5rem;"></i>' +
+      banner.innerHTML = '<i class="bi bi-check-circle-fill" style="font-size:1.5rem;"></i>' +
         '<div><strong>' + msg + '</strong><br>' +
         '<small class="text-muted">Reprocessing is blocked to prevent duplicate transactions.</small></div>';
       var section = document.getElementById('activeTransactionSection');
       if (section) section.appendChild(banner);
     }
-
     showToast(msg, 'info');
   }
 
@@ -650,10 +563,7 @@
         var r = String(item.remarks || '').toUpperCase();
         return r.indexOf('SERVED') !== -1 || r.indexOf('COMPLETE') !== -1 || r.indexOf('BALANCED') !== -1;
       });
-      if (allDone) {
-        showToast('This document has already been fully processed.', 'warning');
-        return;
-      }
+      if (allDone) { showToast('This document has already been fully processed.', 'warning'); return; }
 
       var verifiedItems = state.items.filter(function(i) {
         if (!i.verified) return false;
@@ -678,12 +588,10 @@
         if (!confirm('You have ' + (total - verified) + ' unverified item(s). Submit partial transaction now?\nOnly newly-verified items will be sent.')) return;
       }
 
-            isSubmitting = true;
-      // ★ Mark this doc as currently being submitted so the reprocess check
-      //   doesn't fire on the same doc during the in-flight request.
+      isSubmitting = true;
       window._recentlyProcessedDoc = state.currentDoc;
       try {
-               var result = await submitTransaction(verifiedItems);
+        var result = await submitTransaction(verifiedItems);
         if (result && result.success) {
           var allComplete = true;
           var anyProcessed = false;
@@ -698,14 +606,11 @@
           var statusUrl = API_URL + '?action=updateDocStatus&docNo=' + encodeURIComponent(state.currentDoc) + '&status=' + newStatus + '&_t=' + Date.now();
           fetch(statusUrl, { redirect: 'follow' }).catch(function() {});
 
-          // ★ Remember which doc we just processed so we can print it
           var processedDoc = state.currentDoc;
           var processedType = state.currentModule;
           clearDocProgress(processedDoc);
 
-          // Short success toast + close the transaction UI
           showToast('Submitted: ' + cleanDocNo(processedDoc) + ' (' + newStatus + ')', 'success');
-
           changeDocument();
           isSubmitting = false;
           window._recentlyProcessedDoc = null;
@@ -715,20 +620,20 @@
           if (typeof updatePartialCount === 'function') updatePartialCount();
           if (typeof loadAllRequests === 'function') loadAllRequests();
 
-          // ★ Auto-open print preview of the processed document
+          // Auto-open print preview of the processed doc
           if (processedDoc && typeof autoOpenPrintPreview === 'function') {
-            setTimeout(function() {
-              autoOpenPrintPreview(processedDoc, processedType);
-            }, 500);
+            setTimeout(function() { autoOpenPrintPreview(processedDoc, processedType); }, 500);
           }
         } else {
           var errMsg = (result && result.error) ? result.error : 'Submission failed';
           showToast(errMsg, 'danger');
           isSubmitting = false;
+          window._recentlyProcessedDoc = null;
         }
       } catch(err) {
         showToast('Submit error: ' + err.message, 'danger');
         isSubmitting = false;
+        window._recentlyProcessedDoc = null;
       }
     }, 'Submitting...');
   };
@@ -740,17 +645,20 @@
       return encodeURIComponent(i.inventoryId) + ',' + i.issuedQty + ',' + i.rowIndex + ',' + encodeURIComponent(i.unit || 'PIECE');
     }).join(';');
 
+    // ★ Use full name for consistency
+    var processedByFull = _getCurrentUserName() || state.warehouseName || 'WAREHOUSE';
+
     var url = API_URL + '?action=submitTransaction' +
       '&docNo=' + encodeURIComponent(state.currentDoc) +
       '&docType=' + encodeURIComponent(state.currentModule) +
       '&sheetId=' + encodeURIComponent(getCleanSheetId()) +
       '&items=' + itemsStr +
-      '&processedBy=' + encodeURIComponent(_getCurrentUserName() || state.warehouseName || 'WAREHOUSE') +
+      '&processedBy=' + encodeURIComponent(processedByFull) +
       '&idemKey=' + encodeURIComponent(idemKey) +
       '&_t=' + Date.now();
 
     var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
-    var res = await fetchFn(url, { redirect: 'follow' }, { timeout: 45000, retries: 1 });
+    var res = await fetchFn(url, { redirect: 'follow' }, { timeout: 90000, retries: 1 });
     var text = await res.text();
     return JSON.parse(text);
   };
@@ -768,11 +676,8 @@
     var list = document.getElementById('poItemsList');
     if (!list) return;
 
-    if (state.requestInventoryList.length === 0) {
-      loadRequestInventory().then(populateInventoryDatalist);
-    } else {
-      populateInventoryDatalist();
-    }
+    if (state.requestInventoryList.length === 0) { loadRequestInventory().then(populateInventoryDatalist); }
+    else { populateInventoryDatalist(); }
 
     var hasMissing = false;
     state.poItemsData.forEach(function(item) {
@@ -781,90 +686,49 @@
 
     var warning = document.getElementById('poIncompleteWarning');
     if (warning) {
-      if (hasMissing) {
-        warning.classList.remove('d-none');
-        warning.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i>' +
-          '<strong>Some items are incomplete.</strong> Please fill in the missing Item Code and Description below, or click <strong>Clear</strong> to reset an item and enter the correct one.';
-      } else {
-        warning.classList.add('d-none');
-      }
+      if (hasMissing) { warning.classList.remove('d-none'); }
+      else { warning.classList.add('d-none'); }
     }
 
     list.innerHTML = state.poItemsData.map(function(item, idx) {
       var isManual = !!item._manual;
       var isMissing = !item.inventoryId || !item.inventoryId.trim() || !item.description || !item.description.trim();
       var isNew = !!item._new;
-
-      var borderClass = '';
-      if (isMissing) borderClass = 'border border-danger';
-      else if (isManual) borderClass = 'border border-info';
-
+      var borderClass = isMissing ? 'border border-danger' : (isManual ? 'border border-info' : '');
       var newClass = isNew ? ' po-item-new' : '';
-
       var codeVal = item.inventoryId || '';
       var descVal = item.description || '';
       var isChecked = isManual ? true : !isMissing;
 
       return '<div class="card mb-2 po-item-card ' + borderClass + newClass + '" id="po-card-' + idx + '">' +
-        '<div class="card-body py-2 px-3">' +
-        '<div class="d-flex align-items-start gap-2">' +
-        '<div class="form-check m-0 mt-3">' +
-        '<input class="form-check-input po-check" type="checkbox" id="po-check-' + idx + '" ' + (isChecked ? 'checked' : '') + ' onchange="togglePoCard(' + idx + ')">' +
-        '</div>' +
-        '<div class="flex-grow-1" style="min-width:0;">' +
-        '<div class="row g-2">' +
-        '<div class="col-12 col-md-5">' +
-        '<label class="form-label mb-0 small text-muted">Item Code</label>' +
-        '<input type="text" class="form-control form-control-sm po-edit-code" id="po-code-' + idx + '" value="' + codeVal + '" placeholder="Type or pick item code..." list="inventoryCodeList" autocomplete="off" oninput="updatePoItem(' + idx + ', \'inventoryId\', this.value); autoFillPoDescription(' + idx + ', this.value, false);" onchange="autoFillPoDescription(' + idx + ', this.value, true);">' +
-        '</div>' +
-        '<div class="col-12 col-md-5">' +
-        '<label class="form-label mb-0 small text-muted">Description</label>' +
-        '<input type="text" class="form-control form-control-sm po-edit-desc" id="po-desc-' + idx + '" value="' + descVal + '" placeholder="Auto-fills from item code" oninput="updatePoItem(' + idx + ', \'description\', this.value);">' +
-        '</div>' +
-        '<div class="col-6 col-md-1">' +
-        '<label class="form-label mb-0 small text-muted">PO Qty</label>' +
-        (isManual ?
-          '<input type="number" class="form-control form-control-sm" id="po-qty-' + idx + '" value="' + (item.qty || 1) + '" min="0" oninput="updatePoItem(' + idx + ', \'qty\', this.value)">' :
-          '<div class="fw-bold small pt-1">' + (item.qty || 0) + '</div>') +
-        '</div>' +
-        '<div class="col-6 col-md-1">' +
-        '<label class="form-label mb-0 small text-muted">Unit</label>' +
-        '<div class="fw-bold small pt-1">' + (item.unit || 'PCS') + '</div>' +
-        '</div>' +
-        '</div>' +
+        '<div class="card-body py-2 px-3"><div class="d-flex align-items-start gap-2">' +
+        '<div class="form-check m-0 mt-3"><input class="form-check-input po-check" type="checkbox" id="po-check-' + idx + '" ' + (isChecked ? 'checked' : '') + ' onchange="togglePoCard(' + idx + ')"></div>' +
+        '<div class="flex-grow-1" style="min-width:0;"><div class="row g-2">' +
+        '<div class="col-12 col-md-5"><label class="form-label mb-0 small text-muted">Item Code</label>' +
+        '<input type="text" class="form-control form-control-sm po-edit-code" id="po-code-' + idx + '" value="' + codeVal + '" placeholder="Type or pick item code..." list="inventoryCodeList" autocomplete="off" oninput="updatePoItem(' + idx + ', \'inventoryId\', this.value); autoFillPoDescription(' + idx + ', this.value, false);" onchange="autoFillPoDescription(' + idx + ', this.value, true);"></div>' +
+        '<div class="col-12 col-md-5"><label class="form-label mb-0 small text-muted">Description</label>' +
+        '<input type="text" class="form-control form-control-sm po-edit-desc" id="po-desc-' + idx + '" value="' + descVal + '" placeholder="Auto-fills from item code" oninput="updatePoItem(' + idx + ', \'description\', this.value);"></div>' +
+        '<div class="col-6 col-md-1"><label class="form-label mb-0 small text-muted">PO Qty</label>' +
+        (isManual ? '<input type="number" class="form-control form-control-sm" id="po-qty-' + idx + '" value="' + (item.qty || 1) + '" min="0" oninput="updatePoItem(' + idx + ', \'qty\', this.value)">' : '<div class="fw-bold small pt-1">' + (item.qty || 0) + '</div>') + '</div>' +
+        '<div class="col-6 col-md-1"><label class="form-label mb-0 small text-muted">Unit</label>' +
+        '<div class="fw-bold small pt-1">' + (item.unit || 'PCS') + '</div></div></div>' +
         '<div class="row g-2 mt-1">' +
-        '<div class="col-6 col-md-2">' +
-        '<label class="form-label mb-0 small text-muted">ATL Qty</label>' +
-        '<input type="number" class="form-control form-control-sm" id="po-atl-' + idx + '" value="' + (item.atlQty != null ? item.atlQty : (item.qty || 0)) + '" min="0">' +
-        '</div>' +
-        '<div class="col-6 col-md-2">' +
-        '<label class="form-label mb-0 small text-muted">Unit (Override)</label>' +
-        '<select class="form-select form-select-sm" id="po-unit-' + idx + '">' + buildUnitOptions(item.unit || 'PCS') + '</select>' +
-        '</div>' +
-        '<div class="col-12 col-md-6">' +
-        '<label class="form-label mb-0 small text-muted">Remarks</label>' +
-        '<input type="text" class="form-control form-control-sm" id="po-remarks-' + idx + '" placeholder="Optional note..." maxlength="200">' +
-        '</div>' +
+        '<div class="col-6 col-md-2"><label class="form-label mb-0 small text-muted">ATL Qty</label>' +
+        '<input type="number" class="form-control form-control-sm" id="po-atl-' + idx + '" value="' + (item.atlQty != null ? item.atlQty : (item.qty || 0)) + '" min="0"></div>' +
+        '<div class="col-6 col-md-2"><label class="form-label mb-0 small text-muted">Unit (Override)</label>' +
+        '<select class="form-select form-select-sm" id="po-unit-' + idx + '">' + buildUnitOptions(item.unit || 'PCS') + '</select></div>' +
+        '<div class="col-12 col-md-6"><label class="form-label mb-0 small text-muted">Remarks</label>' +
+        '<input type="text" class="form-control form-control-sm" id="po-remarks-' + idx + '" placeholder="Optional note..." maxlength="200"></div>' +
         '<div class="col-12 col-md-2 d-flex align-items-end">' +
-        '<button type="button" class="btn btn-sm btn-outline-danger w-100" onclick="clearPoItem(' + idx + ')" title="Clear this item">' +
-        '<i class="bi bi-eraser-fill me-1"></i>Clear' +
-        '</button>' +
-        '</div>' +
-        '</div>' +
-        '</div>' +
+        '<button type="button" class="btn btn-sm btn-outline-danger w-100" onclick="clearPoItem(' + idx + ')" title="Clear this item"><i class="bi bi-eraser-fill me-1"></i>Clear</button></div></div></div>' +
         '<div class="d-flex flex-column gap-1 ms-2 align-items-end">' +
         (isManual ? '<span class="badge bg-info">Manual</span>' : '') +
-        (isMissing ? '<span class="badge bg-danger">Incomplete</span>' : '') +
-        '</div>' +
-        '</div>' +
-        '</div>' +
-        '</div>';
+        (isMissing ? '<span class="badge bg-danger">Incomplete</span>' : '') + '</div>' +
+        '</div></div></div>';
     }).join('');
 
     updateCreateMrrButton();
-    document.querySelectorAll('.po-check').forEach(function(cb) {
-      cb.addEventListener('change', updateCreateMrrButton);
-    });
+    document.querySelectorAll('.po-check').forEach(function(cb) { cb.addEventListener('change', updateCreateMrrButton); });
   };
 
   window.clearPoItem = function(idx) {
@@ -887,10 +751,7 @@
   window.addPoManualItem = function() {
     try {
       if (!state.poItemsData) state.poItemsData = [];
-      state.poItemsData.push({
-        inventoryId: '', description: '', qty: 1, atlQty: 0, unit: 'PCS', remarks: '',
-        _manual: true, _new: true
-      });
+      state.poItemsData.push({ inventoryId: '', description: '', qty: 1, atlQty: 0, unit: 'PCS', remarks: '', _manual: true, _new: true });
       renderPoItems();
       updateCreateMrrButton();
       var newIdx = state.poItemsData.length - 1;
@@ -898,7 +759,6 @@
         var modalBody = document.querySelector('#poItemsModal .modal-body');
         var card = document.getElementById('po-card-' + newIdx);
         if (card && modalBody) modalBody.scrollTo({ top: card.offsetTop - 20, behavior: 'smooth' });
-        else if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
         var el = document.getElementById('po-code-' + newIdx);
         if (el) el.focus();
         setTimeout(function() {
@@ -910,17 +770,11 @@
         }, 3000);
       }, 100);
       showToast('New row added. Enter the item code.', 'success');
-    } catch(err) {
-      console.error('[addPoManualItem] Error:', err);
-      showToast('Could not add item: ' + err.message, 'danger');
-    }
+    } catch(err) { showToast('Could not add item: ' + err.message, 'danger'); }
   };
 
   window.restorePoItems = function() {
-    if (!_originalPoItems || _originalPoItems.length === 0) {
-      showToast('No original PO items to restore.', 'warning');
-      return;
-    }
+    if (!_originalPoItems || _originalPoItems.length === 0) { showToast('No original PO items to restore.', 'warning'); return; }
     state.poItemsData = JSON.parse(JSON.stringify(_originalPoItems));
     renderPoItems();
     showToast('PO items restored to original.', 'success');
@@ -947,11 +801,9 @@
     });
     if (!match) return;
     var descInput = document.getElementById('po-desc-' + idx);
-    if (descInput) {
-      if (force || !descInput.value.trim()) {
-        descInput.value = match.description || '';
-        updatePoItem(idx, 'description', descInput.value);
-      }
+    if (descInput && (force || !descInput.value.trim())) {
+      descInput.value = match.description || '';
+      updatePoItem(idx, 'description', descInput.value);
     }
     var unitSelect = document.getElementById('po-unit-' + idx);
     if (unitSelect && match.unit) {
@@ -975,7 +827,7 @@
     var hasMissingSelected = selected.some(function(item) {
       return !item.inventoryId || !item.inventoryId.trim() || !item.description || !item.description.trim();
     });
-    if (hasMissingSelected) { btn.disabled = true; btn.title = 'Fill missing fields or uncheck the item'; }
+    if (hasMissingSelected) { btn.disabled = true; btn.title = 'Fill missing fields'; }
     else if (selected.length === 0) { btn.disabled = true; btn.title = 'Select at least one item'; }
     else { btn.disabled = false; btn.title = ''; }
   };
@@ -995,9 +847,7 @@
       var desc = descEl ? (descEl.value || '').trim() : (item.description || '').trim();
       var qty = qtyEl ? (parseFloat(qtyEl.value) || 0) : (item.qty || 0);
       selected.push({
-        inventoryId: code,
-        description: desc,
-        qty: qty,
+        inventoryId: code, description: desc, qty: qty,
         unit: unitEl ? unitEl.value : (item.unit || 'PCS'),
         atlQty: atlEl ? (parseFloat(atlEl.value) || 0) : 0,
         remarks: remarksEl ? remarksEl.value : ''
@@ -1044,8 +894,7 @@
 
       try {
         var payload = {
-          action: 'createMrrRequest',
-          _idemKey: idemKey,
+          action: 'createMrrRequest', _idemKey: idemKey,
           poNo: state.currentPoNo, prfNo: state.currentPoPrf,
           client: state.currentPoClient, supplier: state.currentPoSupplier,
           drNo: drNo, receivingDate: receivingDate, preparedBy: preparedBy,
@@ -1055,21 +904,17 @@
         var res = await fetchFn(API_URL, {
           method: 'POST', body: JSON.stringify(payload),
           headers: { 'Content-Type': 'text/plain;charset=utf-8' }
-        }, { timeout: 45000, retries: 1 });
+        }, { timeout: 90000, retries: 1 });
         var text = await res.text();
         var data;
         try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
-                if (data && data.success) {
+        if (data && data.success) {
           closePoItemsModal();
           var newPoDocNo = data.docNo || data.balDocNo || '';
-          showToast('MRR created: ' + newPoDocNo + ' — Prepared by ' + preparedBy, 'success');
+          showToast('MRR created: ' + newPoDocNo, 'success');
           fetchPendingDocs(true);
-
-          // ★ Auto-open print preview
           if (newPoDocNo && typeof autoOpenPrintPreview === 'function') {
-            setTimeout(function() {
-              autoOpenPrintPreview(newPoDocNo, 'MRR');
-            }, 400);
+            setTimeout(function() { autoOpenPrintPreview(newPoDocNo, 'MRR'); }, 400);
           }
         } else {
           showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
@@ -1307,7 +1152,6 @@
     var sel3 = document.getElementById('step3Requestor');
     [sel, sel3].forEach(function(s) {
       if (!s) return;
-      // Hidden inputs don't have innerHTML in a useful way, but harmless for selects
       if (s.tagName === 'INPUT') return;
       var html = '<option value="">-- Select Requestor --</option>';
       list.forEach(function(r) {
@@ -1315,40 +1159,21 @@
       });
       s.innerHTML = html;
     });
-
-    // ★ Auto-fill the requestor + department from the logged-in user
     _autoFillRequestorFromLogin(list);
   }
 
   function _autoFillRequestorFromLogin(list) {
     list = list || [];
-
-    // ─── 1. Get the logged-in user's full name ───
     var fullname = '';
-    try {
-      if (typeof state !== 'undefined' && state.currentUserFullname) {
-        fullname = String(state.currentUserFullname).trim();
-      }
-    } catch(e) {}
-    if (!fullname) {
-      fullname = String(localStorage.getItem('ivm_userFullname') || '').trim();
-    }
-    if (!fullname) {
-      fullname = String(localStorage.getItem('ivm_requestorName') || '').trim();
-    }
-    if (!fullname) {
-      // Last resort: use username
-      fullname = String(localStorage.getItem('ivm_username') || '').trim();
-    }
+    try { if (typeof state !== 'undefined' && state.currentUserFullname) fullname = String(state.currentUserFullname).trim(); } catch(e) {}
+    if (!fullname) fullname = String(localStorage.getItem('ivm_userFullname') || '').trim();
+    if (!fullname) fullname = String(localStorage.getItem('ivm_requestorName') || '').trim();
+    if (!fullname) fullname = String(localStorage.getItem('ivm_username') || '').trim();
     if (!fullname) return;
 
-    // ─── 2. Try to find a matching entry in the requestor master list ───
     var matched = null;
     for (var i = 0; i < list.length; i++) {
-      if (String(list[i].name || '').trim().toLowerCase() === fullname.toLowerCase()) {
-        matched = list[i];
-        break;
-      }
+      if (String(list[i].name || '').trim().toLowerCase() === fullname.toLowerCase()) { matched = list[i]; break; }
     }
 
     var step3Sel = document.getElementById('step3Requestor');
@@ -1356,67 +1181,38 @@
     var reqHidden = document.getElementById('reqRequestor');
     var reqDept = document.getElementById('reqDepartment');
 
-    // ─── 3. Select the requestor in the visible dropdown ───
     if (step3Sel) {
-      if (matched) {
-        step3Sel.value = matched.name;
-      } else {
-        // Add the logged-in user as a "(You)" option at the top
+      if (matched) step3Sel.value = matched.name;
+      else {
         var existing = step3Sel.querySelector('option[value="' + CSS.escape(fullname) + '"]');
         if (!existing) {
           var opt = document.createElement('option');
           opt.value = fullname;
           opt.textContent = fullname + ' (You)';
           opt.setAttribute('data-department', localStorage.getItem('ivm_userDepartment') || '');
-          // Insert right after the placeholder
-          if (step3Sel.options.length > 0) {
-            step3Sel.insertBefore(opt, step3Sel.options[1] || null);
-          } else {
-            step3Sel.appendChild(opt);
-          }
+          if (step3Sel.options.length > 0) step3Sel.insertBefore(opt, step3Sel.options[1] || null);
+          else step3Sel.appendChild(opt);
         }
         step3Sel.value = fullname;
       }
     }
 
-    // ─── 4. Fill department ───
-    var deptValue = '';
-    var isEditable = false;
-
-    if (matched) {
-      deptValue = matched.department || '';
-      isEditable = false;
-    } else {
-      deptValue = localStorage.getItem('ivm_userDepartment') || '';
-      isEditable = true; // not found in master → let the user type it
-    }
+    var deptValue = matched ? (matched.department || '') : (localStorage.getItem('ivm_userDepartment') || '');
+    var isEditable = !matched;
 
     if (step3Dept) {
       step3Dept.value = deptValue;
-      if (isEditable) {
-        step3Dept.removeAttribute('readonly');
-        step3Dept.placeholder = 'Enter your department';
-      } else {
-        step3Dept.setAttribute('readonly', 'readonly');
-      }
+      if (isEditable) { step3Dept.removeAttribute('readonly'); step3Dept.placeholder = 'Enter your department'; }
+      else { step3Dept.setAttribute('readonly', 'readonly'); }
     }
 
-    // ─── 5. Sync the hidden inputs that the wizard reads at submit time ───
     if (reqHidden) reqHidden.value = matched ? matched.name : fullname;
     if (reqDept) reqDept.value = deptValue;
 
-    // ─── 6. Enable Next on step 3 ───
     var btnStep3Next = document.getElementById('btnStep3Next');
     if (btnStep3Next) btnStep3Next.disabled = !fullname;
-
-    // ─── 7. Pre-fill the review screen (in case the user jumps to step 4) ───
-    var reviewRequestor = document.getElementById('reviewRequestor');
-    if (reviewRequestor) reviewRequestor.textContent = matched ? matched.name : fullname;
-    var reviewDepartment = document.getElementById('reviewDepartment');
-    if (reviewDepartment) reviewDepartment.textContent = deptValue || '-';
   }
 
-  // Expose so requests.js can also call it if the list is empty/slow
   window.autoFillRequestorFromLogin = _autoFillRequestorFromLogin;
 
   window.loadVendorList = async function(forceRefresh) {
@@ -1473,7 +1269,6 @@
 
   window.openManualMrrModal = function() {
     if (!manualMrrModal) manualMrrModal = new bootstrap.Modal(document.getElementById('manualMrrModal'));
-
     window._prefillMrrMode = false;
     window._prefillMrrDocNo = null;
     var titleEl = document.querySelector('#manualMrrModal .modal-title');
@@ -1505,16 +1300,13 @@
   window.prefillManualMrrFromDoc = async function(docNo) {
     if (!docNo) return;
     if (state.isLoading) return;
-
     showLoading('Loading ' + docNo + '...');
     try {
       var key = 'sheetId_MRR';
       var sheetIdVal = localStorage.getItem(key);
       var sheetIdClean = sheetIdVal ? extractSheetId(sheetIdVal) : '';
-
       var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
-                '&docType=MRR&sheetId=' + encodeURIComponent(sheetIdClean) +
-                '&_t=' + Date.now();
+                '&docType=MRR&sheetId=' + encodeURIComponent(sheetIdClean) + '&_t=' + Date.now();
       var res = await fetch(url, { redirect: 'follow' });
       var text = await res.text();
       var data;
@@ -1523,7 +1315,6 @@
 
       var info = data.info || {};
       var items = data.items || [];
-
       var poNo = info['PO No.'] || info.poNo || '';
       var vendor = info['Vendor/Client'] || info.vendor || '';
       var receivingSite = info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON';
@@ -1536,20 +1327,14 @@
         return {
           inventoryId: it.inventoryId || it.itemCode || '',
           description: it.description || '',
-          qty: remaining,
-          atlQty: 0,
-          unit: it.unit || 'PCS',
-          remarks: ''
+          qty: remaining, atlQty: 0,
+          unit: it.unit || 'PCS', remarks: ''
         };
       }).filter(Boolean);
 
-      if (remainingItems.length === 0) {
-        showToast('This MRR has no remaining items to process.', 'info');
-        return;
-      }
+      if (remainingItems.length === 0) { showToast('This MRR has no remaining items to process.', 'info'); return; }
 
       if (!manualMrrModal) manualMrrModal = new bootstrap.Modal(document.getElementById('manualMrrModal'));
-
       window._prefillMrrMode = true;
       window._prefillMrrDocNo = docNo;
 
@@ -1558,32 +1343,21 @@
       var btn = document.getElementById('btnSubmitManualMrr');
       if (btn) btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Create New MRR';
 
-      var poEl = document.getElementById('manualMrrPoNo');
-      var drEl = document.getElementById('manualMrrDrNo');
-      var vendorEl = document.getElementById('manualMrrVendor');
-      var siteEl = document.getElementById('manualMrrSite');
-      var prepEl = document.getElementById('manualMrrPreparedBy');
-      var dateEl = document.getElementById('manualMrrDate');
-
-      if (poEl) poEl.value = poNo;
-      if (drEl) drEl.value = '';
-      if (vendorEl) vendorEl.value = vendor;
-      if (siteEl) siteEl.value = receivingSite;
-      if (prepEl) prepEl.value = _getCurrentUserName();
-      if (dateEl) dateEl.valueAsDate = new Date();
+      if (document.getElementById('manualMrrPoNo')) document.getElementById('manualMrrPoNo').value = poNo;
+      if (document.getElementById('manualMrrDrNo')) document.getElementById('manualMrrDrNo').value = '';
+      if (document.getElementById('manualMrrVendor')) document.getElementById('manualMrrVendor').value = vendor;
+      if (document.getElementById('manualMrrSite')) document.getElementById('manualMrrSite').value = receivingSite;
+      if (document.getElementById('manualMrrPreparedBy')) document.getElementById('manualMrrPreparedBy').value = _getCurrentUserName();
+      if (document.getElementById('manualMrrDate')) document.getElementById('manualMrrDate').valueAsDate = new Date();
 
       manualMrrItems = remainingItems;
       renderManualMrrItems();
       updateManualMrrSubmitButton();
-
       manualMrrModal.show();
-
     } catch(err) {
       console.error('[prefillManualMrrFromDoc] Error:', err);
       showToast('Failed to load document: ' + err.message, 'danger');
-    } finally {
-      hideLoading();
-    }
+    } finally { hideLoading(); }
   };
 
   document.addEventListener('hidden.bs.modal', function(e) {
@@ -1684,7 +1458,7 @@
       return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
     }).slice(0, 20);
     if (matches.length === 0) {
-      dropdown.innerHTML = '<div class="list-group-item text-muted" style="padding:8px 12px;">No matches — you can type the code manually.</div>';
+      dropdown.innerHTML = '<div class="list-group-item text-muted" style="padding:8px 12px;">No matches.</div>';
     } else {
       matches.forEach(function(it) {
         var code = it.code || it.inventoryId || '';
@@ -1770,10 +1544,8 @@
           items.push({
             inventoryId: it.inventoryId.trim(),
             description: it.description.trim(),
-            qty: it.qty,
-            atlQty: it.atlQty || 0,
-            unit: it.unit || 'PIECE',
-            remarks: it.remarks || ''
+            qty: it.qty, atlQty: it.atlQty || 0,
+            unit: it.unit || 'PIECE', remarks: it.remarks || ''
           });
         }
       }
@@ -1786,42 +1558,23 @@
         var payload;
         if (isPrefill) {
           payload = {
-            action: 'processBalance',
-            _idemKey: idemKey,
-            docType: 'MRR',
-            originalDocNo: window._prefillMrrDocNo,
+            action: 'processBalance', _idemKey: idemKey,
+            docType: 'MRR', originalDocNo: window._prefillMrrDocNo,
             items: items.map(function(it) {
-              return {
-                inventoryId: it.inventoryId,
-                description: it.description,
-                qty: it.qty,
-                issueNow: it.atlQty || 0,
-                unit: it.unit,
-                remarks: it.remarks
-              };
+              return { inventoryId: it.inventoryId, description: it.description, qty: it.qty, issueNow: it.atlQty || 0, unit: it.unit, remarks: it.remarks };
             }),
-            processedBy: preparedBy,
-            drNo: drNo,
-            vendor: vendor,
-            receivingSite: site,
-            receivingDate: receivingDate,
-            poNo: poNo,
-            preparedBy: preparedBy
+            processedBy: preparedBy, drNo: drNo, vendor: vendor,
+            receivingSite: site, receivingDate: receivingDate,
+            poNo: poNo, preparedBy: preparedBy
           };
         } else {
           payload = {
-            action: 'createMrrRequest',
-            _idemKey: idemKey,
-            poNo: poNo || 'N/A',
-            prfNo: '',
-            client: vendor,
-            supplier: vendor,
-            drNo: drNo,
-            receivingDate: receivingDate,
-            receivingSite: site,
-            preparedBy: preparedBy,
-            items: items,
-            isManual: true
+            action: 'createMrrRequest', _idemKey: idemKey,
+            poNo: poNo || 'N/A', prfNo: '',
+            client: vendor, supplier: vendor,
+            drNo: drNo, receivingDate: receivingDate,
+            receivingSite: site, preparedBy: preparedBy,
+            items: items, isManual: true
           };
         }
 
@@ -1829,30 +1582,24 @@
         var res = await fetchFn(API_URL, {
           method: 'POST', body: JSON.stringify(payload),
           headers: { 'Content-Type': 'text/plain;charset=utf-8' }
-        }, { timeout: 45000, retries: 1 });
+        }, { timeout: 90000, retries: 1 });
         var text = await res.text();
         var data;
         try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
-               if (data && data.success) {
+        if (data && data.success) {
           if (manualMrrModal) manualMrrModal.hide();
-
           var newMrrDocNo = '';
           if (isPrefill) {
             newMrrDocNo = data.balDocNo || data.docNo || '';
-            showToast('New MRR created: ' + newMrrDocNo + ' (' + (data.status || 'COMPLETED') + ')', 'success');
+            showToast('New MRR created: ' + newMrrDocNo, 'success');
           } else {
             newMrrDocNo = data.docNo || data.balDocNo || '';
-            showToast('Manual MRR created: ' + newMrrDocNo + ' — Prepared by ' + preparedBy, 'success');
+            showToast('Manual MRR created: ' + newMrrDocNo, 'success');
           }
-
           fetchPendingDocs(true);
           updateWarehouseKPIs();
-
-          // ★ Auto-open print preview
           if (newMrrDocNo && typeof autoOpenPrintPreview === 'function') {
-            setTimeout(function() {
-              autoOpenPrintPreview(newMrrDocNo, 'MRR');
-            }, 400);
+            setTimeout(function() { autoOpenPrintPreview(newMrrDocNo, 'MRR'); }, 400);
           }
         } else {
           showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
@@ -1898,7 +1645,6 @@
   // ═══════════════════════════════════════════════════════════
   // PARTIAL ITEMS
   // ═══════════════════════════════════════════════════════════
-
   window.fetchPartialItems = async function() {
     try {
       var url = API_URL + '?action=getPartialItems&_t=' + Date.now();
@@ -1914,25 +1660,19 @@
     if (!modalEl) { showToast('Modal not found', 'danger'); return; }
     var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     var container = document.getElementById('partialItemsList');
-    if (container) container.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading partial items...</div></div>';
+    if (container) container.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
     modal.show();
-
     try {
       var items = await fetchPartialItems();
       if (!container) return;
       if (items.length === 0) {
-        container.innerHTML = '<div class="list-group-item text-muted text-center py-4">No partial items found. All items are fully served or pending.</div>';
+        container.innerHTML = '<div class="list-group-item text-muted text-center py-4">No partial items found.</div>';
         return;
       }
       var grouped = {};
       items.forEach(function(it) {
         var doc = it.originalDocNo || it.docNo || '(unknown)';
-        if (!grouped[doc]) grouped[doc] = {
-          docNo: doc, items: [],
-          requestor: it.requestor || '', department: it.department || '',
-          joNo: it.joNo || '', gemSoNo: it.gemSoNo || '',
-          clientName: it.clientName || '', project: it.project || ''
-        };
+        if (!grouped[doc]) grouped[doc] = { docNo: doc, items: [], requestor: it.requestor || '', department: it.department || '', joNo: it.joNo || '', gemSoNo: it.gemSoNo || '', clientName: it.clientName || '', project: it.project || '' };
         grouped[doc].items.push(it);
       });
       var html = '';
@@ -1941,9 +1681,7 @@
         html += '<div class="card mb-3 border-warning">' +
           '<div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">' +
             '<div><i class="bi bi-file-earmark-text me-2"></i><strong>' + g.docNo + '</strong> <span class="badge bg-secondary">MRIF</span></div>' +
-            '<button class="btn btn-sm btn-dark" onclick="openProcessPartialModal(\'' + doc + '\')">' +
-              '<i class="bi bi-arrow-right-circle me-1"></i>Process Balance' +
-            '</button>' +
+            '<button class="btn btn-sm btn-dark" onclick="openProcessPartialModal(\'' + doc + '\')"><i class="bi bi-arrow-right-circle me-1"></i>Process Balance</button>' +
           '</div>' +
           '<div class="card-body p-2">' +
             '<div class="row g-2 small mb-2">' +
@@ -1954,25 +1692,20 @@
               (g.clientName ? '<div class="col-md-6"><strong>Client:</strong> ' + g.clientName + '</div>' : '') +
               (g.project ? '<div class="col-md-6"><strong>Project:</strong> ' + g.project + '</div>' : '') +
             '</div>' +
-            '<div class="table-responsive">' +
-              '<table class="table table-sm table-bordered mb-0">' +
-                '<thead class="table-light"><tr>' +
-                  '<th style="width:22%">Item Code</th>' +
-                  '<th>Description</th>' +
-                  '<th class="text-center" style="width:9%">Req.</th>' +
-                  '<th class="text-center" style="width:9%">Issued</th>' +
-                  '<th class="text-center" style="width:10%">Remaining</th>' +
-                  '<th class="text-center" style="width:8%">Unit</th>' +
-                '</tr></thead><tbody>';
+            '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">' +
+              '<thead class="table-light"><tr>' +
+                '<th style="width:22%">Item Code</th><th>Description</th>' +
+                '<th class="text-center" style="width:9%">Req.</th>' +
+                '<th class="text-center" style="width:9%">Issued</th>' +
+                '<th class="text-center" style="width:10%">Remaining</th>' +
+                '<th class="text-center" style="width:8%">Unit</th>' +
+              '</tr></thead><tbody>';
         g.items.forEach(function(it) {
-          html += '<tr>' +
-            '<td><code>' + (it.itemCode || '') + '</code></td>' +
-            '<td>' + (it.description || '') + '</td>' +
+          html += '<tr><td><code>' + (it.itemCode || '') + '</code></td><td>' + (it.description || '') + '</td>' +
             '<td class="text-center">' + (it.requestedQty || 0) + '</td>' +
             '<td class="text-center">' + (it.issuedQty || 0) + '</td>' +
             '<td class="text-center fw-bold text-danger">' + (it.remainingQty || 0) + '</td>' +
-            '<td class="text-center">' + (it.unit || 'PCS') + '</td>' +
-            '</tr>';
+            '<td class="text-center">' + (it.unit || 'PCS') + '</td></tr>';
         });
         html += '</tbody></table></div></div></div>';
       });
@@ -1991,65 +1724,33 @@
     var modalEl = document.getElementById('processPartialModal');
     if (!modalEl) { showToast('Process Balance modal not found', 'danger'); return; }
     var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-
     var titleEl = document.getElementById('processPartialDocTitle');
     if (titleEl) titleEl.textContent = 'Process Balance for ' + docNo;
-
     var body = document.getElementById('processPartialBody');
-    if (body) body.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading items...</div></div>';
-
+    if (body) body.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
     modal.show();
-
     try {
       var all = await fetchPartialItems();
-      _processPartialItems = all.filter(function(it) {
-        return (it.originalDocNo || it.docNo) === docNo;
-      });
+      _processPartialItems = all.filter(function(it) { return (it.originalDocNo || it.docNo) === docNo; });
       if (!_processPartialItems.length) {
         if (body) body.innerHTML = '<div class="alert alert-info mb-0">No open partial items for this document.</div>';
         return;
       }
-      var html = '<div class="alert alert-info small py-2 mb-3">' +
-        '<i class="bi bi-info-circle me-1"></i> ' +
-        'A new sheet <strong>Bal.' + docNo + '</strong> will be created. ' +
-        'Enter the quantity you are <strong>issuing right now</strong> for each item.' +
-        '</div>' +
+      var html = '<div class="alert alert-info small py-2 mb-3"><i class="bi bi-info-circle me-1"></i> A new sheet <strong>Bal.' + docNo + '</strong> will be created.</div>' +
         '<div class="table-responsive"><table class="table table-sm table-bordered align-middle">' +
-        '<thead class="table-light"><tr>' +
-          '<th style="width:4%">#</th>' +
-          '<th style="width:18%">Item Code</th>' +
-          '<th>Description</th>' +
-          '<th class="text-center" style="width:7%">Unit</th>' +
-          '<th class="text-center" style="width:9%">Remaining</th>' +
-          '<th class="text-center" style="width:12%">Issued Now</th>' +
-          '<th style="width:18%">Remarks</th>' +
-        '</tr></thead><tbody>';
+        '<thead class="table-light"><tr><th style="width:4%">#</th><th style="width:18%">Item Code</th><th>Description</th><th class="text-center" style="width:7%">Unit</th><th class="text-center" style="width:9%">Remaining</th><th class="text-center" style="width:12%">Issued Now</th><th style="width:18%">Remarks</th></tr></thead><tbody>';
       _processPartialItems.forEach(function(it, idx) {
         var remaining = Number(it.remainingQty || 0);
-        html += '<tr>' +
-          '<td class="text-center">' + (idx + 1) + '</td>' +
+        html += '<tr><td class="text-center">' + (idx + 1) + '</td>' +
           '<td><code>' + (it.itemCode || '') + '</code></td>' +
           '<td>' + (it.description || '') + '</td>' +
           '<td class="text-center">' + (it.unit || 'PCS') + '</td>' +
           '<td class="text-center fw-bold text-danger process-remaining-cell" data-idx="' + idx + '">' + remaining + '</td>' +
-          '<td class="text-center">' +
-            '<input type="number" class="form-control form-control-sm text-center process-qty-input" ' +
-            'data-idx="' + idx + '" value="0" min="0" max="' + remaining + '" step="0.01" ' +
-            'style="width:90px;margin:0 auto;" oninput="onProcessQtyInput(this)">' +
-          '</td>' +
-          '<td>' +
-            '<input type="text" class="form-control form-control-sm process-remarks-input" ' +
-            'data-idx="' + idx + '" placeholder="Optional" maxlength="200">' +
-          '</td>' +
-        '</tr>';
+          '<td class="text-center"><input type="number" class="form-control form-control-sm text-center process-qty-input" data-idx="' + idx + '" value="0" min="0" max="' + remaining + '" step="0.01" style="width:90px;margin:0 auto;" oninput="onProcessQtyInput(this)"></td>' +
+          '<td><input type="text" class="form-control form-control-sm process-remarks-input" data-idx="' + idx + '" placeholder="Optional" maxlength="200"></td></tr>';
       });
       html += '</tbody></table></div>' +
-        '<div class="mt-2 small text-muted">' +
-        '<button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="fillAllRemaining()">' +
-          '<i class="bi bi-magic me-1"></i>Fill Full Remaining' +
-        '</button>' +
-        '<span class="ms-1">Set all items to their full remaining quantity.</span>' +
-        '</div>';
+        '<div class="mt-2 small text-muted"><button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="fillAllRemaining()"><i class="bi bi-magic me-1"></i>Fill Full Remaining</button></div>';
       if (body) body.innerHTML = html;
     } catch(err) {
       if (body) body.innerHTML = '<div class="alert alert-danger">Failed to load items: ' + err.message + '</div>';
@@ -2089,19 +1790,14 @@
         var remarks = remarksInput ? (remarksInput.value || '').trim() : '';
         if (issueNow > remaining) issueNow = remaining;
         itemsPayload.push({
-          inventoryId: it.itemCode || '',
-          description: it.description || '',
-          qty: remaining,
-          issueNow: issueNow,
-          unit: it.unit || 'PCS',
-          remarks: remarks || '',
+          inventoryId: it.itemCode || '', description: it.description || '',
+          qty: remaining, issueNow: issueNow,
+          unit: it.unit || 'PCS', remarks: remarks || '',
           originalRowIndex: it.originalRowIndex || 0
         });
       });
       var anyIssued = itemsPayload.some(function(it) { return it.issueNow > 0; });
-      if (!anyIssued) {
-        if (!confirm('You have not entered any "Issued Now" quantity.\n\nContinue anyway?')) return;
-      }
+      if (!anyIssued) { if (!confirm('No quantity entered. Continue anyway?')) return; }
 
       var currentUser = '';
       if (typeof state !== 'undefined') currentUser = state.currentUserFullname || state.currentUser || '';
@@ -2112,43 +1808,29 @@
 
       try {
         var payload = {
-          action: 'processPartialBalance',
-          _idemKey: idemKey,
+          action: 'processPartialBalance', _idemKey: idemKey,
           originalDocNo: _processPartialDocNo,
-          items: itemsPayload,
-          processedBy: currentUser
+          items: itemsPayload, processedBy: currentUser
         };
         var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
         var res = await fetchFn(API_URL, {
-          method: 'POST',
-          body: JSON.stringify(payload),
+          method: 'POST', body: JSON.stringify(payload),
           headers: { 'Content-Type': 'text/plain;charset=utf-8' }
-        }, { timeout: 45000, retries: 1 });
+        }, { timeout: 90000, retries: 1 });
         var text = await res.text();
         var data;
         try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
         if (data && data.success) {
           var processModalEl = document.getElementById('processPartialModal');
-          if (processModalEl) {
-            var pm = bootstrap.Modal.getInstance(processModalEl);
-            if (pm) pm.hide();
-          }
+          if (processModalEl) { var pm = bootstrap.Modal.getInstance(processModalEl); if (pm) pm.hide(); }
           showToast('Balance MRIF created: ' + data.balDocNo + ' (' + (data.status || 'COMPLETED') + ')', 'success');
           if (typeof updatePartialCount === 'function') updatePartialCount();
           if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
-          setTimeout(function() {
-            var p = document.getElementById('partialItemsModal');
-            if (p) {
-              var pm2 = bootstrap.Modal.getInstance(p);
-              if (pm2 && pm2._isShown) openPartialItemsModal();
-            }
-          }, 400);
+          if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
         } else {
           showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
         }
-      } catch(err) {
-        showToast('Error: ' + err.message, 'danger');
-      }
+      } catch(err) { showToast('Error: ' + err.message, 'danger'); }
     }, 'Creating Balance...');
   };
 
