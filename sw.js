@@ -1,10 +1,10 @@
-const CACHE_NAME = 'gemcor-wms-v2.4.8';
+const CACHE_NAME = 'gemcor-wms-v2.4.0';
 const urlsToCache = [
   '/GEMCORQR/',
   '/GEMCORQR/index.html',
   '/GEMCORQR/style.css',
-  '/GEMCORQR/gemcor-logo.png',
   '/GEMCORQR/manifest.json',
+  '/GEMCORQR/gemcor-logo.png',
   '/GEMCORQR/js/config.js',
   '/GEMCORQR/js/net.js',
   '/GEMCORQR/js/cache.js',
@@ -23,14 +23,15 @@ const urlsToCache = [
   '/GEMCORQR/js/chat.js',
   '/GEMCORQR/js/editRequests.js',
   '/GEMCORQR/js/main.js',
-  '/GEMCORQR/js/update.js'
+  '/GEMCORQR/js/update.js',
+  '/GEMCORQR/js/prewarm.js'
 ];
 
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(urlsToCache))
-    // No skipWaiting — we want the update banner to prompt users
+    // No skipWaiting — the update banner prompts the user
   );
 });
 
@@ -45,7 +46,6 @@ self.addEventListener('activate', event => {
   );
 });
 
-// When the app's update banner sends SKIP_WAITING, take over now
 self.addEventListener('message', event => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
