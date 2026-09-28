@@ -386,12 +386,21 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
     '<i class="bi bi-chat-dots me-1"></i>Discuss' +
   '</button>';
 
-  if (isWarehouseView) {
+    if (isWarehouseView) {
     if (isCompletedDoc) {
       actionButtons += '<span class="btn btn-sm btn-outline-success disabled" title="This document is already fully processed">' +
         '<i class="bi bi-check-circle-fill me-1"></i>Completed' +
       '</span>';
     } else {
+      // ★ Warehouse: FULL EDIT AUTHORITY
+      //   - Can edit any PENDING doc directly (no approval needed)
+      //   - Can also process it in the scanner
+      var statusUpper = String(docStatusRaw || '').toUpperCase();
+      if (statusUpper === 'PENDING') {
+        actionButtons += '<button class="btn btn-sm btn-outline-warning fw-bold" onclick="openWarehouseEditModal(\'' + jsDoc + '\', \'' + jsType + '\')">' +
+          '<i class="bi bi-pencil-square me-1"></i>Edit Now' +
+        '</button>';
+      }
       actionButtons += '<button class="btn btn-sm btn-success" onclick="processRequestFromDetails(\'' + jsDoc + '\', \'' + jsType + '\')">' +
         '<i class="bi bi-play-circle me-1"></i>Process Request' +
       '</button>';
@@ -818,6 +827,116 @@ function checkUrlDocParam() {
     showToast('Document ' + cleanDocNo(docNo) + ' scanned. Switch to Warehouse mode to process.', 'info');
   }
 }
+
+// ─── Warehouse: Edit any PENDING request directly (no approval needed) ───
+window.openWarehouseEditModal = async function(docNo, docType) {
+  if (!docNo) return;
+  docType = String(docType || 'MRIF').toUpperCase();
+
+  // Close the details modal first
+  var detailsModal = document.getElementById('myRequestDetailsModal');
+  if (detailsModal) {
+    var dm = bootstrap.Modal.getInstance(detailsModal);
+    if (dm) dm.hide();
+  }
+
+  // Reuse the existing edit modal, but without the "Approved" banner
+  var modalEl = document.getElementById('editRequestModal');
+  if (!modalEl) { showToast('Edit modal not found', 'danger'); return; }
+  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+  // Change header + banner text for warehouse
+  var headerEl = document.getElementById('editReqHeader');
+  if (headerEl) {
+    headerEl.innerHTML = '<i class="bi bi-pencil-square me-2"></i>Editing ' +
+      String(docNo).replace(/</g, '&lt;') +
+      ' <span class="badge bg-warning text-dark ms-1">Warehouse Edit</span>';
+  }
+
+  // Replace the "Approved" banner
+  var banner = modalEl.querySelector('.alert-warning');
+  if (banner) {
+    banner.className = 'alert alert-info small py-2';
+    banner.innerHTML = '<i class="bi bi-shield-check me-1"></i>' +
+      'Warehouse can edit this document directly. Save your changes to update the sheet.';
+  }
+
+  // Set hidden fields
+  var elDocNo = document.getElementById('editReqDocNo');
+  var elDocType = document.getElementById('editReqDocType');
+  if (elDocNo) elDocNo.value = docNo;
+  if (elDocType) elDocType.value = docType;
+
+  // Clear existing fields + show loading
+  var tbody = document.getElementById('editReqItemsBody');
+  if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3">' +
+      '<div class="spinner-border spinner-border-sm text-primary"></div></td></tr>';
+  }
+  modal.show();
+
+  // Fetch the document items
+  try {
+    var sheetKey = 'sheetId_' + docType;
+    var sheetIdVal = localStorage.getItem(sheetKey);
+    var sheetIdClean = sheetIdVal ? (typeof extractSheetId === 'function' ? extractSheetId(sheetIdVal) : sheetIdVal) : '';
+
+    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
+              '&docType=' + docType +
+              '&sheetId=' + encodeURIComponent(sheetIdClean) +
+              '&_t=' + Date.now();
+    var res = await fetch(url, { redirect: 'follow' });
+    var text = await res.text();
+    var trimmed = String(text || '').trim();
+    if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
+    var data = JSON.parse(trimmed);
+    if (!data.success) throw new Error(data.error || 'Failed to load document');
+
+    var info = data.info || {};
+    var items = data.items || [];
+
+    // Fill header fields (requestor + department LOCKED)
+    var locked = (typeof _getLockedRequestor === 'function') ? _getLockedRequestor() : { name: '', department: '' };
+    var elReq = document.getElementById('editReqRequestor');
+    var elDept = document.getElementById('editReqDepartment');
+    if (elReq) {
+      elReq.value = locked.name || info.Requestor || '';
+      elReq.setAttribute('readonly', 'readonly');
+      elReq.classList.add('locked-input');
+    }
+    if (elDept) {
+      elDept.value = locked.department || info.Department || '';
+      elDept.setAttribute('readonly', 'readonly');
+      elDept.classList.add('locked-input');
+    }
+
+    document.getElementById('editReqJoNo').value = info['JO No.'] || info.joNo || '';
+    document.getElementById('editReqGemSoNo').value = info['GEM SO No.'] || info.gemSoNo || '';
+    document.getElementById('editReqClient').value = info['Client Name'] || info.clientName || '';
+    document.getElementById('editReqProject').value = info.Project || info.project || '';
+
+    // Populate items into the edit modal
+    if (typeof _editReqState !== 'undefined') {
+      _editReqState.items = items.map(function(it) {
+        return {
+          inventoryId: it.inventoryId || it.itemCode || it.code || '',
+          description: it.description || it.desc || '',
+          qty: Number(it.qty || it.requestedQty || it.expectedQty || 0),
+          unit: it.unit || 'PIECE',
+          remarks: it.remarks || ''
+        };
+      });
+      if (typeof renderEditReqItems === 'function') {
+        renderEditReqItems();
+      }
+    }
+  } catch (err) {
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-danger">' +
+        'Failed to load: ' + String(err.message).replace(/</g, '&lt;') + '</td></tr>';
+    }
+  }
+};
 
 // ─── DOM Ready ───
 document.addEventListener('DOMContentLoaded', function() {
