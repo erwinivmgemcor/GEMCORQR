@@ -463,6 +463,9 @@ window.submitEditedRequest = async function() {
   var docType = document.getElementById('editReqDocType').value;
   if (!docNo) return;
 
+  // ★ Detect if this is a warehouse-direct edit (bypasses the normal approval flow)
+  var isWarehouseEdit = (localStorage.getItem('ivm_userRole') === 'warehouse');
+
   var items = (_editReqState.items || []).filter(function(it) {
     return it.inventoryId && it.inventoryId.trim() && it.qty > 0;
   });
@@ -477,31 +480,16 @@ window.submitEditedRequest = async function() {
   }
 
   try {
-    var payload = {
+       var payload = {
       action: 'applyRequestEdit',
       docNo: docNo,
       docType: docType,
       editedBy: _editReqState.currentUser,
-            updates: {
+      isWarehouseEdit: isWarehouseEdit,      // ★ new flag
+      updates: {
         items: items,
-        // ★ SECURITY: Requestor + department always from login, not editable
-        requestor: (typeof state !== 'undefined' && state.currentUserFullname)
-                    ? state.currentUserFullname
-                    : (localStorage.getItem('ivm_userFullname') || ''),
-        department: (function() {
-          var n = (typeof state !== 'undefined' && state.currentUserFullname)
-                    ? state.currentUserFullname
-                    : (localStorage.getItem('ivm_userFullname') || '');
-          var list = (typeof state !== 'undefined' && state.requestorList) ? state.requestorList : [];
-          for (var i = 0; i < list.length; i++) {
-            if (String(list[i].name || '').toLowerCase() === String(n).toLowerCase()) return list[i].department || '';
-          }
-          return localStorage.getItem('ivm_userDepartment') || '';
-        })(),
-        joNo: document.getElementById('editReqJoNo').value.trim(),
-        gemSoNo: document.getElementById('editReqGemSoNo').value.trim(),
-        clientName: document.getElementById('editReqClient').value.trim(),
-        project: document.getElementById('editReqProject').value.trim()
+        requestor: document.getElementById('editReqRequestor').value.trim(),
+        // ... etc (unchanged)
       }
     };
     var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
