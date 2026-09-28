@@ -1280,12 +1280,18 @@
     var drEl = document.getElementById('manualMrrDrNo');
     var vendorEl = document.getElementById('manualMrrVendor');
     var siteEl = document.getElementById('manualMrrSite');
-    var prepEl = document.getElementById('manualMrrPreparedBy');
+        var prepEl = document.getElementById('manualMrrPreparedBy');
     if (poEl) poEl.value = '';
     if (drEl) drEl.value = '';
     if (vendorEl) vendorEl.value = '';
     if (siteEl) siteEl.value = 'GEMCOR CATMON';
-    if (prepEl) prepEl.value = _getCurrentUserName();
+    // ★ Lock "Prepared By" to login user
+    if (prepEl) {
+      prepEl.value = _getCurrentUserName();
+      prepEl.setAttribute('readonly', 'readonly');
+      prepEl.classList.add('locked-input');
+      prepEl.title = 'Locked to your login account';
+    }
     var dateEl = document.getElementById('manualMrrDate');
     if (dateEl && !dateEl.value) dateEl.valueAsDate = new Date();
     manualMrrItems = [];
@@ -1534,8 +1540,8 @@
       var vendor = document.getElementById('manualMrrVendor') ? document.getElementById('manualMrrVendor').value.trim() : '';
       var site = document.getElementById('manualMrrSite') ? document.getElementById('manualMrrSite').value.trim() : '';
       var receivingDate = document.getElementById('manualMrrDate') ? document.getElementById('manualMrrDate').value : '';
-      var preparedByField = document.getElementById('manualMrrPreparedBy') ? document.getElementById('manualMrrPreparedBy').value.trim() : '';
-      var preparedBy = preparedByField || _getCurrentUserName() || 'WAREHOUSE';
+           // ★ SECURITY: Force from login — never trust the field
+      var preparedBy = _getCurrentUserName() || 'WAREHOUSE';
 
       var items = [];
       for (var i = 0; i < manualMrrItems.length; i++) {
