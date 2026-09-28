@@ -1,6 +1,7 @@
 // ============================================================
 // SUPABASE API — DOCUMENTS
-// v3 — All queries as single strings (no array joining issues)
+// v5 — Uses `or=(...)` for status filters, all docs fetched then
+//      filtered locally where possible. Robust against PostgREST quirks.
 // ============================================================
 
 // ═══════════════════════════════════════════════════════════════
@@ -9,20 +10,25 @@
 
 async function sbGetAllPendingDocs(includeCompleted) {
   try {
-    var statusFilter = includeCompleted
-      ? 'status=in.(PENDING,PARTIAL,COMPLETED)'
-      : 'status=in.(PENDING,PARTIAL)';
-
+    // ★ Fetch ALL docs (no status filter in query), filter locally.
+    //    This avoids all PostgREST `in.(...)` parsing issues.
     var query = 'select=doc_no,doc_type,is_bal,status,requestor,department,item_summary,created_at,processed_by,processed_at,jo_no,gem_so_no,client_name,project,po_no,vendor,dr_no,receiving_site,prepared_by,date_prepared,receiving_date'
-              + '&' + statusFilter
               + '&order=created_at.desc';
 
-    var rows = await sbGetAll('documents', query);
+    var allRows = await sbGetAll('documents', query);
 
-    var docs = (rows || []).map(function(r) {
+    // Filter locally
+    var rows = (allRows || []).filter(function(r) {
+      var s = String(r.status || '').toUpperCase();
+      if (includeCompleted) {
+        return s === 'PENDING' || s === 'PARTIAL' || s === 'COMPLETED';
+      }
+      return s === 'PENDING' || s === 'PARTIAL';
+    });
+
+    var docs = rows.map(function(r) {
       return {
-        docNo: r.doc_no,
-        sheetName: r.doc_no,
+        docNo: r.doc_no, sheetName: r.doc_no,
         docType: String(r.doc_type || '').toUpperCase(),
         status: String(r.status || 'PENDING').toUpperCase(),
         isBal: !!r.is_bal,
@@ -33,14 +39,10 @@ async function sbGetAllPendingDocs(includeCompleted) {
         processedBy: r.processed_by || '',
         processedAt: r.processed_at || null,
         url: '',
-        joNo: r.jo_no || '',
-        gemSoNo: r.gem_so_no || '',
-        clientName: r.client_name || '',
-        project: r.project || '',
-        poNo: r.po_no || '',
-        vendor: r.vendor || '',
-        drNo: r.dr_no || '',
-        receivingSite: r.receiving_site || '',
+        joNo: r.jo_no || '', gemSoNo: r.gem_so_no || '',
+        clientName: r.client_name || '', project: r.project || '',
+        poNo: r.po_no || '', vendor: r.vendor || '',
+        drNo: r.dr_no || '', receivingSite: r.receiving_site || '',
         preparedBy: r.prepared_by || '',
         datePrepared: r.date_prepared || '',
         receivingDate: r.receiving_date || ''
@@ -62,16 +64,17 @@ async function sbGetPendingDocs(docType) {
   try {
     var type = String(docType || 'MRIF').toUpperCase();
     var query = 'doc_type=eq.' + encodeURIComponent(type)
-              + '&status=in.(PENDING,PARTIAL)'
               + '&select=doc_no,doc_type,is_bal,status'
               + '&order=created_at.desc';
 
-    var rows = await sbGetAll('documents', query);
+    var allRows = await sbGetAll('documents', query);
 
-    var docs = (rows || []).map(function(r) {
+    var docs = (allRows || []).filter(function(r) {
+      var s = String(r.status || '').toUpperCase();
+      return s === 'PENDING' || s === 'PARTIAL';
+    }).map(function(r) {
       return {
-        docNo: r.doc_no,
-        sheetName: r.doc_no,
+        docNo: r.doc_no, sheetName: r.doc_no,
         docType: String(r.doc_type || '').toUpperCase(),
         status: String(r.status || 'PENDING').toUpperCase(),
         isBal: !!r.is_bal
@@ -113,8 +116,7 @@ async function sbGetDocItems(docNo, docType) {
 
     var items = (itemRows || []).map(function(r) {
       return {
-        inventoryId: r.item_code,
-        itemCode: r.item_code,
+        inventoryId: r.item_code, itemCode: r.item_code,
         description: r.description || '',
         expectedQty: Number(r.requested_qty || 0),
         recQty: Number(r.requested_qty || 0),
@@ -144,26 +146,17 @@ async function sbGetDocItems(docNo, docType) {
       'Prepared By': d.prepared_by || '',
       'Date Prepared': d.date_prepared || '',
       'Receiving Date': d.receiving_date || '',
-      requestor: d.requestor || '',
-      department: d.department || '',
-      joNo: d.jo_no || '',
-      gemSoNo: d.gem_so_no || '',
-      clientName: d.client_name || '',
-      project: d.project || '',
-      poNo: d.po_no || '',
-      vendor: d.vendor || '',
-      drNo: d.dr_no || '',
-      receivingSite: d.receiving_site || 'GEMCOR CATMON',
+      requestor: d.requestor || '', department: d.department || '',
+      joNo: d.jo_no || '', gemSoNo: d.gem_so_no || '',
+      clientName: d.client_name || '', project: d.project || '',
+      poNo: d.po_no || '', vendor: d.vendor || '',
+      drNo: d.dr_no || '', receivingSite: d.receiving_site || 'GEMCOR CATMON',
       preparedBy: d.prepared_by || '',
-      datePrepared: d.date_prepared || '',
-      receivingDate: d.receiving_date || ''
+      datePrepared: d.date_prepared || '', receivingDate: d.receiving_date || ''
     };
 
     return {
-      success: true,
-      info: info,
-      items: items,
-      docNo: docNo,
+      success: true, info: info, items: items, docNo: docNo,
       status: String(d.status || 'PENDING').toUpperCase(),
       _resolvedFrom: 'supabase'
     };
@@ -214,16 +207,12 @@ async function sbGetMyRequests(requestor) {
       var parts = summary.split(' x');
       var firstItem = parts[0] || '';
       var firstQty = parts.length > 1 ? parseInt(parts[1].split(',')[0].trim()) || 0 : 0;
-
       return {
-        docNo: r.doc_no,
-        type: String(r.doc_type || '').toUpperCase(),
+        docNo: r.doc_no, type: String(r.doc_type || '').toUpperCase(),
         requestor: r.requestor || '',
         status: String(r.status || 'PENDING').toUpperCase(),
         timestamp: r.created_at || null,
-        itemCode: firstItem,
-        qty: firstQty,
-        department: ''
+        itemCode: firstItem, qty: firstQty, department: ''
       };
     });
 
@@ -248,26 +237,19 @@ async function sbGetPartialItems() {
 
     var items = (rows || []).map(function(r) {
       return {
-        id: r.id,
-        originalDocNo: r.original_doc_no,
-        balDocNo: r.bal_doc_no || '',
-        docNo: r.original_doc_no,
-        itemCode: r.item_code,
-        description: r.description || '',
+        id: r.id, originalDocNo: r.original_doc_no,
+        balDocNo: r.bal_doc_no || '', docNo: r.original_doc_no,
+        itemCode: r.item_code, description: r.description || '',
         requestedQty: Number(r.requested_qty || 0),
         issuedQty: Number(r.issued_qty || 0),
         remainingQty: Number(r.remaining_qty || 0),
         unit: r.unit || 'PCS',
         originalRowIndex: r.original_row_index || 0,
-        status: r.status,
-        requestor: r.requestor || '',
+        status: r.status, requestor: r.requestor || '',
         department: r.department || '',
-        joNo: r.jo_no || '',
-        gemSoNo: r.gem_so_no || '',
-        clientName: r.client_name || '',
-        project: r.project || '',
-        createdAt: r.created_at,
-        remarks: 'PARTIAL'
+        joNo: r.jo_no || '', gemSoNo: r.gem_so_no || '',
+        clientName: r.client_name || '', project: r.project || '',
+        createdAt: r.created_at, remarks: 'PARTIAL'
       };
     });
 
@@ -279,8 +261,7 @@ async function sbGetPartialItems() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// PARTIAL DOCS BY TYPE
-// Fixed: uses doc_type filter without complex select combined with in.(...)
+// PARTIAL DOCS BY TYPE — fetch all, filter locally
 // ═══════════════════════════════════════════════════════════════
 
 async function sbGetPartialDocsByType(docType) {
@@ -290,19 +271,24 @@ async function sbGetPartialDocsByType(docType) {
       return { success: false, error: 'Invalid docType' };
     }
 
-    // Step 1: fetch all non-completed docs of this type
-    // Keep the query SIMPLE — just doc_type + status, then fetch columns later
+    // ★ Simple query, no status filter
     var docQuery = 'doc_type=eq.' + encodeURIComponent(docType)
-                 + '&status=in.(PENDING,PARTIAL)'
-                 + '&select=id,doc_no,doc_type,is_bal,status,requestor,department,jo_no,gem_so_no,client_name,project,po_no,vendor,dr_no,receiving_site,prepared_by,date_prepared,receiving_date,item_summary,created_at';
+                 + '&select=id,doc_no,doc_type,is_bal,status,requestor,department,jo_no,gem_so_no,client_name,project,po_no,vendor,dr_no,receiving_site,prepared_by,date_prepared,receiving_date,item_summary,created_at'
+                 + '&order=created_at.desc';
 
-    var docs = await sbGetAll('documents', docQuery);
+    var allDocs = await sbGetAll('documents', docQuery);
+
+    // Filter locally: PENDING or PARTIAL only
+    var docs = (allDocs || []).filter(function(d) {
+      var s = String(d.status || '').toUpperCase();
+      return s === 'PENDING' || s === 'PARTIAL';
+    });
 
     if (!docs || docs.length === 0) {
       return { success: true, documents: [], total: 0 };
     }
 
-    // Step 2: build a simple `in.(...)` list — no quotes, no spaces
+    // Fetch items for these docs
     var docNos = docs.map(function(d) { return d.doc_no; });
     var inList = docNos.map(function(n) {
       return encodeURIComponent(String(n));
@@ -311,16 +297,26 @@ async function sbGetPartialDocsByType(docType) {
     var itemQuery = 'doc_no=in.(' + inList + ')'
                   + '&select=doc_no,item_code,description,requested_qty,issued_qty,unit';
 
-    var items = await sbGetAll('doc_items', itemQuery);
+    var items;
+    try {
+      items = await sbGetAll('doc_items', itemQuery);
+    } catch (e) {
+      // Fallback: if `in.(...)` fails, fetch ALL items and filter locally
+      console.warn('[sbGetPartialDocsByType] `in` filter failed, falling back to full fetch');
+      var allItems = await sbGetAll('doc_items',
+        'select=doc_no,item_code,description,requested_qty,issued_qty,unit'
+      );
+      var docSet = {};
+      docNos.forEach(function(n) { docSet[n] = true; });
+      items = (allItems || []).filter(function(it) { return docSet[it.doc_no]; });
+    }
 
-    // Group items by doc_no
     var itemsByDoc = {};
     (items || []).forEach(function(it) {
       if (!itemsByDoc[it.doc_no]) itemsByDoc[it.doc_no] = [];
       itemsByDoc[it.doc_no].push(it);
     });
 
-    // Analyze each doc
     var results = [];
     docs.forEach(function(d) {
       var docItems = itemsByDoc[d.doc_no] || [];
@@ -346,25 +342,16 @@ async function sbGetPartialDocsByType(docType) {
 
       if (partialCount > 0) {
         results.push({
-          docNo: d.doc_no,
-          docType: docType,
-          isBal: !!d.is_bal,
+          docNo: d.doc_no, docType: docType, isBal: !!d.is_bal,
           status: String(d.status || 'PENDING').toUpperCase(),
-          totalItems: docItems.length,
-          partialItems: partialCount,
+          totalItems: docItems.length, partialItems: partialCount,
           remainingQty: totalRemaining,
-          firstItemCode: firstPartialCode,
-          firstItemDesc: firstPartialDesc,
-          requestor: d.requestor || '',
-          department: d.department || '',
-          joNo: d.jo_no || '',
-          gemSoNo: d.gem_so_no || '',
-          clientName: d.client_name || '',
-          project: d.project || '',
-          vendor: d.vendor || '',
-          poNo: d.po_no || '',
-          drNo: d.dr_no || '',
-          receivingSite: d.receiving_site || '',
+          firstItemCode: firstPartialCode, firstItemDesc: firstPartialDesc,
+          requestor: d.requestor || '', department: d.department || '',
+          joNo: d.jo_no || '', gemSoNo: d.gem_so_no || '',
+          clientName: d.client_name || '', project: d.project || '',
+          vendor: d.vendor || '', poNo: d.po_no || '',
+          drNo: d.dr_no || '', receivingSite: d.receiving_site || '',
           preparedBy: d.prepared_by || '',
           datePrepared: d.date_prepared || '',
           receivingDate: d.receiving_date || '',
@@ -400,9 +387,7 @@ async function sbGetDashboardAnalytics() {
 
     var total = 0, pending = 0, completed = 0, partial = 0;
     var mrifCount = 0, mrrCount = 0, mrsCount = 0;
-    var staffCounts = {};
-    var requestorCounts = {};
-    var itemCounts = {};
+    var staffCounts = {}, requestorCounts = {}, itemCounts = {};
     var processingTimesHours = [];
     var dailyMrif = {}, dailyMrr = {}, dailyMrs = {};
 
@@ -435,8 +420,7 @@ async function sbGetDashboardAnalytics() {
       }
 
       if (type === 'MRIF' && r.item_summary) {
-        var summary = String(r.item_summary);
-        summary.split(',').forEach(function(chunk) {
+        String(r.item_summary).split(',').forEach(function(chunk) {
           var m = chunk.trim().match(/^(.+?)\s+x\s*(\d+)/i);
           if (m) {
             var code = m[1].trim();
@@ -474,9 +458,7 @@ async function sbGetDashboardAnalytics() {
     var dailyRequests = sortedDates.map(function(date) {
       return {
         date: date,
-        mrif: dailyMrif[date] || 0,
-        mrr: dailyMrr[date] || 0,
-        mrs: dailyMrs[date] || 0,
+        mrif: dailyMrif[date] || 0, mrr: dailyMrr[date] || 0, mrs: dailyMrs[date] || 0,
         count: (dailyMrif[date] || 0) + (dailyMrr[date] || 0) + (dailyMrs[date] || 0)
       };
     });
@@ -485,11 +467,7 @@ async function sbGetDashboardAnalytics() {
       return itemCounts[b].count - itemCounts[a].count;
     });
     var topItems = sortedItems.map(function(code) {
-      return {
-        itemCode: code,
-        count: itemCounts[code].count,
-        totalQty: itemCounts[code].totalQty
-      };
+      return { itemCode: code, count: itemCounts[code].count, totalQty: itemCounts[code].totalQty };
     });
 
     var sortedStaff = Object.keys(staffCounts).sort(function(a, b) {
@@ -510,7 +488,6 @@ async function sbGetDashboardAnalytics() {
     if (processingTimesHours.length > 0) {
       avgHours = processingTimesHours.reduce(function(a, b) { return a + b; }, 0) / processingTimesHours.length;
     }
-    var avgDays = avgHours / 24;
 
     return {
       success: true,
@@ -518,16 +495,11 @@ async function sbGetDashboardAnalytics() {
       topItems: topItems,
       staffPerformance: staffPerformance,
       requestorPerformance: requestorPerformance,
-      avgProcessingTime: avgDays,
+      avgProcessingTime: avgHours / 24,
       avgProcessingTimeHours: avgHours,
       totals: {
-        total: total,
-        pending: pending,
-        completed: completed,
-        partial: partial,
-        mrif: mrifCount,
-        mrr: mrrCount,
-        mrs: mrsCount
+        total: total, pending: pending, completed: completed, partial: partial,
+        mrif: mrifCount, mrr: mrrCount, mrs: mrsCount
       }
     };
   } catch (err) {
@@ -536,4 +508,4 @@ async function sbGetDashboardAnalytics() {
   }
 }
 
-console.log('✅ supabase-api-docs.js loaded (v3)');
+console.log('✅ supabase-api-docs.js loaded (v5)');
