@@ -1,10 +1,105 @@
 // ============================================================
 // NEW REQUEST FUNCTIONS
-// v3 — Auto-print Manual MRIF, no retry on abort, longer timeouts
+// v4 — Requestor locked to logged-in user (security)
 // ============================================================
 
 if (typeof state !== 'undefined' && state._reqIdemKey === undefined) {
   state._reqIdemKey = null;
+}
+
+// ─── Get the locked requestor info from the current login ───
+function _getLockedRequestor() {
+  var fullname = '';
+  try {
+    if (typeof state !== 'undefined' && state.currentUserFullname) {
+      fullname = String(state.currentUserFullname).trim();
+    }
+  } catch(e) {}
+  if (!fullname) fullname = String(localStorage.getItem('ivm_userFullname') || '').trim();
+  if (!fullname) fullname = String(localStorage.getItem('ivm_requestorName') || '').trim();
+  if (!fullname) fullname = String(localStorage.getItem('ivm_username') || '').trim();
+
+  // Get department from master list if available
+  var department = '';
+  var list = (typeof state !== 'undefined' && state.requestorList) ? state.requestorList : [];
+  for (var i = 0; i < list.length; i++) {
+    if (String(list[i].name || '').trim().toLowerCase() === fullname.toLowerCase()) {
+      department = list[i].department || '';
+      break;
+    }
+  }
+  if (!department) department = localStorage.getItem('ivm_userDepartment') || '';
+
+  return { name: fullname, department: department };
+}
+
+// ─── Lock step 3 fields to the login user ───
+function _lockStep3ToLoginUser() {
+  var locked = _getLockedRequestor();
+  if (!locked.name) return;
+
+  var step3Sel = document.getElementById('step3Requestor');
+  var step3Dept = document.getElementById('step3Department');
+  var reqHidden = document.getElementById('reqRequestor');
+  var reqDept = document.getElementById('reqDepartment');
+  var btnStep3Next = document.getElementById('btnStep3Next');
+
+  // ─── Replace the dropdown with a locked display ───
+  if (step3Sel) {
+    var wrapper = step3Sel.parentElement;
+
+    // Hide the original select
+    step3Sel.style.display = 'none';
+    step3Sel.disabled = true;
+
+    // Remove any existing locked display
+    var existing = wrapper.querySelector('.locked-requestor-display');
+    if (existing) existing.remove();
+
+    // Insert the locked display
+    var lockedHtml = document.createElement('div');
+    lockedHtml.className = 'locked-requestor-display locked-field-display';
+    lockedHtml.innerHTML =
+      '<i class="bi bi-lock-fill lock-icon"></i>' +
+      '<div class="locked-value">' +
+        locked.name +
+        '<span class="locked-hint">Locked to your account — cannot be changed</span>' +
+      '</div>';
+
+    step3Sel.parentElement.insertBefore(lockedHtml, step3Sel);
+  }
+
+  // ─── Lock the department ───
+  if (step3Dept) {
+    step3Dept.value = locked.department || '';
+    step3Dept.setAttribute('readonly', 'readonly');
+    step3Dept.classList.add('locked-input');
+    step3Dept.placeholder = locked.department ? '' : '(Not set — contact admin)';
+  }
+
+  // ─── Sync hidden inputs ───
+  if (reqHidden) reqHidden.value = locked.name;
+  if (reqDept) reqDept.value = locked.department || '';
+
+  // ─── Enable Next since requestor is guaranteed ───
+  if (btnStep3Next) btnStep3Next.disabled = false;
+}
+
+// ─── Unlock / restore for reset ───
+function _resetStep3Lock() {
+  var step3Sel = document.getElementById('step3Requestor');
+  if (step3Sel) {
+    step3Sel.style.display = '';
+    step3Sel.disabled = false;
+    var wrapper = step3Sel.parentElement;
+    var existing = wrapper.querySelector('.locked-requestor-display');
+    if (existing) existing.remove();
+  }
+  var step3Dept = document.getElementById('step3Department');
+  if (step3Dept) {
+    step3Dept.removeAttribute('readonly');
+    step3Dept.classList.remove('locked-input');
+  }
 }
 
 function openNewRequest() {
@@ -13,15 +108,18 @@ function openNewRequest() {
   loadRequestInventory();
   loadRequestorList();
   newRequestModal.show();
+
+  // After the modal is visible, lock step 3
   setTimeout(function() {
-    if (typeof window.autoFillRequestorFromLogin === 'function') {
-      try { window.autoFillRequestorFromLogin(state.requestorList || []); } catch(e) {}
-    }
-  }, 500);
+    _lockStep3ToLoginUser();
+  }, 300);
 }
 
 function resetWizard() {
   if (typeof state !== 'undefined') state._reqIdemKey = null;
+
+  _resetStep3Lock();
+
   document.getElementById('reqDocType').value = '';
   document.getElementById('reqJoNo').value = '';
   document.getElementById('reqRequestor').value = '';
@@ -29,31 +127,45 @@ function resetWizard() {
   document.getElementById('reqGemSoNo').value = '';
   document.getElementById('reqClientName').value = '';
   document.getElementById('reqProject').value = '';
+
   document.querySelectorAll('.doc-type-card').forEach(function(c) { c.classList.remove('selected'); });
   document.getElementById('btnStep1Next').disabled = true;
+
   document.getElementById('step2JoNo').value = '';
   document.getElementById('joNoStatus').innerHTML = '';
+
   document.getElementById('step3Requestor').value = '';
   document.getElementById('step3Department').value = '';
   document.getElementById('btnStep3Next').disabled = true;
+
   document.getElementById('step5ItemsContainer').innerHTML = '';
   addStep5ItemRow();
   document.getElementById('btnStep5Next').disabled = true;
+
   closeWizardScanner();
   goToStep(1);
 }
 
 function goToStep(step) {
   closeWizardScanner();
+
+  // ★ Lock step 3 every time we enter it
+  if (step === 3) {
+    setTimeout(_lockStep3ToLoginUser, 50);
+  }
+
   if (step === 4) {
     var step3Dept = document.getElementById('step3Department');
     if (step3Dept && !step3Dept.hasAttribute('readonly')) {
       var deptVal = (step3Dept.value || '').trim();
-      if (deptVal) { try { localStorage.setItem('ivm_userDepartment', deptVal); } catch(e) {} }
+      if (deptVal) {
+        try { localStorage.setItem('ivm_userDepartment', deptVal); } catch(e) {}
+      }
       var reqDept = document.getElementById('reqDepartment');
       if (reqDept) reqDept.value = deptVal;
     }
   }
+
   document.querySelectorAll('.wizard-step').forEach(function(el) {
     var s = parseInt(el.getAttribute('data-step'));
     el.classList.remove('active', 'completed');
@@ -122,21 +234,11 @@ async function lookupSofDataWizard() {
   } finally { hideLoading(); }
 }
 
+// ─── Locked: requestor change is a no-op ───
 function onStep3RequestorChange() {
-  var sel = document.getElementById('step3Requestor');
-  var selected = sel.options[sel.selectedIndex];
-  var name = sel.value;
-  var dept = selected ? selected.dataset.department : '';
-  document.getElementById('reqRequestor').value = name;
-  document.getElementById('reqDepartment').value = dept || '';
-  var step3Dept = document.getElementById('step3Department');
-  if (step3Dept) {
-    step3Dept.value = dept || '';
-    if (!step3Dept.hasAttribute('readonly') && dept) {
-      try { localStorage.setItem('ivm_userDepartment', dept); } catch(e) {}
-    }
-  }
-  document.getElementById('btnStep3Next').disabled = !name;
+  // ★ Intentionally does nothing — requestor is locked to login.
+  // Re-apply the lock in case anything tried to change it.
+  _lockStep3ToLoginUser();
 }
 
 function populateReviewData() {
@@ -335,15 +437,22 @@ async function submitNewRequest() {
   _isSubmittingNewRequest = true;
   state.isLoading = true;
 
+  // ★ SECURITY: Force requestor from login — ignore whatever is in the field
+  var locked = _getLockedRequestor();
+  var requestor = locked.name;
+  var department = locked.department || '';
+
   var docType = document.getElementById('reqDocType').value;
-  var requestor = document.getElementById('reqRequestor').value.trim();
-  var department = document.getElementById('reqDepartment').value.trim();
   var joNo = document.getElementById('reqJoNo').value.trim();
   var gemSoNo = document.getElementById('reqGemSoNo').value.trim();
   var clientName = document.getElementById('reqClientName').value.trim();
   var project = document.getElementById('reqProject').value.trim();
 
-  if (!requestor) { showToast('Select a requestor', 'warning'); _resetSubmitState(submitBtn, origHtml); return; }
+  if (!requestor) {
+    showToast('Your account is missing a full name. Contact admin.', 'danger');
+    _resetSubmitState(submitBtn, origHtml);
+    return;
+  }
 
   var items = [];
   document.querySelectorAll('#step5ItemsContainer .step5-item-row').forEach(function(row) {
@@ -719,10 +828,27 @@ function buildRequestDetailsHtml(docNo, docType, info, items) {
       '<tbody>' + itemsHtml + '</tbody></table></div></div>';
 }
 
+// ─── Manual MRIF — requestor locked to login ───
 function openManualMrifModal() {
   if (!manualMrifModal) manualMrifModal = new bootstrap.Modal(document.getElementById('manualMrifModal'));
-  document.getElementById('manualMrifRequestor').value = '';
-  document.getElementById('manualMrifDepartment').value = '';
+  var locked = _getLockedRequestor();
+
+  // ★ Lock requestor + department to login user
+  var requestorEl = document.getElementById('manualMrifRequestor');
+  var deptEl = document.getElementById('manualMrifDepartment');
+  if (requestorEl) {
+    requestorEl.value = locked.name || '';
+    requestorEl.setAttribute('readonly', 'readonly');
+    requestorEl.classList.add('locked-input');
+    requestorEl.title = 'Locked to your login account';
+  }
+  if (deptEl) {
+    deptEl.value = locked.department || '';
+    deptEl.setAttribute('readonly', 'readonly');
+    deptEl.classList.add('locked-input');
+    deptEl.title = 'Locked to your login account';
+  }
+
   document.getElementById('manualMrifJoNo').value = '';
   document.getElementById('manualMrifGemSoNo').value = '';
   document.getElementById('manualMrifClient').value = '';
@@ -864,13 +990,13 @@ function filterManualMrifItems(input, idx) {
 function updateManualMrifSubmitButton() {
   var btn = document.getElementById('btnSubmitManualMrif');
   if (!btn) return;
-  var requestor = document.getElementById('manualMrifRequestor').value.trim();
+  // ★ Requestor always filled from login, so only check items
   var hasValidItems = false;
   for (var i = 0; i < manualMrifItems.length; i++) {
     var it = manualMrifItems[i];
     if (it.inventoryId && it.inventoryId.trim() && it.description && it.description.trim() && it.qty > 0) { hasValidItems = true; break; }
   }
-  btn.disabled = !(requestor && hasValidItems);
+  btn.disabled = !hasValidItems;
 }
 
 var _isSubmittingManualMrif = false;
@@ -887,12 +1013,21 @@ async function submitManualMrif() {
   }
   _isSubmittingManualMrif = true;
   try {
-    var requestor = document.getElementById('manualMrifRequestor').value.trim();
-    var department = document.getElementById('manualMrifDepartment').value.trim();
+    // ★ SECURITY: Force requestor + department from login
+    var locked = _getLockedRequestor();
+    var requestor = locked.name;
+    var department = locked.department || '';
+
+    if (!requestor) {
+      showToast('Your account is missing a full name. Contact admin.', 'danger');
+      return;
+    }
+
     var joNo = document.getElementById('manualMrifJoNo').value.trim();
     var gemSoNo = document.getElementById('manualMrifGemSoNo').value.trim();
     var clientName = document.getElementById('manualMrifClient').value.trim();
     var project = document.getElementById('manualMrifProject').value.trim();
+
     var items = [];
     var rows = document.querySelectorAll('#manualMrifItemsBody tr');
     for (var i = 0; i < rows.length; i++) {
@@ -911,7 +1046,6 @@ async function submitManualMrif() {
       if (code && desc && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty, atlQty: atl, unit: unit, remarks: remarks });
     }
     if (items.length === 0) { showToast('Please add at least one valid item', 'warning'); return; }
-    if (!requestor) { showToast('Please enter a requestor name', 'warning'); return; }
 
     var idemKey = 'mmrif_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
     var payload = {
