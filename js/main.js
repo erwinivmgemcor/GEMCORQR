@@ -213,6 +213,8 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
   opts = opts || {};
   var isWarehouseView = opts.warehouse === true;
   var docStatusRaw = String(opts.status || '').toUpperCase();
+  // ★ If caller didn't pass a status, we'll still be able to decide the button
+  //   from the edit-map + the doc's own remarks/status read below.
   var isCompletedDoc = (docStatusRaw === 'COMPLETED');
 
   var modalEl = document.getElementById('myRequestDetailsModal');
@@ -232,16 +234,24 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
   content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading request details...</div></div>';
   modal.show();
 
-  if (isWarehouseView) {
+    if (isWarehouseView) {
     window._editReqMap = {};
   } else {
     try {
-      var emUrl = API_URL + '?action=getMyEditRequests&requestor=' + encodeURIComponent(localStorage.getItem('ivm_username') || '') + '&_t=' + Date.now();
-      var emRes = await fetch(emUrl, { redirect: 'follow' });
+      // ★ Always fetch fresh, no cache — approval status can change at any moment
+      var _reqUser = localStorage.getItem('ivm_username') || '';
+      var emUrl = API_URL + '?action=getMyEditRequests&requestor=' +
+                  encodeURIComponent(_reqUser) +
+                  '&_t=' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+      var emRes = await fetch(emUrl, { redirect: 'follow', cache: 'no-store' });
       var emText = await emRes.text();
       var emData = JSON.parse(emText);
-      window._editReqMap = (emData.success && emData.map) ? emData.map : {};
+      window._editReqMap = (emData && emData.success && emData.map) ? emData.map : {};
+
+      // ★ Debugging: log the map so you can see what came back
+      console.log('[EditReqMap] Loaded for', _reqUser, ':', window._editReqMap);
     } catch(e) {
+      console.warn('[EditReqMap] Failed to load:', e);
       window._editReqMap = {};
     }
   }
