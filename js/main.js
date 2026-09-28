@@ -1,5 +1,7 @@
 // ============================================================
 // MAIN - DOM Ready & Initialization
+// v4 — Fix: Always fetch fresh edit-map when modal opens
+//      so approved docs show "Edit Now" reliably.
 // ============================================================
 
 // Local HTML escaper (defensive — sheet/user data rendered into innerHTML)
@@ -177,7 +179,10 @@ function _editActionButtonHtml(docNo, docType, docStatus) {
 
   // From here down, docStatus was blank OR 'PENDING'.
   var map = window._editReqMap || {};
-  var entry = map[docNo];
+  var entry = map[docNo] || map[String(docNo || '').toUpperCase()];
+
+  // If the map has a status but no doc-specific entry (unlikely), bail.
+  if (entry && typeof entry === 'object' && !entry.status) entry = null;
 
   if (!entry) {
     return '<button class="btn btn-sm btn-outline-warning" onclick="requestEditPermissionFromUser(\'' + safeDoc + '\', \'' + safeType + '\')">' +
@@ -190,7 +195,7 @@ function _editActionButtonHtml(docNo, docType, docStatus) {
     '</span>';
   }
   if (entry.status === 'APPROVED') {
-    return '<button class="btn btn-sm btn-success" onclick="openRequestEditModal(\'' + safeDoc + '\', \'' + safeType + '\')">' +
+    return '<button class="btn btn-sm btn-success fw-bold" onclick="openRequestEditModal(\'' + safeDoc + '\', \'' + safeType + '\')">' +
       '<i class="bi bi-pencil-square me-1"></i>Edit Now' +
     '</button>';
   }
@@ -208,13 +213,47 @@ function _editActionButtonHtml(docNo, docType, docStatus) {
   return '';
 }
 
-// ─── My Request Details ───
+// ─── Refresh just the edit-status portion of the modal ───
+window.refreshEditStatusInModal = async function(docNo, docType, docStatus) {
+  var container = document.getElementById('editBtnContainer');
+  if (!container) return;
+  container.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+  try {
+    var reqUser = localStorage.getItem('ivm_username') || '';
+    var url = API_URL + '?action=getMyEditRequests&requestor=' +
+              encodeURIComponent(reqUser) +
+              '&_t=' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    var res = await fetch(url, { redirect: 'follow', cache: 'no-store' });
+    var text = await res.text();
+    var data = JSON.parse(text);
+    window._editReqMap = (data && data.success && data.map) ? data.map : {};
+
+    container.innerHTML = _editActionButtonHtml(docNo, docType, docStatus);
+
+    var entry = window._editReqMap[docNo] || window._editReqMap[String(docNo).toUpperCase()];
+    if (entry && entry.status === 'APPROVED') {
+      showToast('Edit approved — click Edit Now.', 'success');
+    } else if (entry && entry.status === 'PENDING') {
+      showToast('Still waiting for warehouse approval.', 'info');
+    } else if (entry && entry.status === 'REJECTED') {
+      showToast('Edit request was rejected.', 'warning');
+    } else {
+      showToast('No active edit request.', 'info');
+    }
+  } catch(e) {
+    container.innerHTML = _editActionButtonHtml(docNo, docType, docStatus);
+    showToast('Could not refresh: ' + e.message, 'danger');
+  }
+};
+
+// ─── My Request Details (also used by Warehouse All Requests view) ───
+// opts.warehouse = true   → shows Process Request button instead of edit
+// opts.status    = current doc status ('PENDING'|'PARTIAL'|'COMPLETED')
 window.openMyRequestDetails = async function(docNo, docType, opts) {
   opts = opts || {};
   var isWarehouseView = opts.warehouse === true;
   var docStatusRaw = String(opts.status || '').toUpperCase();
-  // ★ If caller didn't pass a status, we'll still be able to decide the button
-  //   from the edit-map + the doc's own remarks/status read below.
   var isCompletedDoc = (docStatusRaw === 'COMPLETED');
 
   var modalEl = document.getElementById('myRequestDetailsModal');
@@ -234,11 +273,11 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
   content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading request details...</div></div>';
   modal.show();
 
-    if (isWarehouseView) {
+  // ─── ★ Always fetch fresh edit-request map for production users ───
+  if (isWarehouseView) {
     window._editReqMap = {};
   } else {
     try {
-      // ★ Always fetch fresh, no cache — approval status can change at any moment
       var _reqUser = localStorage.getItem('ivm_username') || '';
       var emUrl = API_URL + '?action=getMyEditRequests&requestor=' +
                   encodeURIComponent(_reqUser) +
@@ -247,8 +286,6 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
       var emText = await emRes.text();
       var emData = JSON.parse(emText);
       window._editReqMap = (emData && emData.success && emData.map) ? emData.map : {};
-
-      // ★ Debugging: log the map so you can see what came back
       console.log('[EditReqMap] Loaded for', _reqUser, ':', window._editReqMap);
     } catch(e) {
       console.warn('[EditReqMap] Failed to load:', e);
@@ -345,7 +382,7 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
   var jsDoc = String(docNo).replace(/'/g, "\\'");
   var jsType = String(docType || 'MRIF').replace(/'/g, "\\'");
 
-   var actionButtons = '<button class="btn btn-sm btn-outline-primary" onclick="discussDocument(\'' + jsDoc + '\', \'' + jsType + '\')">' +
+  var actionButtons = '<button class="btn btn-sm btn-outline-primary" onclick="discussDocument(\'' + jsDoc + '\', \'' + jsType + '\')">' +
     '<i class="bi bi-chat-dots me-1"></i>Discuss' +
   '</button>';
 
@@ -355,37 +392,17 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
         '<i class="bi bi-check-circle-fill me-1"></i>Completed' +
       '</span>';
     } else {
-      // ★ Prep status buttons — visible only for active docs
-      var prepStatus = String(opts.prepStatus || 'NEW').toUpperCase();
-      var prepBadgeHtml = '';
-      if (prepStatus === 'PREPARED') {
-        prepBadgeHtml =
-          '<span class="btn btn-sm btn-success disabled" title="Marked as prepared">' +
-            '<i class="bi bi-check-circle-fill me-1"></i>Prepared' +
-          '</span>' +
-          '<button class="btn btn-sm btn-warning" onclick="markPrepStatus(\'' + jsDoc + '\', \'PICKED_UP\')">' +
-            '<i class="bi bi-box-arrow-up-right me-1"></i>Mark Picked Up' +
-          '</button>';
-      } else if (prepStatus === 'PICKED_UP') {
-        prepBadgeHtml =
-          '<span class="btn btn-sm btn-warning disabled" title="Picked up by production">' +
-            '<i class="bi bi-box-arrow-up-right me-1"></i>Picked Up' +
-          '</span>';
-      } else {
-        prepBadgeHtml =
-          '<button class="btn btn-sm btn-outline-danger" onclick="markPrepStatus(\'' + jsDoc + '\', \'PREPARED\')">' +
-            '<i class="bi bi-check-circle me-1"></i>Mark Prepared' +
-          '</button>';
-      }
-      actionButtons += prepBadgeHtml;
-
-      // Process button
       actionButtons += '<button class="btn btn-sm btn-success" onclick="processRequestFromDetails(\'' + jsDoc + '\', \'' + jsType + '\')">' +
         '<i class="bi bi-play-circle me-1"></i>Process Request' +
       '</button>';
     }
   } else {
-    actionButtons += _editActionButtonHtml(docNo, docType || 'MRIF', docStatusRaw);
+    // ★ Production side — wrap edit button in a container so refresh works
+    actionButtons += '<span id="editBtnContainer">' + _editActionButtonHtml(docNo, docType || 'MRIF', docStatusRaw) + '</span>' +
+      '<button class="btn btn-sm btn-outline-secondary" title="Refresh edit status" ' +
+        'onclick="refreshEditStatusInModal(\'' + jsDoc + '\', \'' + jsType + '\', \'' + String(docStatusRaw || '').replace(/'/g, "\\'") + '\')">' +
+        '<i class="bi bi-arrow-clockwise"></i>' +
+      '</button>';
   }
 
   content.innerHTML =
@@ -435,6 +452,7 @@ window.downloadMyRequestQr = function() {
 };
 
 // ─── Render My Requests (production view) ───
+// Prep status shown ONLY for PENDING / PARTIAL docs. Completed docs show no prep badge.
 var originalRenderMyRequests = window.renderMyRequests || function() {};
 
 window.renderMyRequests = async function(requests) {
@@ -491,6 +509,7 @@ window.renderMyRequests = async function(requests) {
     var itemCode = _escMain(req.itemCode || '');
     var qty = parseInt(req.qty, 10) || 0;
 
+    // ★ Prep status only applies to active docs. Completed docs show no prep badge.
     var prepClass = '';
     var prepBadge = '';
     if (!isCompleted) {
@@ -681,11 +700,11 @@ function renderAllRequests(docs, statusFilter, prepMap) {
         '</div>';
     }
 
+    var prepForAttr = isCompleted ? 'NONE' : _prepStatusFromMap(prepMap, docNoRaw);
     var cardClass = 'all-request-card ' + prepClass;
     if (isCompleted) cardClass += ' completed';
     else if (isPartial) cardClass += ' partial';
 
-        var prepForAttr = isCompleted ? 'NONE' : _prepStatusFromMap(prepMap, docNoRaw);
     html += '<div class="list-group-item ' + cardClass + '" ' +
       'data-docno="' + docNo + '" data-doctype="' + docType + '" data-status="' + _escMain(status) + '" data-prep="' + prepForAttr + '" style="cursor:pointer;">' +
         '<div class="d-flex justify-content-between align-items-start flex-wrap gap-2">' +
@@ -803,8 +822,6 @@ function checkUrlDocParam() {
 // ─── DOM Ready ───
 document.addEventListener('DOMContentLoaded', function() {
   // ★ PRINT-ONLY MODE — must be the FIRST thing we check.
-  // If the URL has ?view=print, we show a standalone read-only preview
-  // and completely skip the interactive app (no login, no sidebar, no scanner).
   var _urlParams = new URLSearchParams(window.location.search);
   var _urlDoc = _urlParams.get('doc');
   var _urlView = (_urlParams.get('view') || '').toLowerCase();
@@ -813,24 +830,23 @@ document.addEventListener('DOMContentLoaded', function() {
     var _pv = document.getElementById('printOnlyView');
     if (_pv) _pv.classList.remove('d-none');
     enterPrintOnlyMode(_urlDoc);
-    return; // ← skip all normal app init
+    return;
   }
 
   var sidebarVerText = document.getElementById('sidebarAppVersionText');
-if (sidebarVerText && typeof APP_VERSION !== 'undefined') {
-  sidebarVerText.textContent = 'v' + APP_VERSION;
-} else {
-  var sidebarVer = document.getElementById('sidebarAppVersion');
-  if (sidebarVer && typeof APP_VERSION !== 'undefined') {
-    sidebarVer.textContent = 'v' + APP_VERSION;
+  if (sidebarVerText && typeof APP_VERSION !== 'undefined') {
+    sidebarVerText.textContent = 'v' + APP_VERSION;
+  } else {
+    var sidebarVer = document.getElementById('sidebarAppVersion');
+    if (sidebarVer && typeof APP_VERSION !== 'undefined') {
+      sidebarVer.textContent = 'v' + APP_VERSION;
+    }
   }
-}
 
-// Optional: show build number / hash under the version
-var sidebarBuild = document.getElementById('sidebarBuild');
-if (sidebarBuild && typeof APP_BUILD !== 'undefined' && APP_BUILD) {
-  sidebarBuild.textContent = 'build ' + APP_BUILD;
-}
+  var sidebarBuild = document.getElementById('sidebarBuild');
+  if (sidebarBuild && typeof APP_BUILD !== 'undefined' && APP_BUILD) {
+    sidebarBuild.textContent = 'build ' + APP_BUILD;
+  }
 
   var modalIds = ['qtyModal', 'successModal', 'settingsModal', 'newRequestModal',
     'requestSuccessModal', 'whNotifModal', 'mrifListModal', 'mrifPrintModal',
@@ -906,8 +922,6 @@ if (sidebarBuild && typeof APP_BUILD !== 'undefined' && APP_BUILD) {
 
 // ═══════════════════════════════════════════════════════════════
 // PRINT-ONLY MODE — public read-only view of a document
-// Triggered by ?doc=X&view=print. No login required, no navigation,
-// no processing. Just the printable sheet + Print/Save-as-PDF.
 // ═══════════════════════════════════════════════════════════════
 
 async function enterPrintOnlyMode(docNo) {
