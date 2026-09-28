@@ -1,23 +1,17 @@
 // ============================================================
 // SUPABASE API — DOCUMENTS
-// v6 — Removes all `select` clauses to avoid PostgREST parser errors
-//      Fetches all columns, filters locally
+// v6 — No select clauses (avoids PostgREST parser issues)
 // ============================================================
 
 async function sbGetAllPendingDocs(includeCompleted) {
   try {
-    // ★ No select, no order — just fetch everything
     var allRows = await sbGetAll('documents', '');
-    
     var rows = (allRows || []).filter(function(r) {
       var s = String(r.status || '').toUpperCase();
-      if (includeCompleted) {
-        return s === 'PENDING' || s === 'PARTIAL' || s === 'COMPLETED';
-      }
+      if (includeCompleted) return s === 'PENDING' || s === 'PARTIAL' || s === 'COMPLETED';
       return s === 'PENDING' || s === 'PARTIAL';
     });
 
-    // Sort newest first (locally)
     rows.sort(function(a, b) {
       var ta = a.created_at ? new Date(a.created_at).getTime() : 0;
       var tb = b.created_at ? new Date(b.created_at).getTime() : 0;
@@ -57,12 +51,11 @@ async function sbGetAllPendingDocs(includeCompleted) {
 async function sbGetPendingDocs(docType) {
   try {
     var type = String(docType || 'MRIF').toUpperCase();
-    // ★ Only filter, no select, no order
-    var allRows = await sbGetAll('documents', 'doc_type=eq.' + encodeURIComponent(type));
-    
+    var allRows = await sbGetAll('documents', '');
     var docs = (allRows || []).filter(function(r) {
+      var t = String(r.doc_type || '').toUpperCase();
       var s = String(r.status || '').toUpperCase();
-      return s === 'PENDING' || s === 'PARTIAL';
+      return t === type && (s === 'PENDING' || s === 'PARTIAL');
     }).map(function(r) {
       return {
         docNo: r.doc_no, sheetName: r.doc_no,
@@ -71,7 +64,6 @@ async function sbGetPendingDocs(docType) {
         isBal: !!r.is_bal
       };
     });
-
     return { success: true, documents: docs };
   } catch (err) {
     console.error('[sbGetPendingDocs]', err);
@@ -82,18 +74,13 @@ async function sbGetPendingDocs(docType) {
 async function sbGetDocItems(docNo, docType) {
   try {
     if (!docNo) return { success: false, error: 'docNo required' };
-
-    // Get doc (no select)
     var docRows = await sbGet('documents', 'doc_no=eq.' + encodeURIComponent(docNo) + '&limit=1');
     if (!docRows || docRows.length === 0) {
       return { success: false, error: 'Document not found: ' + docNo };
     }
     var d = docRows[0];
 
-    // Get items (no select)
     var itemRows = await sbGetAll('doc_items', 'doc_no=eq.' + encodeURIComponent(docNo));
-
-    // Sort by line_no locally
     itemRows.sort(function(a, b) {
       return (Number(a.line_no) || 0) - (Number(b.line_no) || 0);
     });
@@ -169,10 +156,10 @@ async function sbGetDocLinkStatus(docNo) {
 async function sbGetMyRequests(requestor) {
   try {
     if (!requestor) return { success: false, error: 'requestor required' };
-
-    var allRows = await sbGetAll('documents', 'requestor=eq.' + encodeURIComponent(requestor));
-
-    var requests = (allRows || []).map(function(r) {
+    var allRows = await sbGetAll('documents', '');
+    var requests = (allRows || []).filter(function(r) {
+      return String(r.requestor || '').toLowerCase() === String(requestor).toLowerCase();
+    }).map(function(r) {
       var summary = String(r.item_summary || '');
       var parts = summary.split(' x');
       var firstItem = parts[0] || '';
@@ -185,7 +172,6 @@ async function sbGetMyRequests(requestor) {
         itemCode: firstItem, qty: firstQty, department: ''
       };
     });
-
     return { success: true, requests: requests };
   } catch (err) {
     console.error('[sbGetMyRequests]', err);
@@ -195,8 +181,10 @@ async function sbGetMyRequests(requestor) {
 
 async function sbGetPartialItems() {
   try {
-    var rows = await sbGetAll('partial_items', 'status=eq.OPEN');
-    var items = (rows || []).map(function(r) {
+    var rows = await sbGetAll('partial_items', '');
+    var items = (rows || []).filter(function(r) {
+      return String(r.status || '').toUpperCase() === 'OPEN';
+    }).map(function(r) {
       return {
         id: r.id, originalDocNo: r.original_doc_no,
         balDocNo: r.bal_doc_no || '', docNo: r.original_doc_no,
@@ -226,20 +214,17 @@ async function sbGetPartialDocsByType(docType) {
     if (['MRIF', 'MRR', 'MRS'].indexOf(docType) === -1) {
       return { success: false, error: 'Invalid docType' };
     }
-
-    // ★ Simplest query — walang select, walang order, filter lang
-    var allDocs = await sbGetAll('documents', 'doc_type=eq.' + encodeURIComponent(docType));
-
+    var allDocs = await sbGetAll('documents', '');
     var docs = (allDocs || []).filter(function(d) {
+      var t = String(d.doc_type || '').toUpperCase();
       var s = String(d.status || '').toUpperCase();
-      return s === 'PENDING' || s === 'PARTIAL';
+      return t === docType && (s === 'PENDING' || s === 'PARTIAL');
     });
 
     if (!docs || docs.length === 0) {
       return { success: true, documents: [], total: 0 };
     }
 
-    // Fetch all items, filter locally
     var allItems = await sbGetAll('doc_items', '');
     var docSet = {};
     docs.forEach(function(d) { docSet[d.doc_no] = true; });
@@ -255,10 +240,8 @@ async function sbGetPartialDocsByType(docType) {
     docs.forEach(function(d) {
       var docItems = itemsByDoc[d.doc_no] || [];
       if (docItems.length === 0) return;
-
       var partialCount = 0, totalRemaining = 0;
       var firstPartialCode = '', firstPartialDesc = '';
-
       docItems.forEach(function(it) {
         var requested = Number(it.requested_qty || 0);
         var issued = Number(it.issued_qty || 0);
@@ -271,7 +254,6 @@ async function sbGetPartialDocsByType(docType) {
           }
         }
       });
-
       if (partialCount > 0) {
         results.push({
           docNo: d.doc_no, docType: docType, isBal: !!d.is_bal,
@@ -297,7 +279,6 @@ async function sbGetPartialDocsByType(docType) {
       var tb = b.created_at ? new Date(b.created_at).getTime() : 0;
       return tb - ta;
     });
-
     return { success: true, documents: results, total: results.length };
   } catch (err) {
     console.error('[sbGetPartialDocsByType]', err);
@@ -307,9 +288,7 @@ async function sbGetPartialDocsByType(docType) {
 
 async function sbGetDashboardAnalytics() {
   try {
-    // ★ No select — kunin lahat
     var docs = await sbGetAll('documents', '');
-
     var now = new Date();
     var thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
@@ -328,11 +307,9 @@ async function sbGetDashboardAnalytics() {
       total++;
       var type = String(r.doc_type || '').toUpperCase();
       var status = String(r.status || 'PENDING').toUpperCase();
-
       if (type === 'MRIF') mrifCount++;
       else if (type === 'MRR') mrrCount++;
       else if (type === 'MRS') mrsCount++;
-
       if (status === 'PENDING') pending++;
       else if (status === 'COMPLETED') completed++;
       else if (status === 'PARTIAL') partial++;
@@ -346,7 +323,6 @@ async function sbGetDashboardAnalytics() {
           else if (type === 'MRS' && dailyMrs[ds2] !== undefined) dailyMrs[ds2]++;
         }
       }
-
       if (type === 'MRIF' && r.item_summary) {
         String(r.item_summary).split(',').forEach(function(chunk) {
           var m = chunk.trim().match(/^(.+?)\s+x\s*(\d+)/i);
@@ -359,19 +335,16 @@ async function sbGetDashboardAnalytics() {
           }
         });
       }
-
       if (r.processed_by) {
         var staff = String(r.processed_by).trim();
         if (staff) staffCounts[staff] = (staffCounts[staff] || 0) + 1;
       }
-
       if (type === 'MRIF' && r.requestor) {
         var req = String(r.requestor).trim();
         if (req && req.toUpperCase() !== 'WAREHOUSE') {
           requestorCounts[req] = (requestorCounts[req] || 0) + 1;
         }
       }
-
       if (status === 'COMPLETED' && r.created_at && r.processed_at) {
         var created = new Date(r.created_at);
         var processed = new Date(r.processed_at);
