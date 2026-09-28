@@ -1,14 +1,13 @@
 // ============================================================
 // SUPABASE API CORE
 // Generic helpers + User auth + Inventory + Vendors + Requestors
+// v2 — Fixed sbGetAll to build proper query strings
 // ============================================================
 
 // ═══════════════════════════════════════════════════════════════
 // GENERIC REST HELPERS
-// These wrap Supabase's PostgREST API — same feel as GAS but faster.
 // ═══════════════════════════════════════════════════════════════
 
-// ─── Generic GET with query string ───
 async function sbGet(table, query) {
   var url = sbUrl(table) + (query ? '?' + query : '');
   try {
@@ -24,7 +23,6 @@ async function sbGet(table, query) {
   }
 }
 
-// ─── Generic POST (insert) ───
 async function sbPost(table, body) {
   try {
     var res = await fetch(sbUrl(table), {
@@ -43,7 +41,6 @@ async function sbPost(table, body) {
   }
 }
 
-// ─── Generic PATCH (update) ───
 async function sbPatch(table, query, body) {
   try {
     var res = await fetch(sbUrl(table) + '?' + query, {
@@ -63,7 +60,6 @@ async function sbPatch(table, query, body) {
   }
 }
 
-// ─── Generic DELETE ───
 async function sbDelete(table, query) {
   try {
     var res = await fetch(sbUrl(table) + '?' + query, {
@@ -82,9 +78,47 @@ async function sbDelete(table, query) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// PAGINATION HELPER — fixed to build proper query strings
+// ═══════════════════════════════════════════════════════════════
+//
+// Accepts a base query string (WITHOUT leading ? or &) and appends
+// limit + offset each iteration.
+//
+// Example:
+//   sbGetAll('inventory', 'select=item_code&order=item_code.asc')
+//   → iterates with:
+//     select=item_code&order=item_code.asc&limit=1000&offset=0
+//     select=item_code&order=item_code.asc&limit=1000&offset=1000
+//     ...
+//
+async function sbGetAll(table, baseQuery) {
+  var allRows = [];
+  var offset = 0;
+  var limit = 1000;
+  var hasMore = true;
+
+  // Strip any leading ? or & to avoid double separators
+  var cleanQuery = String(baseQuery || '').replace(/^[?&]+/, '');
+
+  while (hasMore) {
+    // Build the query string cleanly: filters first, then limit, then offset
+    var parts = [];
+    if (cleanQuery) parts.push(cleanQuery);
+    parts.push('limit=' + limit);
+    parts.push('offset=' + offset);
+    var q = parts.join('&');
+
+    var batch = await sbGet(table, q);
+    if (!batch || batch.length === 0) break;
+    allRows = allRows.concat(batch);
+    if (batch.length < limit) hasMore = false;
+    else offset += limit;
+  }
+  return allRows;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // USER AUTHENTICATION
-// Same output shape as GAS verifyUser so the rest of the app
-// doesn't need changes.
 // ═══════════════════════════════════════════════════════════════
 
 async function sbVerifyUser(username, password) {
@@ -95,14 +129,11 @@ async function sbVerifyUser(username, password) {
       '&select=username,fullname,roles,department' +
       '&limit=1'
     );
-
     if (!rows || rows.length === 0) {
       return { success: false, error: 'Invalid username or password' };
     }
-
     var u = rows[0];
     var roles = Array.isArray(u.roles) && u.roles.length > 0 ? u.roles : ['warehouse'];
-
     return {
       success: true,
       username: u.username,
@@ -128,30 +159,14 @@ async function sbGetUsers() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// INVENTORY
+// INVENTORY — with pagination (3165+ items)
 // ═══════════════════════════════════════════════════════════════
 
-// Same shape as GAS getInventoryItems (returns items array)
 async function sbGetInventoryItems() {
   try {
-    // Paginate: Supabase returns max 1000 per request by default
-    var allRows = [];
-    var offset = 0;
-    var limit = 1000;
-    var hasMore = true;
-
-    while (hasMore) {
-      var batch = await sbGet('inventory',
-        'select=item_code,description,unit,item_class&order=item_code.asc&limit=' + limit + '&offset=' + offset
-      );
-      if (!batch || batch.length === 0) break;
-      allRows = allRows.concat(batch);
-      if (batch.length < limit) hasMore = false;
-      else offset += limit;
-    }
-
-    var rows = allRows;
-
+    var rows = await sbGetAll('inventory',
+      'select=item_code,description,unit,item_class&order=item_code.asc'
+    );
     var items = (rows || []).map(function(r) {
       return {
         inventoryId: r.item_code,
@@ -161,35 +176,18 @@ async function sbGetInventoryItems() {
         itemClass: r.item_class || ''
       };
     });
-
     return { success: true, items: items, total: items.length };
   } catch (err) {
     console.error('[sbGetInventoryItems]', err);
-    return { success: false, error: err.message };
+    return { success: false, error: err.message, items: [] };
   }
 }
 
-// Same shape as GAS getInventoryList (returns inventory array)
 async function sbGetInventoryList() {
   try {
-    // Paginate
-    var allRows = [];
-    var offset = 0;
-    var limit = 1000;
-    var hasMore = true;
-
-    while (hasMore) {
-      var batch = await sbGet('inventory',
-        'select=item_code,description,unit,item_class&order=item_code.asc&limit=' + limit + '&offset=' + offset
-      );
-      if (!batch || batch.length === 0) break;
-      allRows = allRows.concat(batch);
-      if (batch.length < limit) hasMore = false;
-      else offset += limit;
-    }
-
-    var rows = allRows;
-
+    var rows = await sbGetAll('inventory',
+      'select=item_code,description,unit,item_class&order=item_code.asc'
+    );
     var items = (rows || []).map(function(r) {
       return {
         code: r.item_code,
@@ -199,71 +197,70 @@ async function sbGetInventoryList() {
         itemClass: r.item_class || ''
       };
     });
-
     return { success: true, inventory: items };
   } catch (err) {
     console.error('[sbGetInventoryList]', err);
-    return { success: false, error: err.message };
+    return { success: false, error: err.message, inventory: [] };
   }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// REQUESTORS — for production request wizard
+// REQUESTORS
 // ═══════════════════════════════════════════════════════════════
 
 async function sbGetRequestorList() {
   try {
-    var rows = await sbGet('requestors',
+    var rows = await sbGetAll('requestors',
       'select=name,department&order=name.asc'
     );
     return { success: true, requestors: rows || [] };
   } catch (err) {
     console.error('[sbGetRequestorList]', err);
-    return { success: false, error: err.message };
+    return { success: false, error: err.message, requestors: [] };
   }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// VENDORS — for manual MRR form
+// VENDORS
 // ═══════════════════════════════════════════════════════════════
 
 async function sbGetVendorList() {
   try {
-    var rows = await sbGet('vendors',
+    var rows = await sbGetAll('vendors',
       'select=name&order=name.asc'
     );
     var vendors = (rows || []).map(function(r) { return r.name; });
     return { success: true, vendors: vendors };
   } catch (err) {
     console.error('[sbGetVendorList]', err);
-    return { success: false, error: err.message };
+    return { success: false, error: err.message, vendors: [] };
   }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// IVM TEAM — for "Prepared By" datalist
+// IVM TEAM
 // ═══════════════════════════════════════════════════════════════
 
 async function sbGetIvmTeamList() {
   try {
-    var rows = await sbGet('ivm_team',
+    var rows = await sbGetAll('ivm_team',
       'select=name&order=name.asc'
     );
     var members = (rows || []).map(function(r) { return r.name; });
     return { success: true, members: members };
   } catch (err) {
     console.error('[sbGetIvmTeamList]', err);
-    return { success: false, error: err.message };
+    return { success: false, error: err.message, members: [] };
   }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// PREP STATUS (Red/Green/Yellow color coding)
+// PREP STATUS
 // ═══════════════════════════════════════════════════════════════
 
 async function sbGetAllPrepStatuses() {
   try {
-    var rows = await sbGet('prep_status',
+    var rows = await sbGetAll('prep_status',
       'select=doc_no,prep_status,updated_by,updated_at'
     );
     var statuses = {};
@@ -287,7 +284,6 @@ async function sbSetPrepStatus(docNo, prepStatus, updatedBy) {
     var normalized = String(prepStatus || 'NEW').toUpperCase();
     if (normalized !== 'PREPARED' && normalized !== 'PICKED_UP') normalized = 'NEW';
 
-    // Check if exists
     var existing = await sbGet('prep_status',
       'doc_no=eq.' + encodeURIComponent(docNo) + '&select=id&limit=1'
     );
@@ -318,7 +314,7 @@ async function sbSetPrepStatus(docNo, prepStatus, updatedBy) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// IDEMPOTENCY (prevent duplicate submissions)
+// IDEMPOTENCY
 // ═══════════════════════════════════════════════════════════════
 
 async function sbCheckIdempotency(key) {
@@ -346,7 +342,6 @@ async function sbSaveIdempotency(key, response) {
       response: response
     });
   } catch (e) {
-    // Ignore duplicate errors
     if (String(e.message).indexOf('409') === -1 && String(e.message).indexOf('duplicate') === -1) {
       console.warn('[sbSaveIdempotency]', e.message);
     }
@@ -362,4 +357,4 @@ async function sbProcessWithIdempotency(key, fn) {
   return result;
 }
 
-console.log('✅ supabase-api-core.js loaded');
+console.log('✅ supabase-api-core.js loaded (v2)');
