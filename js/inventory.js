@@ -1,5 +1,5 @@
 // ============================================================
-// INVENTORY BROWSER (with caching)
+// INVENTORY BROWSER (with Item Class + caching)
 // ============================================================
 
 var inventoryBrowserModal = null;
@@ -49,8 +49,9 @@ function openQrZoom(item) {
 async function fetchInventoryItems(forceRefresh) {
   var tbody = document.getElementById('inventoryBrowserBody');
   if (!tbody) return;
-  
-  const cacheKey = 'inventoryItems';
+
+  const cacheKey = 'inventoryItems_v2';   // ★ new key to force refresh of old cache
+
   if (!forceRefresh) {
     const cached = getCache(cacheKey);
     if (cached) {
@@ -62,7 +63,7 @@ async function fetchInventoryItems(forceRefresh) {
     }
   }
 
-  tbody.innerHTML = '<tr><td colspan="3" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading inventory...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading inventory...</td></tr>';
 
   try {
     var sheetId = '1HSxuSlik8hvbHppOE56ICzl1Jz9cCxFWCJ4EN-bzVFs';
@@ -86,11 +87,11 @@ async function fetchInventoryItems(forceRefresh) {
     } else {
       var errorMsg = data.error || 'No items found. Please check that your inventory sheet exists and has data.';
       console.error('[fetchInventoryItems] Error:', errorMsg);
-      tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-3">' + errorMsg + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger py-3">' + errorMsg + '</td></tr>';
     }
   } catch(err) {
     console.error('[fetchInventoryItems] Error:', err);
-    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Could not load inventory. Please try again.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Could not load inventory. Please try again.</td></tr>';
   }
 }
 
@@ -99,7 +100,7 @@ function renderInventoryItems() {
   if (!tbody) return;
 
   if (inventoryBrowserFiltered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No items match your search</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No items match your search</td></tr>';
     return;
   }
 
@@ -108,16 +109,21 @@ function renderInventoryItems() {
     var it = inventoryBrowserFiltered[i];
     var code = it.inventoryId || it.code || '';
     var desc = it.description || '';
+    var itemClass = it.itemClass || '';
     var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=' + encodeURIComponent(code);
-    var safeCode = code.replace(/'/g, "\\'");
-    var safeDesc = desc.replace(/'/g, "\\'");
 
-    html += '<tr class="inventory-row" style="cursor:pointer;" onclick="openQrZoom({inventoryId:\'' + safeCode + '\', code:\'' + safeCode + '\', description:\'' + safeDesc + '\'})">' +
+    // Escape single quotes for inline onclick
+    var safeCode = String(code).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    var safeDesc = String(desc).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    var safeClass = String(itemClass).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+    html += '<tr class="inventory-row" style="cursor:pointer;" onclick="openQrZoom({inventoryId:\'' + safeCode + '\', code:\'' + safeCode + '\', description:\'' + safeDesc + '\', itemClass:\'' + safeClass + '\'})">' +
       '<td class="align-middle text-center">' +
         '<img src="' + qrUrl + '" style="width:40px;height:40px;" alt="QR" onerror="this.onerror=null;this.src=\'' + QR_PLACEHOLDER + '\';">' +
       '</td>' +
       '<td class="align-middle"><code>' + code + '</code></td>' +
       '<td class="align-middle">' + desc + '</td>' +
+      '<td class="align-middle"><span class="badge bg-light text-dark" style="font-size:0.72rem;font-weight:600;">' + (itemClass || '—') + '</span></td>' +
       '</tr>';
   }
   tbody.innerHTML = html;
@@ -130,7 +136,8 @@ function filterInventoryItems() {
   } else {
     inventoryBrowserFiltered = inventoryItemsCache.filter(function(it) {
       return (it.inventoryId && it.inventoryId.toLowerCase().indexOf(query) !== -1) ||
-             (it.description && it.description.toLowerCase().indexOf(query) !== -1);
+             (it.description && it.description.toLowerCase().indexOf(query) !== -1) ||
+             (it.itemClass && it.itemClass.toLowerCase().indexOf(query) !== -1);
     });
   }
   renderInventoryItems();
