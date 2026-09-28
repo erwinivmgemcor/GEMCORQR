@@ -1,22 +1,15 @@
 // ============================================================
 // SUPABASE CONFIGURATION
 // ============================================================
-// This file is only loaded when USE_SUPABASE = true.
-// The GAS version uses js/config.js instead.
-// ============================================================
 
 const SUPABASE_URL = 'https://tphstadcscquiezuxsis.supabase.co';
 
-// ⚠️ Verified: This is the ANON (public) key. Safe to embed in client-side JS.
-//    The service_role key is NEVER used here.
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRwaHN0YWRjc2NxdWllenV4c2lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1OTI4NTksImV4cCI6MjEwNjE2ODg1OX0.7x7KCpcdGYkDsjs3RBdfhhhSamFP-xEfNY5prIkLWL8';
 
-// ─── Build Supabase REST API URL ───
 function sbUrl(table) {
   return SUPABASE_URL + '/rest/v1/' + table;
 }
 
-// ─── Build Supabase headers ───
 function sbHeaders(extra) {
   var h = {
     'apikey': SUPABASE_ANON_KEY,
@@ -30,7 +23,6 @@ function sbHeaders(extra) {
   return h;
 }
 
-// ─── App constants (same as GAS version) ───
 const APP_VERSION = '3.0.0';
 const APP_BUILD   = 'supabase';
 const DEFAULT_PIN = '0000';
