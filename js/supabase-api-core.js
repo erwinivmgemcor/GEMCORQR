@@ -1,7 +1,7 @@
 // ============================================================
 // SUPABASE API CORE
 // Generic helpers + User auth + Inventory + Vendors + Requestors
-// v2 — Fixed sbGetAll to build proper query strings
+// v3 — Fixed sbGetAll with inline fetch (no recursion)
 // ============================================================
 
 // ═══════════════════════════════════════════════════════════════
@@ -78,19 +78,8 @@ async function sbDelete(table, query) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// PAGINATION HELPER — fixed to build proper query strings
+// PAGINATION HELPER — direct inline fetch, no recursion
 // ═══════════════════════════════════════════════════════════════
-//
-// Accepts a base query string (WITHOUT leading ? or &) and appends
-// limit + offset each iteration.
-//
-// Example:
-//   sbGetAll('inventory', 'select=item_code&order=item_code.asc')
-//   → iterates with:
-//     select=item_code&order=item_code.asc&limit=1000&offset=0
-//     select=item_code&order=item_code.asc&limit=1000&offset=1000
-//     ...
-//
 async function sbGetAll(table, baseQuery) {
   var allRows = [];
   var offset = 0;
@@ -108,7 +97,13 @@ async function sbGetAll(table, baseQuery) {
     parts.push('offset=' + offset);
     var q = parts.join('&');
 
-    var batch = await sbGet(table, q);
+    var url = sbUrl(table) + '?' + q;
+    var res = await fetch(url, { headers: sbHeaders() });
+    if (!res.ok) {
+      var errText = await res.text();
+      throw new Error('sbGetAll HTTP ' + res.status + ' — ' + errText);
+    }
+    var batch = await res.json();
     if (!batch || batch.length === 0) break;
     allRows = allRows.concat(batch);
     if (batch.length < limit) hasMore = false;
@@ -124,10 +119,10 @@ async function sbGetAll(table, baseQuery) {
 async function sbVerifyUser(username, password) {
   try {
     var rows = await sbGet('users',
-      'username=eq.' + encodeURIComponent(username) +
-      '&password=eq.' + encodeURIComponent(password) +
-      '&select=username,fullname,roles,department' +
-      '&limit=1'
+      'username=eq.' + encodeURIComponent(username)
+      + '&password=eq.' + encodeURIComponent(password)
+      + '&select=username,fullname,roles,department'
+      + '&limit=1'
     );
     if (!rows || rows.length === 0) {
       return { success: false, error: 'Invalid username or password' };
@@ -149,7 +144,7 @@ async function sbVerifyUser(username, password) {
 
 async function sbGetUsers() {
   try {
-    var rows = await sbGet('users',
+    var rows = await sbGetAll('users',
       'select=username,fullname,roles,department&order=username.asc'
     );
     return { success: true, users: rows || [] };
@@ -159,7 +154,7 @@ async function sbGetUsers() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// INVENTORY — with pagination (3165+ items)
+// INVENTORY — with pagination for 3000+ items
 // ═══════════════════════════════════════════════════════════════
 
 async function sbGetInventoryItems() {
@@ -357,4 +352,4 @@ async function sbProcessWithIdempotency(key, fn) {
   return result;
 }
 
-console.log('✅ supabase-api-core.js loaded (v2)');
+console.log('✅ supabase-api-core.js loaded (v3)');
