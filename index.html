@@ -2722,7 +2722,12 @@ textarea[readonly].locked-input {
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content text-center">
       <div class="modal-header"><h6 class="modal-title" id="qrZoomCode">Item Code</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-      <div class="modal-body"><img id="qrZoomImg" src="" alt="QR" style="max-width:280px;width:100%;margin:0 auto;display:block;"><div id="qrZoomFallback" class="alert alert-warning d-none">QR generation failed</div><div id="qrZoomDesc" class="small text-muted mt-2">Item description</div></div>
+    <div class="modal-body">
+  <img id="qrZoomImg" src="" alt="QR" style="max-width:280px;width:100%;margin:0 auto;display:block;">
+  <div id="qrZoomFallback" class="alert alert-warning d-none">QR generation failed</div>
+  <div id="qrZoomDesc" class="small text-muted mt-2">Item description</div>
+  <div id="qrZoomClass" class="mt-2"></div>
+</div>
       <div class="modal-footer justify-content-center"><button class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
     </div>
   </div>
