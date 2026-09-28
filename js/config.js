@@ -2,7 +2,7 @@
 // CONFIGURATION
 // ============================================================
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbwVA3jgdDU1_O07bQ0CktKHaFEwsImBiO83Sc3zA919FN07svtGyYQNwqRHXJ1Vtvc2/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzbTLwl6rQSJyNUmKswbzQGFoAyn1cUm4BxL4bI-CGd6-yfS6k6cTzE4SINLzb64AJ_/exec';
 
 const DEFAULT_PIN = '0000';
 const APP_VERSION = '2.5.14';
