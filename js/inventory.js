@@ -29,6 +29,12 @@ function openQrZoom(item) {
   }
   document.getElementById('qrZoomCode').textContent = item.inventoryId || item.code || '';
   document.getElementById('qrZoomDesc').textContent = item.description || '';
+var classEl = document.getElementById('qrZoomClass');
+if (classEl) {
+  classEl.innerHTML = item.itemClass
+    ? '<span class="badge bg-info text-dark">' + item.itemClass + '</span>'
+    : '';
+}
 
   var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(item.inventoryId || item.code || '');
   var img = document.getElementById('qrZoomImg');
