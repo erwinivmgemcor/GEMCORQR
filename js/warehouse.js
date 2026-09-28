@@ -1473,7 +1473,11 @@
         var el = document.createElement('div');
         el.className = 'list-group-item list-group-item-action';
         el.style.cssText = 'padding:10px 14px;cursor:pointer;font-size:0.9rem;border-bottom:1px solid #f0f0f0;';
-        el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div><div class="text-muted small">' + desc + ' <span class="badge bg-light text-dark">' + unit + '</span></div>';
+       var itemClass = it.itemClass || '';
+var classBadge = itemClass ? ' <span class="badge bg-info text-dark" style="font-size:0.68rem;">' + itemClass + '</span>' : '';
+var itemClass = it.itemClass || '';
+var classBadge = itemClass ? ' <span class="badge bg-info text-dark" style="font-size:0.68rem;">' + itemClass + '</span>' : '';
+el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div><div class="text-muted small">' + desc + ' <span class="badge bg-light text-dark">' + unit + '</span>' + classBadge + '</div>';
         el.onmousedown = function(e) { e.preventDefault(); selectManualMrrItem(idx, code, desc, unit); dropdown.classList.add('d-none'); };
         dropdown.appendChild(el);
       });
