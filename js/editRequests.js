@@ -294,8 +294,34 @@ window.openRequestEditModal = async function(docNo, docType) {
     var info = data.info || {};
     var items = data.items || [];
 
-    document.getElementById('editReqRequestor').value = info.Requestor || info.requestor || '';
-    document.getElementById('editReqDepartment').value = info.Department || info.department || '';
+        // ★ SECURITY: Requestor is locked to login user — do NOT allow edit
+    var _lockedName = (typeof state !== 'undefined' && state.currentUserFullname)
+      ? state.currentUserFullname
+      : (localStorage.getItem('ivm_userFullname') || '');
+    var _lockedDept = '';
+    var _reqList = (typeof state !== 'undefined' && state.requestorList) ? state.requestorList : [];
+    for (var _i = 0; _i < _reqList.length; _i++) {
+      if (String(_reqList[_i].name || '').toLowerCase() === String(_lockedName).toLowerCase()) {
+        _lockedDept = _reqList[_i].department || '';
+        break;
+      }
+    }
+    if (!_lockedDept) _lockedDept = localStorage.getItem('ivm_userDepartment') || '';
+
+    var _elReq = document.getElementById('editReqRequestor');
+    var _elDept = document.getElementById('editReqDepartment');
+    if (_elReq) {
+      _elReq.value = _lockedName;
+      _elReq.setAttribute('readonly', 'readonly');
+      _elReq.classList.add('locked-input');
+      _elReq.title = 'Locked to your login account';
+    }
+    if (_elDept) {
+      _elDept.value = _lockedDept;
+      _elDept.setAttribute('readonly', 'readonly');
+      _elDept.classList.add('locked-input');
+      _elDept.title = 'Locked to your login account';
+    }
     document.getElementById('editReqJoNo').value = info['JO No.'] || info.joNo || '';
     document.getElementById('editReqGemSoNo').value = info['GEM SO No.'] || info.gemSoNo || '';
     document.getElementById('editReqClient').value = info['Client Name'] || info.clientName || '';
@@ -456,10 +482,22 @@ window.submitEditedRequest = async function() {
       docNo: docNo,
       docType: docType,
       editedBy: _editReqState.currentUser,
-      updates: {
+            updates: {
         items: items,
-        requestor: document.getElementById('editReqRequestor').value.trim(),
-        department: document.getElementById('editReqDepartment').value.trim(),
+        // ★ SECURITY: Requestor + department always from login, not editable
+        requestor: (typeof state !== 'undefined' && state.currentUserFullname)
+                    ? state.currentUserFullname
+                    : (localStorage.getItem('ivm_userFullname') || ''),
+        department: (function() {
+          var n = (typeof state !== 'undefined' && state.currentUserFullname)
+                    ? state.currentUserFullname
+                    : (localStorage.getItem('ivm_userFullname') || '');
+          var list = (typeof state !== 'undefined' && state.requestorList) ? state.requestorList : [];
+          for (var i = 0; i < list.length; i++) {
+            if (String(list[i].name || '').toLowerCase() === String(n).toLowerCase()) return list[i].department || '';
+          }
+          return localStorage.getItem('ivm_userDepartment') || '';
+        })(),
         joNo: document.getElementById('editReqJoNo').value.trim(),
         gemSoNo: document.getElementById('editReqGemSoNo').value.trim(),
         clientName: document.getElementById('editReqClient').value.trim(),
