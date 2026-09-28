@@ -1,6 +1,6 @@
 // ============================================================
 // PRINT PREVIEW FUNCTIONS
-// v3 — Fix QR images missing in print, fixed sig line overlap
+// v4 — Embedded QR (base64 data URL) — fixes missing QR in print
 // ============================================================
 
 // ─── Local HTML escaper ───
@@ -21,12 +21,90 @@ function _printQrData(docNo) {
   return base + '?doc=' + encodeURIComponent(docNo) + '&view=print';
 }
 
-// ─── Build a QR image URL (server-side, cache-safe) ───
+// ─── Build a QR image URL (server-side) ───
 function _qrUrl(data, size) {
   size = size || 120;
   return 'https://api.qrserver.com/v1/create-qr-code/?size=' + size + 'x' + size +
          '&data=' + encodeURIComponent(data) +
          '&qzone=1&margin=0';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// QR → BASE64 CONVERTER (KEY FIX)
+// Downloads the QR image, converts to a data URL, caches it.
+// ═══════════════════════════════════════════════════════════════
+var _qrDataUrlCache = {};
+
+async function _qrToDataUrl(data, size) {
+  size = size || 120;
+  var cacheKey = size + '_' + data;
+  if (_qrDataUrlCache[cacheKey]) return _qrDataUrlCache[cacheKey];
+
+  var url = _qrUrl(data, size);
+  try {
+    var res = await fetch(url, { mode: 'cors', cache: 'force-cache' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var blob = await res.blob();
+    var dataUrl = await new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onloadend = function() { resolve(reader.result); };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    _qrDataUrlCache[cacheKey] = dataUrl;
+    return dataUrl;
+  } catch(e) {
+    console.warn('[QR] Could not embed QR for:', data, e.message);
+    return '';
+  }
+}
+
+// ─── Pre-convert all QRs in an HTML string to data URLs ───
+// Takes HTML with <img data-qr="dataValue" data-qr-size="120">,
+// returns HTML with <img src="data:image/png;base64,...">.
+async function _embedQrInHtml(html) {
+  if (!html) return html;
+
+  // Find all data-qr markers
+  var regex = /<img\s+([^>]*?)data-qr="([^"]*)"([^>]*?)data-qr-size="(\d+)"([^>]*?)>/g;
+  var matches = [];
+  var m;
+  while ((m = regex.exec(html)) !== null) {
+    matches.push({
+      full: m[0],
+      before: m[1],
+      data: decodeURIComponent(m[2]),
+      after: m[3],
+      size: parseInt(m[4], 10) || 120,
+      trailing: m[5]
+    });
+  }
+
+  if (matches.length === 0) return html;
+
+  // Convert each QR to a data URL (in parallel)
+  var conversions = matches.map(function(match) {
+    return _qrToDataUrl(match.data, match.size).then(function(dataUrl) {
+      if (!dataUrl) return null;
+      var newImg = '<img ' + match.before +
+        'src="' + dataUrl + '" ' +
+        match.after +
+        match.trailing +
+        '>';
+      return { old: match.full, new: newImg };
+    });
+  });
+
+  var results = await Promise.all(conversions);
+
+  // Replace each original tag with the embedded version
+  results.forEach(function(r) {
+    if (r && r.old && r.new) {
+      html = html.split(r.old).join(r.new);
+    }
+  });
+
+  return html;
 }
 
 // ─── Auto-open print preview after create/process ───
@@ -271,11 +349,11 @@ async function printSelectedDocs() {
 
     if (data.documents.length === 1) {
       var docData = data.documents[0];
-      if (docType === 'MRIF') renderMrifPrint(docData.docNo, docData.info, docData.items);
-      else if (docType === 'MRR') renderMrrPrint(docData.docNo, docData.info, docData.items);
-      else if (docType === 'MRS') renderMrsPrint(docData.docNo, docData.info, docData.items);
+      if (docType === 'MRIF') await renderMrifPrint(docData.docNo, docData.info, docData.items);
+      else if (docType === 'MRR') await renderMrrPrint(docData.docNo, docData.info, docData.items);
+      else if (docType === 'MRS') await renderMrsPrint(docData.docNo, docData.info, docData.items);
     } else {
-      renderBulkPrintPreview(data.documents, docType);
+      await renderBulkPrintPreview(data.documents, docType);
     }
 
     if (docType === 'MRIF' && mrifListModal) mrifListModal.hide();
@@ -292,7 +370,7 @@ async function printSelectedDocs() {
   } finally { hideLoading(); }
 }
 
-function renderBulkPrintPreview(documents, docType) {
+async function renderBulkPrintPreview(documents, docType) {
   var container = null;
   if (docType === 'MRIF') container = document.getElementById('mrifPrintContent');
   else if (docType === 'MRR') container = document.getElementById('mrrPrintContent');
@@ -309,11 +387,14 @@ function renderBulkPrintPreview(documents, docType) {
     else if (docType === 'MRS') combinedHtml += buildSingleMrsHtml(docNo, info, items);
     if (index < documents.length - 1) combinedHtml += '<div style="page-break-after: always;"></div>';
   });
+
+  // Embed all QRs before showing
+  combinedHtml = await _embedQrInHtml(combinedHtml);
   container.innerHTML = combinedHtml;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BUILD MRIF PRINT
+// BUILD MRIF PRINT — Uses data-qr markers for embedding
 // ═══════════════════════════════════════════════════════════════
 function buildSingleMrifHtml(docNo, info, items) {
   var requestor = _escPrint(info.Requestor || info.requestor || info.requestorName || '');
@@ -350,12 +431,12 @@ function buildSingleMrifHtml(docNo, info, items) {
       var issuedDisplay = (issued === 0 || issued === '') ? '' : issued;
       var unit = _escPrint(it.unit || 'PIECE');
       var remarks = _escPrint(_cleanRemarksForPrint(it.remarks || ''));
-      var itemQrUrl = _qrUrl(codeRaw, 50);
 
+      // ★ data-qr marker — will be replaced with base64 during render
       itemsHtml += '<tr>' +
         '<td class="td-center">' + (i + 1) + '</td>' +
         '<td class="td-center">' + code + '</td>' +
-        '<td class="td-center"><img src="' + itemQrUrl + '" class="print-qr-sm" alt="" crossorigin="anonymous"></td>' +
+        '<td class="td-center"><img class="print-qr-sm" alt="" data-qr="' + encodeURIComponent(codeRaw) + '" data-qr-size="50"></td>' +
         '<td class="td-left">' + desc + '</td>' +
         '<td class="td-center">' + qty + '</td>' +
         '<td class="td-center">' + issuedDisplay + '</td>' +
@@ -368,14 +449,14 @@ function buildSingleMrifHtml(docNo, info, items) {
   }
   itemsHtml += '<tr><td class="td-center" colspan="8">&nbsp;</td></tr>';
 
-  var mrifQrUrl = _qrUrl(_printQrData(docNo), 120);
+  var docQrData = _printQrData(docNo);
 
   return '<div class="mrif-print-sheet">' +
     '<div class="mrif-header">' +
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
       '<div class="mrif-docno">' +
         '<div><span class="mrif-dn-label">MRIF No.:</span><span class="mrif-dn-box">' + _escPrint(displayDocNo) + '</span></div>' +
-        '<div class="mrif-doc-qr"><img src="' + mrifQrUrl + '" alt="MRIF QR" class="print-qr-lg" crossorigin="anonymous"></div>' +
+        '<div class="mrif-doc-qr"><img class="print-qr-lg" alt="MRIF QR" data-qr="' + encodeURIComponent(docQrData) + '" data-qr-size="120"></div>' +
       '</div>' +
     '</div>' +
     '<div class="mrif-title">' + titleText + '</div>' +
@@ -473,14 +554,14 @@ function buildSingleMrrHtml(docNo, info, items) {
     itemsHtml += '<tr><td class="td-center" colspan="7" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
   }
 
-  var mrrQrUrl = _qrUrl(_printQrData(docNo), 120);
+  var docQrData = _printQrData(docNo);
 
   return '<div class="mrr-print-sheet">' +
     '<div class="mrr-header">' +
       '<div class="mrr-logo"><img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'"></div>' +
       '<div class="mrr-docno">' +
         '<div><span class="mrr-dn-label">Receipt No.:</span><span class="mrr-dn-box">' + _escPrint(cleanDocNo(docNo)) + '</span></div>' +
-        '<div class="mrr-doc-qr"><img src="' + mrrQrUrl + '" alt="MRR QR" class="print-qr-lg" crossorigin="anonymous"></div>' +
+        '<div class="mrr-doc-qr"><img class="print-qr-lg" alt="MRR QR" data-qr="' + encodeURIComponent(docQrData) + '" data-qr-size="120"></div>' +
       '</div>' +
     '</div>' +
     '<div class="mrr-title">MATERIALS RECEIVING REPORT</div>' +
@@ -559,12 +640,11 @@ function buildSingleMrsHtml(docNo, info, items) {
       var actualDisplay = (actualReturned === 0 || actualReturned === '') ? '' : actualReturned;
       var unit = _escPrint(it.unit || 'PIECE');
       var remarks = _escPrint(_cleanRemarksForPrint(it.remarks || ''));
-      var itemQrUrl = _qrUrl(codeRaw, 50);
 
       itemsHtml += '<tr>' +
         '<td class="td-center">' + (i + 1) + '</td>' +
         '<td class="td-center">' + code + '</td>' +
-        '<td class="td-center"><img src="' + itemQrUrl + '" class="print-qr-sm" alt="" crossorigin="anonymous"></td>' +
+        '<td class="td-center"><img class="print-qr-sm" alt="" data-qr="' + encodeURIComponent(codeRaw) + '" data-qr-size="50"></td>' +
         '<td class="td-left">' + desc + '</td>' +
         '<td class="td-center">' + qtyReturned + '</td>' +
         '<td class="td-center">' + actualDisplay + '</td>' +
@@ -577,14 +657,14 @@ function buildSingleMrsHtml(docNo, info, items) {
   }
   itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
 
-  var mrsQrUrl = _qrUrl(_printQrData(docNo), 120);
+  var docQrData = _printQrData(docNo);
 
   return '<div class="mrif-print-sheet">' +
     '<div class="mrif-header">' +
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
       '<div class="mrif-docno">' +
         '<div><span class="mrif-dn-label">MRS No.:</span><span class="mrif-dn-box">' + _escPrint(cleanDocNo(docNo)) + '</span></div>' +
-        '<div class="mrif-doc-qr"><img src="' + mrsQrUrl + '" alt="MRS QR" class="print-qr-lg" crossorigin="anonymous"></div>' +
+        '<div class="mrif-doc-qr"><img class="print-qr-lg" alt="MRS QR" data-qr="' + encodeURIComponent(docQrData) + '" data-qr-size="120"></div>' +
       '</div>' +
     '</div>' +
     '<div class="mrif-title">MATERIALS RETURN SLIP</div>' +
@@ -639,7 +719,7 @@ async function openMrifPrint(docNo) {
     try { data = JSON.parse(text); } catch(e) { data = {}; }
     if (data.error) { showToast('Error: ' + data.error, 'danger'); return; }
     if (!data.success) { showToast('Error: ' + (data.error || 'Failed to load document'), 'danger'); return; }
-    renderMrifPrint(docNo, data.info || {}, data.items || []);
+    await renderMrifPrint(docNo, data.info || {}, data.items || []);
     if (mrifListModal) mrifListModal.hide();
     setTimeout(function() { if (mrifPrintModal) mrifPrintModal.show(); }, 300);
   } catch(err) {
@@ -660,7 +740,7 @@ async function openMrrPrint(docNo) {
     try { data = JSON.parse(text); } catch(e) { data = {}; }
     if (data.error) { showToast('Error: ' + data.error, 'danger'); return; }
     if (!data.success) { showToast('Error: ' + (data.error || 'Failed to load document'), 'danger'); return; }
-    renderMrrPrint(docNo, data.info || {}, data.items || []);
+    await renderMrrPrint(docNo, data.info || {}, data.items || []);
     if (mrrListModal) mrrListModal.hide();
     setTimeout(function() { if (mrrPrintModal) mrrPrintModal.show(); }, 300);
   } catch(err) {
@@ -681,7 +761,7 @@ async function openMrsPrint(docNo) {
     try { data = JSON.parse(text); } catch(e) { data = {}; }
     if (data.error) { showToast('Error: ' + data.error, 'danger'); return; }
     if (!data.success) { showToast('Error: ' + (data.error || 'Failed to load document'), 'danger'); return; }
-    renderMrsPrint(docNo, data.info || {}, data.items || []);
+    await renderMrsPrint(docNo, data.info || {}, data.items || []);
     if (mrsListModal) mrsListModal.hide();
     setTimeout(function() { if (mrsPrintModal) mrsPrintModal.show(); }, 300);
   } catch(err) {
@@ -690,54 +770,50 @@ async function openMrsPrint(docNo) {
   } finally { hideLoading(); }
 }
 
-// ─── Render print functions ────
-function renderMrifPrint(docNo, info, items) {
+// ─── Render print functions (with embedded QRs) ────
+async function renderMrifPrint(docNo, info, items) {
   var container = document.getElementById('mrifPrintContent');
   if (!container) return;
-  container.innerHTML = buildSingleMrifHtml(docNo, info, items);
-  _waitForImages(container);
+  showLoading('Embedding QRs...');
+  try {
+    var html = buildSingleMrifHtml(docNo, info, items);
+    html = await _embedQrInHtml(html);
+    container.innerHTML = html;
+  } catch(e) {
+    console.warn('[renderMrifPrint] Embed failed:', e);
+    container.innerHTML = buildSingleMrifHtml(docNo, info, items);
+  } finally { hideLoading(); }
 }
 
-function renderMrrPrint(docNo, info, items) {
+async function renderMrrPrint(docNo, info, items) {
   var container = document.getElementById('mrrPrintContent');
   if (!container) return;
-  container.innerHTML = buildSingleMrrHtml(docNo, info, items);
-  _waitForImages(container);
+  showLoading('Embedding QRs...');
+  try {
+    var html = buildSingleMrrHtml(docNo, info, items);
+    html = await _embedQrInHtml(html);
+    container.innerHTML = html;
+  } catch(e) {
+    console.warn('[renderMrrPrint] Embed failed:', e);
+    container.innerHTML = buildSingleMrrHtml(docNo, info, items);
+  } finally { hideLoading(); }
 }
 
-function renderMrsPrint(docNo, info, items) {
+async function renderMrsPrint(docNo, info, items) {
   var container = document.getElementById('mrsPrintContent');
   if (!container) return;
-  container.innerHTML = buildSingleMrsHtml(docNo, info, items);
-  _waitForImages(container);
+  showLoading('Embedding QRs...');
+  try {
+    var html = buildSingleMrsHtml(docNo, info, items);
+    html = await _embedQrInHtml(html);
+    container.innerHTML = html;
+  } catch(e) {
+    console.warn('[renderMrsPrint] Embed failed:', e);
+    container.innerHTML = buildSingleMrsHtml(docNo, info, items);
+  } finally { hideLoading(); }
 }
 
-// ─── Wait for all images in the print container to finish loading ───
-// This is the KEY FIX for missing QR images.
-function _waitForImages(container) {
-  if (!container) return;
-
-  // Attach a class so print knows this QR has loaded
-  var imgs = container.querySelectorAll('img');
-  imgs.forEach(function(img) {
-    // If already loaded, mark it
-    if (img.complete && img.naturalWidth > 0) {
-      img.classList.add('print-img-ready');
-    } else {
-      img.addEventListener('load', function() {
-        img.classList.add('print-img-ready');
-      }, { once: true });
-      img.addEventListener('error', function() {
-        // Fallback: replace with a gray placeholder
-        img.classList.add('print-img-failed');
-        img.style.background = '#eee';
-        img.style.border = '1px solid #ccc';
-      }, { once: true });
-    }
-  });
-}
-
-// ─── Print via iframe ────
+// ─── Print via iframe (now uses embedded QRs, so no race) ────
 function printMrif() { printWithIframe('mrifPrintContent', 'MRIF Print'); }
 function printMrr() { printWithIframe('mrrPrintContent', 'MRR Print'); }
 function printMrs() { printWithIframe('mrsPrintContent', 'MRS Print'); }
@@ -762,7 +838,6 @@ function printWithIframe(containerId, title) {
     '.mrif-doc-qr img, .mrr-doc-qr img { width: 75px; height: 75px; margin-top: 4px; display: block; }' +
     '.print-qr-sm { width: 40px; height: 40px; display: block; margin: 0 auto; }' +
     '.print-qr-lg { width: 80px; height: 80px; display: block; }' +
-    '.print-img-failed { background: #eee; border: 1px solid #ccc; width: 40px; height: 40px; display: block; margin: 0 auto; }' +
     '.mrif-title, .mrr-title { text-align: center; font-size: 12pt; font-weight: bold; letter-spacing: 5px; margin: 8px 0 14px 0; text-transform: uppercase; }' +
     '.mrif-meta, .mrr-meta-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 8.5pt; }' +
     '.mrif-meta td, .mrr-meta-table td { padding: 3px 6px; vertical-align: top; }' +
@@ -806,15 +881,9 @@ function printWithIframe(containerId, title) {
   doc.write(fullHtml);
   doc.close();
 
-  // ★ Wait for all images inside the iframe to finish loading
-  var iframeImages = iframe.contentWindow.document.images;
-  var totalImages = iframeImages.length;
-  var loadedImages = 0;
-  var printed = false;
-
-  function tryPrint() {
-    if (printed) return;
-    printed = true;
+  // ★ Because QRs are already embedded as data URLs, we can print almost immediately.
+  // Still wait a short beat for layout to settle.
+  setTimeout(function() {
     try {
       iframe.contentWindow.focus();
       iframe.contentWindow.print();
@@ -825,37 +894,7 @@ function printWithIframe(containerId, title) {
     setTimeout(function() {
       if (iframe.parentNode) document.body.removeChild(iframe);
     }, 3000);
-  }
-
-  function checkAllLoaded() {
-    loadedImages++;
-    if (loadedImages >= totalImages) {
-      // All images done — print
-      setTimeout(tryPrint, 150);
-    }
-  }
-
-  if (totalImages === 0) {
-    // No images — print immediately
-    setTimeout(tryPrint, 300);
-  } else {
-    for (var i = 0; i < totalImages; i++) {
-      var img = iframeImages[i];
-      if (img.complete && img.naturalWidth > 0) {
-        checkAllLoaded();
-      } else {
-        img.addEventListener('load', checkAllLoaded, { once: true });
-        img.addEventListener('error', checkAllLoaded, { once: true });
-      }
-    }
-    // Safety fallback: if some image hangs, force print after 5 seconds
-    setTimeout(function() {
-      if (!printed) {
-        console.warn('[Print] Timeout waiting for images — forcing print');
-        tryPrint();
-      }
-    }, 5000);
-  }
+  }, 400);
 }
 
 function closeMrifPrint() { if (mrifPrintModal) mrifPrintModal.hide(); }
