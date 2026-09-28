@@ -644,6 +644,93 @@ window.loadAllRequests = async function() {
       '<i class="bi bi-exclamation-triangle-fill me-2"></i>Failed to load: ' + _escMain(err.message) + '</div>';
   }
 };
+window.openPartialMrrModal = async function() {
+  showLoading('Loading partial MRRs...');
+  try {
+    var url = API_URL + '?action=getAllPendingDocs&_t=' + Date.now();
+    var res = await fetch(url, { redirect: 'follow' });
+    var text = await res.text();
+    var data = JSON.parse(text);
+    var docs = (data.documents || []).filter(function(d) {
+      return String(d.status || '').toUpperCase() === 'PARTIAL' &&
+             String(d.docType || '').toUpperCase() === 'MRR';
+    });
+
+    hideLoading();
+
+    if (docs.length === 0) {
+      showToast('No partial MRRs at the moment.', 'info');
+      return;
+    }
+
+    // Build a simple modal on the fly
+    var modalId = 'partialMrrModal';
+    var existing = document.getElementById(modalId);
+    if (existing) existing.remove();
+
+    var html = '<div class="modal fade" id="' + modalId + '" tabindex="-1">' +
+      '<div class="modal-dialog modal-lg modal-dialog-scrollable">' +
+        '<div class="modal-content">' +
+          '<div class="modal-header bg-success text-white">' +
+            '<h5 class="modal-title"><i class="bi bi-box-arrow-in-down me-2"></i>Partially Received MRRs (' + docs.length + ')</h5>' +
+            '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>' +
+          '</div>' +
+          '<div class="modal-body p-0">' +
+            '<div class="list-group list-group-flush">';
+
+    docs.forEach(function(d) {
+      var dateStr = d.timestamp ? new Date(d.timestamp).toLocaleString() : '';
+      var requestor = (d.requestor || '').replace(/</g, '&lt;');
+      var docNo = (d.docNo || '').replace(/</g, '&lt;');
+      var itemSummary = (d.itemSummary || '').replace(/</g, '&lt;');
+
+      html += '<div class="list-group-item">' +
+        '<div class="d-flex justify-content-between align-items-start flex-wrap gap-2">' +
+          '<div class="flex-grow-1">' +
+            '<div class="fw-bold">' + docNo + ' <span class="badge bg-success">MRR</span> <span class="badge bg-info text-dark">PARTIAL</span></div>' +
+            '<div class="small text-muted"><i class="bi bi-person me-1"></i>' + requestor + '</div>' +
+            '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
+            '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + itemSummary + '</div>' +
+          '</div>' +
+          '<div class="d-flex flex-column gap-1">' +
+            '<button class="btn btn-sm btn-success" onclick="closePartialMrrModal();prefillManualMrrFromDoc(\'' + docNo.replace(/'/g, "\\'") + '\')">' +
+              '<i class="bi bi-arrow-right-circle me-1"></i>Process' +
+            '</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    });
+
+    html += '</div></div>' +
+          '<div class="modal-footer"><button class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+    var wrapper = document.createElement('div');
+    wrapper.innerHTML = html;
+    document.body.appendChild(wrapper.firstChild);
+
+    var modalEl = document.getElementById(modalId);
+    var bsModal = new bootstrap.Modal(modalEl);
+    bsModal.show();
+
+    modalEl.addEventListener('hidden.bs.modal', function() {
+      modalEl.remove();
+    });
+  } catch (err) {
+    hideLoading();
+    showToast('Failed to load partial MRRs: ' + err.message, 'danger');
+  }
+};
+
+window.closePartialMrrModal = function() {
+  var modalEl = document.getElementById('partialMrrModal');
+  if (modalEl) {
+    var m = bootstrap.Modal.getInstance(modalEl);
+    if (m) m.hide();
+  }
+};
 
 function renderAllRequests(docs, statusFilter, prepMap) {
   var container = document.getElementById('allRequestsListPage');
