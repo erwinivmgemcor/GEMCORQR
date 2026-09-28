@@ -2699,12 +2699,19 @@ textarea[readonly].locked-input {
       </div>
       <div class="modal-body">
         <div class="input-group mb-3"><span class="input-group-text"><i class="bi bi-search"></i></span><input type="text" class="form-control" id="inventorySearchInput" placeholder="Search item code or description..." oninput="filterInventoryItems()"></div>
-        <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
-          <table class="table table-sm table-hover">
-            <thead class="table-light sticky-top"><tr><th style="width:10%">QR</th><th style="width:30%">ITEM CODE</th><th style="width:60%">DESCRIPTION</th></tr></thead>
-            <tbody id="inventoryBrowserBody"><tr><td colspan="3" class="text-center py-3 text-muted">Loading inventory...</td></tr></tbody>
-          </table>
-        </div>
+       <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
+  <table class="table table-sm table-hover">
+    <thead class="table-light sticky-top"><tr>
+      <th style="width:8%">QR</th>
+      <th style="width:22%">ITEM CODE</th>
+      <th style="width:50%">DESCRIPTION</th>
+      <th style="width:20%">ITEM CLASS</th>
+    </tr></thead>
+    <tbody id="inventoryBrowserBody">
+      <tr><td colspan="4" class="text-center py-3 text-muted">Loading inventory...</td></tr>
+    </tbody>
+  </table>
+</div>
       </div>
       <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
     </div>
