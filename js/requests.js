@@ -1,6 +1,6 @@
 // ============================================================
 // NEW REQUEST FUNCTIONS
-// v4 — Requestor locked to logged-in user (security)
+// v5 — Requestor locked to login + Robust QR scan matching
 // ============================================================
 
 if (typeof state !== 'undefined' && state._reqIdemKey === undefined) {
@@ -19,7 +19,6 @@ function _getLockedRequestor() {
   if (!fullname) fullname = String(localStorage.getItem('ivm_requestorName') || '').trim();
   if (!fullname) fullname = String(localStorage.getItem('ivm_username') || '').trim();
 
-  // Get department from master list if available
   var department = '';
   var list = (typeof state !== 'undefined' && state.requestorList) ? state.requestorList : [];
   for (var i = 0; i < list.length; i++) {
@@ -44,19 +43,14 @@ function _lockStep3ToLoginUser() {
   var reqDept = document.getElementById('reqDepartment');
   var btnStep3Next = document.getElementById('btnStep3Next');
 
-  // ─── Replace the dropdown with a locked display ───
   if (step3Sel) {
     var wrapper = step3Sel.parentElement;
-
-    // Hide the original select
     step3Sel.style.display = 'none';
     step3Sel.disabled = true;
 
-    // Remove any existing locked display
     var existing = wrapper.querySelector('.locked-requestor-display');
     if (existing) existing.remove();
 
-    // Insert the locked display
     var lockedHtml = document.createElement('div');
     lockedHtml.className = 'locked-requestor-display locked-field-display';
     lockedHtml.innerHTML =
@@ -69,7 +63,6 @@ function _lockStep3ToLoginUser() {
     step3Sel.parentElement.insertBefore(lockedHtml, step3Sel);
   }
 
-  // ─── Lock the department ───
   if (step3Dept) {
     step3Dept.value = locked.department || '';
     step3Dept.setAttribute('readonly', 'readonly');
@@ -77,15 +70,12 @@ function _lockStep3ToLoginUser() {
     step3Dept.placeholder = locked.department ? '' : '(Not set — contact admin)';
   }
 
-  // ─── Sync hidden inputs ───
   if (reqHidden) reqHidden.value = locked.name;
   if (reqDept) reqDept.value = locked.department || '';
 
-  // ─── Enable Next since requestor is guaranteed ───
   if (btnStep3Next) btnStep3Next.disabled = false;
 }
 
-// ─── Unlock / restore for reset ───
 function _resetStep3Lock() {
   var step3Sel = document.getElementById('step3Requestor');
   if (step3Sel) {
@@ -109,7 +99,6 @@ function openNewRequest() {
   loadRequestorList();
   newRequestModal.show();
 
-  // After the modal is visible, lock step 3
   setTimeout(function() {
     _lockStep3ToLoginUser();
   }, 300);
@@ -149,7 +138,6 @@ function resetWizard() {
 function goToStep(step) {
   closeWizardScanner();
 
-  // ★ Lock step 3 every time we enter it
   if (step === 3) {
     setTimeout(_lockStep3ToLoginUser, 50);
   }
@@ -177,6 +165,17 @@ function goToStep(step) {
   if (panel) panel.classList.add('active');
   if (step === 4) populateReviewData();
   if (step === 6) populateFinalReview();
+
+  // ★ NEW: Ensure inventory list is loaded before scanning in step 5
+  if (step === 5) {
+    if (typeof state !== 'undefined' && (!state.requestInventoryList || state.requestInventoryList.length === 0)) {
+      loadRequestInventory().then(function() {
+        console.log('[Wizard] Inventory loaded:', state.requestInventoryList.length, 'items');
+      }).catch(function(e) {
+        console.warn('[Wizard] Inventory load failed:', e);
+      });
+    }
+  }
 }
 
 function selectDocType(type) {
@@ -234,10 +233,7 @@ async function lookupSofDataWizard() {
   } finally { hideLoading(); }
 }
 
-// ─── Locked: requestor change is a no-op ───
 function onStep3RequestorChange() {
-  // ★ Intentionally does nothing — requestor is locked to login.
-  // Re-apply the lock in case anything tried to change it.
   _lockStep3ToLoginUser();
 }
 
@@ -346,12 +342,34 @@ function populateFinalReview() {
   });
 }
 
+// ═══════════════════════════════════════════════════════════════
+// WIZARD SCANNER — robust matching
+// ═══════════════════════════════════════════════════════════════
 var wizardScanner = null;
 var wizardScannerRowIndex = null;
 
 function openWizardScanner(rowIndex) {
   closeWizardScanner();
   wizardScannerRowIndex = rowIndex;
+
+  // ★ Ensure inventory list is loaded BEFORE opening the scanner
+  if (typeof state !== 'undefined' && (!state.requestInventoryList || state.requestInventoryList.length === 0)) {
+    showLoading('Loading inventory...');
+    loadRequestInventory().then(function() {
+      hideLoading();
+      _startWizardScanner(rowIndex);
+    }).catch(function(e) {
+      hideLoading();
+      showToast('Could not load inventory list. Please try again.', 'danger');
+      console.warn('[openWizardScanner] Inventory load failed:', e);
+    });
+    return;
+  }
+
+  _startWizardScanner(rowIndex);
+}
+
+function _startWizardScanner(rowIndex) {
   var overlay = document.getElementById('wizardScannerOverlay');
   if (!overlay) return;
   overlay.classList.remove('d-none');
@@ -363,57 +381,166 @@ function openWizardScanner(rowIndex) {
       .catch(function(err) { showToast('Camera error: ' + err, 'danger'); closeWizardScanner(); });
   }).catch(function(err) { showToast('Camera access denied', 'danger'); closeWizardScanner(); });
 }
+
 function closeWizardScanner() {
   if (wizardScanner) { wizardScanner.stop().catch(function() {}); wizardScanner = null; }
   var overlay = document.getElementById('wizardScannerOverlay');
   if (overlay) overlay.classList.add('d-none');
   wizardScannerRowIndex = null;
 }
-function onWizardScanSuccess(decodedText) {
-  closeWizardScanner();
-  var idx = wizardScannerRowIndex;
-  if (idx === null) return;
-  var matchedItem = null;
-  var code = decodedText.trim();
-  for (var i = 0; i < state.requestInventoryList.length; i++) {
-    var it = state.requestInventoryList[i];
-    if (it.inventoryId === code || it.code === code) { matchedItem = it; break; }
+
+// ─── Extract a clean item code from any QR payload ───
+function _extractItemCode(decodedText) {
+  if (!decodedText) return '';
+
+  var raw = String(decodedText).trim();
+
+  // Strip surrounding quotes or whitespace artifacts
+  raw = raw.replace(/^["'\s]+|["'\s]+$/g, '');
+
+  // Case 1: URL with ?code= or ?item= parameter (some QR generators)
+  var urlMatch = raw.match(/[?&](?:code|item|id|inventory)=([^&\s]+)/i);
+  if (urlMatch) {
+    return decodeURIComponent(urlMatch[1]).trim();
   }
-  if (!matchedItem) {
-    var lowerCode = code.toLowerCase();
-    for (var j = 0; j < state.requestInventoryList.length; j++) {
-      var it2 = state.requestInventoryList[j];
-      if (it2.inventoryId.toLowerCase().indexOf(lowerCode) !== -1 || it2.code.toLowerCase().indexOf(lowerCode) !== -1) { matchedItem = it2; break; }
+
+  // Case 2: Full WMS URL with ?doc= — NOT an item, ignore
+  if (/[?&]doc=/i.test(raw)) {
+    return ''; // treated as document QR, not item
+  }
+
+  // Case 3: Just the raw code (most common)
+  return raw;
+}
+
+// ─── Score an inventory item against a scanned code ───
+function _findInventoryMatch(scannedCode) {
+  var code = String(scannedCode || '').trim();
+  if (!code) return null;
+
+  var codeUpper = code.toUpperCase();
+  var list = (typeof state !== 'undefined' && state.requestInventoryList) ? state.requestInventoryList : [];
+  if (!list.length) return null;
+
+  // Pass 1: Exact match (case-insensitive), checking all common field names
+  for (var i = 0; i < list.length; i++) {
+    var it = list[i];
+    var idCandidates = [it.inventoryId, it.code, it.itemCode, it.id];
+    for (var c = 0; c < idCandidates.length; c++) {
+      var candidate = String(idCandidates[c] || '').trim();
+      if (candidate && candidate.toUpperCase() === codeUpper) return it;
     }
   }
-  var row = document.querySelector('#step5ItemsContainer .step5-item-row:nth-child(' + (idx+1) + ')');
-  if (!row) return;
+
+  // Pass 2: Partial match — scanned code contains item code or vice versa
+  for (var j = 0; j < list.length; j++) {
+    var it2 = list[j];
+    var idCandidates2 = [it2.inventoryId, it2.code, it2.itemCode, it2.id];
+    for (var c2 = 0; c2 < idCandidates2.length; c2++) {
+      var candidate2 = String(idCandidates2[c2] || '').trim().toUpperCase();
+      if (!candidate2) continue;
+      if (codeUpper.indexOf(candidate2) !== -1) return it2;
+      if (candidate2.indexOf(codeUpper) !== -1 && codeUpper.length >= 4) return it2;
+    }
+  }
+
+  return null;
+}
+
+function onWizardScanSuccess(decodedText) {
+  console.log('[WizardScan] Decoded:', decodedText);
+
+  // Extract item code from payload
+  var extracted = _extractItemCode(decodedText);
+  if (!extracted) {
+    closeWizardScanner();
+    showToast('Scanned QR is not an item code.', 'warning');
+    return;
+  }
+
+  var idx = wizardScannerRowIndex;
+  if (idx === null) {
+    closeWizardScanner();
+    return;
+  }
+
+  var matchedItem = _findInventoryMatch(extracted);
+
+  // ─── Find the target row and its inputs ───
+  var row = document.querySelector('#step5ItemsContainer .step5-item-row:nth-child(' + (idx + 1) + ')');
+  if (!row) {
+    closeWizardScanner();
+    showToast('Item row not found.', 'danger');
+    return;
+  }
+
   var searchInput = row.querySelector('.req-item-search');
   var codeInput = document.getElementById('step5Code' + idx);
   var descInput = document.getElementById('step5Desc' + idx);
   var unitSelect = row.querySelector('.req-unit');
   var dropdown = document.getElementById('step5Dropdown' + idx);
   if (dropdown) dropdown.classList.add('d-none');
+
+  // ─── Close scanner BEFORE filling (avoids race on mobile) ───
+  closeWizardScanner();
+
   if (matchedItem) {
-    if (searchInput) searchInput.value = matchedItem.inventoryId + ' - ' + matchedItem.description;
-    if (codeInput) codeInput.value = matchedItem.inventoryId || matchedItem.code;
-    if (descInput) descInput.value = matchedItem.description || '';
+    // Fill everything from the matched inventory item
+    var code = matchedItem.inventoryId || matchedItem.code || matchedItem.itemCode || '';
+    var desc = matchedItem.description || '';
+    var unit = matchedItem.unit || 'PIECE';
+
+    if (searchInput) searchInput.value = code + ' - ' + desc;
+    if (codeInput) codeInput.value = code;
+    if (descInput) descInput.value = desc;
+
+    // Set unit dropdown
     if (unitSelect) {
-      var unit = matchedItem.unit || 'PIECE';
+      var found = false;
       for (var opt = 0; opt < unitSelect.options.length; opt++) {
-        if (unitSelect.options[opt].value === unit) { unitSelect.selectedIndex = opt; break; }
+        if (unitSelect.options[opt].value === unit) {
+          unitSelect.selectedIndex = opt;
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        // Add the unit as a temporary option if not in the standard list
+        var newOpt = document.createElement('option');
+        newOpt.value = unit;
+        newOpt.textContent = unit;
+        unitSelect.appendChild(newOpt);
+        unitSelect.value = unit;
       }
     }
+
     checkStep5Items();
     playSuccessBeep();
-    showToast('Item scanned: ' + matchedItem.inventoryId, 'success');
+    showToast('✅ ' + code + ' filled in', 'success');
+
+    // Auto-focus the qty field so the user can immediately type
+    setTimeout(function() {
+      var qtyInput = row.querySelector('.req-qty');
+      if (qtyInput) { qtyInput.focus(); qtyInput.select(); }
+    }, 250);
+
   } else {
-    if (searchInput) searchInput.value = code;
-    if (codeInput) codeInput.value = code;
+    // Not found — still fill what we can, let the user edit manually
+    if (searchInput) searchInput.value = extracted;
+    if (codeInput) codeInput.value = extracted;
+    if (descInput) descInput.value = '';
+
     checkStep5Items();
-    showToast('Scanned code: ' + code + ' (not in inventory)', 'warning');
+    playErrorBuzz();
+    showToast('⚠️ Code "' + extracted + '" not in inventory. Type the description manually.', 'warning', 6000);
+
+    // Focus the search input so user can see what was filled
+    setTimeout(function() {
+      if (searchInput) searchInput.focus();
+    }, 250);
   }
 }
+
 document.addEventListener('hidden.bs.modal', function (event) {
   if (event.target.id === 'newRequestModal') closeWizardScanner();
 });
@@ -437,7 +564,6 @@ async function submitNewRequest() {
   _isSubmittingNewRequest = true;
   state.isLoading = true;
 
-  // ★ SECURITY: Force requestor from login — ignore whatever is in the field
   var locked = _getLockedRequestor();
   var requestor = locked.name;
   var department = locked.department || '';
@@ -833,7 +959,6 @@ function openManualMrifModal() {
   if (!manualMrifModal) manualMrifModal = new bootstrap.Modal(document.getElementById('manualMrifModal'));
   var locked = _getLockedRequestor();
 
-  // ★ Lock requestor + department to login user
   var requestorEl = document.getElementById('manualMrifRequestor');
   var deptEl = document.getElementById('manualMrifDepartment');
   if (requestorEl) {
@@ -990,7 +1115,6 @@ function filterManualMrifItems(input, idx) {
 function updateManualMrifSubmitButton() {
   var btn = document.getElementById('btnSubmitManualMrif');
   if (!btn) return;
-  // ★ Requestor always filled from login, so only check items
   var hasValidItems = false;
   for (var i = 0; i < manualMrifItems.length; i++) {
     var it = manualMrifItems[i];
@@ -1013,7 +1137,6 @@ async function submitManualMrif() {
   }
   _isSubmittingManualMrif = true;
   try {
-    // ★ SECURITY: Force requestor + department from login
     var locked = _getLockedRequestor();
     var requestor = locked.name;
     var department = locked.department || '';
