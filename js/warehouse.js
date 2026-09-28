@@ -1,7 +1,7 @@
 // ============================================================
 // WAREHOUSE CORE FUNCTIONS
-// v3 — Includes: auto-print after process, normalize processedBy,
-//      fixed ProcessedBy name, no retry on abort
+// v5 — Fixed submitProcessBalance (window-scoped items)
+//      + Requestor full-name normalization + auto-print
 // ============================================================
 
 (function() {
@@ -620,7 +620,6 @@
           if (typeof updatePartialCount === 'function') updatePartialCount();
           if (typeof loadAllRequests === 'function') loadAllRequests();
 
-          // Auto-open print preview of the processed doc
           if (processedDoc && typeof autoOpenPrintPreview === 'function') {
             setTimeout(function() { autoOpenPrintPreview(processedDoc, processedType); }, 500);
           }
@@ -645,7 +644,6 @@
       return encodeURIComponent(i.inventoryId) + ',' + i.issuedQty + ',' + i.rowIndex + ',' + encodeURIComponent(i.unit || 'PIECE');
     }).join(';');
 
-    // ★ Use full name for consistency
     var processedByFull = _getCurrentUserName() || state.warehouseName || 'WAREHOUSE';
 
     var url = API_URL + '?action=submitTransaction' +
@@ -1280,12 +1278,11 @@
     var drEl = document.getElementById('manualMrrDrNo');
     var vendorEl = document.getElementById('manualMrrVendor');
     var siteEl = document.getElementById('manualMrrSite');
-        var prepEl = document.getElementById('manualMrrPreparedBy');
+    var prepEl = document.getElementById('manualMrrPreparedBy');
     if (poEl) poEl.value = '';
     if (drEl) drEl.value = '';
     if (vendorEl) vendorEl.value = '';
     if (siteEl) siteEl.value = 'GEMCOR CATMON';
-    // ★ Lock "Prepared By" to login user
     if (prepEl) {
       prepEl.value = _getCurrentUserName();
       prepEl.setAttribute('readonly', 'readonly');
@@ -1470,14 +1467,12 @@
         var code = it.code || it.inventoryId || '';
         var desc = it.description || '';
         var unit = it.unit || 'PIECE';
+        var itemClass = it.itemClass || '';
+        var classBadge = itemClass ? ' <span class="badge bg-info text-dark" style="font-size:0.68rem;">' + itemClass + '</span>' : '';
         var el = document.createElement('div');
         el.className = 'list-group-item list-group-item-action';
         el.style.cssText = 'padding:10px 14px;cursor:pointer;font-size:0.9rem;border-bottom:1px solid #f0f0f0;';
-       var itemClass = it.itemClass || '';
-var classBadge = itemClass ? ' <span class="badge bg-info text-dark" style="font-size:0.68rem;">' + itemClass + '</span>' : '';
-var itemClass = it.itemClass || '';
-var classBadge = itemClass ? ' <span class="badge bg-info text-dark" style="font-size:0.68rem;">' + itemClass + '</span>' : '';
-el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div><div class="text-muted small">' + desc + ' <span class="badge bg-light text-dark">' + unit + '</span>' + classBadge + '</div>';
+        el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div><div class="text-muted small">' + desc + ' <span class="badge bg-light text-dark">' + unit + '</span>' + classBadge + '</div>';
         el.onmousedown = function(e) { e.preventDefault(); selectManualMrrItem(idx, code, desc, unit); dropdown.classList.add('d-none'); };
         dropdown.appendChild(el);
       });
@@ -1544,7 +1539,6 @@ el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div><d
       var vendor = document.getElementById('manualMrrVendor') ? document.getElementById('manualMrrVendor').value.trim() : '';
       var site = document.getElementById('manualMrrSite') ? document.getElementById('manualMrrSite').value.trim() : '';
       var receivingDate = document.getElementById('manualMrrDate') ? document.getElementById('manualMrrDate').value : '';
-           // ★ SECURITY: Force from login — never trust the field
       var preparedBy = _getCurrentUserName() || 'WAREHOUSE';
 
       var items = [];
@@ -1731,6 +1725,7 @@ el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div><d
   window.openProcessPartialModal = async function(docNo) {
     if (!docNo) return;
     _processPartialDocNo = docNo;
+    window._processPartialDocNo = docNo;
     var modalEl = document.getElementById('processPartialModal');
     if (!modalEl) { showToast('Process Balance modal not found', 'danger'); return; }
     var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
@@ -1742,6 +1737,7 @@ el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div><d
     try {
       var all = await fetchPartialItems();
       _processPartialItems = all.filter(function(it) { return (it.originalDocNo || it.docNo) === docNo; });
+      window._processPartialItems = _processPartialItems;   // ★ exposed for submit
       if (!_processPartialItems.length) {
         if (body) body.innerHTML = '<div class="alert alert-info mb-0">No open partial items for this document.</div>';
         return;
@@ -1756,7 +1752,7 @@ el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div><d
           '<td>' + (it.description || '') + '</td>' +
           '<td class="text-center">' + (it.unit || 'PCS') + '</td>' +
           '<td class="text-center fw-bold text-danger process-remaining-cell" data-idx="' + idx + '">' + remaining + '</td>' +
-          '<td class="text-center"><input type="number" class="form-control form-control-sm text-center process-qty-input" data-idx="' + idx + '" value="0" min="0" max="' + remaining + '" step="0.01" style="width:90px;margin:0 auto;" oninput="onProcessQtyInput(this)"></td>' +
+          '<td class="text-center"><input type="number" class="form-control form-control-sm text-center process-qty-input" data-idx="' + idx + '" value="' + remaining + '" min="0" max="' + remaining + '" step="0.01" style="width:90px;margin:0 auto;" oninput="onProcessQtyInput(this)"></td>' +
           '<td><input type="text" class="form-control form-control-sm process-remarks-input" data-idx="' + idx + '" placeholder="Optional" maxlength="200"></td></tr>';
       });
       html += '</tbody></table></div>' +
@@ -1784,15 +1780,23 @@ el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div><d
     });
   };
 
+  // ★ FIXED submitProcessBalance — uses window-scoped items
   window.submitProcessBalance = function() {
-    if (!_processPartialDocNo || !_processPartialItems.length) {
+    var processDocNo = window._processPartialDocNo || _processPartialDocNo;
+    var processItems = window._processPartialItems || _processPartialItems || [];
+    var processDocType = window._processDocType || 'MRIF';
+
+    console.log('[submitProcessBalance] Doc:', processDocNo, 'Items:', processItems.length);
+
+    if (!processDocNo || !processItems.length) {
       showToast('No items to process', 'warning');
       return;
     }
+
     var btn = document.getElementById('btnSubmitProcessBalance');
     return withButtonLoading(btn, async function() {
       var itemsPayload = [];
-      _processPartialItems.forEach(function(it, idx) {
+      processItems.forEach(function(it, idx) {
         var qtyInput = document.querySelector('.process-qty-input[data-idx="' + idx + '"]');
         var remarksInput = document.querySelector('.process-remarks-input[data-idx="' + idx + '"]');
         var remaining = Number(it.remainingQty || 0);
@@ -1800,14 +1804,18 @@ el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div><d
         var remarks = remarksInput ? (remarksInput.value || '').trim() : '';
         if (issueNow > remaining) issueNow = remaining;
         itemsPayload.push({
-          inventoryId: it.itemCode || '', description: it.description || '',
+          inventoryId: it.itemCode || it.inventoryId || '',
+          description: it.description || '',
           qty: remaining, issueNow: issueNow,
           unit: it.unit || 'PCS', remarks: remarks || '',
           originalRowIndex: it.originalRowIndex || 0
         });
       });
+
       var anyIssued = itemsPayload.some(function(it) { return it.issueNow > 0; });
-      if (!anyIssued) { if (!confirm('No quantity entered. Continue anyway?')) return; }
+      if (!anyIssued) {
+        if (!confirm('You have not entered any "Issued Now" quantity.\n\nContinue anyway?')) return;
+      }
 
       var currentUser = '';
       if (typeof state !== 'undefined') currentUser = state.currentUserFullname || state.currentUser || '';
@@ -1818,13 +1826,17 @@ el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div><d
 
       try {
         var payload = {
-          action: 'processPartialBalance', _idemKey: idemKey,
-          originalDocNo: _processPartialDocNo,
-          items: itemsPayload, processedBy: currentUser
+          action: 'processPartialBalance',
+          _idemKey: idemKey,
+          originalDocNo: processDocNo,
+          items: itemsPayload,
+          processedBy: currentUser,
+          docType: processDocType
         };
         var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
         var res = await fetchFn(API_URL, {
-          method: 'POST', body: JSON.stringify(payload),
+          method: 'POST',
+          body: JSON.stringify(payload),
           headers: { 'Content-Type': 'text/plain;charset=utf-8' }
         }, { timeout: 90000, retries: 1 });
         var text = await res.text();
@@ -1832,15 +1844,32 @@ el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div><d
         try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
         if (data && data.success) {
           var processModalEl = document.getElementById('processPartialModal');
-          if (processModalEl) { var pm = bootstrap.Modal.getInstance(processModalEl); if (pm) pm.hide(); }
-          showToast('Balance MRIF created: ' + data.balDocNo + ' (' + (data.status || 'COMPLETED') + ')', 'success');
+          if (processModalEl) {
+            var pm = bootstrap.Modal.getInstance(processModalEl);
+            if (pm) pm.hide();
+          }
+          var newBalanceDoc = data.balDocNo || data.docNo || '';
+          showToast('Balance MRIF created: ' + newBalanceDoc + ' (' + (data.status || 'COMPLETED') + ')', 'success');
+
+          // ★ Clear the shared state
+          window._processPartialItems = null;
+          window._processPartialDocNo = null;
+          window._processDocType = null;
+
           if (typeof updatePartialCount === 'function') updatePartialCount();
           if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
           if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
+          if (typeof loadAllRequests === 'function') loadAllRequests();
+
+          if (newBalanceDoc && typeof autoOpenPrintPreview === 'function') {
+            setTimeout(function() { autoOpenPrintPreview(newBalanceDoc, 'MRIF'); }, 400);
+          }
         } else {
           showToast('Failed: ' + (data.error || 'Unknown error'), 'danger');
         }
-      } catch(err) { showToast('Error: ' + err.message, 'danger'); }
+      } catch(err) {
+        showToast('Error: ' + err.message, 'danger');
+      }
     }, 'Creating Balance...');
   };
 
