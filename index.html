@@ -1038,6 +1038,51 @@
     width: 92vw;
   }
 }
+  /* ═══════════════════════════════════════════════════════════
+   LOCKED FIELD — Requestor / Department / Prepared By
+   ═══════════════════════════════════════════════════════════ */
+.locked-field-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #f0f4f8;
+  border: 2px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #1e3a5f;
+}
+
+.locked-field-display .lock-icon {
+  color: #64748b;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.locked-field-display .locked-value {
+  flex: 1;
+  word-break: break-word;
+}
+
+.locked-field-display .locked-hint {
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: #94a3b8;
+  display: block;
+  margin-top: 2px;
+}
+
+/* Disabled inputs get a "locked" visual */
+input[readonly].locked-input,
+select:disabled.locked-input,
+textarea[readonly].locked-input {
+  background: #f0f4f8 !important;
+  border-color: #cbd5e1 !important;
+  color: #1e3a5f !important;
+  font-weight: 600 !important;
+  cursor: not-allowed;
+}
 </style>
 </style>
 </head>
