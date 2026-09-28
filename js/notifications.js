@@ -21,51 +21,7 @@
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  window.updateWarehouseKPIs = async function() {
-  try {
-    // ─── Fetch all pending + partial docs ───
-    var pendingUrl = API_URL + '?action=getAllPendingDocs&_t=' + Date.now();
-    var pendingRes = await fetch(pendingUrl, { redirect: 'follow' });
-    var pendingText = await pendingRes.text();
-    var pendingData;
-    try { pendingData = JSON.parse(pendingText); } catch(e) { pendingData = {}; }
-    var allDocs = (pendingData && pendingData.documents) || [];
-
-    // ─── Count by category ───
-    var pendingCount = allDocs.filter(function(d) {
-      return String(d.status || '').toUpperCase() === 'PENDING';
-    }).length;
-
-    // Partial MRR = docs with status=PARTIAL and docType=MRR
-    var partialMrrCount = allDocs.filter(function(d) {
-      var s = String(d.status || '').toUpperCase();
-      var t = String(d.docType || '').toUpperCase();
-      return s === 'PARTIAL' && t === 'MRR';
-    }).length;
-
-    // ─── Total / Completed from sheet-count endpoint ───
-    var sheetId = getCleanSheetId() || '';
-    var countUrl = API_URL + '?action=getPendingDocCount&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
-    var countRes = await fetch(countUrl, { redirect: 'follow' });
-    var countText = await countRes.text();
-    var countData;
-    try { countData = JSON.parse(countText); } catch(e) { countData = {}; }
-    var completedCount = countData.completedCount || 0;
-    var totalCount = countData.totalCount || 0;
-
-    var kpiActive = document.getElementById('kpiActiveDocs');
-    var kpiPending = document.getElementById('kpiPending');
-    var kpiPartialMrr = document.getElementById('kpiPartialMrr');
-    var kpiCompleted = document.getElementById('kpiCompleted');
-
-    if (kpiActive) kpiActive.textContent = totalCount;
-    if (kpiPending) kpiPending.textContent = pendingCount;
-    if (kpiPartialMrr) kpiPartialMrr.textContent = partialMrrCount;
-    if (kpiCompleted) kpiCompleted.textContent = completedCount;
-
-    if (typeof updatePartialCount === 'function') updatePartialCount();
-  } catch(e) { console.error('[KPI] Error:', e); }
-};
+  updateWarehouseKPIs 
 
   function processNotifications(requests) {
     if (!requests) requests = [];
