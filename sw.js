@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gemcor-wms-v2.4.19';
+const CACHE_NAME = 'gemcor-wms-v2.4.20';
 const urlsToCache = [
   '/GEMCORQR/',
   '/GEMCORQR/index.html',
