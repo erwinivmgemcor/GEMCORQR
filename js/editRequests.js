@@ -217,14 +217,31 @@ async function rejectEditReqAction(editReqId) {
 async function _getMyEditMap() {
   try {
     var url = API_URL + '?action=getMyEditRequests&requestor=' +
-              encodeURIComponent(_editReqState.currentUser) + '&_t=' + Date.now();
+              encodeURIComponent(_editReqState.currentUser) +
+              '&_t=' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
     var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
-    var res = await fetchFn(url, { redirect: 'follow' }, { timeout: 15000, retries: 1 });
+    var res = await fetchFn(url, { redirect: 'follow', cache: 'no-store' }, { timeout: 15000, retries: 1 });
     var text = await res.text();
     var data = JSON.parse(text);
-    if (data.success) return data.map || {};
+    if (!data.success) return {};
+
+    // ★ Normalize keys — trim, uppercase, remove trailing spaces.
+    //   This way even if the sheet has "MRIF0021274-fabrication " (trailing space)
+    //   and the doc list has "MRIF0021274-fabrication", they match.
+    var raw = data.map || {};
+    var normalized = {};
+    Object.keys(raw).forEach(function(k) {
+      var key = String(k || '').trim();
+      if (!key) return;
+      normalized[key] = raw[k];
+      // Also store an uppercase version for case-insensitive match
+      normalized[key.toUpperCase()] = raw[k];
+    });
+    return normalized;
+  } catch(e) {
+    console.warn('[getMyEditMap] Error:', e);
     return {};
-  } catch(e) { return {}; }
+  }
 }
 
 window.openRequestEditModal = async function(docNo, docType) {
