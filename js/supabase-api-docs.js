@@ -1,50 +1,28 @@
 // ============================================================
 // SUPABASE API — DOCUMENTS
-// Reading layer: documents, doc_items, partial_items, KPIs
-// (Part A — no write operations)
+// Reading + Writing layer
+// v2 — Fixed query strings for sbGetAll
 // ============================================================
 
 // ═══════════════════════════════════════════════════════════════
-// HELPER — paginate a Supabase query (avoid 1000-row limit)
-// ═══════════════════════════════════════════════════════════════
-async function sbGetAll(table, baseQuery) {
-  var allRows = [];
-  var offset = 0;
-  var limit = 1000;
-  var hasMore = true;
-
-  while (hasMore) {
-    var sep = baseQuery.indexOf('?') === -1 ? '?' : '&';
-    var q = baseQuery + sep + 'limit=' + limit + '&offset=' + offset;
-    var batch = await sbGet(table, q);
-    if (!batch || batch.length === 0) break;
-    allRows = allRows.concat(batch);
-    if (batch.length < limit) hasMore = false;
-    else offset += limit;
-  }
-  return allRows;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// PENDING DOCS — for the doc picker dropdown + All Requests page
+// PENDING DOCS — for doc picker + All Requests page
 // ═══════════════════════════════════════════════════════════════
 
-// Same shape as GAS getAllPendingDocs
 async function sbGetAllPendingDocs(includeCompleted) {
   try {
-    var query = 'select=doc_no,doc_type,is_bal,status,requestor,item_summary,created_at,processed_by,processed_at,jo_no,gem_so_no,client_name,project,po_no,vendor,dr_no,receiving_site,prepared_by,date_prepared,receiving_date';
+    var filters = [];
+    filters.push('select=doc_no,doc_type,is_bal,status,requestor,department,item_summary,created_at,processed_by,processed_at,jo_no,gem_so_no,client_name,project,po_no,vendor,dr_no,receiving_site,prepared_by,date_prepared,receiving_date');
 
-    // Filter by status
     if (includeCompleted) {
-      // Return everything that has any status
-      query += '&status=in.(PENDING,PARTIAL,COMPLETED)';
+      filters.push('status=in.(PENDING,PARTIAL,COMPLETED)');
     } else {
-      // Only active docs
-      query += '&status=in.(PENDING,PARTIAL)';
+      filters.push('status=in.(PENDING,PARTIAL)');
     }
 
-    query += '&order=created_at.desc';
+    // order must be LAST in the query string
+    filters.push('order=created_at.desc');
 
+    var query = filters.join('&');
     var rows = await sbGetAll('documents', query);
 
     var docs = (rows || []).map(function(r) {
@@ -55,12 +33,12 @@ async function sbGetAllPendingDocs(includeCompleted) {
         status: String(r.status || 'PENDING').toUpperCase(),
         isBal: !!r.is_bal,
         requestor: r.requestor || '',
+        department: r.department || '',
         itemSummary: r.item_summary || '',
         timestamp: r.created_at || null,
         processedBy: r.processed_by || '',
         processedAt: r.processed_at || null,
         url: '',
-        // Extra fields for the detail modal
         joNo: r.jo_no || '',
         gemSoNo: r.gem_so_no || '',
         clientName: r.client_name || '',
@@ -83,17 +61,19 @@ async function sbGetAllPendingDocs(includeCompleted) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// PENDING DOCS BY TYPE — for the module dropdown
+// PENDING DOCS BY TYPE
 // ═══════════════════════════════════════════════════════════════
+
 async function sbGetPendingDocs(docType) {
   try {
     var type = String(docType || 'MRIF').toUpperCase();
-    var query = 'doc_type=eq.' + encodeURIComponent(type) +
-                '&status=in.(PENDING,PARTIAL)' +
-                '&select=doc_no,doc_type,is_bal,status' +
-                '&order=created_at.desc';
+    var filters = [];
+    filters.push('doc_type=eq.' + encodeURIComponent(type));
+    filters.push('status=in.(PENDING,PARTIAL)');
+    filters.push('select=doc_no,doc_type,is_bal,status');
+    filters.push('order=created_at.desc');
 
-    var rows = await sbGetAll('documents', query);
+    var rows = await sbGetAll('documents', filters.join('&'));
 
     var docs = (rows || []).map(function(r) {
       return {
@@ -113,15 +93,13 @@ async function sbGetPendingDocs(docType) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// DOC ITEMS — get all items for a document
+// DOC ITEMS
 // ═══════════════════════════════════════════════════════════════
 
-// Same shape as GAS getDocItems
 async function sbGetDocItems(docNo, docType) {
   try {
     if (!docNo) return { success: false, error: 'docNo required' };
 
-    // Get document info
     var docRows = await sbGet('documents',
       'doc_no=eq.' + encodeURIComponent(docNo) +
       '&select=id,doc_no,doc_type,status,requestor,department,jo_no,gem_so_no,client_name,project,po_no,prf_no,vendor,dr_no,receiving_site,prepared_by,date_prepared,receiving_date,item_summary,processed_by,processed_at' +
@@ -134,12 +112,12 @@ async function sbGetDocItems(docNo, docType) {
 
     var d = docRows[0];
 
-    // Get items
-    var itemRows = await sbGetAll('doc_items',
-      'doc_no=eq.' + encodeURIComponent(docNo) +
-      '&select=line_no,item_code,description,requested_qty,issued_qty,unit,remarks,row_index' +
-      '&order=line_no.asc'
-    );
+    var itemFilters = [];
+    itemFilters.push('doc_no=eq.' + encodeURIComponent(docNo));
+    itemFilters.push('select=line_no,item_code,description,requested_qty,issued_qty,unit,remarks,row_index');
+    itemFilters.push('order=line_no.asc');
+
+    var itemRows = await sbGetAll('doc_items', itemFilters.join('&'));
 
     var items = (itemRows || []).map(function(r) {
       return {
@@ -159,7 +137,6 @@ async function sbGetDocItems(docNo, docType) {
       };
     });
 
-    // Build info object (same shape as GAS)
     var info = {
       'Requestor': d.requestor || '',
       'Department': d.department || '',
@@ -175,7 +152,6 @@ async function sbGetDocItems(docNo, docType) {
       'Prepared By': d.prepared_by || '',
       'Date Prepared': d.date_prepared || '',
       'Receiving Date': d.receiving_date || '',
-      // Extra aliases for code compatibility
       requestor: d.requestor || '',
       department: d.department || '',
       joNo: d.jo_no || '',
@@ -196,6 +172,7 @@ async function sbGetDocItems(docNo, docType) {
       info: info,
       items: items,
       docNo: docNo,
+      status: String(d.status || 'PENDING').toUpperCase(),
       _resolvedFrom: 'supabase'
     };
   } catch (err) {
@@ -205,8 +182,9 @@ async function sbGetDocItems(docNo, docType) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// DOC STATUS — quick check
+// DOC STATUS
 // ═══════════════════════════════════════════════════════════════
+
 async function sbGetDocStatus(docNo) {
   try {
     if (!docNo) return { success: false, error: 'docNo required' };
@@ -221,27 +199,27 @@ async function sbGetDocStatus(docNo) {
   }
 }
 
-// Alias — for backward compat with existing code that calls getDocLinkStatus
 async function sbGetDocLinkStatus(docNo) {
   var r = await sbGetDocStatus(docNo);
   return r.success ? r.status : null;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MY REQUESTS — for production users (their own requests)
+// MY REQUESTS
 // ═══════════════════════════════════════════════════════════════
+
 async function sbGetMyRequests(requestor) {
   try {
     if (!requestor) return { success: false, error: 'requestor required' };
 
-    var rows = await sbGetAll('documents',
-      'requestor=eq.' + encodeURIComponent(requestor) +
-      '&select=doc_no,doc_type,status,item_summary,created_at,requestor' +
-      '&order=created_at.desc'
-    );
+    var filters = [];
+    filters.push('requestor=eq.' + encodeURIComponent(requestor));
+    filters.push('select=doc_no,doc_type,status,item_summary,created_at,requestor');
+    filters.push('order=created_at.desc');
+
+    var rows = await sbGetAll('documents', filters.join('&'));
 
     var requests = (rows || []).map(function(r) {
-      // Parse item summary to get first item + qty
       var summary = String(r.item_summary || '');
       var parts = summary.split(' x');
       var firstItem = parts[0] || '';
@@ -267,15 +245,17 @@ async function sbGetMyRequests(requestor) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// PARTIAL ITEMS — for MRIF partial processing
+// PARTIAL ITEMS
 // ═══════════════════════════════════════════════════════════════
+
 async function sbGetPartialItems() {
   try {
-    var rows = await sbGetAll('partial_items',
-      'status=eq.OPEN' +
-      '&select=id,original_doc_no,bal_doc_no,item_code,description,requested_qty,issued_qty,remaining_qty,unit,original_row_index,status,requestor,department,jo_no,gem_so_no,client_name,project,created_at' +
-      '&order=created_at.desc'
-    );
+    var filters = [];
+    filters.push('status=eq.OPEN');
+    filters.push('select=id,original_doc_no,bal_doc_no,item_code,description,requested_qty,issued_qty,remaining_qty,unit,original_row_index,status,requestor,department,jo_no,gem_so_no,client_name,project,created_at');
+    filters.push('order=created_at.desc');
+
+    var rows = await sbGetAll('partial_items', filters.join('&'));
 
     var items = (rows || []).map(function(r) {
       return {
@@ -310,9 +290,9 @@ async function sbGetPartialItems() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// PARTIAL DOCS BY TYPE — for the KPI cards (Partial MRR / MRIF)
-// This scans doc_items and returns docs that have at least 1 partial item.
+// PARTIAL DOCS BY TYPE
 // ═══════════════════════════════════════════════════════════════
+
 async function sbGetPartialDocsByType(docType) {
   try {
     docType = String(docType || 'MRIF').toUpperCase();
@@ -320,11 +300,14 @@ async function sbGetPartialDocsByType(docType) {
       return { success: false, error: 'Invalid docType' };
     }
 
-    // Get all docs of this type that are NOT completed
-    var docQuery = 'doc_type=eq.' + encodeURIComponent(docType) +
-                   '&status=in.(PENDING,PARTIAL)' +
-                   '&select=id,doc_no,doc_type,is_bal,status,requestor,department,jo_no,gem_so_no,client_name,project,po_no,vendor,dr_no,receiving_site,prepared_by,date_prepared,receiving_date,item_summary,created_at';
-    var docs = await sbGetAll('documents', docQuery);
+    // Get active docs of this type
+    var docFilters = [];
+    docFilters.push('doc_type=eq.' + encodeURIComponent(docType));
+    docFilters.push('status=in.(PENDING,PARTIAL)');
+    docFilters.push('select=id,doc_no,doc_type,is_bal,status,requestor,department,jo_no,gem_so_no,client_name,project,po_no,vendor,dr_no,receiving_site,prepared_by,date_prepared,receiving_date,item_summary,created_at');
+    docFilters.push('order=created_at.desc');
+
+    var docs = await sbGetAll('documents', docFilters.join('&'));
 
     if (!docs || docs.length === 0) {
       return { success: true, documents: [], total: 0 };
@@ -332,12 +315,15 @@ async function sbGetPartialDocsByType(docType) {
 
     // Get all items for these docs
     var docNos = docs.map(function(d) { return d.doc_no; });
-    var inClause = docNos.map(function(n) { return '"' + String(n).replace(/"/g, '') + '"'; }).join(',');
+    var inClause = docNos.map(function(n) {
+      return '"' + String(n).replace(/"/g, '') + '"';
+    }).join(',');
 
-    var items = await sbGetAll('doc_items',
-      'doc_no=in.(' + inClause + ')' +
-      '&select=doc_no,item_code,description,requested_qty,issued_qty,unit'
-    );
+    var itemFilters = [];
+    itemFilters.push('doc_no=in.(' + inClause + ')');
+    itemFilters.push('select=doc_no,item_code,description,requested_qty,issued_qty,unit');
+
+    var items = await sbGetAll('doc_items', itemFilters.join('&'));
 
     // Group items by doc_no
     var itemsByDoc = {};
@@ -399,7 +385,6 @@ async function sbGetPartialDocsByType(docType) {
       }
     });
 
-    // Sort newest first
     results.sort(function(a, b) {
       var ta = a.created_at ? new Date(a.created_at).getTime() : 0;
       var tb = b.created_at ? new Date(b.created_at).getTime() : 0;
@@ -414,12 +399,12 @@ async function sbGetPartialDocsByType(docType) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// DASHBOARD ANALYTICS — aggregated stats
+// DASHBOARD ANALYTICS
 // ═══════════════════════════════════════════════════════════════
+
 async function sbGetDashboardAnalytics() {
   try {
-    // Get all documents (for totals)
-    var allDocs = await sbGetAll('documents',
+    var docs = await sbGetAll('documents',
       'select=doc_no,doc_type,status,requestor,item_summary,created_at,processed_by,processed_at'
     );
 
@@ -434,13 +419,12 @@ async function sbGetDashboardAnalytics() {
     var processingTimesHours = [];
     var dailyMrif = {}, dailyMrr = {}, dailyMrs = {};
 
-    // Initialize 30-day buckets
     for (var d = 0; d < 30; d++) {
       var ds = new Date(now.getTime() - d * 86400000).toISOString().slice(0, 10);
       dailyMrif[ds] = 0; dailyMrr[ds] = 0; dailyMrs[ds] = 0;
     }
 
-    (allDocs || []).forEach(function(r) {
+    (docs || []).forEach(function(r) {
       total++;
       var type = String(r.doc_type || '').toUpperCase();
       var status = String(r.status || 'PENDING').toUpperCase();
@@ -453,18 +437,16 @@ async function sbGetDashboardAnalytics() {
       else if (status === 'COMPLETED') completed++;
       else if (status === 'PARTIAL') partial++;
 
-      // Daily buckets
       if (r.created_at) {
         var dt = new Date(r.created_at);
         if (!isNaN(dt.getTime()) && dt >= thirtyDaysAgo) {
-          var ds = dt.toISOString().slice(0, 10);
-          if (type === 'MRIF' && dailyMrif[ds] !== undefined) dailyMrif[ds]++;
-          else if (type === 'MRR' && dailyMrr[ds] !== undefined) dailyMrr[ds]++;
-          else if (type === 'MRS' && dailyMrs[ds] !== undefined) dailyMrs[ds]++;
+          var ds2 = dt.toISOString().slice(0, 10);
+          if (type === 'MRIF' && dailyMrif[ds2] !== undefined) dailyMrif[ds2]++;
+          else if (type === 'MRR' && dailyMrr[ds2] !== undefined) dailyMrr[ds2]++;
+          else if (type === 'MRS' && dailyMrs[ds2] !== undefined) dailyMrs[ds2]++;
         }
       }
 
-      // Items (only MRIF)
       if (type === 'MRIF' && r.item_summary) {
         var summary = String(r.item_summary);
         summary.split(',').forEach(function(chunk) {
@@ -479,13 +461,11 @@ async function sbGetDashboardAnalytics() {
         });
       }
 
-      // Staff
       if (r.processed_by) {
         var staff = String(r.processed_by).trim();
         if (staff) staffCounts[staff] = (staffCounts[staff] || 0) + 1;
       }
 
-      // Requestors (only MRIF)
       if (type === 'MRIF' && r.requestor) {
         var req = String(r.requestor).trim();
         if (req && req.toUpperCase() !== 'WAREHOUSE') {
@@ -493,7 +473,6 @@ async function sbGetDashboardAnalytics() {
         }
       }
 
-      // Processing time (completed only)
       if (status === 'COMPLETED' && r.created_at && r.processed_at) {
         var created = new Date(r.created_at);
         var processed = new Date(r.processed_at);
@@ -504,7 +483,6 @@ async function sbGetDashboardAnalytics() {
       }
     });
 
-    // Build daily array
     var sortedDates = Object.keys(dailyMrif).sort();
     var dailyRequests = sortedDates.map(function(date) {
       return {
@@ -516,7 +494,6 @@ async function sbGetDashboardAnalytics() {
       };
     });
 
-    // Top items
     var sortedItems = Object.keys(itemCounts).sort(function(a, b) {
       return itemCounts[b].count - itemCounts[a].count;
     });
@@ -528,7 +505,6 @@ async function sbGetDashboardAnalytics() {
       };
     });
 
-    // Staff
     var sortedStaff = Object.keys(staffCounts).sort(function(a, b) {
       return staffCounts[b] - staffCounts[a];
     });
@@ -536,7 +512,6 @@ async function sbGetDashboardAnalytics() {
       return { name: name, count: staffCounts[name] };
     });
 
-    // Requestors
     var sortedRequestors = Object.keys(requestorCounts).sort(function(a, b) {
       return requestorCounts[b] - requestorCounts[a];
     });
@@ -544,7 +519,6 @@ async function sbGetDashboardAnalytics() {
       return { name: name, count: requestorCounts[name] };
     });
 
-    // Avg
     var avgHours = 0;
     if (processingTimesHours.length > 0) {
       avgHours = processingTimesHours.reduce(function(a, b) { return a + b; }, 0) / processingTimesHours.length;
@@ -575,4 +549,4 @@ async function sbGetDashboardAnalytics() {
   }
 }
 
-console.log('✅ supabase-api-docs.js loaded');
+console.log('✅ supabase-api-docs.js loaded (v2)');
