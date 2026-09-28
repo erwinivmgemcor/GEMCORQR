@@ -134,9 +134,23 @@ async function sbGetUsers() {
 // Same shape as GAS getInventoryItems (returns items array)
 async function sbGetInventoryItems() {
   try {
-    var rows = await sbGet('inventory',
-      'select=item_code,description,unit,item_class&order=item_code.asc'
-    );
+    // Paginate: Supabase returns max 1000 per request by default
+    var allRows = [];
+    var offset = 0;
+    var limit = 1000;
+    var hasMore = true;
+
+    while (hasMore) {
+      var batch = await sbGet('inventory',
+        'select=item_code,description,unit,item_class&order=item_code.asc&limit=' + limit + '&offset=' + offset
+      );
+      if (!batch || batch.length === 0) break;
+      allRows = allRows.concat(batch);
+      if (batch.length < limit) hasMore = false;
+      else offset += limit;
+    }
+
+    var rows = allRows;
 
     var items = (rows || []).map(function(r) {
       return {
@@ -158,9 +172,23 @@ async function sbGetInventoryItems() {
 // Same shape as GAS getInventoryList (returns inventory array)
 async function sbGetInventoryList() {
   try {
-    var rows = await sbGet('inventory',
-      'select=item_code,description,unit,item_class&order=item_code.asc'
-    );
+    // Paginate
+    var allRows = [];
+    var offset = 0;
+    var limit = 1000;
+    var hasMore = true;
+
+    while (hasMore) {
+      var batch = await sbGet('inventory',
+        'select=item_code,description,unit,item_class&order=item_code.asc&limit=' + limit + '&offset=' + offset
+      );
+      if (!batch || batch.length === 0) break;
+      allRows = allRows.concat(batch);
+      if (batch.length < limit) hasMore = false;
+      else offset += limit;
+    }
+
+    var rows = allRows;
 
     var items = (rows || []).map(function(r) {
       return {
