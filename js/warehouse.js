@@ -1873,12 +1873,17 @@
     }, 'Creating Balance...');
   };
 
-  window.updatePartialCount = async function() {
-    try {
-      var items = await fetchPartialItems();
-      var el = document.getElementById('kpiPartial');
-      if (el) el.textContent = items.length;
-    } catch(err) {}
-  };
+ window.updatePartialCount = async function() {
+  try {
+    var items = await fetchPartialItems();
+    // ★ Only count MRIF items (partial items sheet is MRIF-specific)
+    var mrifItems = items.filter(function(it) {
+      var docNo = String(it.originalDocNo || it.docNo || '').toUpperCase();
+      return docNo.indexOf('MRIF') === 0 || docNo.indexOf('BAL.MRIF') === 0;
+    });
+    var el = document.getElementById('kpiPartial');
+    if (el) el.textContent = mrifItems.length;
+  } catch(err) {}
+};
 
 })(); // end IIFE
