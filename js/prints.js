@@ -1,6 +1,6 @@
 // ============================================================
 // PRINT PREVIEW FUNCTIONS
-// v4 — Embedded QR (base64 data URL) — fixes missing QR in print
+// v5 — Embedded QR (base64) + Centered QR in print cells
 // ============================================================
 
 // ─── Local HTML escaper ───
@@ -30,7 +30,7 @@ function _qrUrl(data, size) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// QR → BASE64 CONVERTER (KEY FIX)
+// QR → BASE64 CONVERTER
 // Downloads the QR image, converts to a data URL, caches it.
 // ═══════════════════════════════════════════════════════════════
 var _qrDataUrlCache = {};
@@ -60,12 +60,9 @@ async function _qrToDataUrl(data, size) {
 }
 
 // ─── Pre-convert all QRs in an HTML string to data URLs ───
-// Takes HTML with <img data-qr="dataValue" data-qr-size="120">,
-// returns HTML with <img src="data:image/png;base64,...">.
 async function _embedQrInHtml(html) {
   if (!html) return html;
 
-  // Find all data-qr markers
   var regex = /<img\s+([^>]*?)data-qr="([^"]*)"([^>]*?)data-qr-size="(\d+)"([^>]*?)>/g;
   var matches = [];
   var m;
@@ -82,7 +79,6 @@ async function _embedQrInHtml(html) {
 
   if (matches.length === 0) return html;
 
-  // Convert each QR to a data URL (in parallel)
   var conversions = matches.map(function(match) {
     return _qrToDataUrl(match.data, match.size).then(function(dataUrl) {
       if (!dataUrl) return null;
@@ -97,7 +93,6 @@ async function _embedQrInHtml(html) {
 
   var results = await Promise.all(conversions);
 
-  // Replace each original tag with the embedded version
   results.forEach(function(r) {
     if (r && r.old && r.new) {
       html = html.split(r.old).join(r.new);
@@ -388,13 +383,12 @@ async function renderBulkPrintPreview(documents, docType) {
     if (index < documents.length - 1) combinedHtml += '<div style="page-break-after: always;"></div>';
   });
 
-  // Embed all QRs before showing
   combinedHtml = await _embedQrInHtml(combinedHtml);
   container.innerHTML = combinedHtml;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BUILD MRIF PRINT — Uses data-qr markers for embedding
+// BUILD MRIF PRINT
 // ═══════════════════════════════════════════════════════════════
 function buildSingleMrifHtml(docNo, info, items) {
   var requestor = _escPrint(info.Requestor || info.requestor || info.requestorName || '');
@@ -432,11 +426,10 @@ function buildSingleMrifHtml(docNo, info, items) {
       var unit = _escPrint(it.unit || 'PIECE');
       var remarks = _escPrint(_cleanRemarksForPrint(it.remarks || ''));
 
-      // ★ data-qr marker — will be replaced with base64 during render
       itemsHtml += '<tr>' +
         '<td class="td-center">' + (i + 1) + '</td>' +
         '<td class="td-center">' + code + '</td>' +
-        '<td class="td-center"><img class="print-qr-sm" alt="" data-qr="' + encodeURIComponent(codeRaw) + '" data-qr-size="50"></td>' +
+        '<td class="td-center qr-cell"><img class="print-qr-sm" alt="" data-qr="' + encodeURIComponent(codeRaw) + '" data-qr-size="100"></td>' +
         '<td class="td-left">' + desc + '</td>' +
         '<td class="td-center">' + qty + '</td>' +
         '<td class="td-center">' + issuedDisplay + '</td>' +
@@ -456,7 +449,7 @@ function buildSingleMrifHtml(docNo, info, items) {
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
       '<div class="mrif-docno">' +
         '<div><span class="mrif-dn-label">MRIF No.:</span><span class="mrif-dn-box">' + _escPrint(displayDocNo) + '</span></div>' +
-        '<div class="mrif-doc-qr"><img class="print-qr-lg" alt="MRIF QR" data-qr="' + encodeURIComponent(docQrData) + '" data-qr-size="120"></div>' +
+        '<div class="mrif-doc-qr"><img class="print-qr-lg" alt="MRIF QR" data-qr="' + encodeURIComponent(docQrData) + '" data-qr-size="140"></div>' +
       '</div>' +
     '</div>' +
     '<div class="mrif-title">' + titleText + '</div>' +
@@ -561,7 +554,7 @@ function buildSingleMrrHtml(docNo, info, items) {
       '<div class="mrr-logo"><img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'"></div>' +
       '<div class="mrr-docno">' +
         '<div><span class="mrr-dn-label">Receipt No.:</span><span class="mrr-dn-box">' + _escPrint(cleanDocNo(docNo)) + '</span></div>' +
-        '<div class="mrr-doc-qr"><img class="print-qr-lg" alt="MRR QR" data-qr="' + encodeURIComponent(docQrData) + '" data-qr-size="120"></div>' +
+        '<div class="mrr-doc-qr"><img class="print-qr-lg" alt="MRR QR" data-qr="' + encodeURIComponent(docQrData) + '" data-qr-size="140"></div>' +
       '</div>' +
     '</div>' +
     '<div class="mrr-title">MATERIALS RECEIVING REPORT</div>' +
@@ -644,7 +637,7 @@ function buildSingleMrsHtml(docNo, info, items) {
       itemsHtml += '<tr>' +
         '<td class="td-center">' + (i + 1) + '</td>' +
         '<td class="td-center">' + code + '</td>' +
-        '<td class="td-center"><img class="print-qr-sm" alt="" data-qr="' + encodeURIComponent(codeRaw) + '" data-qr-size="50"></td>' +
+        '<td class="td-center qr-cell"><img class="print-qr-sm" alt="" data-qr="' + encodeURIComponent(codeRaw) + '" data-qr-size="100"></td>' +
         '<td class="td-left">' + desc + '</td>' +
         '<td class="td-center">' + qtyReturned + '</td>' +
         '<td class="td-center">' + actualDisplay + '</td>' +
@@ -664,7 +657,7 @@ function buildSingleMrsHtml(docNo, info, items) {
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
       '<div class="mrif-docno">' +
         '<div><span class="mrif-dn-label">MRS No.:</span><span class="mrif-dn-box">' + _escPrint(cleanDocNo(docNo)) + '</span></div>' +
-        '<div class="mrif-doc-qr"><img class="print-qr-lg" alt="MRS QR" data-qr="' + encodeURIComponent(docQrData) + '" data-qr-size="120"></div>' +
+        '<div class="mrif-doc-qr"><img class="print-qr-lg" alt="MRS QR" data-qr="' + encodeURIComponent(docQrData) + '" data-qr-size="140"></div>' +
       '</div>' +
     '</div>' +
     '<div class="mrif-title">MATERIALS RETURN SLIP</div>' +
@@ -813,7 +806,7 @@ async function renderMrsPrint(docNo, info, items) {
   } finally { hideLoading(); }
 }
 
-// ─── Print via iframe (now uses embedded QRs, so no race) ────
+// ─── Print via iframe ────
 function printMrif() { printWithIframe('mrifPrintContent', 'MRIF Print'); }
 function printMrr() { printWithIframe('mrrPrintContent', 'MRR Print'); }
 function printMrs() { printWithIframe('mrsPrintContent', 'MRS Print'); }
@@ -835,9 +828,9 @@ function printWithIframe(containerId, title) {
     '.mrif-docno, .mrr-docno { text-align: right; }' +
     '.mrif-dn-label, .mrr-dn-label { font-weight: bold; font-size: 9pt; margin-right: 4px; }' +
     '.mrif-dn-box, .mrr-dn-box { display: inline-block; background: #f4cccc; border: 1px solid #e6b8b8; padding: 2px 10px; font-weight: bold; font-size: 10pt; color: #000; }' +
-    '.mrif-doc-qr img, .mrr-doc-qr img { width: 75px; height: 75px; margin-top: 4px; display: block; }' +
-    '.print-qr-sm { width: 40px; height: 40px; display: block; margin: 0 auto; }' +
-    '.print-qr-lg { width: 80px; height: 80px; display: block; }' +
+    '.mrif-doc-qr img, .mrr-doc-qr img { width: 82px; height: 82px; margin-top: 4px; display: block; margin-left: auto; margin-right: auto; }' +
+    '.print-qr-sm { width: 42px; height: 42px; display: block; margin: 0 auto; }' +
+    '.print-qr-lg { width: 82px; height: 82px; display: block; margin: 0 auto; }' +
     '.mrif-title, .mrr-title { text-align: center; font-size: 12pt; font-weight: bold; letter-spacing: 5px; margin: 8px 0 14px 0; text-transform: uppercase; }' +
     '.mrif-meta, .mrr-meta-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 8.5pt; }' +
     '.mrif-meta td, .mrr-meta-table td { padding: 3px 6px; vertical-align: top; }' +
@@ -849,8 +842,10 @@ function printWithIframe(containerId, title) {
     '.mrif-items, .mrr-items { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 8.5pt; }' +
     '.mrif-items th, .mrif-items td, .mrr-items th, .mrr-items td { border: 1px solid #000; padding: 4px 5px; vertical-align: middle; }' +
     '.mrif-items th, .mrr-items th { background: #fff; font-weight: bold; text-align: center; font-size: 8pt; }' +
-    '.td-center { text-align: center; }' +
-    '.td-left { text-align: left; }' +
+    '.td-center { text-align: center; vertical-align: middle; }' +
+    '.td-left { text-align: left; vertical-align: middle; }' +
+    '.qr-cell { text-align: center; vertical-align: middle; padding: 4px 2px; line-height: 0; }' +
+    '.qr-cell img { display: inline-block; margin: 0 auto; vertical-align: middle; }' +
     '.mrr-checkboxes { font-size: 7.5pt; margin-top: 6px; margin-bottom: 16px; }' +
     '.mrr-cb-section { margin-bottom: 6px; }' +
     '.mrr-cb-title { font-weight: bold; font-size: 7.5pt; letter-spacing: 0.5px; margin-bottom: 3px; text-transform: uppercase; }' +
@@ -881,8 +876,6 @@ function printWithIframe(containerId, title) {
   doc.write(fullHtml);
   doc.close();
 
-  // ★ Because QRs are already embedded as data URLs, we can print almost immediately.
-  // Still wait a short beat for layout to settle.
   setTimeout(function() {
     try {
       iframe.contentWindow.focus();
