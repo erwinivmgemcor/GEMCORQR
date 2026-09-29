@@ -1413,11 +1413,14 @@ textarea[readonly].locked-input {
             <option value="MRIF">MRIF only</option>
             <option value="MRS">MRS only</option>
           </select>
-          <select id="allRequestsStatusFilter" class="form-select form-select-sm" style="width:auto;" onchange="loadAllRequests()">
-            <option value="all" selected>All Statuses</option>
-            <option value="active">Active (Pending + Partial)</option>
-            <option value="completed">Completed Only</option>
-          </select>
+         <select id="allRequestsStatusFilter" class="form-select form-select-sm" style="width:auto;" onchange="loadAllRequests()">
+  <option value="partial_today" selected>Partial + Today</option>
+  <option value="partial">Partial (All Dates)</option>
+  <option value="today">Today (All Statuses)</option>
+  <option value="active">Active (Pending + Partial)</option>
+  <option value="all">All Statuses</option>
+  <option value="completed">Completed Only</option>
+</select>
           <button class="btn btn-sm btn-outline-primary" onclick="loadAllRequests()">
             <i class="bi bi-arrow-clockwise me-1"></i>Refresh
           </button>
