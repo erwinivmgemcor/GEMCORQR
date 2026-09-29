@@ -1,6 +1,6 @@
 // ============================================================
 // MAIN - DOM Ready & Initialization
-// v7 — Supabase fast reads for All Requests + My Requests
+// v7.1 — Supabase fast reads + forceSyncToSupabase
 // ============================================================
 
 function _escMain(s) {
@@ -582,12 +582,10 @@ window.loadAllRequests = async function() {
   );
 
   try {
-    // ★ Supabase-first
     var data;
     if (typeof sbGetAllPendingDocs === 'function') {
       data = await sbGetAllPendingDocs(needCompleted);
     } else {
-      // Fallback to GAS
       var url = API_URL + '?action=getAllPendingDocs&_t=' + Date.now();
       if (needCompleted) url += '&includeCompleted=1';
       var res = await fetch(url, { redirect: 'follow' });
@@ -818,7 +816,6 @@ async function testConnection() {
   resultDiv.classList.remove('d-none');
   resultDiv.textContent = 'Testing...';
 
-  // Supabase test
   if (typeof sbHealthCheck === 'function') {
     try {
       var sbResult = await sbHealthCheck();
@@ -828,7 +825,6 @@ async function testConnection() {
     }
   }
 
-  // GAS test
   try {
     var url = API_URL + '?action=ping&_t=' + Date.now();
     resultDiv.textContent += '\nTesting GAS...';
@@ -1120,13 +1116,15 @@ async function enterPrintOnlyMode(docNo) {
         '<p class="small text-muted">If you are the document owner, please verify the QR code is intact.</p>' +
       '</div>';
   }
-  // =============================================================================
+}
+
+// =============================================================================
 // FORCE SUPABASE SYNC
 // =============================================================================
 window.forceSupabaseSync = async function() {
   if (!confirm('Sync all data to Supabase now?\n\nThis may take 10-30 seconds.')) return;
 
-  showToast('Syncing to Supabase...', 'info');
+  if (typeof showToast === 'function') showToast('Syncing to Supabase...', 'info');
 
   try {
     var url = API_URL + '?action=forceSyncToSupabase&_t=' + Date.now();
@@ -1137,16 +1135,20 @@ window.forceSupabaseSync = async function() {
     var data = JSON.parse(trimmed);
 
     if (data.success) {
-      showToast('✅ Sync complete!', 'success');
-      // Refresh data
-      if (typeof sbGetAllPendingDocs === 'function') {
-        sbGetAllPendingDocs(true).catch(function() {});
+      if (typeof showToast === 'function') showToast('✅ Sync complete!', 'success');
+      // Refresh Supabase caches
+      if (typeof clearCache === 'function') {
+        clearCache('partial_modal_MRIF');
+        clearCache('partial_modal_MRR');
+        clearCache('kpi_partial_MRIF');
+        clearCache('kpi_partial_MRR');
       }
     } else {
-      showToast('Sync failed: ' + (data.error || 'Unknown'), 'danger');
+      if (typeof showToast === 'function') showToast('Sync failed: ' + (data.error || 'Unknown'), 'danger');
     }
   } catch(e) {
-    showToast('Sync error: ' + e.message, 'danger');
+    if (typeof showToast === 'function') showToast('Sync error: ' + e.message, 'danger');
   }
 };
-}
+
+console.log('✅ main.js v7.1 loaded (forceSupabaseSync ready)');
