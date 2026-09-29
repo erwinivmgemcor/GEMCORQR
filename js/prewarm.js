@@ -7,7 +7,7 @@
 (function() {
   'use strict';
 
-  var PREWARM_INTERVAL = 4 * 60 * 1000; // 4 minutes
+var PREWARM_INTERVAL = 15 * 60 * 1000; // 15 minutes
   var _timer = null;
   var _lastPing = 0;
 
