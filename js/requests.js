@@ -1521,3 +1521,51 @@ window.submitNewRequestNoJo = async function() {
 };
 
 console.log('✅ requests.js v6 loaded (with No JO feature)');
+// =============================================================================
+// REFRESH MY REQUESTS — force-sync then reload
+// =============================================================================
+window.refreshMyRequests = async function() {
+  var btn = document.getElementById('btnRefreshMyReq');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Syncing...';
+  }
+
+  showToast('Syncing to Supabase...', 'info');
+
+  try {
+    // 1. Force sync to Supabase (calls GAS which syncs DOCLINKS + items)
+    var url = API_URL + '?action=forceSyncToSupabase&_t=' + Date.now();
+    var res = await fetch(url, { redirect: 'follow' });
+    var text = await res.text();
+    var trimmed = String(text || '').trim();
+    if (trimmed && trimmed.charAt(0) !== '<') {
+      var data = JSON.parse(trimmed);
+      if (!data.success) {
+        console.warn('[refreshMyRequests] Sync returned: ' + (data.error || 'unknown'));
+      }
+    }
+
+    // 2. Clear cache so next load fetches fresh from Supabase
+    if (typeof clearCache === 'function') {
+      clearCache('my_requests');
+      clearCache('partial_modal_MRIF');
+      clearCache('partial_modal_MRR');
+    }
+
+    // 3. Reload from Supabase
+    if (typeof loadMyRequests === 'function') {
+      await loadMyRequests();
+    }
+
+    showToast('✅ Requests refreshed!', 'success');
+  } catch(e) {
+    console.error('[refreshMyRequests] Error:', e);
+    showToast('Refresh failed: ' + e.message, 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Refresh';
+    }
+  }
+};
