@@ -1,7 +1,7 @@
 // ============================================================
 // MAIN - DOM Ready & Initialization
-// v4 — Fix: Always fetch fresh edit-map when modal opens
-//      so approved docs show "Edit Now" reliably.
+// v5 — All Requests: Partial + Today default filter (persisted)
+//      Removed duplicate openPartialMrrModal (handled by notifications.js)
 // ============================================================
 
 // Local HTML escaper (defensive — sheet/user data rendered into innerHTML)
@@ -570,6 +570,7 @@ window.updateWarehouseKPIs = function() {
 
 // ═══════════════════════════════════════════════════════════════
 // ALL REQUESTS (Warehouse view — active + completed)
+// ★ v2 — Partial + Today filter (persisted), plus date-aware filters
 // ═══════════════════════════════════════════════════════════════
 
 window.loadAllRequests = async function() {
@@ -577,19 +578,31 @@ window.loadAllRequests = async function() {
   if (!container) return;
 
   container.innerHTML = '<div class="list-group-item text-muted text-center py-3">' +
-    '<div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading all requests...</div>';
+    '<div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading requests...</div>';
 
   var typeEl = document.getElementById('allRequestsFilter');
   var statusEl = document.getElementById('allRequestsStatusFilter');
+
+  // ★ Restore saved filter (if any)
+  var savedFilter = localStorage.getItem('ivm_allReqStatusFilter');
+  if (savedFilter && statusEl) {
+    var hasOpt = Array.prototype.some.call(statusEl.options, function(o) { return o.value === savedFilter; });
+    if (hasOpt) statusEl.value = savedFilter;
+  }
+
   var filterRaw = typeEl ? typeEl.value : 'MRIF,MRS';
-  var statusFilter = statusEl ? statusEl.value : 'all';
+  var statusFilter = statusEl ? statusEl.value : 'partial_today';
+
+  // ★ Persist current choice
+  try { localStorage.setItem('ivm_allReqStatusFilter', statusFilter); } catch(e) {}
+
   var allowedTypes = (filterRaw || 'MRIF,MRS').split(',').map(function(s) { return s.trim().toUpperCase(); });
 
-  var includeCompleted = (statusFilter !== 'active');
+  var needCompleted = (statusFilter === 'all' || statusFilter === 'completed' || statusFilter === 'today');
 
   try {
     var url = API_URL + '?action=getAllPendingDocs&_t=' + Date.now();
-    if (includeCompleted) url += '&includeCompleted=1';
+    if (needCompleted) url += '&includeCompleted=1';
 
     var res = await fetch(url, { redirect: 'follow' });
     var text = await res.text();
@@ -600,6 +613,7 @@ window.loadAllRequests = async function() {
 
     var allDocs = data.documents || [];
 
+    // ─── Sidebar badge (active = pending + partial, regardless of date) ───
     var activeCount = allDocs.filter(function(d) {
       var s = (d.status || 'PENDING').toUpperCase();
       return s === 'PENDING' || s === 'PARTIAL';
@@ -610,6 +624,39 @@ window.loadAllRequests = async function() {
       badge.classList.toggle('d-none', activeCount === 0);
     }
 
+    // ─── Prepare date boundaries for "today" ───
+    var now = new Date();
+    var todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    var todayEnd = todayStart + 24 * 60 * 60 * 1000;
+
+    // ─── Filter docs ───
+    var docs = allDocs.filter(function(d) {
+      var t = (d.docType || '').toUpperCase();
+      if (allowedTypes.indexOf(t) === -1) return false;
+
+      var s = (d.status || 'PENDING').toUpperCase();
+      var ts = d.timestamp ? new Date(d.timestamp).getTime() : 0;
+      var isToday = ts >= todayStart && ts < todayEnd;
+
+      if (statusFilter === 'partial_today') {
+        return s === 'PARTIAL' && isToday;
+      }
+      if (statusFilter === 'partial') {
+        return s === 'PARTIAL';
+      }
+      if (statusFilter === 'today') {
+        return isToday;
+      }
+      if (statusFilter === 'active') {
+        return s === 'PENDING' || s === 'PARTIAL';
+      }
+      if (statusFilter === 'completed') {
+        return s === 'COMPLETED';
+      }
+      return true; // 'all'
+    });
+
+    // ─── Fetch prep statuses (only useful for active docs) ───
     var prepMap = {};
     if (statusFilter !== 'completed') {
       try {
@@ -621,15 +668,6 @@ window.loadAllRequests = async function() {
         if (prepData && prepData.success) prepMap = prepData.statuses || {};
       } catch(e) { /* silent */ }
     }
-
-    var docs = allDocs.filter(function(d) {
-      var t = (d.docType || '').toUpperCase();
-      if (allowedTypes.indexOf(t) === -1) return false;
-      var s = (d.status || 'PENDING').toUpperCase();
-      if (statusFilter === 'active' && s !== 'PENDING' && s !== 'PARTIAL') return false;
-      if (statusFilter === 'completed' && s !== 'COMPLETED') return false;
-      return true;
-    });
 
     docs.sort(function(a, b) {
       var ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
@@ -644,93 +682,10 @@ window.loadAllRequests = async function() {
       '<i class="bi bi-exclamation-triangle-fill me-2"></i>Failed to load: ' + _escMain(err.message) + '</div>';
   }
 };
-window.openPartialMrrModal = async function() {
-  showLoading('Loading partial MRRs...');
-  try {
-    var url = API_URL + '?action=getAllPendingDocs&_t=' + Date.now();
-    var res = await fetch(url, { redirect: 'follow' });
-    var text = await res.text();
-    var data = JSON.parse(text);
-    var docs = (data.documents || []).filter(function(d) {
-      return String(d.status || '').toUpperCase() === 'PARTIAL' &&
-             String(d.docType || '').toUpperCase() === 'MRR';
-    });
 
-    hideLoading();
-
-    if (docs.length === 0) {
-      showToast('No partial MRRs at the moment.', 'info');
-      return;
-    }
-
-    // Build a simple modal on the fly
-    var modalId = 'partialMrrModal';
-    var existing = document.getElementById(modalId);
-    if (existing) existing.remove();
-
-    var html = '<div class="modal fade" id="' + modalId + '" tabindex="-1">' +
-      '<div class="modal-dialog modal-lg modal-dialog-scrollable">' +
-        '<div class="modal-content">' +
-          '<div class="modal-header bg-success text-white">' +
-            '<h5 class="modal-title"><i class="bi bi-box-arrow-in-down me-2"></i>Partially Received MRRs (' + docs.length + ')</h5>' +
-            '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>' +
-          '</div>' +
-          '<div class="modal-body p-0">' +
-            '<div class="list-group list-group-flush">';
-
-    docs.forEach(function(d) {
-      var dateStr = d.timestamp ? new Date(d.timestamp).toLocaleString() : '';
-      var requestor = (d.requestor || '').replace(/</g, '&lt;');
-      var docNo = (d.docNo || '').replace(/</g, '&lt;');
-      var itemSummary = (d.itemSummary || '').replace(/</g, '&lt;');
-
-      html += '<div class="list-group-item">' +
-        '<div class="d-flex justify-content-between align-items-start flex-wrap gap-2">' +
-          '<div class="flex-grow-1">' +
-            '<div class="fw-bold">' + docNo + ' <span class="badge bg-success">MRR</span> <span class="badge bg-info text-dark">PARTIAL</span></div>' +
-            '<div class="small text-muted"><i class="bi bi-person me-1"></i>' + requestor + '</div>' +
-            '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + dateStr + '</div>' +
-            '<div class="small mt-1"><i class="bi bi-box me-1"></i>' + itemSummary + '</div>' +
-          '</div>' +
-          '<div class="d-flex flex-column gap-1">' +
-            '<button class="btn btn-sm btn-success" onclick="closePartialMrrModal();prefillManualMrrFromDoc(\'' + docNo.replace(/'/g, "\\'") + '\')">' +
-              '<i class="bi bi-arrow-right-circle me-1"></i>Process' +
-            '</button>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
-    });
-
-    html += '</div></div>' +
-          '<div class="modal-footer"><button class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button></div>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
-
-    var wrapper = document.createElement('div');
-    wrapper.innerHTML = html;
-    document.body.appendChild(wrapper.firstChild);
-
-    var modalEl = document.getElementById(modalId);
-    var bsModal = new bootstrap.Modal(modalEl);
-    bsModal.show();
-
-    modalEl.addEventListener('hidden.bs.modal', function() {
-      modalEl.remove();
-    });
-  } catch (err) {
-    hideLoading();
-    showToast('Failed to load partial MRRs: ' + err.message, 'danger');
-  }
-};
-
-window.closePartialMrrModal = function() {
-  var modalEl = document.getElementById('partialMrrModal');
-  if (modalEl) {
-    var m = bootstrap.Modal.getInstance(modalEl);
-    if (m) m.hide();
-  }
-};
+// ─── REMOVED duplicate openPartialMrrModal ───
+// The canonical version lives in notifications.js (loaded after main.js).
+// Keeping this comment as a breadcrumb for future refactors.
 
 function renderAllRequests(docs, statusFilter, prepMap) {
   var container = document.getElementById('allRequestsListPage');
@@ -740,7 +695,16 @@ function renderAllRequests(docs, statusFilter, prepMap) {
   if (!docs || docs.length === 0) {
     var emptyMsg = 'No requests found.';
     var emptyHint = 'New requests from production will appear here automatically.';
-    if (statusFilter === 'active') {
+    if (statusFilter === 'partial_today') {
+      emptyMsg = 'No partial requests for today. 🎉';
+      emptyHint = 'Change the filter to "All Statuses" or "Partial (All Dates)" to see more.';
+    } else if (statusFilter === 'partial') {
+      emptyMsg = 'No partial requests at the moment.';
+      emptyHint = 'Everything is either pending or completed.';
+    } else if (statusFilter === 'today') {
+      emptyMsg = 'No requests submitted today.';
+      emptyHint = 'Try switching to "Partial + Today" or "All Statuses".';
+    } else if (statusFilter === 'active') {
       emptyMsg = 'No active requests right now.';
       emptyHint = 'All requests have been processed. Switch the filter to "All Statuses" to review past work.';
     } else if (statusFilter === 'completed') {
@@ -982,22 +946,22 @@ window.openWarehouseEditModal = async function(docNo, docType) {
     var info = data.info || {};
     var items = data.items || [];
 
-   // ★ Warehouse edit: keep the ORIGINAL requestor/department of the doc.
-//   Do NOT overwrite with warehouse's own login name.
-var elReq = document.getElementById('editReqRequestor');
-var elDept = document.getElementById('editReqDepartment');
-if (elReq) {
-  elReq.value = info.Requestor || info.requestor || '';
-  elReq.setAttribute('readonly', 'readonly');
-  elReq.classList.add('locked-input');
-  elReq.title = 'Original requestor — cannot be changed by warehouse';
-}
-if (elDept) {
-  elDept.value = info.Department || info.department || '';
-  elDept.setAttribute('readonly', 'readonly');
-  elDept.classList.add('locked-input');
-  elDept.title = 'Original department — cannot be changed by warehouse';
-}
+    // ★ Warehouse edit: keep the ORIGINAL requestor/department of the doc.
+    //   Do NOT overwrite with warehouse's own login name.
+    var elReq = document.getElementById('editReqRequestor');
+    var elDept = document.getElementById('editReqDepartment');
+    if (elReq) {
+      elReq.value = info.Requestor || info.requestor || '';
+      elReq.setAttribute('readonly', 'readonly');
+      elReq.classList.add('locked-input');
+      elReq.title = 'Original requestor — cannot be changed by warehouse';
+    }
+    if (elDept) {
+      elDept.value = info.Department || info.department || '';
+      elDept.setAttribute('readonly', 'readonly');
+      elDept.classList.add('locked-input');
+      elDept.title = 'Original department — cannot be changed by warehouse';
+    }
 
     document.getElementById('editReqJoNo').value = info['JO No.'] || info.joNo || '';
     document.getElementById('editReqGemSoNo').value = info['GEM SO No.'] || info.gemSoNo || '';
