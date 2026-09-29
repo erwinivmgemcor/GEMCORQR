@@ -1201,7 +1201,7 @@ async function submitManualMrif() {
 var _noJoItems = [];
 var _noJoModal = null;
 
-window.openNewRequestNoJO = function() {
+window.openNewRequestNoJO = async function() {
   console.log('[NoJO] Opening modal...');
 
   _noJoItems = [];
@@ -1234,11 +1234,18 @@ window.openNewRequestNoJO = function() {
   if (reqHidden) reqHidden.value = locked.name || '';
   if (deptHidden) deptHidden.value = locked.department || '';
 
-  if (typeof renderNoJoItems === 'function') renderNoJoItems();
+  renderNoJoItems();
 
+  // ★ AWAIT inventory load BEFORE opening modal
   if (typeof loadRequestInventory === 'function' && typeof state !== 'undefined') {
     if (!state.requestInventoryList || state.requestInventoryList.length === 0) {
-      loadRequestInventory().catch(function() {});
+      showLoading('Loading inventory...');
+      try {
+        await loadRequestInventory();
+      } catch(e) {
+        console.warn('[NoJO] Inventory load failed:', e);
+      }
+      hideLoading();
     }
   }
 
@@ -1253,9 +1260,8 @@ window.openNewRequestNoJO = function() {
     _noJoModal = new bootstrap.Modal(modalEl);
   }
   _noJoModal.show();
-  console.log('[NoJO] Modal shown');
+  console.log('[NoJO] Modal shown, inventory items:', state.requestInventoryList.length);
 };
-
 window.selectNoJoDocType = function(type) {
   var el = document.getElementById('noJoDocType');
   if (el) el.value = type;
@@ -1361,11 +1367,23 @@ window.filterNoJoItems = function(input, idx) {
 
   var list = (typeof state !== 'undefined' && state.requestInventoryList) ? state.requestInventoryList : [];
   if (list.length === 0) {
-    dropdown.innerHTML = '<div class="list-group-item text-muted small" style="padding:8px 12px;">Loading inventory...</div>';
+    dropdown.innerHTML = '<div class="list-group-item text-muted small" style="padding:8px 12px;">' +
+      '<i class="bi bi-hourglass-split me-1"></i>Loading inventory... (please wait)' +
+      '</div>';
     _positionNoJoDropdown(dropdown, input);
     dropdown.classList.remove('d-none');
+    // Try loading again
+    if (typeof loadRequestInventory === 'function') {
+      loadRequestInventory().then(function() {
+        // Re-trigger filter once loaded
+        if (list.length > 0) {
+          filterNoJoItems(input, idx);
+        }
+      }).catch(function() {});
+    }
     return;
   }
+  // ... rest of the function unchanged
 
   var matches = list.filter(function(it) {
     var c = (it.code || it.inventoryId || '').toLowerCase();
