@@ -66,8 +66,8 @@ async function loadAnalytics(forceRefresh) {
 
   _analyticsFetchPromise = (async function() {
     try {
-      var url = API_URL + '?action=getDashboardAnalytics&_t=' + Date.now();
-      var res = await fetch(url, { redirect: 'follow' });
+var data = await sbGetDashboardAnalytics();
+if (!data.success) throw new Error(data.error || 'Unknown error');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var text = await res.text();
       var trimmed = String(text || '').trim();
