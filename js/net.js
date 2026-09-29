@@ -1,14 +1,15 @@
 // ============================================================
-// NETWORK LAYER — Retry, timeout, offline banner, safe fetch
-// ★ v2 — No retry on AbortError (prevents duplicate writes)
-//       Longer timeouts (60s default)
-//       Better error messages
+// NETWORK LAYER — safeFetch helper + offline pill
+// v3 — REMOVED global fetch monkey-patch (was aborting GAS calls)
+//      safeFetch is opt-in only. Default fetch has no timeout.
+//      GAS cold starts can take 15-30s — we no longer abort them.
 // ============================================================
 
+// ─── Opt-in safeFetch (only use when you explicitly want retry+timeout) ───
 window.safeFetch = async function(url, options, opts) {
   opts = opts || {};
-  var retries = opts.retries != null ? opts.retries : 2;
-  var timeout = opts.timeout || 60000;   // ★ was 20s, now 60s default
+  var retries = opts.retries != null ? opts.retries : 0;
+  var timeout = opts.timeout || 90000;   // ★ 90s default (GAS cold starts)
   var lastErr = null;
 
   for (var attempt = 0; attempt <= retries; attempt++) {
@@ -20,7 +21,7 @@ window.safeFetch = async function(url, options, opts) {
       clearTimeout(timer);
       if (!res.ok) {
         if (res.status >= 500 && attempt < retries) {
-          await new Promise(function(r) { setTimeout(r, 800 * Math.pow(2, attempt)); });
+          await new Promise(function(r) { setTimeout(r, 1500 * Math.pow(2, attempt)); });
           continue;
         }
         throw new Error('HTTP ' + res.status);
@@ -29,15 +30,10 @@ window.safeFetch = async function(url, options, opts) {
     } catch (e) {
       clearTimeout(timer);
       lastErr = e;
-
-      // ★ CRITICAL: If we timed out, DO NOT retry.
-      // The server likely received the request. Retrying duplicates writes.
-      if (e.name === 'AbortError') {
-        throw e;
-      }
-
+      // Never retry on abort — server may still be processing
+      if (e.name === 'AbortError') throw e;
       if (attempt < retries) {
-        await new Promise(function(r) { setTimeout(r, 800 * Math.pow(2, attempt)); });
+        await new Promise(function(r) { setTimeout(r, 1500 * Math.pow(2, attempt)); });
       }
     }
   }
@@ -87,10 +83,7 @@ window.safeFetch = async function(url, options, opts) {
   pill.innerHTML = '<span class="net-dot"></span><span id="netPillText"></span>';
   document.body.appendChild(pill);
 
-  var _slowTimer = null;
   var _hideTimer = null;
-  var _origFetch = window.fetch;
-  var _pendingCount = 0;
 
   function _showPill(text, cls, autoHideMs) {
     var textEl = document.getElementById('netPillText');
@@ -106,29 +99,6 @@ window.safeFetch = async function(url, options, opts) {
     if (_hideTimer) clearTimeout(_hideTimer);
     pill.className = '';
   }
-
-  window.fetch = function(input, init) {
-    var url = typeof input === 'string' ? input : (input && input.url) || '';
-    var isApiCall = url.indexOf('script.google.com') !== -1 || url.indexOf('macros/s/') !== -1;
-
-    _pendingCount++;
-    if (isApiCall && !_slowTimer && navigator.onLine) {
-      _slowTimer = setTimeout(function() {
-        _showPill('Slow connection...', 'slow', 0);
-      }, 6000);
-    }
-
-    var p = _origFetch.apply(this, arguments);
-    p.finally(function() {
-      _pendingCount--;
-      if (_pendingCount <= 0) {
-        _pendingCount = 0;
-        if (_slowTimer) { clearTimeout(_slowTimer); _slowTimer = null; }
-        if (pill.classList.contains('slow') && navigator.onLine) _hidePill();
-      }
-    });
-    return p;
-  };
 
   window.addEventListener('online', function() {
     _showPill('Back online', 'online', 2000);
@@ -148,14 +118,20 @@ window.safeFetch = async function(url, options, opts) {
   });
 
   if (!navigator.onLine) _showPill('Offline — showing cached data', 'offline', 0);
+
+  window.showNetPill = _showPill;
+  window.hideNetPill = _hidePill;
 })();
 
-// ─── Stale-while-revalidate helper ───
+// ─── SWR helper ───
 window.swrFetch = async function(url, cacheKey, ttl, opts) {
   var cached = (typeof getCache === 'function') ? getCache(cacheKey) : null;
   var fetchPromise = safeFetch(url, null, opts)
-    .then(function(res) { return res.json(); })
-    .then(function(data) {
+    .then(function(res) { return res.text(); })
+    .then(function(text) {
+      var trimmed = String(text || '').trim();
+      if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
+      var data = JSON.parse(trimmed);
       if (data && data.success !== false && typeof setCache === 'function') {
         try { setCache(cacheKey, data, ttl); } catch(e) {}
       }
@@ -197,13 +173,16 @@ window.flushOfflineQueue = async function() {
   var successCount = 0;
   for (var i = 0; i < q.length; i++) {
     try {
-      var res = await safeFetch(q[i].url, {
+      var res = await fetch(q[i].url, {
         method: 'POST',
         body: q[i].body,
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }
-      }, { retries: 1, timeout: 30000 });
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        redirect: 'follow'
+      });
       var text = await res.text();
-      var data = JSON.parse(text);
+      var trimmed = String(text || '').trim();
+      if (!trimmed || trimmed.charAt(0) === '<') { remaining.push(q[i]); continue; }
+      var data = JSON.parse(trimmed);
       if (data && data.success) successCount++;
       else remaining.push(q[i]);
     } catch(e) {
@@ -226,4 +205,4 @@ setTimeout(function() {
   if (navigator.onLine && _getQueue().length > 0) flushOfflineQueue();
 }, 3000);
 
-console.log('✅ net.js loaded (v2 — no retry on abort, 60s timeout)');
+console.log('✅ net.js loaded (v3 — no global fetch override, GAS-safe)');
