@@ -336,22 +336,37 @@
   // ═══════════════════════════════════════════════════════════
   // SHARED PARTIAL DOC MODAL
   // ═══════════════════════════════════════════════════════════
-  async function _openPartialDocModal(docType) {
+    async function _openPartialDocModal(docType) {
     showLoading('Loading partial ' + docType + 's...');
     try {
       var url = API_URL + '?action=getPartialDocsByType&docType=' + docType + '&_t=' + Date.now();
-      var res = await fetch(url, { redirect: 'follow' });
+      var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
+      var res = await fetchFn(url, { redirect: 'follow' }, { timeout: 25000, retries: 0 });
       var text = await res.text();
-      var data;
-      try { data = JSON.parse(text); } catch(e) { data = {}; }
+      var trimmed = String(text || '').trim();
 
       hideLoading();
+
+      // ★ Detect dead deployment / HTML response
+      if (!trimmed || trimmed.charAt(0) === '<') {
+        showToast('⚠️ Server is offline or misconfigured. Please verify the GAS Web app URL in config.js.', 'danger', 10000);
+        console.error('[Partial Doc] Got HTML instead of JSON. First 200 chars:', trimmed.substring(0, 200));
+        return;
+      }
+
+      var data;
+      try {
+        data = JSON.parse(trimmed);
+      } catch(e) {
+        showToast('⚠️ Invalid server response. Check the GAS deployment.', 'danger');
+        console.error('[Partial Doc] JSON parse failed:', e, 'Raw:', trimmed.substring(0, 200));
+        return;
+      }
 
       if (!data.success) {
         showToast('Failed to load: ' + (data.error || 'Unknown error'), 'danger');
         return;
       }
-
       var docs = data.documents || [];
 
       var modalId = 'partialDocModal_' + docType;
