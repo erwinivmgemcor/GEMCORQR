@@ -694,35 +694,61 @@ window.loadAllRequests = async function() {
       badge.classList.toggle('d-none', activeCount === 0);
     }
 
-    var now = new Date();
-    var todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    var todayEnd = todayStart + 24 * 60 * 60 * 1000;
-
-    var docs = allDocs.filter(function(d) {
-      var t = (d.docType || '').toUpperCase();
-      if (allowedTypes.indexOf(t) === -1) return false;
-
-      var s = (d.status || 'PENDING').toUpperCase();
-      var ts = d.timestamp ? new Date(d.timestamp).getTime() : 0;
-      var isToday = ts >= todayStart && ts < todayEnd;
-
-      if (statusFilter === 'today_and_partial') {
-        return isToday || s === 'PARTIAL';
-      }
-      if (statusFilter === 'today') {
-        return isToday;
-      }
-      if (statusFilter === 'partial') {
-        return s === 'PARTIAL';
-      }
-      if (statusFilter === 'active') {
-        return s === 'PENDING' || s === 'PARTIAL';
-      }
-      if (statusFilter === 'completed') {
-        return s === 'COMPLETED';
-      }
-      return true;
+    // ★ Compute "today" using PH timezone (Asia/Manila) to avoid UTC mismatches
+function _getPHDateString(d) {
+  try {
+    var parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Manila',
+      year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(d);
+    var y = '', m = '', dd = '';
+    parts.forEach(function(p) {
+      if (p.type === 'year') y = p.value;
+      else if (p.type === 'month') m = p.value;
+      else if (p.type === 'day') dd = p.value;
     });
+    return y + '-' + m + '-' + dd;
+  } catch(e) {
+    // Fallback to local
+    var yy = d.getFullYear();
+    var mm = String(d.getMonth() + 1).padStart(2, '0');
+    var dd2 = String(d.getDate()).padStart(2, '0');
+    return yy + '-' + mm + '-' + dd2;
+  }
+}
+
+var todayPH = _getPHDateString(new Date());
+
+var docs = allDocs.filter(function(d) {
+  var t = (d.docType || '').toUpperCase();
+  if (allowedTypes.indexOf(t) === -1) return false;
+
+  var s = (d.status || 'PENDING').toUpperCase();
+
+  // Convert timestamp to PH date string
+  var ts = d.timestamp ? new Date(d.timestamp) : null;
+  var tsPH = ts && !isNaN(ts.getTime()) ? _getPHDateString(ts) : '';
+  var isToday = (tsPH === todayPH);
+
+  if (statusFilter === 'today_and_partial') {
+    // Today's requests (any status) OR any partial regardless of date
+    return isToday || s === 'PARTIAL';
+  }
+  if (statusFilter === 'today') {
+    return isToday;
+  }
+  if (statusFilter === 'partial') {
+    return s === 'PARTIAL';
+  }
+  if (statusFilter === 'active') {
+    // Pending + Partial, ALL dates — the "monitoring" filter you need
+    return s === 'PENDING' || s === 'PARTIAL';
+  }
+  if (statusFilter === 'completed') {
+    return s === 'COMPLETED';
+  }
+  return true;
+});
 
     var prepMap = {};
     if (statusFilter !== 'completed') {
