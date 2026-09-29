@@ -1,11 +1,8 @@
 // ============================================================
 // MAIN - DOM Ready & Initialization
-// v6 — All Requests: "Today + All Partials" default
-//      Fixed: fetch includeCompleted when 'today_and_partial'
-//      Removed duplicate openPartialMrrModal (handled by notifications.js)
+// v7 — Supabase fast reads for All Requests + My Requests
 // ============================================================
 
-// Local HTML escaper (defensive — sheet/user data rendered into innerHTML)
 function _escMain(s) {
   if (s === null || s === undefined) return '';
   return String(s)
@@ -16,7 +13,6 @@ function _escMain(s) {
     .replace(/'/g, '&#39;');
 }
 
-// ─── Local prep-status helpers (used by All Requests renderer) ───
 function _prepStatusFromMap(prepMap, docNo) {
   var p = prepMap[docNo];
   var s = p ? String(p.prepStatus || 'NEW').toUpperCase() : 'NEW';
@@ -153,7 +149,6 @@ function toggleSidebar(open) {
   }
 }
 
-// ─── Edit request action button helper ───
 function _editActionButtonHtml(docNo, docType, docStatus) {
   var safeDoc = String(docNo).replace(/'/g, "\\'");
   var safeType = String(docType || 'MRIF').replace(/'/g, "\\'");
@@ -446,8 +441,6 @@ window.downloadMyRequestQr = function() {
   qrImg.src = img.src;
 };
 
-// Optional: prep statuses still from GAS (smaller data)
-// Or skip for now
 var originalRenderMyRequests = window.renderMyRequests || function() {};
 
 window.renderMyRequests = async function(requests) {
@@ -553,8 +546,7 @@ window.updateWarehouseKPIs = function() {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// ALL REQUESTS (Warehouse view)
-// ★ v3 — Fixed: "today_and_partial" now fetches completed docs
+// ALL REQUESTS — Supabase-first reads
 // ═══════════════════════════════════════════════════════════════
 
 window.loadAllRequests = async function() {
@@ -564,10 +556,11 @@ window.loadAllRequests = async function() {
   container.innerHTML = '<div class="list-group-item text-muted text-center py-3">' +
     '<div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading requests...</div>';
 
+  var t0 = Date.now();
+
   var typeEl = document.getElementById('allRequestsFilter');
   var statusEl = document.getElementById('allRequestsStatusFilter');
 
-  // ★ Restore saved filter (if any)
   var savedFilter = localStorage.getItem('ivm_allReqStatusFilter');
   if (savedFilter && statusEl) {
     var hasOpt = Array.prototype.some.call(statusEl.options, function(o) { return o.value === savedFilter; });
@@ -577,25 +570,37 @@ window.loadAllRequests = async function() {
   var filterRaw = typeEl ? typeEl.value : 'MRIF,MRS';
   var statusFilter = statusEl ? statusEl.value : 'today_and_partial';
 
-  // ★ Persist current choice
   try { localStorage.setItem('ivm_allReqStatusFilter', statusFilter); } catch(e) {}
 
   var allowedTypes = (filterRaw || 'MRIF,MRS').split(',').map(function(s) { return s.trim().toUpperCase(); });
 
-  // ★ CRITICAL FIX: today_and_partial needs completed docs from today
   var needCompleted = (
     statusFilter === 'all' ||
     statusFilter === 'completed' ||
     statusFilter === 'today' ||
-    statusFilter === 'today_and_partial'   // ← was missing before
+    statusFilter === 'today_and_partial'
   );
 
   try {
-  var data = await sbGetAllPendingDocs(needCompleted);
-if (!data.success) throw new Error(data.error || 'Failed to load requests');
-var allDocs = data.documents || [];
+    // ★ Supabase-first
+    var data;
+    if (typeof sbGetAllPendingDocs === 'function') {
+      data = await sbGetAllPendingDocs(needCompleted);
+    } else {
+      // Fallback to GAS
+      var url = API_URL + '?action=getAllPendingDocs&_t=' + Date.now();
+      if (needCompleted) url += '&includeCompleted=1';
+      var res = await fetch(url, { redirect: 'follow' });
+      var text = await res.text();
+      var trimmed = String(text || '').trim();
+      if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
+      data = JSON.parse(trimmed);
+    }
 
-    // ─── Sidebar badge (active = pending + partial) ───
+    if (!data.success) throw new Error(data.error || 'Failed to load requests');
+
+    var allDocs = data.documents || [];
+
     var activeCount = allDocs.filter(function(d) {
       var s = (d.status || 'PENDING').toUpperCase();
       return s === 'PENDING' || s === 'PARTIAL';
@@ -606,12 +611,10 @@ var allDocs = data.documents || [];
       badge.classList.toggle('d-none', activeCount === 0);
     }
 
-    // ─── Today boundaries ───
     var now = new Date();
     var todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     var todayEnd = todayStart + 24 * 60 * 60 * 1000;
 
-    // ─── Filter ───
     var docs = allDocs.filter(function(d) {
       var t = (d.docType || '').toUpperCase();
       if (allowedTypes.indexOf(t) === -1) return false;
@@ -620,7 +623,6 @@ var allDocs = data.documents || [];
       var ts = d.timestamp ? new Date(d.timestamp).getTime() : 0;
       var isToday = ts >= todayStart && ts < todayEnd;
 
-      // ★ Default: everything from today (any status) + any partial from older dates
       if (statusFilter === 'today_and_partial') {
         return isToday || s === 'PARTIAL';
       }
@@ -636,10 +638,9 @@ var allDocs = data.documents || [];
       if (statusFilter === 'completed') {
         return s === 'COMPLETED';
       }
-      return true; // 'all'
+      return true;
     });
 
-    // ─── Fetch prep statuses ───
     var prepMap = {};
     if (statusFilter !== 'completed') {
       try {
@@ -652,9 +653,7 @@ var allDocs = data.documents || [];
       } catch(e) { /* silent */ }
     }
 
-    // ─── Sort ───
     docs.sort(function(a, b) {
-      // Partials first
       var sa = (a.status || '').toUpperCase() === 'PARTIAL' ? 0 : 1;
       var sb = (b.status || '').toUpperCase() === 'PARTIAL' ? 0 : 1;
       if (sa !== sb) return sa - sb;
@@ -662,6 +661,9 @@ var allDocs = data.documents || [];
       var tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
       return tb - ta;
     });
+
+    var elapsed = Date.now() - t0;
+    console.log('[AllRequests] Loaded ' + docs.length + ' docs in ' + elapsed + 'ms');
 
     renderAllRequests(docs, statusFilter, prepMap);
   } catch(err) {
@@ -815,23 +817,28 @@ async function testConnection() {
   if (!resultDiv) return;
   resultDiv.classList.remove('d-none');
   resultDiv.textContent = 'Testing...';
+
+  // Supabase test
+  if (typeof sbHealthCheck === 'function') {
+    try {
+      var sbResult = await sbHealthCheck();
+      resultDiv.textContent += '\n✅ Supabase: ' + (sbResult.success ? 'OK (' + sbResult.latency + 'ms)' : 'FAIL: ' + sbResult.error);
+    } catch(e) {
+      resultDiv.textContent += '\n❌ Supabase: ' + e.message;
+    }
+  }
+
+  // GAS test
   try {
     var url = API_URL + '?action=ping&_t=' + Date.now();
-    resultDiv.textContent += '\nURL: ' + url.substring(0, 80) + '...';
+    resultDiv.textContent += '\nTesting GAS...';
     var res = await fetch(url, { redirect: 'follow' });
-    resultDiv.textContent += '\nHTTP Status: ' + res.status;
+    resultDiv.textContent += '\nGAS HTTP: ' + res.status;
     var text = await res.text();
-    resultDiv.textContent += '\nRaw Response: ' + text.substring(0, 200);
-    try {
-      var data = JSON.parse(text);
-      resultDiv.textContent += '\nParsed: ' + JSON.stringify(data, null, 2);
-      if (data.success) resultDiv.textContent += '\n✅ CONNECTION OK';
-      else resultDiv.textContent += '\n⚠️ Error: ' + data.error;
-    } catch(e) {
-      resultDiv.textContent += '\n❌ Response is not valid JSON!';
-    }
+    var data = JSON.parse(text);
+    resultDiv.textContent += '\n✅ GAS: ' + (data.success ? 'OK' : 'FAIL');
   } catch(err) {
-    resultDiv.textContent += '\n❌ FETCH FAILED: ' + err.message;
+    resultDiv.textContent += '\n❌ GAS: ' + err.message;
   }
 }
 
