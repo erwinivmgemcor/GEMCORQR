@@ -618,12 +618,37 @@
           changeDocument();
           isSubmitting = false;
           window._recentlyProcessedDoc = null;
-          if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
-          if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications();
-          if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
-          if (typeof updatePartialCount === 'function') updatePartialCount();
-          if (typeof loadAllRequests === 'function') loadAllRequests();
+          // ★ Clear ALL relevant frontend caches first
+if (typeof clearCache === 'function') {
+  clearCache('partial_modal_MRIF');
+  clearCache('partial_modal_MRR');
+  clearCache('partial_modal_MRS');
+  clearCache('kpi_partial_MRIF');
+  clearCache('kpi_partial_MRR');
+  clearCache('pendingRequests');
+  clearCache('analyticsData');
+  clearCache('pendingDocs_' + processedType + '_' + (typeof getCleanSheetId === 'function' ? getCleanSheetId() : ''));
+}
+// ★ Then force fresh reads
+if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
+if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications(true);
+if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
+if (typeof updatePartialCount === 'function') updatePartialCount();
+if (typeof loadAllRequests === 'function') loadAllRequests();
 
+// ★ Also refresh the Dashboard KPI numbers
+setTimeout(function() {
+  if (typeof loadAnalytics === 'function') loadAnalytics(true);
+}, 800);
+
+// ★ Notify other tabs/windows to refresh
+try {
+  if (window.BroadcastChannel) {
+    var bc = new BroadcastChannel('gemcor_sync');
+    bc.postMessage({ type: 'doc_processed', docNo: processedDoc, status: newStatus });
+    bc.close();
+  }
+} catch(e) {}
           if (processedDoc && typeof autoOpenPrintPreview === 'function') {
             setTimeout(function() { autoOpenPrintPreview(processedDoc, processedType); }, 500);
           }
