@@ -2,24 +2,16 @@
 // SUPABASE CONFIGURATION
 // ============================================================
 
-// ⚠️ IMPORTANT: Replace with your actual Supabase project URL
 const SUPABASE_URL = 'https://tphstadcscquiezuxsis.supabase.co';
-
-// ⚠️ IMPORTANT: Replace with your actual anon public key
-// Get it from: Supabase Dashboard → Settings → API → anon public
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRwaHN0YWRjc2NxdWllenV4c2lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1OTI4NTksImV4cCI6MjEwNjE2ODg1OX0.7x7KCpcdGYkDsjs3RBdfhhhSamFP-xEfNY5prIkLWL8';
 
-// Whether to use Supabase or Google Apps Script
-// Set to true when testing the Supabase version
-// Set to false to use the current GAS version
-const USE_SUPABASE = true;
+// Toggle: reads from Supabase when true, falls back to GAS when false
+const USE_SUPABASE_READS = true;
 
-// ─── Build Supabase REST API URL ───
 function sbUrl(table) {
   return SUPABASE_URL + '/rest/v1/' + table;
 }
 
-// ─── Build Supabase headers ───
 function sbHeaders(extra) {
   var h = {
     'apikey': SUPABASE_ANON_KEY,
@@ -32,3 +24,5 @@ function sbHeaders(extra) {
   }
   return h;
 }
+
+console.log('✅ supabase-config.js loaded');
