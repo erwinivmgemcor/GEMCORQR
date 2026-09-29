@@ -66,82 +66,58 @@
   // ═══════════════════════════════════════════════════════════
   // KPI UPDATER
   // ═══════════════════════════════════════════════════════════
-  window.updateWarehouseKPIs = async function() {
-    if (typeof window.checkApiHealth === 'function') {
-      var healthy = await window.checkApiHealth();
-      if (!healthy) {
-        console.warn('[KPI] Skipping — API unreachable');
-        return;
-      }
-    }
+ window.updateWarehouseKPIs = async function() {
+  try {
+    // Read from Supabase (fast!)
+    var partialMrrCount = 0;
+    var partialMrifCount = 0;
+    var pendingCount = 0;
+    var totalCount = 0;
+    var completedCount = 0;
 
     try {
-      // ─── Partial MRR ───
-      var partialMrrCount = 0;
-      try {
-        var mrrCached = (typeof getCache === 'function') ? getCache('kpi_partial_MRR') : null;
-        if (mrrCached && mrrCached.success) {
-          partialMrrCount = (mrrCached.documents || []).length;
-        } else {
-          var mrrData = await _fetchJson(API_URL + '?action=getPartialDocsByType&docType=MRR&_t=' + Date.now(), 120000);
-          if (mrrData && mrrData.success) {
-            partialMrrCount = (mrrData.documents || []).length;
-            if (typeof setCache === 'function') setCache('kpi_partial_MRR', mrrData, 60000);
-          }
-        }
-      } catch(e) { console.warn('[KPI] Partial MRR:', e.message); }
+      var mrr = await sbGetPartialDocsByType('MRR');
+      if (mrr.success) partialMrrCount = (mrr.documents || []).length;
+    } catch(e) { console.warn('[KPI] Partial MRR:', e.message); }
 
-      // ─── Partial MRIF ───
-      var partialMrifCount = 0;
-      try {
-        var mrifCached = (typeof getCache === 'function') ? getCache('kpi_partial_MRIF') : null;
-        if (mrifCached && mrifCached.success) {
-          partialMrifCount = (mrifCached.documents || []).length;
-        } else {
-          var mrifData = await _fetchJson(API_URL + '?action=getPartialDocsByType&docType=MRIF&_t=' + Date.now(), 120000);
-          if (mrifData && mrifData.success) {
-            partialMrifCount = (mrifData.documents || []).length;
-            if (typeof setCache === 'function') setCache('kpi_partial_MRIF', mrifData, 60000);
-          }
-        }
-      } catch(e) { console.warn('[KPI] Partial MRIF:', e.message); }
+    try {
+      var mrif = await sbGetPartialDocsByType('MRIF');
+      if (mrif.success) partialMrifCount = (mrif.documents || []).length;
+    } catch(e) { console.warn('[KPI] Partial MRIF:', e.message); }
 
-      // ─── Pending count ───
-      var pendingCount = 0;
-      try {
-        var pendingData = await _fetchJson(API_URL + '?action=getAllPendingDocs&_t=' + Date.now(), 120000);
-        var allDocs = (pendingData && pendingData.documents) || [];
-        pendingCount = allDocs.filter(function(d) {
+    try {
+      var allDocs = await sbGetAllPendingDocs(false);
+      if (allDocs.success) {
+        var docs = allDocs.documents || [];
+        pendingCount = docs.filter(function(d) {
           return String(d.status || '').toUpperCase() === 'PENDING';
         }).length;
-      } catch(e) { console.warn('[KPI] Pending:', e.message); }
+      }
+    } catch(e) { console.warn('[KPI] Pending:', e.message); }
 
-      // ─── Total / Completed ───
-      var totalCount = 0;
-      var completedCount = 0;
-      try {
-        var sheetId = (typeof getCleanSheetId === 'function') ? getCleanSheetId() : '';
-        var countData = await _fetchJson(API_URL + '?action=getPendingDocCount&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now(), 120000);
-        completedCount = countData.completedCount || 0;
-        totalCount = countData.totalCount || 0;
-      } catch(e) { console.warn('[KPI] Count:', e.message); }
+    try {
+      var counts = await sbGetPendingDocCount('MRIF');
+      if (counts.success) {
+        completedCount = counts.completedCount || 0;
+        totalCount = counts.totalCount || 0;
+      }
+    } catch(e) { console.warn('[KPI] Count:', e.message); }
 
-      // ─── Update DOM ───
-      var kpiActive = document.getElementById('kpiActiveDocs');
-      var kpiPending = document.getElementById('kpiPending');
-      var kpiPartialMrr = document.getElementById('kpiPartialMrr');
-      var kpiPartialMrif = document.getElementById('kpiPartial');
-      var kpiCompleted = document.getElementById('kpiCompleted');
+    var kpiActive = document.getElementById('kpiActiveDocs');
+    var kpiPending = document.getElementById('kpiPending');
+    var kpiPartialMrr = document.getElementById('kpiPartialMrr');
+    var kpiPartialMrif = document.getElementById('kpiPartial');
+    var kpiCompleted = document.getElementById('kpiCompleted');
 
-      if (kpiActive) kpiActive.textContent = totalCount;
-      if (kpiPending) kpiPending.textContent = pendingCount;
-      if (kpiPartialMrr) kpiPartialMrr.textContent = partialMrrCount;
-      if (kpiPartialMrif) kpiPartialMrif.textContent = partialMrifCount;
-      if (kpiCompleted) kpiCompleted.textContent = completedCount;
+    if (kpiActive) kpiActive.textContent = totalCount;
+    if (kpiPending) kpiPending.textContent = pendingCount;
+    if (kpiPartialMrr) kpiPartialMrr.textContent = partialMrrCount;
+    if (kpiPartialMrif) kpiPartialMrif.textContent = partialMrifCount;
+    if (kpiCompleted) kpiCompleted.textContent = completedCount;
 
-      console.log('[KPI] Pending:', pendingCount, '| Partial MRR:', partialMrrCount, '| Partial MRIF:', partialMrifCount);
-    } catch(e) { console.error('[KPI] Error:', e); }
-  };
+    console.log('[KPI-Supabase] Pending:', pendingCount, '| Partial MRR:', partialMrrCount, '| Partial MRIF:', partialMrifCount);
+  } catch(e) { console.error('[KPI] Error:', e); }
+};
 
   // ═══════════════════════════════════════════════════════════
   // NOTIFICATIONS
