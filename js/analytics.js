@@ -1,6 +1,6 @@
 // ============================================================
-// DASHBOARD ANALYTICS — Fixed Chart.js sizing
-// ★ v2 — 10 min cache, lazy load only on visible, friendly errors
+// DASHBOARD ANALYTICS — Supabase-first
+// v3 — Reads from Supabase (0.5s vs 15s from GAS)
 // ============================================================
 
 var analyticsLoaded = false;
@@ -33,7 +33,6 @@ async function loadAnalytics(forceRefresh) {
   var dashboard = document.getElementById('section-dashboard');
   if (!dashboard || !dashboard.classList.contains('active')) return;
 
-  // ★ Use cache unless forced
   var cacheKey = 'analyticsData';
   if (!forceRefresh) {
     var cached = (typeof getCache === 'function') ? getCache(cacheKey) : null;
@@ -44,7 +43,6 @@ async function loadAnalytics(forceRefresh) {
     }
   }
 
-  // ★ Prevent duplicate in-flight requests
   if (_analyticsFetchPromise) return _analyticsFetchPromise;
 
   var loadingEl = document.getElementById('analyticsLoading');
@@ -62,22 +60,33 @@ async function loadAnalytics(forceRefresh) {
       var t = document.getElementById('analyticsErrorText');
       if (t) t.textContent = 'Analytics is taking longer than usual. Click "Retry" in a moment.';
     }
-  }, 30000);   // ★ was 10s, now 30s
+  }, 30000);
 
   _analyticsFetchPromise = (async function() {
     try {
-var data = await sbGetDashboardAnalytics();
-if (!data.success) throw new Error(data.error || 'Unknown error');
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      var text = await res.text();
-      var trimmed = String(text || '').trim();
-      if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server busy');
-      var data = JSON.parse(trimmed);
+      var t0 = Date.now();
+      var data;
+
+      // ★ Supabase-first
+      if (typeof sbGetDashboardAnalytics === 'function') {
+        data = await sbGetDashboardAnalytics();
+      } else {
+        // Fallback to GAS
+        var url = API_URL + '?action=getDashboardAnalytics&_t=' + Date.now();
+        var res = await fetch(url, { redirect: 'follow' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var text = await res.text();
+        var trimmed = String(text || '').trim();
+        if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server busy');
+        data = JSON.parse(trimmed);
+      }
 
       clearTimeout(timeoutId);
-      if (!data.success) throw new Error(data.error || 'Unknown error');
+      if (!data || !data.success) throw new Error((data && data.error) || 'Unknown error');
 
-      // ★ Save to cache
+      var elapsed = Date.now() - t0;
+      console.log('[Analytics-Supabase] Loaded in ' + elapsed + 'ms');
+
       if (typeof setCache === 'function') setCache(cacheKey, data, CACHE_TTL.ANALYTICS);
 
       renderAnalytics(data);
