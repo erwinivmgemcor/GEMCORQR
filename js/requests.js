@@ -754,16 +754,21 @@ async function loadMyRequests() {
   if (!requestor) return;
   showLoading('Loading requests...');
   try {
-    var url = API_URL + '?action=getMyRequests&requestor=' + encodeURIComponent(requestor) + '&_t=' + Date.now();
-    var res = await fetch(url);
-    var text = await res.text();
-    var trimmed = String(text || '').trim();
-    if (!trimmed || trimmed.charAt(0) === '<') {
-      var listEl = document.getElementById('myRequestsList');
-      if (listEl) listEl.innerHTML = '<div class="list-group-item text-warning text-center py-3">Server unavailable.</div>';
-      return;
-    }
-    var data = JSON.parse(trimmed);
+   var data;
+if (typeof sbGetMyRequests === 'function') {
+  data = await sbGetMyRequests(requestor);
+} else {
+  var url = API_URL + '?action=getMyRequests&requestor=' + encodeURIComponent(requestor) + '&_t=' + Date.now();
+  var res = await fetch(url);
+  var text = await res.text();
+  var trimmed = String(text || '').trim();
+  if (!trimmed || trimmed.charAt(0) === '<') {
+    var listEl = document.getElementById('myRequestsList');
+    if (listEl) listEl.innerHTML = '<div class="list-group-item text-warning text-center py-3">Server unavailable.</div>';
+    return;
+  }
+  data = JSON.parse(trimmed);
+}
     if (data.success && data.requests) {
       data.requests = data.requests.filter(function(req) {
         var t = (req.type || '').toUpperCase();
