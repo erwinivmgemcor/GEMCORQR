@@ -5,8 +5,8 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbzbTLwl6rQSJyNUmKswbzQGFoAyn1cUm4BxL4bI-CGd6-yfS6k6cTzE4SINLzb64AJ_/exec';
 
 const DEFAULT_PIN = '0000';
-const APP_VERSION = '2.5.31';
-const APP_BUILD = '20260929-0301-a24918c';
+const APP_VERSION = '2.5.32';
+const APP_BUILD = '20260929-0315-4218644';
 
 const UNIT_OPTIONS = [
   'ASSEMB', 'BOX', 'CAN', 'GAL', 'KG', 'LENGTH', 'LITERS',
