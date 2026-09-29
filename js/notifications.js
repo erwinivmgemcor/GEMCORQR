@@ -1,6 +1,8 @@
 // ============================================================
-// WAREHOUSE NOTIFICATIONS
-// v5 — plain fetch, no safeFetch, client-side modal cache
+// WAREHOUSE NOTIFICATIONS — v6
+//  - Plain fetch, correct AbortController cleanup
+//  - Retry button on partial modal failure
+//  - KPI client cache (60s)
 // ============================================================
 
 (function() {
@@ -26,35 +28,62 @@
       .replace(/'/g, '&#39;');
   }
 
+  // ─── Internal JSON fetcher with proper cleanup ───
   async function _fetchJson(url, timeoutMs) {
-    timeoutMs = timeoutMs || 90000;
+    timeoutMs = timeoutMs || 120000; // 2 minutes for slow GAS
     var ctrl = new AbortController();
     var timer = setTimeout(function() { ctrl.abort(); }, timeoutMs);
-    var res;
+
     try {
-      res = await fetch(url, { redirect: 'follow', signal: ctrl.signal, cache: 'no-store' });
+      var res = await fetch(url, {
+        redirect: 'follow',
+        signal: ctrl.signal,
+        cache: 'no-store'
+      });
+
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+
+      var text = await res.text();
+      var trimmed = String(text || '').trim();
+
+      if (!trimmed) throw new Error('Empty response');
+      if (trimmed.charAt(0) === '<') {
+        var err = new Error('Server returned HTML — deployment URL may be wrong');
+        err.code = 'GAS_UNREACHABLE';
+        throw err;
+      }
+
+      try {
+        return JSON.parse(trimmed);
+      } catch(e) {
+        throw new Error('Invalid JSON from server');
+      }
     } finally {
       clearTimeout(timer);
     }
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    var text = await res.text();
-    var trimmed = String(text || '').trim();
-    if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server returned HTML');
-    return JSON.parse(trimmed);
   }
 
   // ═══════════════════════════════════════════════════════════
   // KPI UPDATER
   // ═══════════════════════════════════════════════════════════
   window.updateWarehouseKPIs = async function() {
+    if (typeof window.checkApiHealth === 'function') {
+      var healthy = await window.checkApiHealth();
+      if (!healthy) {
+        console.warn('[KPI] Skipping — API unreachable');
+        return;
+      }
+    }
+
     try {
+      // ─── Partial MRR ───
       var partialMrrCount = 0;
       try {
         var mrrCached = (typeof getCache === 'function') ? getCache('kpi_partial_MRR') : null;
         if (mrrCached && mrrCached.success) {
           partialMrrCount = (mrrCached.documents || []).length;
         } else {
-          var mrrData = await _fetchJson(API_URL + '?action=getPartialDocsByType&docType=MRR&_t=' + Date.now(), 90000);
+          var mrrData = await _fetchJson(API_URL + '?action=getPartialDocsByType&docType=MRR&_t=' + Date.now(), 120000);
           if (mrrData && mrrData.success) {
             partialMrrCount = (mrrData.documents || []).length;
             if (typeof setCache === 'function') setCache('kpi_partial_MRR', mrrData, 60000);
@@ -62,13 +91,14 @@
         }
       } catch(e) { console.warn('[KPI] Partial MRR:', e.message); }
 
+      // ─── Partial MRIF ───
       var partialMrifCount = 0;
       try {
         var mrifCached = (typeof getCache === 'function') ? getCache('kpi_partial_MRIF') : null;
         if (mrifCached && mrifCached.success) {
           partialMrifCount = (mrifCached.documents || []).length;
         } else {
-          var mrifData = await _fetchJson(API_URL + '?action=getPartialDocsByType&docType=MRIF&_t=' + Date.now(), 90000);
+          var mrifData = await _fetchJson(API_URL + '?action=getPartialDocsByType&docType=MRIF&_t=' + Date.now(), 120000);
           if (mrifData && mrifData.success) {
             partialMrifCount = (mrifData.documents || []).length;
             if (typeof setCache === 'function') setCache('kpi_partial_MRIF', mrifData, 60000);
@@ -76,24 +106,27 @@
         }
       } catch(e) { console.warn('[KPI] Partial MRIF:', e.message); }
 
+      // ─── Pending count ───
       var pendingCount = 0;
       try {
-        var pendingData = await _fetchJson(API_URL + '?action=getAllPendingDocs&_t=' + Date.now(), 90000);
+        var pendingData = await _fetchJson(API_URL + '?action=getAllPendingDocs&_t=' + Date.now(), 120000);
         var allDocs = (pendingData && pendingData.documents) || [];
         pendingCount = allDocs.filter(function(d) {
           return String(d.status || '').toUpperCase() === 'PENDING';
         }).length;
       } catch(e) { console.warn('[KPI] Pending:', e.message); }
 
+      // ─── Total / Completed ───
       var totalCount = 0;
       var completedCount = 0;
       try {
         var sheetId = (typeof getCleanSheetId === 'function') ? getCleanSheetId() : '';
-        var countData = await _fetchJson(API_URL + '?action=getPendingDocCount&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now(), 90000);
+        var countData = await _fetchJson(API_URL + '?action=getPendingDocCount&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now(), 120000);
         completedCount = countData.completedCount || 0;
         totalCount = countData.totalCount || 0;
       } catch(e) { console.warn('[KPI] Count:', e.message); }
 
+      // ─── Update DOM ───
       var kpiActive = document.getElementById('kpiActiveDocs');
       var kpiPending = document.getElementById('kpiPending');
       var kpiPartialMrr = document.getElementById('kpiPartialMrr');
@@ -166,7 +199,7 @@
 
   async function refreshNotifications() {
     try {
-      var data = await _fetchJson(API_URL + '?action=getPendingRequests&_t=' + Date.now(), 90000);
+      var data = await _fetchJson(API_URL + '?action=getPendingRequests&_t=' + Date.now(), 120000);
       if (data.success && data.requests) {
         setCache('pendingRequests', data.requests, 5 * 60 * 1000);
         processNotifications(data.requests);
@@ -236,7 +269,7 @@
         '<div class="spinner-border spinner-border-sm text-primary"></div></div>';
     }
     try {
-      var data = await _fetchJson(API_URL + '?action=getPendingRequests&_t=' + Date.now(), 90000);
+      var data = await _fetchJson(API_URL + '?action=getPendingRequests&_t=' + Date.now(), 120000);
       if (data.success && data.requests) {
         var today = new Date();
         var todayStr = today.getFullYear() + '-' +
@@ -300,7 +333,7 @@
   };
 
   // ═══════════════════════════════════════════════════════════
-  // PARTIAL MODALS
+  // PARTIAL MODALS — with retry UI
   // ═══════════════════════════════════════════════════════════
   window.openPartialMrrModal = async function() {
     await _openPartialDocModal('MRR');
@@ -320,16 +353,17 @@
     }
 
     showLoading('Loading partial ' + docType + 's...');
+
     try {
       var data = await _fetchJson(
         API_URL + '?action=getPartialDocsByType&docType=' + docType + '&_t=' + Date.now(),
-        90000
+        120000
       );
 
       hideLoading();
 
       if (!data.success) {
-        showToast('Failed to load: ' + (data.error || 'Unknown error'), 'danger');
+        _showPartialError(docType, 'Server error: ' + (data.error || 'Unknown'));
         return;
       }
 
@@ -338,18 +372,84 @@
       }
 
       renderPartialDocModal(docType, data.documents || []);
+
     } catch (err) {
       hideLoading();
-      if (err.name === 'AbortError') {
-        showToast('⚠️ Server is slow (>90s). Please try again.', 'warning', 8000);
-      } else if (err.message && err.message.indexOf('HTML') !== -1) {
-        showToast('⚠️ Server returned HTML. Check the GAS deployment URL.', 'danger', 10000);
+      var msg = err.message || 'Unknown error';
+
+      if (err.name === 'AbortError' || msg.indexOf('timeout') !== -1) {
+        _showPartialError(docType, '⏱️ Server took too long (over 2 min). The sheet scan may be very slow.');
+      } else if (err.code === 'GAS_UNREACHABLE' || msg.indexOf('HTML') !== -1) {
+        _showPartialError(docType, '🔴 Server returned HTML instead of JSON. The GAS deployment URL may be wrong or expired.');
       } else {
-        showToast('Failed to load partial docs: ' + err.message, 'danger');
+        _showPartialError(docType, '⚠️ ' + msg);
       }
+
       console.error('[_openPartialDocModal] Error:', err);
     }
   }
+
+  function _showPartialError(docType, message) {
+    var modalId = 'partialErrorModal_' + docType;
+    var existing = document.getElementById(modalId);
+    if (existing) existing.remove();
+
+    var headerClass = docType === 'MRR' ? 'bg-success text-white' : 'bg-warning text-dark';
+    var closeClass = docType === 'MRIF' ? '' : ' btn-close-white';
+    var label = 'Partial ' + docType + 's';
+
+    var html = '<div class="modal fade" id="' + modalId + '" tabindex="-1">' +
+      '<div class="modal-dialog modal-dialog-centered">' +
+        '<div class="modal-content">' +
+          '<div class="modal-header ' + headerClass + '">' +
+            '<h5 class="modal-title">' +
+              '<i class="bi bi-exclamation-triangle-fill me-2"></i>' + label +
+            '</h5>' +
+            '<button type="button" class="btn-close' + closeClass + '" data-bs-dismiss="modal"></button>' +
+          '</div>' +
+          '<div class="modal-body">' +
+            '<div class="alert alert-danger mb-3">' + _esc(message) + '</div>' +
+            '<div class="small text-muted mb-3">' +
+              '<strong>Quick checks:</strong>' +
+              '<ol class="mb-0 mt-2">' +
+                '<li>Open <code>' + _esc(API_URL.substring(0, 60)) + '...&amp;action=ping</code> in a new tab — should show <code>{"success":true}</code></li>' +
+                '<li>In Apps Script → Deploy → Manage deployments → confirm a <strong>Web app</strong> exists with "Anyone" access</li>' +
+                '<li>Try clearing browser cache (Ctrl+Shift+Delete) and reload</li>' +
+              '</ol>' +
+            '</div>' +
+            '<div class="d-grid gap-2">' +
+              '<button class="btn btn-primary" onclick="closePartialErrorModal(\'' + docType + '\');openPartialMrifModal();">' +
+                '<i class="bi bi-arrow-clockwise me-1"></i>Retry' +
+              '</button>' +
+              '<button class="btn btn-outline-secondary" onclick="closePartialErrorModal(\'' + docType + '\');">' +
+                'Close' +
+              '</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+    var wrapper = document.createElement('div');
+    wrapper.innerHTML = html;
+    document.body.appendChild(wrapper.firstChild);
+
+    var modalEl = document.getElementById(modalId);
+    var bsModal = new bootstrap.Modal(modalEl);
+    bsModal.show();
+
+    modalEl.addEventListener('hidden.bs.modal', function() {
+      modalEl.remove();
+    });
+  }
+
+  window.closePartialErrorModal = function(docType) {
+    var modalEl = document.getElementById('partialErrorModal_' + docType);
+    if (modalEl) {
+      var m = bootstrap.Modal.getInstance(modalEl);
+      if (m) m.hide();
+    }
+  };
 
   function renderPartialDocModal(docType, docs) {
     var modalId = 'partialDocModal_' + docType;
@@ -491,5 +591,5 @@
     if (typeof window.openPartialMrifModal === 'function') return window.openPartialMrifModal();
   };
 
-  console.log('✅ notifications.js loaded (v5 — plain fetch)');
+  console.log('✅ notifications.js v6 loaded');
 })();
