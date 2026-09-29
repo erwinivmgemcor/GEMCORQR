@@ -1,15 +1,16 @@
 // ============================================================
-// NETWORK LAYER — safeFetch helper + offline pill
-// v3 — REMOVED global fetch monkey-patch (was aborting GAS calls)
-//      safeFetch is opt-in only. Default fetch has no timeout.
-//      GAS cold starts can take 15-30s — we no longer abort them.
+// NETWORK LAYER — v4
+//  - safeFetch opt-in with 300s timeout (GAS hard limit is 6 min)
+//  - HTML response detection → throws GAS_UNREACHABLE
+//  - Offline pill + slow-connection warning
 // ============================================================
 
-// ─── Opt-in safeFetch (only use when you explicitly want retry+timeout) ───
+window.GAS_UNREACHABLE = 'GAS_UNREACHABLE';
+
 window.safeFetch = async function(url, options, opts) {
   opts = opts || {};
   var retries = opts.retries != null ? opts.retries : 0;
-  var timeout = opts.timeout || 90000;   // ★ 90s default (GAS cold starts)
+  var timeout = opts.timeout || 300000; // 300s = GAS hard limit minus safety
   var lastErr = null;
 
   for (var attempt = 0; attempt <= retries; attempt++) {
@@ -19,6 +20,7 @@ window.safeFetch = async function(url, options, opts) {
       var fetchOpts = Object.assign({ signal: ctrl.signal, redirect: 'follow' }, options || {});
       var res = await fetch(url, fetchOpts);
       clearTimeout(timer);
+
       if (!res.ok) {
         if (res.status >= 500 && attempt < retries) {
           await new Promise(function(r) { setTimeout(r, 1500 * Math.pow(2, attempt)); });
@@ -26,12 +28,25 @@ window.safeFetch = async function(url, options, opts) {
         }
         throw new Error('HTTP ' + res.status);
       }
+
+      // Detect HTML (usually means wrong/expired deployment)
+      var text = await res.clone().text();
+      var trimmed = String(text || '').trim();
+      if (trimmed && trimmed.charAt(0) === '<') {
+        var htmlErr = new Error('GAS returned HTML — deployment URL is wrong or expired');
+        htmlErr.code = window.GAS_UNREACHABLE;
+        throw htmlErr;
+      }
+
       return res;
     } catch (e) {
       clearTimeout(timer);
       lastErr = e;
-      // Never retry on abort — server may still be processing
-      if (e.name === 'AbortError') throw e;
+      if (e.name === 'AbortError') {
+        var abortErr = new Error('Server timeout (' + Math.round(timeout/1000) + 's). GAS may be slow.');
+        abortErr.code = 'TIMEOUT';
+        throw abortErr;
+      }
       if (attempt < retries) {
         await new Promise(function(r) { setTimeout(r, 1500 * Math.pow(2, attempt)); });
       }
@@ -40,7 +55,7 @@ window.safeFetch = async function(url, options, opts) {
   throw lastErr || new Error('Network failed');
 };
 
-// ─── Network status pill (bottom-right) ───
+// ─── Network status pill ───
 (function setupNetworkBanner() {
   if (document.getElementById('netPill')) return;
 
@@ -104,11 +119,10 @@ window.safeFetch = async function(url, options, opts) {
     _showPill('Back online', 'online', 2000);
     setTimeout(function() {
       if (typeof flushOfflineQueue === 'function') flushOfflineQueue();
-      if (typeof state !== 'undefined' && state.currentModule) {
-        setTimeout(function() {
-          if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications();
-          if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
-        }, 500);
+      if (typeof window.checkApiHealth === 'function') {
+        window.checkApiHealth(true).then(function(ok) {
+          if (ok && typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
+        });
       }
     }, 300);
   });
@@ -205,4 +219,4 @@ setTimeout(function() {
   if (navigator.onLine && _getQueue().length > 0) flushOfflineQueue();
 }, 3000);
 
-console.log('✅ net.js loaded (v3 — no global fetch override, GAS-safe)');
+console.log('✅ net.js v4 loaded');
