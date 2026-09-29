@@ -1215,4 +1215,287 @@ var atl = atlInput ? parseFloat(atlInput.value) : 0;
       btn.innerHTML = origHtml || '<i class="bi bi-check-circle me-1"></i>Create MRIF';
     }
   }
+  // =============================================================================
+// NEW REQUEST (NO JO) — standalone request without Job Order
+// =============================================================================
+
+var _noJoItems = [];
+var _noJoModal = null;
+
+window.openNewRequestNoJO = function() {
+  // Reset state
+  _noJoItems = [];
+  document.getElementById('noJoDocType').value = '';
+  document.getElementById('noJoJoNo').value = '';
+  document.getElementById('noJoGemSoNo').value = '';
+  document.getElementById('noJoClientName').value = '';
+  document.getElementById('noJoProject').value = '';
+
+  // Un-select doc type cards
+  document.querySelectorAll('#noJoDocTypeMRIF, #noJoDocTypeMRS').forEach(function(el) {
+    el.classList.remove('selected');
+  });
+
+  // Lock requestor/department to login user
+  var locked = _getLockedRequestor();
+  document.getElementById('noJoRequestorDisplay').textContent = locked.name || '(missing)';
+  document.getElementById('noJoDepartmentDisplay').textContent = locked.department || '(not set — contact admin)';
+  document.getElementById('noJoRequestor').value = locked.name || '';
+  document.getElementById('noJoDepartment').value = locked.department || '';
+
+  // Reset items
+  renderNoJoItems();
+
+  // Ensure inventory list is loaded
+  if (typeof loadRequestInventory === 'function' && (!state.requestInventoryList || state.requestInventoryList.length === 0)) {
+    loadRequestInventory().catch(function() {});
+  }
+
+  // Show modal
+  if (!_noJoModal) {
+    _noJoModal = new bootstrap.Modal(document.getElementById('newRequestNoJoModal'));
+  }
+  _noJoModal.show();
+};
+
+window.selectNoJoDocType = function(type) {
+  document.getElementById('noJoDocType').value = type;
+  document.querySelectorAll('#noJoDocTypeMRIF, #noJoDocTypeMRS').forEach(function(el) {
+    el.classList.remove('selected');
+  });
+  document.getElementById('noJoDocType' + type).classList.add('selected');
+};
+
+window.addNoJoItem = function() {
+  _noJoItems.push({ inventoryId: '', description: '', qty: 1, unit: 'PIECE', remarks: '' });
+  renderNoJoItems();
+  setTimeout(function() {
+    var inputs = document.querySelectorAll('.no-jo-item-search');
+    if (inputs.length > 0) inputs[inputs.length - 1].focus();
+  }, 100);
+};
+
+window.removeNoJoItem = function(idx) {
+  _noJoItems.splice(idx, 1);
+  renderNoJoItems();
+};
+
+window.updateNoJoItem = function(idx, field, value) {
+  if (_noJoItems[idx]) _noJoItems[idx][field] = value;
+};
+
+window.renderNoJoItems = function() {
+  var container = document.getElementById('noJoItemsContainer');
+  var empty = document.getElementById('noJoEmptyState');
+  if (!container) return;
+
+  if (_noJoItems.length === 0) {
+    container.innerHTML = '';
+    if (empty) empty.style.display = '';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  var html = '';
+  for (var i = 0; i < _noJoItems.length; i++) {
+    var it = _noJoItems[i];
+    html += '<div class="card mb-2" style="background:#f8f9fa;">' +
+      '<div class="card-body p-3">' +
+        '<div class="row g-2 align-items-end">' +
+          '<div class="col-12 col-md-5">' +
+            '<label class="form-label small fw-bold mb-1">Item Code / Search</label>' +
+            '<div style="position:relative;">' +
+              '<input type="text" class="form-control no-jo-item-search" ' +
+                'placeholder="Type to search inventory..." ' +
+                'value="' + (it.inventoryId ? (it.inventoryId + ' - ' + it.description) : '') + '" ' +
+                'oninput="filterNoJoItems(this, ' + i + ')" ' +
+                'onfocus="filterNoJoItems(this, ' + i + ')" ' +
+                'autocomplete="off">' +
+              '<div class="list-group d-none no-jo-dropdown" id="noJoDropdown' + i + '" ' +
+                'style="position:fixed;z-index:99999;box-shadow:0 8px 24px rgba(0,0,0,0.18);max-height:260px;overflow-y:auto;background:#fff;border-radius:6px;"></div>' +
+              '<input type="hidden" class="no-jo-code" value="' + (it.inventoryId || '') + '">' +
+              '<input type="hidden" class="no-jo-desc-hidden" value="' + (it.description || '') + '">' +
+            '</div>' +
+          '</div>' +
+          '<div class="col-12 col-md-4">' +
+            '<label class="form-label small fw-bold mb-1">Description</label>' +
+            '<input type="text" class="form-control no-jo-desc" value="' + (it.description || '') + '" ' +
+              'oninput="updateNoJoItem(' + i + ', \'description\', this.value)">' +
+          '</div>' +
+          '<div class="col-6 col-md-1">' +
+            '<label class="form-label small fw-bold mb-1">Qty</label>' +
+            '<input type="number" class="form-control text-center no-jo-qty" value="' + (it.qty || 1) + '" min="0" step="0.01" ' +
+              'oninput="updateNoJoItem(' + i + ', \'qty\', parseFloat(this.value)||0)">' +
+          '</div>' +
+          '<div class="col-6 col-md-1">' +
+            '<label class="form-label small fw-bold mb-1">Unit</label>' +
+            '<select class="form-select no-jo-unit" onchange="updateNoJoItem(' + i + ', \'unit\', this.value)">' +
+              buildUnitOptions(it.unit || 'PIECE') +
+            '</select>' +
+          '</div>' +
+          '<div class="col-12 col-md-1">' +
+            '<button class="btn btn-outline-danger w-100" onclick="removeNoJoItem(' + i + ')">' +
+              '<i class="bi bi-trash"></i>' +
+            '</button>' +
+          '</div>' +
+          '<div class="col-12">' +
+            '<label class="form-label small fw-bold mb-1">Remarks</label>' +
+            '<input type="text" class="form-control no-jo-remarks" value="' + (it.remarks || '') + '" ' +
+              'placeholder="Optional note..." maxlength="200" ' +
+              'oninput="updateNoJoItem(' + i + ', \'remarks\', this.value)">' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+  container.innerHTML = html;
+};
+
+window.filterNoJoItems = function(input, idx) {
+  var term = String(input.value || '').toLowerCase().trim();
+  var dropdown = document.getElementById('noJoDropdown' + idx);
+  if (!dropdown) return;
+
+  if (!term) { dropdown.classList.add('d-none'); return; }
+
+  var list = (typeof state !== 'undefined' && state.requestInventoryList) ? state.requestInventoryList : [];
+  if (list.length === 0) {
+    dropdown.innerHTML = '<div class="list-group-item text-muted small" style="padding:8px 12px;">Loading inventory...</div>';
+    _positionNoJoDropdown(dropdown, input);
+    dropdown.classList.remove('d-none');
+    return;
+  }
+
+  var matches = list.filter(function(it) {
+    var c = (it.code || it.inventoryId || '').toLowerCase();
+    var d = (it.description || '').toLowerCase();
+    return c.indexOf(term) !== -1 || d.indexOf(term) !== -1;
+  }).slice(0, 20);
+
+  dropdown.innerHTML = '';
+  if (matches.length === 0) {
+    dropdown.innerHTML = '<div class="list-group-item text-muted small" style="padding:8px 12px;">No matches</div>';
+  } else {
+    matches.forEach(function(it) {
+      var code = it.code || it.inventoryId || '';
+      var desc = it.description || '';
+      var unit = it.unit || 'PIECE';
+      var el = document.createElement('div');
+      el.className = 'list-group-item list-group-item-action';
+      el.style.cssText = 'padding:10px 14px;cursor:pointer;font-size:0.9rem;border-bottom:1px solid #f0f0f0;background:#fff;';
+      el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + code + '</div>' +
+        '<div class="text-muted small">' + desc + ' <span class="badge bg-light text-dark">' + unit + '</span></div>';
+      el.onmousedown = function(e) {
+        e.preventDefault();
+        selectNoJoItem(idx, code, desc, unit);
+        dropdown.classList.add('d-none');
+      };
+      dropdown.appendChild(el);
+    });
+  }
+
+  _positionNoJoDropdown(dropdown, input);
+  dropdown.classList.remove('d-none');
+};
+
+function _positionNoJoDropdown(dropdown, input) {
+  var rect = input.getBoundingClientRect();
+  dropdown.style.left = rect.left + 'px';
+  dropdown.style.width = Math.max(rect.width, 320) + 'px';
+  var below = window.innerHeight - rect.bottom;
+  if (below < 240 && rect.top > below) {
+    dropdown.style.top = 'auto';
+    dropdown.style.bottom = (window.innerHeight - rect.top + 2) + 'px';
+  } else {
+    dropdown.style.bottom = 'auto';
+    dropdown.style.top = (rect.bottom + 2) + 'px';
+  }
+}
+
+window.selectNoJoItem = function(idx, code, desc, unit) {
+  if (!_noJoItems[idx]) return;
+  _noJoItems[idx].inventoryId = code;
+  _noJoItems[idx].description = desc;
+  _noJoItems[idx].unit = unit || 'PIECE';
+  renderNoJoItems();
+};
+
+window.submitNewRequestNoJo = async function() {
+  var docType = document.getElementById('noJoDocType').value;
+  if (!docType) { showToast('Please select document type (MRIF or MRS)', 'warning'); return; }
+
+  var requestor = document.getElementById('noJoRequestor').value;
+  var department = document.getElementById('noJoDepartment').value;
+  if (!requestor) { showToast('Your account is missing a full name. Contact admin.', 'danger'); return; }
+
+  var joNo = document.getElementById('noJoJoNo').value.trim();
+  var gemSoNo = document.getElementById('noJoGemSoNo').value.trim();
+  var clientName = document.getElementById('noJoClientName').value.trim();
+  var project = document.getElementById('noJoProject').value.trim();
+
+  // Collect items
+  var items = [];
+  var rows = document.querySelectorAll('#noJoItemsContainer .card');
+  for (var i = 0; i < rows.length; i++) {
+    var codeEl = rows[i].querySelector('.no-jo-code');
+    var descEl = rows[i].querySelector('.no-jo-desc');
+    var qtyEl = rows[i].querySelector('.no-jo-qty');
+    var unitEl = rows[i].querySelector('.no-jo-unit');
+    var remarksEl = rows[i].querySelector('.no-jo-remarks');
+    var code = codeEl ? codeEl.value.trim() : '';
+    var desc = descEl ? descEl.value.trim() : '';
+    var qty = qtyEl ? parseFloat(qtyEl.value) || 0 : 0;
+    var unit = unitEl ? unitEl.value : 'PIECE';
+    var remarks = remarksEl ? remarksEl.value.trim() : '';
+    if (code && desc && qty > 0) {
+      items.push({ inventoryId: code, description: desc, qty: qty, unit: unit, remarks: remarks });
+    }
+  }
+  if (items.length === 0) { showToast('Please add at least one valid item', 'warning'); return; }
+
+  var btn = document.getElementById('btnSubmitNoJo');
+  return withButtonLoading(btn, async function() {
+    var idemKey = 'nojo_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+    var payload = {
+      action: 'createRequest',
+      _idemKey: idemKey,
+      docType: docType,
+      requestor: requestor,
+      department: department || '',
+      joNo: joNo || '',
+      gemSoNo: gemSoNo || '',
+      clientName: clientName || '',
+      project: project || '',
+      items: items,
+      timestamp: new Date().toISOString(),
+      isManual: true,
+      isNoJo: true
+    };
+
+    try {
+      var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
+      var res = await fetchFn(API_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+      }, { timeout: 90000, retries: 1 });
+      var text = await res.text();
+      var trimmed = String(text || '').trim();
+      if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
+      var data = JSON.parse(trimmed);
+
+      if (data && data.success) {
+        if (_noJoModal) _noJoModal.hide();
+        showToast('Request created: ' + data.docNo, 'success');
+        if (typeof loadMyRequests === 'function') loadMyRequests();
+        if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
+        if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
+      } else {
+        showToast('Failed: ' + ((data && data.error) || 'Unknown error'), 'danger');
+      }
+    } catch(err) {
+      showToast('Error: ' + err.message, 'danger');
+    }
+  }, 'Submitting...');
+};
 }
