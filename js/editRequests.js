@@ -22,7 +22,7 @@ window.initEditRequests = function() {
   if (localStorage.getItem('ivm_userRole') === 'warehouse') {
     refreshEditReqBadge();
     if (_editReqState.badgeTimer) clearInterval(_editReqState.badgeTimer);
-    _editReqState.badgeTimer = setInterval(refreshEditReqBadge, 30000);
+ _editReqState.badgeTimer = setInterval(refreshEditReqBadge, 120000);  // 2 min
   }
 };
 
