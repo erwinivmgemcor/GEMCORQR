@@ -581,14 +581,14 @@ async function submitNewRequest() {
   }
 
   var items = [];
-  document.querySelectorAll('#step5ItemsContainer .step5-item-row').forEach(function(row) {
-    var code = row.querySelector('.req-item-code').value;
-    var desc = row.querySelector('.req-item-desc').value;
-    var qty = parseInt(row.querySelector('.req-qty').value, 10);
-    var unit = row.querySelector('.req-unit').value || 'PIECE';
-    var remarks = row.querySelector('.req-remarks').value || '';
-    if (code && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty, unit: unit, remarks: remarks });
-  });
+document.querySelectorAll('#step5ItemsContainer .step5-item-row').forEach(function(row) {
+  var code = row.querySelector('.req-item-code').value;
+  var desc = row.querySelector('.req-item-desc').value;
+  var qty = parseFloat(row.querySelector('.req-qty').value);
+  var unit = row.querySelector('.req-unit').value || 'PIECE';
+  var remarks = row.querySelector('.req-remarks').value || '';
+  if (code && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty, unit: unit, remarks: remarks });
+});
 
   if (items.length === 0) { showToast('Add at least one item', 'warning'); _resetSubmitState(submitBtn, origHtml); return; }
 
@@ -1030,8 +1030,8 @@ function renderManualMrifItems() {
         '<input type="hidden" class="manual-mrif-desc" id="manualMrifDesc' + i + '" value="' + (it.description || '') + '">' +
       '</div></td>' +
       '<td><input type="text" class="form-control form-control-sm" value="' + (it.description || '') + '" onchange="updateManualMrifItem(' + i + ', \'description\', this.value)" placeholder="Description"></td>' +
-      '<td><input type="number" class="form-control form-control-sm text-center" value="' + (it.qty || 1) + '" onchange="updateManualMrifItem(' + i + ', \'qty\', parseFloat(this.value)||0)" min="1" step="1"></td>' +
-      '<td><input type="number" class="form-control form-control-sm text-center" value="' + (it.atlQty || 0) + '" onchange="updateManualMrifItem(' + i + ', \'atlQty\', parseFloat(this.value)||0)" min="0" step="1"></td>' +
+     '<td><input type="number" class="form-control form-control-sm text-center" value="' + (it.qty || 1) + '" onchange="updateManualMrifItem(' + i + ', \'qty\', parseFloat(this.value)||0)" min="0" step="0.01"></td>' +
+'<td><input type="number" class="form-control form-control-sm text-center" value="' + (it.atlQty || 0) + '" onchange="updateManualMrifItem(' + i + ', \'atlQty\', parseFloat(this.value)||0)" min="0" step="0.01"></td>' +
       '<td><select class="form-select form-select-sm manual-mrif-unit" onchange="updateManualMrifItem(' + i + ', \'unit\', this.value)">' + buildUnitOptions(it.unit || 'PIECE') + '</select></td>' +
       '<td><input type="text" class="form-control form-control-sm" value="' + (it.remarks || '') + '" onchange="updateManualMrifItem(' + i + ', \'remarks\', this.value)" placeholder="Remarks" maxlength="200"></td>' +
       '<td class="align-middle text-center"><button class="btn btn-sm btn-outline-danger" onclick="removeManualMrifItem(' + i + ')" title="Remove"><i class="bi bi-trash"></i></button></td>' +
@@ -1162,8 +1162,8 @@ async function submitManualMrif() {
       var remarksInput = rows[i].querySelector('td:nth-child(7) input');
       var code = codeInput ? codeInput.value.trim() : '';
       var desc = descInput ? descInput.value.trim() : '';
-      var qty = qtyInput ? parseInt(qtyInput.value, 10) : 0;
-      var atl = atlInput ? parseInt(atlInput.value, 10) : 0;
+     var qty = qtyInput ? parseFloat(qtyInput.value) : 0;
+var atl = atlInput ? parseFloat(atlInput.value) : 0;
       var unit = unitSelect ? unitSelect.value : 'PIECE';
       var remarks = remarksInput ? remarksInput.value.trim() : '';
       if (code && desc && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty, atlQty: atl, unit: unit, remarks: remarks });
