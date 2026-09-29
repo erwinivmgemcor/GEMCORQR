@@ -591,7 +591,7 @@ window.loadAllRequests = async function() {
   }
 
   var filterRaw = typeEl ? typeEl.value : 'MRIF,MRS';
-  var statusFilter = statusEl ? statusEl.value : 'partial_today';
+   var statusFilter = statusEl ? statusEl.value : 'today_and_partial';
 
   // ★ Persist current choice
   try { localStorage.setItem('ivm_allReqStatusFilter', statusFilter); } catch(e) {}
@@ -624,7 +624,7 @@ window.loadAllRequests = async function() {
       badge.classList.toggle('d-none', activeCount === 0);
     }
 
-    // ─── Prepare date boundaries for "today" ───
+       // ─── Prepare date boundaries for "today" ───
     var now = new Date();
     var todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     var todayEnd = todayStart + 24 * 60 * 60 * 1000;
@@ -638,14 +638,17 @@ window.loadAllRequests = async function() {
       var ts = d.timestamp ? new Date(d.timestamp).getTime() : 0;
       var isToday = ts >= todayStart && ts < todayEnd;
 
-      if (statusFilter === 'partial_today') {
-        return s === 'PARTIAL' && isToday;
+      // ★ DEFAULT VIEW: everything from today (any status)
+      //                + any PARTIAL from older dates
+      if (statusFilter === 'today_and_partial') {
+        return isToday || s === 'PARTIAL';
+      }
+
+      if (statusFilter === 'today') {
+        return isToday;
       }
       if (statusFilter === 'partial') {
         return s === 'PARTIAL';
-      }
-      if (statusFilter === 'today') {
-        return isToday;
       }
       if (statusFilter === 'active') {
         return s === 'PENDING' || s === 'PARTIAL';
@@ -655,7 +658,6 @@ window.loadAllRequests = async function() {
       }
       return true; // 'all'
     });
-
     // ─── Fetch prep statuses (only useful for active docs) ───
     var prepMap = {};
     if (statusFilter !== 'completed') {
@@ -695,9 +697,9 @@ function renderAllRequests(docs, statusFilter, prepMap) {
   if (!docs || docs.length === 0) {
     var emptyMsg = 'No requests found.';
     var emptyHint = 'New requests from production will appear here automatically.';
-    if (statusFilter === 'partial_today') {
-      emptyMsg = 'No partial requests for today. 🎉';
-      emptyHint = 'Change the filter to "All Statuses" or "Partial (All Dates)" to see more.';
+        if (statusFilter === 'today_and_partial') {
+      emptyMsg = 'No requests today and no partials pending. 🎉';
+      emptyHint = 'Switch to "All Statuses" to see past work.';
     } else if (statusFilter === 'partial') {
       emptyMsg = 'No partial requests at the moment.';
       emptyHint = 'Everything is either pending or completed.';
