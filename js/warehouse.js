@@ -1,6 +1,6 @@
 // ============================================================
 // WAREHOUSE CORE FUNCTIONS
-// v5 — Fixed submitProcessBalance (window-scoped items)
+// v6 — Fixed partial processing fallback + Supabase partial_items sync
 //      + Requestor full-name normalization + auto-print
 // ============================================================
 
@@ -347,18 +347,18 @@
   window.fetchDocItems = async function(docNo, docType) {
     var sheetId = getCleanSheetId();
     if (!sheetId) throw new Error('No Sheet ID');
-     var data;
-  if (typeof sbGetDocItems === 'function') {
-    data = await sbGetDocItems(docNo, docType);
-  } else {
-    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
-              '&docType=' + docType + '&sheetId=' + sheetId + '&_t=' + Date.now();
-    var res = await fetch(url, { redirect: 'follow' });
-    var text = await res.text();
-    try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
-  }
-  if (data.error) throw new Error(data.error);
-  if (!data.success) throw new Error(data.error || 'Failed to load document');
+    var data;
+    if (typeof sbGetDocItems === 'function') {
+      data = await sbGetDocItems(docNo, docType);
+    } else {
+      var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
+                '&docType=' + docType + '&sheetId=' + sheetId + '&_t=' + Date.now();
+      var res = await fetch(url, { redirect: 'follow' });
+      var text = await res.text();
+      try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+    }
+    if (data.error) throw new Error(data.error);
+    if (!data.success) throw new Error(data.error || 'Failed to load document');
     var items = Array.isArray(data) ? data : (data.items || []);
     state.items = items.map(function(it, idx) {
       return {
@@ -535,10 +535,10 @@
   };
 
   window.confirmBatchVerify = function() {
-  var qtyInput = document.getElementById('batchQtyInput');
-  if (!qtyInput) return;
-  var qtyVal = parseFloat(qtyInput.value);
-  if (isNaN(qtyVal) || qtyVal < 0) { showToast('Enter a valid quantity', 'warning'); return; }
+    var qtyInput = document.getElementById('batchQtyInput');
+    if (!qtyInput) return;
+    var qtyVal = parseFloat(qtyInput.value);
+    if (isNaN(qtyVal) || qtyVal < 0) { showToast('Enter a valid quantity', 'warning'); return; }
     var unit = qtyInput.dataset.unit || 'PIECE';
     var selectedRows = document.querySelectorAll('#itemsTable .item-select:checked');
     selectedRows.forEach(function(cb) {
@@ -618,37 +618,40 @@
           changeDocument();
           isSubmitting = false;
           window._recentlyProcessedDoc = null;
-          // ★ Clear ALL relevant frontend caches first
-if (typeof clearCache === 'function') {
-  clearCache('partial_modal_MRIF');
-  clearCache('partial_modal_MRR');
-  clearCache('partial_modal_MRS');
-  clearCache('kpi_partial_MRIF');
-  clearCache('kpi_partial_MRR');
-  clearCache('pendingRequests');
-  clearCache('analyticsData');
-  clearCache('pendingDocs_' + processedType + '_' + (typeof getCleanSheetId === 'function' ? getCleanSheetId() : ''));
-}
-// ★ Then force fresh reads
-if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
-if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications(true);
-if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
-if (typeof updatePartialCount === 'function') updatePartialCount();
-if (typeof loadAllRequests === 'function') loadAllRequests();
 
-// ★ Also refresh the Dashboard KPI numbers
-setTimeout(function() {
-  if (typeof loadAnalytics === 'function') loadAnalytics(true);
-}, 800);
+          // ★ CLEAR ALL RELEVANT CACHES FIRST
+          if (typeof clearCache === 'function') {
+            clearCache('partial_modal_MRIF');
+            clearCache('partial_modal_MRR');
+            clearCache('partial_modal_MRS');
+            clearCache('kpi_partial_MRIF');
+            clearCache('kpi_partial_MRR');
+            clearCache('pendingRequests');
+            clearCache('analyticsData');
+          }
 
-// ★ Notify other tabs/windows to refresh
-try {
-  if (window.BroadcastChannel) {
-    var bc = new BroadcastChannel('gemcor_sync');
-    bc.postMessage({ type: 'doc_processed', docNo: processedDoc, status: newStatus });
-    bc.close();
-  }
-} catch(e) {}
+          // ★ FORCE FRESH READS
+          if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
+          if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications(true);
+          if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
+          if (typeof updatePartialCount === 'function') updatePartialCount();
+          if (typeof loadAllRequests === 'function') loadAllRequests();
+
+          // ★ Refresh analytics KPI numbers
+          setTimeout(function() {
+            if (typeof loadAnalytics === 'function') loadAnalytics(true);
+          }, 800);
+
+          // ★ Broadcast to other tabs
+          try {
+            if (window.BroadcastChannel) {
+              var bc = new BroadcastChannel('gemcor_sync');
+              bc.postMessage({ type: 'doc_processed', docNo: processedDoc, status: newStatus });
+              bc.close();
+            }
+          } catch(e) {}
+
+          // ★ Auto-open print preview
           if (processedDoc && typeof autoOpenPrintPreview === 'function') {
             setTimeout(function() { autoOpenPrintPreview(processedDoc, processedType); }, 500);
           }
@@ -1049,11 +1052,11 @@ try {
   };
 
   window.confirmQty = function() {
-  if (!currentModalItem) return;
-  var input = document.getElementById('modalInputQty');
-  if (!input) return;
-  var qtyVal = parseFloat(input.value);
-  if (isNaN(qtyVal) || qtyVal < 0) { input.classList.add('is-invalid'); playErrorBuzz(); return; }
+    if (!currentModalItem) return;
+    var input = document.getElementById('modalInputQty');
+    if (!input) return;
+    var qtyVal = parseFloat(input.value);
+    if (isNaN(qtyVal) || qtyVal < 0) { input.classList.add('is-invalid'); playErrorBuzz(); return; }
     var isMRR = state.currentModule === 'MRR';
     if (!isMRR && qtyVal > currentModalItem.qty) {
       var max = currentModalItem.qty;
@@ -1751,6 +1754,9 @@ try {
   var _processPartialDocNo = null;
   var _processPartialItems = [];
 
+  // ═══════════════════════════════════════════════════════════
+  // ★ FIXED: openProcessPartialModal with 5-step fallback
+  // ═══════════════════════════════════════════════════════════
   window.openProcessPartialModal = async function(docNo) {
     if (!docNo) return;
     _processPartialDocNo = docNo;
@@ -1763,33 +1769,173 @@ try {
     var body = document.getElementById('processPartialBody');
     if (body) body.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
     modal.show();
+
     try {
+      // ★ STEP 1: Try PARTIAL ITEMS sheet first (fast path)
       var all = await fetchPartialItems();
-      _processPartialItems = all.filter(function(it) { return (it.originalDocNo || it.docNo) === docNo; });
-      window._processPartialItems = _processPartialItems;   // ★ exposed for submit
+      _processPartialItems = all.filter(function(it) {
+        return (it.originalDocNo || it.docNo) === docNo;
+      });
+      window._processPartialItems = _processPartialItems;
+
+      // ★ STEP 2: Fallback — read from Supabase/GAS doc items directly
       if (!_processPartialItems.length) {
-        if (body) body.innerHTML = '<div class="alert alert-info mb-0">No open partial items for this document.</div>';
+        console.log('[openProcessPartialModal] No partial items in sheet — falling back to doc items read for:', docNo);
+
+        var docData = null;
+        if (typeof sbGetDocItems === 'function') {
+          try {
+            docData = await sbGetDocItems(docNo, 'MRIF');
+          } catch(e) {
+            console.warn('[openProcessPartialModal] Supabase read failed:', e.message);
+          }
+        }
+
+        // GAS fallback if Supabase empty/failed
+        if (!docData || !docData.success || !docData.items || docData.items.length === 0) {
+          try {
+            var sheetKey = 'sheetId_MRIF';
+            var sheetIdVal = localStorage.getItem(sheetKey);
+            var sheetIdClean = sheetIdVal
+              ? (typeof extractSheetId === 'function' ? extractSheetId(sheetIdVal) : sheetIdVal)
+              : '';
+            var gasUrl = API_URL + '?action=getDocItems' +
+                         '&docNo=' + encodeURIComponent(docNo) +
+                         '&docType=MRIF' +
+                         '&sheetId=' + encodeURIComponent(sheetIdClean) +
+                         '&_t=' + Date.now();
+            var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
+            var gasRes = await fetchFn(gasUrl, { redirect: 'follow' }, { timeout: 30000, retries: 1 });
+            var gasText = await gasRes.text();
+            var gasTrimmed = String(gasText || '').trim();
+            if (gasTrimmed && gasTrimmed.charAt(0) !== '<') {
+              var parsed = JSON.parse(gasTrimmed);
+              if (parsed && parsed.success) docData = parsed;
+            }
+          } catch(e) {
+            console.warn('[openProcessPartialModal] GAS read failed:', e.message);
+          }
+        }
+
+        // ★ STEP 3: Build the processPartialItems array from the doc items
+        if (docData && docData.success && docData.items && docData.items.length > 0) {
+          var rebuiltItems = [];
+          docData.items.forEach(function(it) {
+            var requested = Number(it.requestedQty || it.expectedQty || it.recQty || it.qty || 0);
+            var issued = Number(it.issuedQty || it.actualQty || it.atlQty || 0);
+            var remaining = requested - issued;
+
+            if (remaining > 0 && requested > 0) {
+              rebuiltItems.push({
+                originalDocNo: docNo,
+                docNo: docNo,
+                itemCode: it.inventoryId || it.itemCode || it.code || '',
+                description: it.description || it.desc || '',
+                requestedQty: requested,
+                issuedQty: issued,
+                remainingQty: remaining,
+                unit: it.unit || 'PCS',
+                originalRowIndex: it.rowIndex || 0,
+                status: 'OPEN',
+                remarks: it.remarks || ''
+              });
+            }
+          });
+
+          if (rebuiltItems.length > 0) {
+            console.log('[openProcessPartialModal] Rebuilt ' + rebuiltItems.length + ' items from doc items for ' + docNo);
+            _processPartialItems = rebuiltItems;
+            window._processPartialItems = rebuiltItems;
+            showToast('Loaded ' + rebuiltItems.length + ' remaining item(s) from document.', 'info');
+          }
+        }
+      }
+
+      // ★ STEP 4: Still empty? Show helpful error.
+      if (!_processPartialItems.length) {
+        if (body) {
+          body.innerHTML =
+            '<div class="alert alert-warning mb-0">' +
+              '<i class="bi bi-exclamation-triangle-fill me-2"></i>' +
+              '<strong>No remaining items found for this document.</strong><br>' +
+              '<small>This document may already be fully processed, or the data ' +
+              'has not been synced yet.</small><br><br>' +
+              '<small class="text-muted">' +
+                'If you believe this is wrong, please try:<br>' +
+                '1. Click "Close" then reopen this document<br>' +
+                '2. Ask the warehouse admin to run a fresh sync<br>' +
+                '3. Check the Google Sheet — items may already be SERVED' +
+              '</small>' +
+            '</div>' +
+            '<div class="mt-2 text-center">' +
+              '<button class="btn btn-sm btn-outline-primary" ' +
+                'onclick="closeProcessPartialModal();setTimeout(function(){openProcessPartialModal(\'' +
+                String(docNo).replace(/'/g, "\\'") + '\')},300)">' +
+                '<i class="bi bi-arrow-clockwise me-1"></i>Retry' +
+              '</button>' +
+            '</div>';
+        }
         return;
       }
-      var html = '<div class="alert alert-info small py-2 mb-3"><i class="bi bi-info-circle me-1"></i> A new sheet <strong>Bal.' + docNo + '</strong> will be created.</div>' +
+
+      // ★ STEP 5: Render the modal
+      var html = '<div class="alert alert-info small py-2 mb-3">' +
+        '<i class="bi bi-info-circle me-1"></i> A new sheet <strong>Bal.' + docNo +
+        '</strong> will be created.</div>' +
         '<div class="table-responsive"><table class="table table-sm table-bordered align-middle">' +
-        '<thead class="table-light"><tr><th style="width:4%">#</th><th style="width:18%">Item Code</th><th>Description</th><th class="text-center" style="width:7%">Unit</th><th class="text-center" style="width:9%">Remaining</th><th class="text-center" style="width:12%">Issued Now</th><th style="width:18%">Remarks</th></tr></thead><tbody>';
+        '<thead class="table-light"><tr>' +
+          '<th style="width:4%">#</th>' +
+          '<th style="width:18%">Item Code</th>' +
+          '<th>Description</th>' +
+          '<th class="text-center" style="width:7%">Unit</th>' +
+          '<th class="text-center" style="width:9%">Remaining</th>' +
+          '<th class="text-center" style="width:12%">Issued Now</th>' +
+          '<th style="width:18%">Remarks</th>' +
+        '</tr></thead><tbody>';
+
       _processPartialItems.forEach(function(it, idx) {
         var remaining = Number(it.remainingQty || 0);
-        html += '<tr><td class="text-center">' + (idx + 1) + '</td>' +
+        html += '<tr>' +
+          '<td class="text-center">' + (idx + 1) + '</td>' +
           '<td><code>' + (it.itemCode || '') + '</code></td>' +
           '<td>' + (it.description || '') + '</td>' +
           '<td class="text-center">' + (it.unit || 'PCS') + '</td>' +
           '<td class="text-center fw-bold text-danger process-remaining-cell" data-idx="' + idx + '">' + remaining + '</td>' +
-          '<td class="text-center"><input type="number" class="form-control form-control-sm text-center process-qty-input" data-idx="' + idx + '" value="' + remaining + '" min="0" max="' + remaining + '" step="0.01" style="width:90px;margin:0 auto;" oninput="onProcessQtyInput(this)"></td>' +
-          '<td><input type="text" class="form-control form-control-sm process-remarks-input" data-idx="' + idx + '" placeholder="Optional" maxlength="200"></td></tr>';
+          '<td class="text-center">' +
+            '<input type="number" class="form-control form-control-sm text-center process-qty-input" ' +
+              'data-idx="' + idx + '" value="' + remaining + '" min="0" max="' + remaining + '" ' +
+              'step="0.01" style="width:90px;margin:0 auto;" oninput="onProcessQtyInput(this)">' +
+          '</td>' +
+          '<td>' +
+            '<input type="text" class="form-control form-control-sm process-remarks-input" ' +
+              'data-idx="' + idx + '" placeholder="Optional" maxlength="200">' +
+          '</td>' +
+        '</tr>';
       });
+
       html += '</tbody></table></div>' +
-        '<div class="mt-2 small text-muted"><button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="fillAllRemaining()"><i class="bi bi-magic me-1"></i>Fill Full Remaining</button></div>';
+        '<div class="mt-2 small text-muted">' +
+          '<button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="fillAllRemaining()">' +
+            '<i class="bi bi-magic me-1"></i>Fill Full Remaining' +
+          '</button>' +
+        '</div>';
+
       if (body) body.innerHTML = html;
     } catch(err) {
-      if (body) body.innerHTML = '<div class="alert alert-danger">Failed to load items: ' + err.message + '</div>';
+      console.error('[openProcessPartialModal] Error:', err);
+      if (body) {
+        body.innerHTML = '<div class="alert alert-danger">Failed to load items: ' +
+          String(err.message).replace(/</g, '&lt;') + '</div>';
+      }
     }
+  };
+
+  // ★ Helper to close the modal safely
+  window.closeProcessPartialModal = function() {
+    var modalEl = document.getElementById('processPartialModal');
+    if (!modalEl) return;
+    var m = bootstrap.Modal.getInstance(modalEl);
+    if (m) m.hide();
   };
 
   window.onProcessQtyInput = function(input) {
@@ -1885,10 +2031,30 @@ try {
           window._processPartialDocNo = null;
           window._processDocType = null;
 
+          // ★ Clear caches
+          if (typeof clearCache === 'function') {
+            clearCache('partial_modal_MRIF');
+            clearCache('partial_modal_MRR');
+            clearCache('partial_modal_MRS');
+            clearCache('kpi_partial_MRIF');
+            clearCache('kpi_partial_MRR');
+            clearCache('pendingRequests');
+            clearCache('analyticsData');
+          }
+
           if (typeof updatePartialCount === 'function') updatePartialCount();
           if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
           if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
           if (typeof loadAllRequests === 'function') loadAllRequests();
+
+          // ★ Broadcast to other tabs
+          try {
+            if (window.BroadcastChannel) {
+              var bc = new BroadcastChannel('gemcor_sync');
+              bc.postMessage({ type: 'doc_processed', docNo: newBalanceDoc, status: data.status || 'COMPLETED' });
+              bc.close();
+            }
+          } catch(e) {}
 
           if (newBalanceDoc && typeof autoOpenPrintPreview === 'function') {
             setTimeout(function() { autoOpenPrintPreview(newBalanceDoc, 'MRIF'); }, 400);
@@ -1902,9 +2068,8 @@ try {
     }, 'Creating Balance...');
   };
 
- window.updatePartialCount = async function() {
-  // Deprecated — KPI now handled by updateWarehouseKPIs.
-  // This is kept for backward compatibility but does nothing.
-  return;
-};
+  window.updatePartialCount = async function() {
+    // Deprecated — KPI now handled by updateWarehouseKPIs.
+    return;
+  };
 })(); // end IIFE
