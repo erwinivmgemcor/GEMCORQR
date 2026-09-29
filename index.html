@@ -348,14 +348,15 @@
             <option value="MRIF">MRIF only</option>
             <option value="MRS">MRS only</option>
           </select>
-          <select id="allRequestsStatusFilter" class="form-select form-select-sm" style="width:auto;" onchange="loadAllRequests()">
-            <option value="today_and_partial" selected>Today + All Partials</option>
-            <option value="today">Today Only</option>
-            <option value="partial">Partials (All Dates)</option>
-            <option value="active">Active (Pending + Partial)</option>
-            <option value="all">All Statuses</option>
-            <option value="completed">Completed Only</option>
-          </select>
+         <select id="allRequestsStatusFilter" class="form-select form-select-sm" style="width:auto;" onchange="loadAllRequests()">
+  <option value="active" selected>⚠️ For Monitoring (Pending + Partial, All Dates)</option>
+  <option value="today_and_partial">Today + All Partials</option>
+  <option value="today">Today Only</option>
+  <option value="partial">Partials Only (All Dates)</option>
+  <option value="pending">Pending Only (All Dates)</option>
+  <option value="all">All Statuses</option>
+  <option value="completed">Completed Only</option>
+</select>
           <button class="btn btn-sm btn-outline-primary" onclick="loadAllRequests()">
             <i class="bi bi-arrow-clockwise me-1"></i>Refresh
           </button>
