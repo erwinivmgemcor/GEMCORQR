@@ -347,14 +347,18 @@
   window.fetchDocItems = async function(docNo, docType) {
     var sheetId = getCleanSheetId();
     if (!sheetId) throw new Error('No Sheet ID');
+     var data;
+  if (typeof sbGetDocItems === 'function') {
+    data = await sbGetDocItems(docNo, docType);
+  } else {
     var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
               '&docType=' + docType + '&sheetId=' + sheetId + '&_t=' + Date.now();
     var res = await fetch(url, { redirect: 'follow' });
     var text = await res.text();
-    var data;
     try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
-    if (data.error) throw new Error(data.error);
-    if (!data.success) throw new Error(data.error || 'Failed to load document');
+  }
+  if (data.error) throw new Error(data.error);
+  if (!data.success) throw new Error(data.error || 'Failed to load document');
     var items = Array.isArray(data) ? data : (data.items || []);
     state.items = items.map(function(it, idx) {
       return {
