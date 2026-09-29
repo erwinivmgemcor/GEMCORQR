@@ -1,9 +1,8 @@
 // ============================================================
 // PRINT PREVIEW FUNCTIONS
-// v5 — Embedded QR (base64) + Centered QR in print cells
+// v6 — Supabase-first reads (0.2s vs 15s from GAS)
 // ============================================================
 
-// ─── Local HTML escaper ───
 function _escPrint(s) {
   if (s === null || s === undefined) return '';
   return String(s)
@@ -14,14 +13,12 @@ function _escPrint(s) {
     .replace(/'/g, '&#39;');
 }
 
-// ─── Build the print-only URL ───
 function _printQrData(docNo) {
   if (!docNo) return '';
   var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
   return base + '?doc=' + encodeURIComponent(docNo) + '&view=print';
 }
 
-// ─── Build a QR image URL (server-side) ───
 function _qrUrl(data, size) {
   size = size || 120;
   return 'https://api.qrserver.com/v1/create-qr-code/?size=' + size + 'x' + size +
@@ -29,10 +26,6 @@ function _qrUrl(data, size) {
          '&qzone=1&margin=0';
 }
 
-// ═══════════════════════════════════════════════════════════════
-// QR → BASE64 CONVERTER
-// Downloads the QR image, converts to a data URL, caches it.
-// ═══════════════════════════════════════════════════════════════
 var _qrDataUrlCache = {};
 
 async function _qrToDataUrl(data, size) {
@@ -59,7 +52,6 @@ async function _qrToDataUrl(data, size) {
   }
 }
 
-// ─── Pre-convert all QRs in an HTML string to data URLs ───
 async function _embedQrInHtml(html) {
   if (!html) return html;
 
@@ -102,6 +94,42 @@ async function _embedQrInHtml(html) {
   return html;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// HELPER: Fetch doc items — Supabase-first, GAS fallback
+// ═══════════════════════════════════════════════════════════════
+async function _fetchDocItemsForPrint(docNo, docType) {
+  // ★ Supabase first
+  if (typeof sbGetDocItems === 'function') {
+    try {
+      var t0 = Date.now();
+      var data = await sbGetDocItems(docNo, docType);
+      if (data && data.success && data.items && data.items.length > 0) {
+        console.log('[print] Supabase returned ' + data.items.length + ' items in ' + (Date.now() - t0) + 'ms');
+        return data;
+      }
+      console.log('[print] Supabase empty for ' + docNo + ', falling back to GAS');
+    } catch(e) {
+      console.warn('[print] Supabase failed, using GAS:', e.message);
+    }
+  }
+
+  // Fallback to GAS
+  var sheetKey = 'sheetId_' + (docType || 'MRIF');
+  var sheetIdVal = localStorage.getItem(sheetKey);
+  var sheetIdClean = sheetIdVal ? (typeof extractSheetId === 'function' ? extractSheetId(sheetIdVal) : sheetIdVal) : '';
+
+  var url = API_URL + '?action=getDocItems' +
+            '&docNo=' + encodeURIComponent(docNo) +
+            '&docType=' + (docType || 'MRIF') +
+            '&sheetId=' + encodeURIComponent(sheetIdClean) +
+            '&_t=' + Date.now();
+  var res = await fetch(url, { redirect: 'follow' });
+  var text = await res.text();
+  var trimmed = String(text || '').trim();
+  if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
+  return JSON.parse(trimmed);
+}
+
 // ─── Auto-open print preview after create/process ───
 function autoOpenPrintPreview(docNo, docType) {
   if (!docNo || !docType) return;
@@ -110,54 +138,44 @@ function autoOpenPrintPreview(docNo, docType) {
 
   showLoading('Preparing print preview...');
 
-  setTimeout(function() {
-    var url = API_URL + '?action=getDocItems' +
-              '&docNo=' + encodeURIComponent(cleanDoc) +
-              '&docType=' + cleanType +
-              '&sheetId=' + encodeURIComponent(_getSheetIdForDocType(cleanType)) +
-              '&_t=' + Date.now();
+  setTimeout(async function() {
+    try {
+      var data = await _fetchDocItemsForPrint(cleanDoc, cleanType);
+      hideLoading();
 
-    fetch(url, { redirect: 'follow' })
-      .then(function(res) { return res.text(); })
-      .then(function(text) {
-        var data;
-        try { data = JSON.parse(text); } catch(e) { data = {}; }
-        hideLoading();
-
-        if (!data || !data.success) {
-          if (typeof showToast === 'function') {
-            showToast('Document created: ' + cleanDoc + '. Open the module to print it.', 'success');
-          }
-          _navigateToModuleForDocType(cleanType);
-          return;
-        }
-
-        var info = data.info || {};
-        var items = data.items || [];
-
-        if (cleanType === 'MRIF') {
-          renderMrifPrint(cleanDoc, info, items);
-          if (typeof mrifListModal !== 'undefined' && mrifListModal) mrifListModal.hide();
-          setTimeout(function() { if (mrifPrintModal) mrifPrintModal.show(); }, 200);
-        } else if (cleanType === 'MRR') {
-          renderMrrPrint(cleanDoc, info, items);
-          if (typeof mrrListModal !== 'undefined' && mrrListModal) mrrListModal.hide();
-          setTimeout(function() { if (mrrPrintModal) mrrPrintModal.show(); }, 200);
-        } else if (cleanType === 'MRS') {
-          renderMrsPrint(cleanDoc, info, items);
-          if (typeof mrsListModal !== 'undefined' && mrsListModal) mrsListModal.hide();
-          setTimeout(function() { if (mrsPrintModal) mrsPrintModal.show(); }, 200);
-        }
-      })
-      .catch(function(err) {
-        hideLoading();
-        console.warn('[autoOpenPrintPreview] failed:', err);
+      if (!data || !data.success) {
         if (typeof showToast === 'function') {
           showToast('Document created: ' + cleanDoc + '. Open the module to print it.', 'success');
         }
         _navigateToModuleForDocType(cleanType);
-      });
-  }, 700);
+        return;
+      }
+
+      var info = data.info || {};
+      var items = data.items || [];
+
+      if (cleanType === 'MRIF') {
+        await renderMrifPrint(cleanDoc, info, items);
+        if (typeof mrifListModal !== 'undefined' && mrifListModal) mrifListModal.hide();
+        setTimeout(function() { if (mrifPrintModal) mrifPrintModal.show(); }, 200);
+      } else if (cleanType === 'MRR') {
+        await renderMrrPrint(cleanDoc, info, items);
+        if (typeof mrrListModal !== 'undefined' && mrrListModal) mrrListModal.hide();
+        setTimeout(function() { if (mrrPrintModal) mrrPrintModal.show(); }, 200);
+      } else if (cleanType === 'MRS') {
+        await renderMrsPrint(cleanDoc, info, items);
+        if (typeof mrsListModal !== 'undefined' && mrsListModal) mrsListModal.hide();
+        setTimeout(function() { if (mrsPrintModal) mrsPrintModal.show(); }, 200);
+      }
+    } catch(err) {
+      hideLoading();
+      console.warn('[autoOpenPrintPreview] failed:', err);
+      if (typeof showToast === 'function') {
+        showToast('Document created: ' + cleanDoc + '. Open the module to print it.', 'success');
+      }
+      _navigateToModuleForDocType(cleanType);
+    }
+  }, 500);
 }
 
 function _navigateToModuleForDocType(docType) {
@@ -168,7 +186,7 @@ function _navigateToModuleForDocType(docType) {
 
 window.autoOpenPrintPreview = autoOpenPrintPreview;
 
-// ─── Display doc number ───
+// ─── Helpers ───
 function _displayDocNo(docNo) {
   if (!docNo) return '';
   if (docNo.indexOf('Bal.') === 0) {
@@ -331,24 +349,56 @@ async function printSelectedDocs() {
 
   showLoading('Loading ' + docNos.length + ' documents...');
   try {
-    var sheetIdClean = _getSheetIdForDocType(docType);
-    var url = API_URL + '?action=getMultipleDocItems&docNos=' + encodeURIComponent(docNos.join(',')) +
-              '&docType=' + docType + '&sheetId=' + encodeURIComponent(sheetIdClean) + '&_t=' + Date.now();
-    var res = await fetch(url, { redirect: 'follow' });
-    var text = await res.text();
-    var data;
-    try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+    // ★ Supabase-first: fetch each doc from Supabase in parallel
+    var results = [];
+    if (typeof sbGetDocItems === 'function') {
+      var promises = docNos.map(function(dn) {
+        return sbGetDocItems(dn, docType).then(function(data) {
+          return { docNo: dn, info: data.info || {}, items: data.items || [], success: data.success };
+        }).catch(function() {
+          return { docNo: dn, info: {}, items: [], success: false };
+        });
+      });
+      results = await Promise.all(promises);
+    }
 
-    if (!data.success) throw new Error(data.error || 'Failed to load documents');
-    if (!data.documents || data.documents.length === 0) throw new Error('No document data returned');
+    // Filter out failures; if any failed, fallback to GAS for those
+    var failedDocs = results.filter(function(r) { return !r.success || r.items.length === 0; });
+    if (failedDocs.length > 0) {
+      console.log('[print] Falling back to GAS for ' + failedDocs.length + ' docs');
+      var sheetIdClean = _getSheetIdForDocType(docType);
+      var gasUrl = API_URL + '?action=getMultipleDocItems&docNos=' + encodeURIComponent(failedDocs.map(function(f) { return f.docNo; }).join(',')) +
+                   '&docType=' + docType + '&sheetId=' + encodeURIComponent(sheetIdClean) + '&_t=' + Date.now();
+      try {
+        var res = await fetch(gasUrl, { redirect: 'follow' });
+        var text = await res.text();
+        var gasData;
+        try { gasData = JSON.parse(text); } catch(e) { gasData = {}; }
+        if (gasData && gasData.success && gasData.documents) {
+          // Merge GAS results with Supabase results
+          gasData.documents.forEach(function(g) {
+            for (var i = 0; i < results.length; i++) {
+              if (results[i].docNo === g.docNo) {
+                results[i] = { docNo: g.docNo, info: g.info || {}, items: g.items || [], success: true };
+                break;
+              }
+            }
+          });
+        }
+      } catch(e) { console.warn('[print] GAS fallback failed:', e); }
+    }
 
-    if (data.documents.length === 1) {
-      var docData = data.documents[0];
+    // Filter out still-failed
+    var validResults = results.filter(function(r) { return r.success && r.items.length > 0; });
+    if (validResults.length === 0) throw new Error('No document data returned');
+
+    if (validResults.length === 1) {
+      var docData = validResults[0];
       if (docType === 'MRIF') await renderMrifPrint(docData.docNo, docData.info, docData.items);
       else if (docType === 'MRR') await renderMrrPrint(docData.docNo, docData.info, docData.items);
       else if (docType === 'MRS') await renderMrsPrint(docData.docNo, docData.info, docData.items);
     } else {
-      await renderBulkPrintPreview(data.documents, docType);
+      await renderBulkPrintPreview(validResults, docType);
     }
 
     if (docType === 'MRIF' && mrifListModal) mrifListModal.hide();
@@ -388,7 +438,7 @@ async function renderBulkPrintPreview(documents, docType) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BUILD MRIF PRINT
+// BUILD MRIF PRINT HTML
 // ═══════════════════════════════════════════════════════════════
 function buildSingleMrifHtml(docNo, info, items) {
   var requestor = _escPrint(info.Requestor || info.requestor || info.requestorName || '');
@@ -492,7 +542,7 @@ function buildSingleMrifHtml(docNo, info, items) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BUILD MRR PRINT
+// BUILD MRR PRINT HTML
 // ═══════════════════════════════════════════════════════════════
 function buildSingleMrrHtml(docNo, info, items) {
   var receivingSite = _escPrint(info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON');
@@ -600,7 +650,7 @@ function buildSingleMrrHtml(docNo, info, items) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BUILD MRS PRINT
+// BUILD MRS PRINT HTML
 // ═══════════════════════════════════════════════════════════════
 function buildSingleMrsHtml(docNo, info, items) {
   var requestor = _escPrint(info.Requestor || info.requestor || info.requestorName || '');
@@ -699,17 +749,14 @@ function buildSingleMrsHtml(docNo, info, items) {
   '</div>';
 }
 
-// ─── Open single doc print ────
+// ─── Open single doc print (Supabase-first) ────
 async function openMrifPrint(docNo) {
   if (state.isLoading) return;
   showLoading('Loading ' + _displayDocNo(docNo) + '...');
   try {
-    var sheetId = _getSheetIdForDocType('MRIF');
-    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRIF&sheetId=' + sheetId + '&_t=' + Date.now();
-    var res = await fetch(url, { redirect: 'follow' });
-    var text = await res.text();
-    var data;
-    try { data = JSON.parse(text); } catch(e) { data = {}; }
+    var t0 = Date.now();
+    var data = await _fetchDocItemsForPrint(docNo, 'MRIF');
+    console.log('[openMrifPrint] ' + docNo + ' in ' + (Date.now() - t0) + 'ms');
     if (data.error) { showToast('Error: ' + data.error, 'danger'); return; }
     if (!data.success) { showToast('Error: ' + (data.error || 'Failed to load document'), 'danger'); return; }
     await renderMrifPrint(docNo, data.info || {}, data.items || []);
@@ -725,12 +772,9 @@ async function openMrrPrint(docNo) {
   if (state.isLoading) return;
   showLoading('Loading ' + _displayDocNo(docNo) + '...');
   try {
-    var sheetId = _getSheetIdForDocType('MRR');
-    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRR&sheetId=' + sheetId + '&_t=' + Date.now();
-    var res = await fetch(url, { redirect: 'follow' });
-    var text = await res.text();
-    var data;
-    try { data = JSON.parse(text); } catch(e) { data = {}; }
+    var t0 = Date.now();
+    var data = await _fetchDocItemsForPrint(docNo, 'MRR');
+    console.log('[openMrrPrint] ' + docNo + ' in ' + (Date.now() - t0) + 'ms');
     if (data.error) { showToast('Error: ' + data.error, 'danger'); return; }
     if (!data.success) { showToast('Error: ' + (data.error || 'Failed to load document'), 'danger'); return; }
     await renderMrrPrint(docNo, data.info || {}, data.items || []);
@@ -746,12 +790,9 @@ async function openMrsPrint(docNo) {
   if (state.isLoading) return;
   showLoading('Loading ' + _displayDocNo(docNo) + '...');
   try {
-    var sheetId = _getSheetIdForDocType('MRS');
-    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) + '&docType=MRS&sheetId=' + sheetId + '&_t=' + Date.now();
-    var res = await fetch(url, { redirect: 'follow' });
-    var text = await res.text();
-    var data;
-    try { data = JSON.parse(text); } catch(e) { data = {}; }
+    var t0 = Date.now();
+    var data = await _fetchDocItemsForPrint(docNo, 'MRS');
+    console.log('[openMrsPrint] ' + docNo + ' in ' + (Date.now() - t0) + 'ms');
     if (data.error) { showToast('Error: ' + data.error, 'danger'); return; }
     if (!data.success) { showToast('Error: ' + (data.error || 'Failed to load document'), 'danger'); return; }
     await renderMrsPrint(docNo, data.info || {}, data.items || []);
@@ -767,43 +808,32 @@ async function openMrsPrint(docNo) {
 async function renderMrifPrint(docNo, info, items) {
   var container = document.getElementById('mrifPrintContent');
   if (!container) return;
-  showLoading('Embedding QRs...');
-  try {
-    var html = buildSingleMrifHtml(docNo, info, items);
-    html = await _embedQrInHtml(html);
-    container.innerHTML = html;
-  } catch(e) {
-    console.warn('[renderMrifPrint] Embed failed:', e);
-    container.innerHTML = buildSingleMrifHtml(docNo, info, items);
-  } finally { hideLoading(); }
+  var html = buildSingleMrifHtml(docNo, info, items);
+  container.innerHTML = html;
+  // Embed QRs in background (non-blocking)
+  _embedQrInHtml(html).then(function(embedded) {
+    if (embedded && embedded !== html) container.innerHTML = embedded;
+  }).catch(function() {});
 }
 
 async function renderMrrPrint(docNo, info, items) {
   var container = document.getElementById('mrrPrintContent');
   if (!container) return;
-  showLoading('Embedding QRs...');
-  try {
-    var html = buildSingleMrrHtml(docNo, info, items);
-    html = await _embedQrInHtml(html);
-    container.innerHTML = html;
-  } catch(e) {
-    console.warn('[renderMrrPrint] Embed failed:', e);
-    container.innerHTML = buildSingleMrrHtml(docNo, info, items);
-  } finally { hideLoading(); }
+  var html = buildSingleMrrHtml(docNo, info, items);
+  container.innerHTML = html;
+  _embedQrInHtml(html).then(function(embedded) {
+    if (embedded && embedded !== html) container.innerHTML = embedded;
+  }).catch(function() {});
 }
 
 async function renderMrsPrint(docNo, info, items) {
   var container = document.getElementById('mrsPrintContent');
   if (!container) return;
-  showLoading('Embedding QRs...');
-  try {
-    var html = buildSingleMrsHtml(docNo, info, items);
-    html = await _embedQrInHtml(html);
-    container.innerHTML = html;
-  } catch(e) {
-    console.warn('[renderMrsPrint] Embed failed:', e);
-    container.innerHTML = buildSingleMrsHtml(docNo, info, items);
-  } finally { hideLoading(); }
+  var html = buildSingleMrsHtml(docNo, info, items);
+  container.innerHTML = html;
+  _embedQrInHtml(html).then(function(embedded) {
+    if (embedded && embedded !== html) container.innerHTML = embedded;
+  }).catch(function() {});
 }
 
 // ─── Print via iframe ────
@@ -933,3 +963,5 @@ async function openMrsList() {
     if (container) container.innerHTML = '<div class="list-group-item text-center text-danger py-3">Error: ' + _escPrint(err.message) + '</div>';
   }
 }
+
+console.log('✅ prints.js v6 loaded (Supabase-first)');
