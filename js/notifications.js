@@ -1,8 +1,8 @@
 // ============================================================
-// WAREHOUSE NOTIFICATIONS — v6
-//  - Plain fetch, correct AbortController cleanup
-//  - Retry button on partial modal failure
-//  - KPI client cache (60s)
+// WAREHOUSE NOTIFICATIONS — v7 (Supabase + GAS hybrid)
+//  - KPI + partial modals: read from Supabase (fast!)
+//  - Notifications polling: reads from Supabase
+//  - Writes still go through GAS (safety)
 // ============================================================
 
 (function() {
@@ -28,9 +28,9 @@
       .replace(/'/g, '&#39;');
   }
 
-  // ─── Internal JSON fetcher with proper cleanup ───
+  // ─── Fallback JSON fetcher (used when Supabase functions unavailable) ───
   async function _fetchJson(url, timeoutMs) {
-    timeoutMs = timeoutMs || 120000; // 2 minutes for slow GAS
+    timeoutMs = timeoutMs || 120000;
     var ctrl = new AbortController();
     var timer = setTimeout(function() { ctrl.abort(); }, timeoutMs);
 
@@ -64,63 +64,80 @@
   }
 
   // ═══════════════════════════════════════════════════════════
-  // KPI UPDATER
+  // KPI UPDATER — Supabase-first
   // ═══════════════════════════════════════════════════════════
- window.updateWarehouseKPIs = async function() {
-  try {
-    // Read from Supabase (fast!)
-    var partialMrrCount = 0;
-    var partialMrifCount = 0;
-    var pendingCount = 0;
-    var totalCount = 0;
-    var completedCount = 0;
+  window.updateWarehouseKPIs = async function() {
+    var startTime = Date.now();
 
     try {
-      var mrr = await sbGetPartialDocsByType('MRR');
-      if (mrr.success) partialMrrCount = (mrr.documents || []).length;
-    } catch(e) { console.warn('[KPI] Partial MRR:', e.message); }
+      var partialMrrCount = 0;
+      var partialMrifCount = 0;
+      var pendingCount = 0;
+      var totalCount = 0;
+      var completedCount = 0;
 
-    try {
-      var mrif = await sbGetPartialDocsByType('MRIF');
-      if (mrif.success) partialMrifCount = (mrif.documents || []).length;
-    } catch(e) { console.warn('[KPI] Partial MRIF:', e.message); }
+      // ─── Partial MRR (Supabase) ───
+      try {
+        if (typeof sbGetPartialDocsByType === 'function') {
+          var mrr = await sbGetPartialDocsByType('MRR');
+          if (mrr && mrr.success) partialMrrCount = (mrr.documents || []).length;
+        }
+      } catch(e) { console.warn('[KPI] Partial MRR:', e.message); }
 
-    try {
-      var allDocs = await sbGetAllPendingDocs(false);
-      if (allDocs.success) {
-        var docs = allDocs.documents || [];
-        pendingCount = docs.filter(function(d) {
-          return String(d.status || '').toUpperCase() === 'PENDING';
-        }).length;
-      }
-    } catch(e) { console.warn('[KPI] Pending:', e.message); }
+      // ─── Partial MRIF (Supabase) ───
+      try {
+        if (typeof sbGetPartialDocsByType === 'function') {
+          var mrif = await sbGetPartialDocsByType('MRIF');
+          if (mrif && mrif.success) partialMrifCount = (mrif.documents || []).length;
+        }
+      } catch(e) { console.warn('[KPI] Partial MRIF:', e.message); }
 
-    try {
-      var counts = await sbGetPendingDocCount('MRIF');
-      if (counts.success) {
-        completedCount = counts.completedCount || 0;
-        totalCount = counts.totalCount || 0;
-      }
-    } catch(e) { console.warn('[KPI] Count:', e.message); }
+      // ─── Pending count (Supabase) ───
+      try {
+        if (typeof sbGetAllPendingDocs === 'function') {
+          var allDocs = await sbGetAllPendingDocs(false);
+          if (allDocs && allDocs.success) {
+            var docs = allDocs.documents || [];
+            pendingCount = docs.filter(function(d) {
+              return String(d.status || '').toUpperCase() === 'PENDING';
+            }).length;
+          }
+        }
+      } catch(e) { console.warn('[KPI] Pending:', e.message); }
 
-    var kpiActive = document.getElementById('kpiActiveDocs');
-    var kpiPending = document.getElementById('kpiPending');
-    var kpiPartialMrr = document.getElementById('kpiPartialMrr');
-    var kpiPartialMrif = document.getElementById('kpiPartial');
-    var kpiCompleted = document.getElementById('kpiCompleted');
+      // ─── Total / Completed (Supabase) ───
+      try {
+        if (typeof sbGetPendingDocCount === 'function') {
+          var counts = await sbGetPendingDocCount('MRIF');
+          if (counts && counts.success) {
+            completedCount = counts.completedCount || 0;
+            totalCount = counts.totalCount || 0;
+          }
+        }
+      } catch(e) { console.warn('[KPI] Count:', e.message); }
 
-    if (kpiActive) kpiActive.textContent = totalCount;
-    if (kpiPending) kpiPending.textContent = pendingCount;
-    if (kpiPartialMrr) kpiPartialMrr.textContent = partialMrrCount;
-    if (kpiPartialMrif) kpiPartialMrif.textContent = partialMrifCount;
-    if (kpiCompleted) kpiCompleted.textContent = completedCount;
+      // ─── Update DOM ───
+      var kpiActive = document.getElementById('kpiActiveDocs');
+      var kpiPending = document.getElementById('kpiPending');
+      var kpiPartialMrr = document.getElementById('kpiPartialMrr');
+      var kpiPartialMrif = document.getElementById('kpiPartial');
+      var kpiCompleted = document.getElementById('kpiCompleted');
 
-    console.log('[KPI-Supabase] Pending:', pendingCount, '| Partial MRR:', partialMrrCount, '| Partial MRIF:', partialMrifCount);
-  } catch(e) { console.error('[KPI] Error:', e); }
-};
+      if (kpiActive) kpiActive.textContent = totalCount;
+      if (kpiPending) kpiPending.textContent = pendingCount;
+      if (kpiPartialMrr) kpiPartialMrr.textContent = partialMrrCount;
+      if (kpiPartialMrif) kpiPartialMrif.textContent = partialMrifCount;
+      if (kpiCompleted) kpiCompleted.textContent = completedCount;
+
+      var elapsed = Date.now() - startTime;
+      console.log('[KPI-Supabase] Pending:', pendingCount, '| Partial MRR:', partialMrrCount, '| Partial MRIF:', partialMrifCount, '| Time:', elapsed + 'ms');
+    } catch(e) {
+      console.error('[KPI] Error:', e);
+    }
+  };
 
   // ═══════════════════════════════════════════════════════════
-  // NOTIFICATIONS
+  // NOTIFICATIONS — Supabase-first
   // ═══════════════════════════════════════════════════════════
   function processNotifications(requests) {
     if (!requests) requests = [];
@@ -175,8 +192,13 @@
 
   async function refreshNotifications() {
     try {
-      var data = await _fetchJson(API_URL + '?action=getPendingRequests&_t=' + Date.now(), 120000);
-      if (data.success && data.requests) {
+      var data;
+      if (typeof sbGetPendingRequests === 'function') {
+        data = await sbGetPendingRequests();
+      } else {
+        data = await _fetchJson(API_URL + '?action=getPendingRequests&_t=' + Date.now(), 120000);
+      }
+      if (data && data.success && data.requests) {
         setCache('pendingRequests', data.requests, 5 * 60 * 1000);
         processNotifications(data.requests);
       } else {
@@ -245,8 +267,13 @@
         '<div class="spinner-border spinner-border-sm text-primary"></div></div>';
     }
     try {
-      var data = await _fetchJson(API_URL + '?action=getPendingRequests&_t=' + Date.now(), 120000);
-      if (data.success && data.requests) {
+      var data;
+      if (typeof sbGetPendingRequests === 'function') {
+        data = await sbGetPendingRequests();
+      } else {
+        data = await _fetchJson(API_URL + '?action=getPendingRequests&_t=' + Date.now(), 120000);
+      }
+      if (data && data.success && data.requests) {
         var today = new Date();
         var todayStr = today.getFullYear() + '-' +
                        String(today.getMonth() + 1).padStart(2, '0') + '-' +
@@ -309,7 +336,7 @@
   };
 
   // ═══════════════════════════════════════════════════════════
-  // PARTIAL MODALS — with retry UI
+  // PARTIAL MODALS — Supabase-first
   // ═══════════════════════════════════════════════════════════
   window.openPartialMrrModal = async function() {
     await _openPartialDocModal('MRR');
@@ -319,33 +346,29 @@
   };
 
   async function _openPartialDocModal(docType) {
-    var cacheKey = 'partial_modal_' + docType;
-    if (typeof getCache === 'function') {
-      var cached = getCache(cacheKey);
-      if (cached && cached.success) {
-        renderPartialDocModal(docType, cached.documents || []);
-        return;
-      }
-    }
-
+    var t0 = Date.now();
     showLoading('Loading partial ' + docType + 's...');
 
     try {
-      var data = await _fetchJson(
-        API_URL + '?action=getPartialDocsByType&docType=' + docType + '&_t=' + Date.now(),
-        120000
-      );
+      var data;
+      if (typeof sbGetPartialDocsByType === 'function') {
+        data = await sbGetPartialDocsByType(docType);
+      } else {
+        data = await _fetchJson(
+          API_URL + '?action=getPartialDocsByType&docType=' + docType + '&_t=' + Date.now(),
+          120000
+        );
+      }
 
       hideLoading();
 
-      if (!data.success) {
-        _showPartialError(docType, 'Server error: ' + (data.error || 'Unknown'));
+      if (!data || !data.success) {
+        _showPartialError(docType, 'Server error: ' + ((data && data.error) || 'Unknown'));
         return;
       }
 
-      if (typeof setCache === 'function') {
-        setCache(cacheKey, data, 60000);
-      }
+      var elapsed = Date.now() - t0;
+      console.log('[Partial-' + docType + '] Loaded in ' + elapsed + 'ms, count: ' + (data.documents || []).length);
 
       renderPartialDocModal(docType, data.documents || []);
 
@@ -354,7 +377,7 @@
       var msg = err.message || 'Unknown error';
 
       if (err.name === 'AbortError' || msg.indexOf('timeout') !== -1) {
-        _showPartialError(docType, '⏱️ Server took too long (over 2 min). The sheet scan may be very slow.');
+        _showPartialError(docType, '⏱️ Server took too long. Please try again.');
       } else if (err.code === 'GAS_UNREACHABLE' || msg.indexOf('HTML') !== -1) {
         _showPartialError(docType, '🔴 Server returned HTML instead of JSON. The GAS deployment URL may be wrong or expired.');
       } else {
@@ -394,7 +417,8 @@
               '</ol>' +
             '</div>' +
             '<div class="d-grid gap-2">' +
-              '<button class="btn btn-primary" onclick="closePartialErrorModal(\'' + docType + '\');openPartialMrifModal();">' +
+              '<button class="btn btn-primary" onclick="closePartialErrorModal(\'' + docType + '\');' +
+                (docType === 'MRIF' ? 'openPartialMrifModal' : 'openPartialMrrModal') + '();">' +
                 '<i class="bi bi-arrow-clockwise me-1"></i>Retry' +
               '</button>' +
               '<button class="btn btn-outline-secondary" onclick="closePartialErrorModal(\'' + docType + '\');">' +
@@ -491,13 +515,13 @@
               '<div class="fw-bold">' + docNoSafe +
                 ' <span class="badge ' + typeBadgeClass + '">' + docType + '</span>' +
                 balTag +
-                ' <span class="badge bg-danger">' + partialCount + ' partial</span>' +
+                (partialCount > 0 ? ' <span class="badge bg-danger">' + partialCount + ' partial</span>' : '') +
                 (servedCount > 0 ? ' <span class="badge bg-success">' + servedCount + ' served</span>' : '') +
-                ' <span class="badge bg-secondary">' + totalItems + ' total</span>' +
+                (totalItems > 0 ? ' <span class="badge bg-secondary">' + totalItems + ' total</span>' : '') +
               '</div>' +
               (subtitle ? '<div class="small text-muted mt-1">' + subtitle + '</div>' : '') +
               (dateStr ? '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + _esc(dateStr) + '</div>' : '') +
-              '<div class="small mt-1"><i class="bi bi-box me-1"></i>Total remaining: <strong>' + (d.remainingQty || 0) + '</strong></div>' +
+              (d.remainingQty ? '<div class="small mt-1"><i class="bi bi-box me-1"></i>Total remaining: <strong>' + d.remainingQty + '</strong></div>' : '') +
               (d.firstItemCode ? '<div class="small text-muted"><i class="bi bi-info-circle me-1"></i>First partial: <code>' + _esc(d.firstItemCode) + '</code></div>' : '') +
             '</div>' +
             '<div class="d-flex flex-column gap-1 flex-shrink-0">' +
@@ -567,5 +591,5 @@
     if (typeof window.openPartialMrifModal === 'function') return window.openPartialMrifModal();
   };
 
-  console.log('✅ notifications.js v6 loaded');
+  console.log('✅ notifications.js v7 loaded (Supabase-integrated)');
 })();
