@@ -290,15 +290,20 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
     var sheetIdVal = localStorage.getItem(sheetKey);
     var sheetIdClean = sheetIdVal ? extractSheetId(sheetIdVal) : '';
 
-    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
-              '&docType=' + (docType || 'MRIF') +
-              '&sheetId=' + encodeURIComponent(sheetIdClean) +
-              '&_t=' + Date.now();
-    var res = await fetch(url, { redirect: 'follow' });
-    var text = await res.text();
-    var trimmed = String(text || '').trim();
-    if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
-    var data = JSON.parse(trimmed);
+       var data;
+    if (typeof sbGetDocItems === 'function') {
+      data = await sbGetDocItems(docNo, docType || 'MRIF');
+    } else {
+      var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
+                '&docType=' + (docType || 'MRIF') +
+                '&sheetId=' + encodeURIComponent(sheetIdClean) +
+                '&_t=' + Date.now();
+      var res = await fetch(url, { redirect: 'follow' });
+      var text = await res.text();
+      var trimmed = String(text || '').trim();
+      if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
+      data = JSON.parse(trimmed);
+    }
 
     if (data && data.success) {
       var info = data.info || {};
