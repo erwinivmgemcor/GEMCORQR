@@ -465,3 +465,75 @@ async function sbHealthCheck() {
 }
 
 console.log('✅ supabase-api.js loaded');
+// ═══════════════════════════════════════════════════════════════
+// DOC ITEMS — Supabase read (0.2s vs 20s from GAS)
+// ═══════════════════════════════════════════════════════════════
+async function sbGetDocItems(docNo, docType) {
+  try {
+    if (!docNo) return { success: false, error: 'docNo required', items: [], info: {} };
+
+    // Fetch items from Supabase
+    var rows = await _sbGet('doc_items',
+      'select=*&doc_no=eq.' + encodeURIComponent(docNo) + '&order=line_no.asc'
+    );
+
+    // Fetch document meta
+    var docRows = await _sbGet('documents',
+      'select=*&doc_no=eq.' + encodeURIComponent(docNo) + '&limit=1'
+    );
+
+    var doc = (docRows && docRows[0]) || {};
+    var items = (rows || []).map(function(r) {
+      return {
+        inventoryId: r.item_code,
+        itemCode: r.item_code,
+        code: r.item_code,
+        description: r.description || '',
+        expectedQty: Number(r.requested_qty || 0),
+        recQty: Number(r.requested_qty || 0),
+        requestedQty: Number(r.requested_qty || 0),
+        qty: Number(r.requested_qty || 0),
+        actualQty: Number(r.issued_qty || 0),
+        atlQty: Number(r.issued_qty || 0),
+        issuedQty: Number(r.issued_qty || 0),
+        unit: r.unit || 'PCS',
+        remarks: r.remarks || 'PENDING',
+        rowIndex: r.row_index || 0
+      };
+    });
+
+    var info = {
+      'Requestor': doc.requestor || '',
+      'Department': doc.department || '',
+      'JO No.': doc.jo_no || '',
+      'GEM SO No.': doc.gem_so_no || '',
+      'Client Name': doc.client_name || '',
+      'Project': doc.project || '',
+      'PO No.': doc.po_no || '',
+      'Vendor/Client': doc.vendor || '',
+      'DR No.': doc.dr_no || '',
+      'Receiving Site': doc.receiving_site || '',
+      'Date Prepared': doc.date_prepared || '',
+      'Receiving Date': doc.receiving_date || '',
+      'Prepared By': doc.prepared_by || '',
+      'Date': doc.date_prepared || '',
+      requestor: doc.requestor || '',
+      department: doc.department || '',
+      joNo: doc.jo_no || '',
+      gemSoNo: doc.gem_so_no || '',
+      clientName: doc.client_name || '',
+      project: doc.project || ''
+    };
+
+    return {
+      success: true,
+      info: info,
+      items: items,
+      docNo: docNo,
+      _resolvedFrom: 'supabase'
+    };
+  } catch(err) {
+    console.warn('[Supabase] getDocItems failed:', err.message);
+    return { success: false, error: err.message, items: [], info: {} };
+  }
+}
