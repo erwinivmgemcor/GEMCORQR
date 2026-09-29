@@ -744,6 +744,9 @@ var docs = allDocs.filter(function(d) {
     // Pending + Partial, ALL dates — the "monitoring" filter you need
     return s === 'PENDING' || s === 'PARTIAL';
   }
+    if (statusFilter === 'pending') {
+    return s === 'PENDING';
+  }
   if (statusFilter === 'completed') {
     return s === 'COMPLETED';
   }
@@ -802,6 +805,9 @@ function renderAllRequests(docs, statusFilter, prepMap) {
     } else if (statusFilter === 'active') {
       emptyMsg = 'No active requests right now.';
       emptyHint = 'All requests have been processed.';
+          } else if (statusFilter === 'pending') {
+      emptyMsg = 'No pending requests at the moment.';
+      emptyHint = 'Switch to "For Monitoring" to see partials too.';
     } else if (statusFilter === 'completed') {
       emptyMsg = 'No completed requests yet.';
       emptyHint = 'Processed requests will appear here once they are fully served.';
