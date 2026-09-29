@@ -34,7 +34,7 @@ window.initChat = function() {
   if (!_chatState.currentUser) return;
   refreshChatBadge();
   if (_chatState.badgeTimer) clearInterval(_chatState.badgeTimer);
-  _chatState.badgeTimer = setInterval(refreshChatBadge, 30000);
+_chatState.badgeTimer = setInterval(refreshChatBadge, 120000);  // 2 min instead of 30s
 };
 
 document.addEventListener('visibilitychange', function() {
