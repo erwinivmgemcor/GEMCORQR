@@ -1,6 +1,7 @@
 // ============================================================
 // PRINT PREVIEW FUNCTIONS
-// v6 — Supabase-first reads (0.2s vs 15s from GAS)
+// v6.1 — Supabase-first reads (0.2s vs 15s from GAS)
+//        + FIXED: double-render race in render*Print functions
 // ============================================================
 
 function _escPrint(s) {
@@ -804,36 +805,34 @@ async function openMrsPrint(docNo) {
   } finally { hideLoading(); }
 }
 
-// ─── Render print functions (with embedded QRs) ────
+// ═══════════════════════════════════════════════════════════════
+// RENDER PRINT FUNCTIONS — FIXED (no more double-render)
+// ═══════════════════════════════════════════════════════════════
 async function renderMrifPrint(docNo, info, items) {
   var container = document.getElementById('mrifPrintContent');
   if (!container) return;
+  // 1. Build initial HTML (QR placeholders still in place)
   var html = buildSingleMrifHtml(docNo, info, items);
-  container.innerHTML = html;
-  // Embed QRs in background (non-blocking)
-  _embedQrInHtml(html).then(function(embedded) {
-    if (embedded && embedded !== html) container.innerHTML = embedded;
-  }).catch(function() {});
+  // 2. Await QR embedding — do NOT touch the container until fully done
+  var finalHtml = await _embedQrInHtml(html);
+  // 3. Set container ONCE with the final result
+  container.innerHTML = finalHtml;
 }
 
 async function renderMrrPrint(docNo, info, items) {
   var container = document.getElementById('mrrPrintContent');
   if (!container) return;
   var html = buildSingleMrrHtml(docNo, info, items);
-  container.innerHTML = html;
-  _embedQrInHtml(html).then(function(embedded) {
-    if (embedded && embedded !== html) container.innerHTML = embedded;
-  }).catch(function() {});
+  var finalHtml = await _embedQrInHtml(html);
+  container.innerHTML = finalHtml;
 }
 
 async function renderMrsPrint(docNo, info, items) {
   var container = document.getElementById('mrsPrintContent');
   if (!container) return;
   var html = buildSingleMrsHtml(docNo, info, items);
-  container.innerHTML = html;
-  _embedQrInHtml(html).then(function(embedded) {
-    if (embedded && embedded !== html) container.innerHTML = embedded;
-  }).catch(function() {});
+  var finalHtml = await _embedQrInHtml(html);
+  container.innerHTML = finalHtml;
 }
 
 // ─── Print via iframe ────
@@ -964,4 +963,4 @@ async function openMrsList() {
   }
 }
 
-console.log('✅ prints.js v6 loaded (Supabase-first)');
+console.log('✅ prints.js v6.1 loaded (Supabase-first, double-render FIXED)');
