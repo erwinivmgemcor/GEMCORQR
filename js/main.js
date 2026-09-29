@@ -446,7 +446,8 @@ window.downloadMyRequestQr = function() {
   qrImg.src = img.src;
 };
 
-// ─── Render My Requests (production view) ───
+// Optional: prep statuses still from GAS (smaller data)
+// Or skip for now
 var originalRenderMyRequests = window.renderMyRequests || function() {};
 
 window.renderMyRequests = async function(requests) {
@@ -590,17 +591,9 @@ window.loadAllRequests = async function() {
   );
 
   try {
-    var url = API_URL + '?action=getAllPendingDocs&_t=' + Date.now();
-    if (needCompleted) url += '&includeCompleted=1';
-
-    var res = await fetch(url, { redirect: 'follow' });
-    var text = await res.text();
-    var trimmed = String(text || '').trim();
-    if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
-    var data = JSON.parse(trimmed);
-    if (!data.success) throw new Error(data.error || 'Failed to load requests');
-
-    var allDocs = data.documents || [];
+  var data = await sbGetAllPendingDocs(needCompleted);
+if (!data.success) throw new Error(data.error || 'Failed to load requests');
+var allDocs = data.documents || [];
 
     // ─── Sidebar badge (active = pending + partial) ───
     var activeCount = allDocs.filter(function(d) {
