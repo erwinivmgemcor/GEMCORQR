@@ -1,6 +1,8 @@
 // ============================================================
 // MAIN - DOM Ready & Initialization
-// v7.1 — Supabase fast reads + forceSyncToSupabase
+// v7.2 — Supabase fast reads + forceSyncToSupabase
+//      + BroadcastChannel cross-tab refresh (v7.2)
+//      + forceRefreshAll() global helper
 // ============================================================
 
 function _escMain(s) {
@@ -31,6 +33,73 @@ function _prepTagFromStatus(s) {
   return '<span class="prep-badge"><i class="bi ' + icon + ' me-1"></i>' + label + '</span>';
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ★ CROSS-TAB REFRESH (BroadcastChannel)
+// ═══════════════════════════════════════════════════════════════
+function applyBroadcastRefresh(reason) {
+  console.log('[Broadcast] Applying refresh —', reason || 'no reason');
+  try {
+    if (typeof clearCache === 'function') {
+      clearCache('partial_modal_MRIF');
+      clearCache('partial_modal_MRR');
+      clearCache('partial_modal_MRS');
+      clearCache('kpi_partial_MRIF');
+      clearCache('kpi_partial_MRR');
+      clearCache('pendingRequests');
+      clearCache('analyticsData');
+    }
+  } catch(e) { console.warn('[Broadcast] clearCache failed:', e); }
+
+  setTimeout(function() {
+    try { if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs(); } catch(e) {}
+    try { if (typeof loadAllRequests === 'function') loadAllRequests(); } catch(e) {}
+    try { if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications(true); } catch(e) {}
+    try { if (typeof loadAnalytics === 'function') loadAnalytics(true); } catch(e) {}
+    try { if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true); } catch(e) {}
+  }, 150);
+}
+
+function _initBroadcastChannel() {
+  try {
+    if (!window.BroadcastChannel) return;
+    var bc = new BroadcastChannel('gemcor_sync');
+    bc.onmessage = function(ev) {
+      if (!ev || !ev.data) return;
+      if (ev.data.type === 'doc_processed') {
+        console.log('[Sync] Another tab processed:', ev.data.docNo, ev.data.status);
+        applyBroadcastRefresh('doc_processed ' + ev.data.docNo);
+      } else if (ev.data.type === 'request_created') {
+        console.log('[Sync] Another tab created request:', ev.data.docNo);
+        applyBroadcastRefresh('request_created ' + ev.data.docNo);
+      } else if (ev.data.type === 'full_refresh') {
+        applyBroadcastRefresh('full_refresh request');
+      }
+    };
+    console.log('[Sync] BroadcastChannel listener active');
+  } catch(e) {
+    console.warn('[Sync] BroadcastChannel not available:', e);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ★ GLOBAL FORCE REFRESH (call from console: forceRefreshAll())
+// ═══════════════════════════════════════════════════════════════
+window.forceRefreshAll = function() {
+  if (typeof clearCache === 'function') clearCache();  // clears ALL ivm_cache_*
+  console.log('[ForceRefresh] Cleared all caches. Reloading...');
+  try {
+    if (window.BroadcastChannel) {
+      var bc = new BroadcastChannel('gemcor_sync');
+      bc.postMessage({ type: 'full_refresh' });
+      bc.close();
+    }
+  } catch(e) {}
+  setTimeout(function() { location.reload(); }, 300);
+};
+
+// ═══════════════════════════════════════════════════════════════
+// SIDEBAR ROLE
+// ═══════════════════════════════════════════════════════════════
 window.applySidebarRole = function(role) {
   var isProduction = (role === 'production');
   var isWarehouse = (role === 'warehouse');
@@ -71,6 +140,9 @@ window.applySidebarRole = function(role) {
   }
 };
 
+// ═══════════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════════
 function navigateTo(sectionId) {
   document.querySelectorAll('.section-page').forEach(function(el) {
     el.classList.remove('active');
@@ -149,6 +221,9 @@ function toggleSidebar(open) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// EDIT BUTTON HELPER
+// ═══════════════════════════════════════════════════════════════
 function _editActionButtonHtml(docNo, docType, docStatus) {
   var safeDoc = String(docNo).replace(/'/g, "\\'");
   var safeType = String(docType || 'MRIF').replace(/'/g, "\\'");
@@ -237,6 +312,9 @@ window.refreshEditStatusInModal = async function(docNo, docType, docStatus) {
   }
 };
 
+// ═══════════════════════════════════════════════════════════════
+// MY REQUEST DETAILS MODAL
+// ═══════════════════════════════════════════════════════════════
 window.openMyRequestDetails = async function(docNo, docType, opts) {
   opts = opts || {};
   var isWarehouseView = opts.warehouse === true;
@@ -290,7 +368,7 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
     var sheetIdVal = localStorage.getItem(sheetKey);
     var sheetIdClean = sheetIdVal ? extractSheetId(sheetIdVal) : '';
 
-       var data;
+    var data;
     if (typeof sbGetDocItems === 'function') {
       data = await sbGetDocItems(docNo, docType || 'MRIF');
     } else {
@@ -446,6 +524,9 @@ window.downloadMyRequestQr = function() {
   qrImg.src = img.src;
 };
 
+// ═══════════════════════════════════════════════════════════════
+// MY REQUESTS RENDER
+// ═══════════════════════════════════════════════════════════════
 var originalRenderMyRequests = window.renderMyRequests || function() {};
 
 window.renderMyRequests = async function(requests) {
@@ -553,7 +634,6 @@ window.updateWarehouseKPIs = function() {
 // ═══════════════════════════════════════════════════════════════
 // ALL REQUESTS — Supabase-first reads
 // ═══════════════════════════════════════════════════════════════
-
 window.loadAllRequests = async function() {
   var container = document.getElementById('allRequestsListPage');
   if (!container) return;
@@ -815,6 +895,9 @@ window.processRequestFromDetails = function(docNo, docType) {
   }, 300);
 };
 
+// ═══════════════════════════════════════════════════════════════
+// TEST CONNECTION
+// ═══════════════════════════════════════════════════════════════
 async function testConnection() {
   var resultDiv = document.getElementById('testResult');
   if (!resultDiv) return;
@@ -843,6 +926,9 @@ async function testConnection() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// URL DOC PARAM
+// ═══════════════════════════════════════════════════════════════
 function checkUrlDocParam() {
   var params = new URLSearchParams(window.location.search);
   var docNo = params.get('doc');
@@ -869,6 +955,9 @@ function checkUrlDocParam() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// WAREHOUSE DIRECT EDIT MODAL
+// ═══════════════════════════════════════════════════════════════
 window.openWarehouseEditModal = async function(docNo, docType) {
   if (!docNo) return;
   docType = String(docType || 'MRIF').toUpperCase();
@@ -970,6 +1059,9 @@ window.openWarehouseEditModal = async function(docNo, docType) {
   }
 };
 
+// ═══════════════════════════════════════════════════════════════
+// DOM READY — INIT
+// ═══════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
   var _urlParams = new URLSearchParams(window.location.search);
   var _urlDoc = _urlParams.get('doc');
@@ -981,6 +1073,9 @@ document.addEventListener('DOMContentLoaded', function() {
     enterPrintOnlyMode(_urlDoc);
     return;
   }
+
+  // ★ Start BroadcastChannel listener
+  _initBroadcastChannel();
 
   var sidebarVerText = document.getElementById('sidebarAppVersionText');
   if (sidebarVerText && typeof APP_VERSION !== 'undefined') {
@@ -1069,6 +1164,9 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════
+// PRINT-ONLY MODE (public QR scan)
+// ═══════════════════════════════════════════════════════════════
 async function enterPrintOnlyMode(docNo) {
   var content = document.getElementById('printOnlyContent');
   if (!content) return;
@@ -1085,22 +1183,31 @@ async function enterPrintOnlyMode(docNo) {
   try { document.title = docNo + ' — Print View'; } catch(e) {}
 
   try {
-    var sheetKey = 'sheetId_' + docType;
-    var sheetIdVal = localStorage.getItem(sheetKey) || '';
-    var sheetIdClean = sheetIdVal
-      ? (typeof extractSheetId === 'function' ? extractSheetId(sheetIdVal) : sheetIdVal)
-      : '';
+    // ★ Supabase-first for print-only view
+    var data;
+    if (typeof sbGetDocItems === 'function') {
+      try { data = await sbGetDocItems(docNo, docType); } catch(e) { data = null; }
+    }
 
-    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
-              '&docType=' + docType +
-              '&sheetId=' + encodeURIComponent(sheetIdClean) +
-              '&_t=' + Date.now();
+    if (!data || !data.success) {
+      var sheetKey = 'sheetId_' + docType;
+      var sheetIdVal = localStorage.getItem(sheetKey) || '';
+      var sheetIdClean = sheetIdVal
+        ? (typeof extractSheetId === 'function' ? extractSheetId(sheetIdVal) : sheetIdVal)
+        : '';
 
-    var res = await fetch(url, { redirect: 'follow' });
-    var text = await res.text();
-    var trimmed = String(text || '').trim();
-    if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
-    var data = JSON.parse(trimmed);
+      var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
+                '&docType=' + docType +
+                '&sheetId=' + encodeURIComponent(sheetIdClean) +
+                '&_t=' + Date.now();
+
+      var res = await fetch(url, { redirect: 'follow' });
+      var text = await res.text();
+      var trimmed = String(text || '').trim();
+      if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server unavailable');
+      data = JSON.parse(trimmed);
+    }
+
     if (!data || !data.success) throw new Error((data && data.error) || 'Document not found');
 
     var info = data.info || {};
@@ -1110,6 +1217,11 @@ async function enterPrintOnlyMode(docNo) {
     if (docType === 'MRIF')      html = buildSingleMrifHtml(docNo, info, items);
     else if (docType === 'MRR')  html = buildSingleMrrHtml(docNo, info, items);
     else if (docType === 'MRS')  html = buildSingleMrsHtml(docNo, info, items);
+
+    // Embed QR codes
+    if (typeof _embedQrInHtml === 'function') {
+      try { html = await _embedQrInHtml(html); } catch(e) {}
+    }
 
     content.innerHTML = html;
   } catch (err) {
@@ -1123,9 +1235,9 @@ async function enterPrintOnlyMode(docNo) {
   }
 }
 
-// =============================================================================
-// FORCE SUPABASE SYNC
-// =============================================================================
+// ═══════════════════════════════════════════════════════════════
+// FORCE SUPABASE SYNC (manual)
+// ═══════════════════════════════════════════════════════════════
 window.forceSupabaseSync = async function() {
   if (!confirm('Sync all data to Supabase now?\n\nThis may take 10-30 seconds.')) return;
 
@@ -1141,7 +1253,6 @@ window.forceSupabaseSync = async function() {
 
     if (data.success) {
       if (typeof showToast === 'function') showToast('✅ Sync complete!', 'success');
-      // Refresh Supabase caches
       if (typeof clearCache === 'function') {
         clearCache('partial_modal_MRIF');
         clearCache('partial_modal_MRR');
@@ -1156,11 +1267,14 @@ window.forceSupabaseSync = async function() {
   }
 };
 
-console.log('✅ main.js v7.1 loaded (forceSupabaseSync ready)');
+console.log('✅ main.js v7.2 loaded (BroadcastChannel + forceRefreshAll ready)');
 
+// ═══════════════════════════════════════════════════════════════
+// FORCE APP RELOAD (nuclear option)
+// ═══════════════════════════════════════════════════════════════
 window.forceAppReload = function() {
   if (!confirm('Force reload the app?\n\nThis will clear all caches and reload.')) return;
-  
+
   try {
     localStorage.clear();
     sessionStorage.clear();
