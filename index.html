@@ -20,1071 +20,6 @@
 <script defer src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link rel="stylesheet" href="/GEMCORQR/style.css">
-
-<style>
-  /* ─── SIDEBAR ─── */
-  .app-wrapper { display: flex; min-height: 100vh; }
-  .sidebar {
-    width: 260px;
-    background: var(--gemcor-blue);
-    color: #fff;
-    flex-shrink: 0;
-    transition: transform 0.3s ease;
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    overflow-y: auto;
-    z-index: 1040;
-    display: flex;
-    flex-direction: column;
-  }
-  .sidebar-brand {
-    padding: 18px 20px;
-    font-weight: 700;
-    font-size: 1.2rem;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .sidebar-brand i { font-size: 1.6rem; color: var(--gemcor-green-light); }
-  .sidebar-nav { flex: 1; padding: 12px 0; }
-  .sidebar-nav .nav-item {
-    padding: 10px 20px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: rgba(255,255,255,0.7);
-    cursor: pointer;
-    transition: all 0.2s;
-    border-left: 3px solid transparent;
-    text-decoration: none;
-  }
-  .sidebar-nav .nav-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
-  .sidebar-nav .nav-item.active {
-    background: rgba(255,255,255,0.12);
-    color: #fff;
-    border-left-color: var(--gemcor-green-light);
-  }
-  .sidebar-nav .nav-item i { font-size: 1.2rem; width: 24px; text-align: center; }
-  .sidebar-nav .nav-item .badge { margin-left: auto; background: var(--gemcor-red); color: #fff; }
-  .sidebar-footer {
-    padding: 16px 20px;
-    border-top: 1px solid rgba(255,255,255,0.1);
-    font-size: 0.75rem;
-    color: rgba(255,255,255,0.5);
-  }
-
-  .main-content {
-    flex: 1;
-    padding: 16px 20px;
-    background: var(--gemcor-bg);
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    align-items: stretch;
-    align-content: flex-start;
-    overflow-x: hidden;
-  }
-  .main-content > .sidebar-toggle,
-  .main-content > .top-bar,
-  .main-content > .section-page {
-    flex: 0 0 auto;
-    align-self: stretch;
-    margin-top: 0;
-    min-height: 0;
-  }
-  .main-content > .section-page.active {
-    display: block;
-  }
-  .section-page { display: none; animation: fadeIn 0.25s ease; }
-  .section-page.active { display: block; }
-
-  .top-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: #fff;
-    padding: 8px 16px;
-    border-radius: 12px;
-    margin-bottom: 16px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-    border: 1px solid var(--gemcor-border);
-  }
-  .top-bar .left { display: flex; align-items: center; gap: 12px; }
-  .top-bar .right { display: flex; align-items: center; gap: 12px; }
-  .top-bar .btn-icon {
-    background: transparent;
-    border: none;
-    font-size: 1.4rem;
-    color: var(--gemcor-gray);
-    position: relative;
-    padding: 4px 8px;
-    transition: color 0.2s;
-  }
-  .top-bar .btn-icon:hover { color: var(--gemcor-blue); }
-  .top-bar .btn-icon .badge {
-    position: absolute;
-    top: -4px; right: -4px;
-    font-size: 0.6rem;
-    padding: 3px 6px;
-    background: var(--gemcor-red);
-    color: #fff;
-    border-radius: 50%;
-  }
-  .top-bar .upload-btn {
-    background: var(--gemcor-blue);
-    color: #fff;
-    border: none;
-    padding: 6px 16px;
-    border-radius: 20px;
-    font-weight: 600;
-    font-size: 0.85rem;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transition: background 0.2s;
-  }
-  .top-bar .upload-btn:hover { background: var(--gemcor-blue-light); }
-
-    .sidebar-toggle {
-    display: none;
-    background: var(--gemcor-blue);
-    color: #fff;
-    border: none;
-    padding: 6px 12px;
-    border-radius: 8px;
-    font-size: 1.15rem;
-    line-height: 1;
-    width: auto;
-    max-width: 48px;
-    height: 40px;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 12px;
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(30,58,95,0.25);
-    transition: background 0.15s, transform 0.1s;
-  }
-  .sidebar-toggle:active {
-    transform: scale(0.94);
-  }
-  .sidebar-toggle:hover {
-    background: var(--gemcor-blue-light);
-  }
-   @media (max-width: 768px) {
-    .sidebar {
-      position: fixed;
-      top: 0; left: 0;
-      height: 100vh;
-      transform: translateX(-100%);
-      width: 280px;
-      box-shadow: 2px 0 20px rgba(0,0,0,0.2);
-      z-index: 1050;
-    }
-    .sidebar.open { transform: translateX(0); }
-    .sidebar-backdrop {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.4);
-      z-index: 1045;
-    }
-    .sidebar-backdrop.show { display: block; }
-
-    /* ★ Floating hamburger button */
-    .sidebar-toggle {
-      display: inline-flex;
-      position: fixed;
-      top: 12px;
-      left: 12px;
-      z-index: 1035;
-      width: auto;
-      max-width: 48px;
-      height: 40px;
-      padding: 0 12px;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 0;
-      font-size: 1.15rem;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    }
-
-    /* Push content down so nothing is hidden behind the button */
-    .main-content { padding: 64px 12px 12px 12px; }
-
-    .top-bar { flex-wrap: wrap; gap: 8px; }
-    .top-bar .left { flex: 1; }
-  }
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  .kpi-clickable { cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; }
-  .kpi-clickable:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
-  .bg-amber { background-color: #f59e0b !important; color: #1f2937 !important; }
-  .pending-mrif-item { cursor: pointer; transition: background-color 0.15s ease; }
-  .pending-mrif-item:hover { background-color: #f8f9fa; }
-  .analytics-card .card-header { background: transparent; font-weight: 600; border-bottom: 1px solid #e5e7eb; }
-  .analytics-card .card-body { padding: 16px; }
-  .production-banner {
-    background: var(--gemcor-green);
-    color: #fff;
-    padding: 8px 16px;
-    border-radius: 8px;
-    margin-bottom: 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 600;
-  }
-  .kpi-card {
-    background: #fff;
-    border-radius: 12px;
-    padding: 16px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    border: 1px solid #e5e7eb;
-  }
-  .kpi-icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.3rem;
-    flex-shrink: 0;
-  }
-  .kpi-icon.blue { background: #dbeafe; color: #1e40af; }
-  .kpi-icon.green { background: #d1fae5; color: #065f46; }
-  .kpi-icon.amber { background: #fef3c7; color: #92400e; }
-  .kpi-icon.red { background: #fee2e2; color: #991b1b; }
-  .kpi-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; margin-bottom: 2px; }
-  .kpi-value { font-size: 1.6rem; font-weight: 700; color: #1f2937; line-height: 1.1; }
-  .kpi-sub { font-size: 0.7rem; color: #6c757d; }
-
-  .module-btn {
-    background: #fff;
-    border: 1.5px solid #e5e7eb;
-    border-radius: 12px;
-    padding: 14px 8px;
-    text-align: center;
-    transition: all 0.2s;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    font-weight: 600;
-    font-size: 0.85rem;
-    color: #1f2937;
-    width: 100%;
-  }
-  .module-btn:hover { border-color: var(--gemcor-blue); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-  .module-btn.active { background: var(--gemcor-blue); color: #fff; border-color: var(--gemcor-blue); }
-  .module-btn i { font-size: 1.4rem; }
-
-  .scanner-container { position: relative; width: 100%; max-width: 400px; margin: 0 auto; border-radius: 12px; overflow: hidden; background: #000; }
-  .scanner-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; border: 2px solid var(--gemcor-green); pointer-events: none; }
-  .scanner-overlay::before { content: ''; position: absolute; top: 50%; left: 10%; right: 10%; height: 2px; background: var(--gemcor-green); animation: scanline 2s linear infinite; }
-  @keyframes scanline { 0% { top: 20%; } 50% { top: 80%; } 100% { top: 20%; } }
-
-  .cam-controls { position: absolute; bottom: 12px; right: 12px; display: flex; gap: 8px; z-index: 5; }
-  .cam-btn { background: rgba(0,0,0,0.6); color: #fff; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s; }
-  .cam-btn:hover { background: rgba(0,0,0,0.8); }
-  .cam-btn.active { background: var(--gemcor-green); }
-
-  .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.5px; display: inline-block; }
-  .status-pending { background: #fff3cd; color: #856404; }
-  .status-served { background: #d4edda; color: #155724; }
-  .status-partial { background: #cce5ff; color: #004085; }
-
-  .item-row.verified { background: #e8f5e9; }
-  .request-card { cursor: pointer; transition: background 0.15s; border-left: 4px solid #ffc107; }
-  .request-card:hover { background: #f8f9fa; }
-  .request-card.completed { border-left-color: #198754; }
-  .wh-notif-item { cursor: pointer; transition: background 0.15s; border-left: 4px solid #0d6efd; }
-  .wh-notif-item:hover { background: #f8f9fa; }
-
-  .pin-dot { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid #6c757d; display: inline-block; margin: 0 4px; background: #fff; transition: background 0.2s; }
-  .pin-dot.filled { background: var(--gemcor-blue); border-color: var(--gemcor-blue); }
-
-  .doc-type-card { cursor: pointer; border: 2px solid #dee2e6; border-radius: 12px; padding: 16px; text-align: center; transition: all 0.2s; background: #fff; }
-  .doc-type-card:hover { border-color: #0d6efd; background: #f0f7ff; }
-  .doc-type-card.selected { border-color: #0d6efd; background: #cfe2ff; box-shadow: 0 0 0 3px rgba(13,110,253,0.25); }
-  .doc-type-card i { font-size: 2.2rem; display: block; margin-bottom: 6px; }
-
-  .wizard-step { display: flex; align-items: center; gap: 8px; font-weight: 600; color: #adb5bd; padding: 6px 0; }
-  .wizard-step .step-num { width: 30px; height: 30px; border-radius: 50%; background: #dee2e6; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; flex-shrink: 0; }
-  .wizard-step.active .step-num { background: #0d6efd; }
-  .wizard-step.completed .step-num { background: #198754; }
-  .wizard-step.active { color: #0d6efd; }
-  .wizard-step.completed { color: #198754; }
-  .wizard-panel { display: none; }
-  .wizard-panel.active { display: block; }
-
-  .pin-dots { display: flex; justify-content: center; gap: 10px; margin: 16px 0; }
-
-  .role-card { background: #fff; border: 2px solid #e5e7eb; border-radius: 12px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; }
-  .role-card:hover { border-color: var(--gemcor-blue); transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
-  .role-card i { font-size: 2.5rem; margin-bottom: 12px; color: var(--gemcor-blue); }
-
-  .review-card { background: #f8f9fa; border-radius: 8px; padding: 12px 16px; }
-  .review-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #e5e7eb; }
-  .review-row:last-child { border-bottom: none; }
-  .review-label { font-weight: 600; color: #495057; }
-  .review-value { color: #212529; }
-
-  #qrFileInput { display: none; }
-
-  .po-items-modal-dialog { max-width: 1140px; width: 96%; }
-  @media (min-width: 1400px) { .po-items-modal-dialog { max-width: 1320px; } }
-  #poItemsModal .modal-body { max-height: calc(100vh - 200px); overflow-y: auto; padding: 20px; }
-  .po-items-list { max-height: 48vh; overflow-y: auto; padding: 4px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fafbfc; }
-  .po-items-list .po-item-card { background: #fff; transition: box-shadow 0.15s ease; }
-  .po-items-list .po-item-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-
-  @keyframes poNewFlash {
-    0%   { background-color: #fef3c7; box-shadow: 0 0 0 3px rgba(245,158,11,0.5); }
-    100% { background-color: #ffffff; box-shadow: 0 0 0 0 rgba(245,158,11,0); }
-  }
-  .po-item-new { animation: poNewFlash 2.5s ease-out; }
-  .po-item-new .card-body { position: relative; }
-  .po-item-new .card-body::before {
-    content: 'NEW';
-    position: absolute;
-    top: 6px; left: 8px;
-    background: #f59e0b;
-    color: #fff;
-    font-size: 0.65rem;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 4px;
-    letter-spacing: 1px;
-  }
-
-  @media (max-width: 767.98px) {
-    .po-items-modal-dialog { max-width: 100%; width: 100%; margin: 0; }
-    .po-items-modal-dialog .modal-content { border-radius: 0; min-height: 100vh; }
-    #poItemsModal .modal-body { max-height: calc(100vh - 140px); padding: 12px; }
-    .po-items-list { max-height: none; border: none; background: transparent; padding: 0; }
-    .po-items-list .po-item-card { padding: 8px !important; position: relative; }
-    .po-items-list .po-item-card .row.g-2 > [class*="col-"] { width: 100% !important; flex: 0 0 100% !important; max-width: 100% !important; }
-    .po-items-list .po-item-card .btn-outline-danger { width: 100%; }
-  }
-  @media (min-width: 768px) and (max-width: 1199.98px) {
-    .po-items-modal-dialog { max-width: 98%; }
-    #poItemsModal .modal-body { padding: 16px; }
-    .po-items-list { max-height: 45vh; }
-  }
-
-  /* Analytics */
-  .analytics-card { overflow: hidden; }
-  .analytics-card .card-body { overflow: hidden; }
-  .analytics-card canvas { display: block; width: 100% !important; height: 100% !important; max-width: 100%; }
-  .chart-pie-legend {
-    display: flex; flex-wrap: wrap; gap: 6px 12px;
-    padding: 4px 4px 8px 4px; font-size: 0.72rem; line-height: 1.4;
-    max-height: 90px; overflow-y: auto; border-bottom: 1px solid #f0f0f0;
-  }
-  .chart-pie-legend:empty { display: none; }
-  .chart-pie-legend-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
-  .chart-pie-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
-  .chart-pie-legend-item code { font-size: 0.7rem; background: #f1f5f9; padding: 1px 5px; border-radius: 3px; color: #1e3a5f; }
-  .chart-pie-legend-meta { color: #6b7280; font-weight: 600; font-size: 0.68rem; }
-  .chart-pie-legend-other { background: #f9fafb; padding: 2px 6px; border-radius: 4px; }
-  @media (max-width: 767.98px) {
-    .chart-pie-legend { max-height: none; font-size: 0.7rem; gap: 4px 10px; }
-    .chart-pie-legend-item code { font-size: 0.66rem; }
-  }
-
-  /* Skeleton */
-  .skeleton-box {
-    background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
-    background-size: 200% 100%;
-    animation: skeletonShimmer 1.4s infinite;
-    border-radius: 8px;
-  }
-  @keyframes skeletonShimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
-
-  /* ─── CHAT ─── */
-  .chat-wrapper {
-    display: flex;
-    background: #fff;
-    border-radius: 12px;
-    border: 1px solid var(--gemcor-border);
-    overflow: hidden;
-    height: calc(100vh - 180px);
-    min-height: 500px;
-  }
-  .chat-sidebar {
-    width: 340px;
-    flex-shrink: 0;
-    border-right: 1px solid var(--gemcor-border);
-    display: flex;
-    flex-direction: column;
-    background: #fafbfc;
-  }
-  .chat-sidebar-header { border-bottom: 1px solid var(--gemcor-border); background: #fff; }
-  .chat-tabs { display: flex; }
-  .chat-tab-btn {
-    flex: 1;
-    border: none;
-    background: transparent;
-    padding: 12px 8px;
-    font-weight: 600;
-    font-size: 0.85rem;
-    color: #6c757d;
-    border-bottom: 2px solid transparent;
-    transition: all 0.15s;
-    cursor: pointer;
-  }
-  .chat-tab-btn:hover { color: var(--gemcor-blue); }
-  .chat-tab-btn.active { color: var(--gemcor-blue); border-bottom-color: var(--gemcor-blue); }
-  .chat-conv-list { flex: 1; overflow-y: auto; }
-  .chat-conv-item {
-    padding: 12px 16px;
-    border-bottom: 1px solid #f0f2f5;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  .chat-conv-item:hover { background: #f0f4f8; }
-  .chat-conv-item.active { background: #e8f0fe; border-left: 3px solid var(--gemcor-blue); padding-left: 13px; }
-  .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #fff; }
-  .chat-empty-state {
-    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    color: #adb5bd; padding: 40px;
-  }
-  .chat-empty-state i { font-size: 3rem; opacity: 0.4; margin-bottom: 12px; }
-  .chat-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-  .chat-panel-header {
-    padding: 12px 16px; border-bottom: 1px solid var(--gemcor-border);
-    display: flex; align-items: center; background: #fff;
-  }
-  .chat-doc-banner {
-    padding: 8px 16px; background: #f0f7ff; border-bottom: 1px solid #dbeafe;
-    font-size: 0.85rem; color: #1e40af;
-  }
-  .chat-messages {
-    flex: 1; overflow-y: auto; padding: 16px; background: #f5f7fa;
-    display: flex; flex-direction: column; gap: 6px;
-  }
-  .chat-bubble {
-    max-width: 72%; padding: 8px 12px; border-radius: 14px;
-    font-size: 0.9rem; line-height: 1.35; word-wrap: break-word; white-space: pre-wrap;
-  }
-  .chat-bubble-me { align-self: flex-end; background: var(--gemcor-blue); color: #fff; border-bottom-right-radius: 4px; }
-  .chat-bubble-them { align-self: flex-start; background: #fff; border: 1px solid #e5e7eb; color: #1f2937; border-bottom-left-radius: 4px; }
-  .chat-bubble-sender {
-    font-size: 0.68rem; font-weight: 700; color: var(--gemcor-blue);
-    margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.3px;
-  }
-  .chat-bubble-time { font-size: 0.65rem; opacity: 0.7; margin-top: 3px; text-align: right; }
-  .chat-bubble-them .chat-bubble-time { color: #6c757d; opacity: 1; }
-  .chat-date-sep { text-align: center; font-size: 0.7rem; color: #6c757d; margin: 8px 0; }
-  .chat-date-sep::before, .chat-date-sep::after {
-    content: ''; display: inline-block; width: 30px; height: 1px;
-    background: #d1d5db; vertical-align: middle; margin: 0 8px;
-  }
-  .chat-input-row {
-    padding: 10px 12px; border-top: 1px solid var(--gemcor-border);
-    display: flex; gap: 8px; align-items: flex-end; background: #fff;
-  }
-  .chat-input {
-    flex: 1; border: 1px solid #dee2e6; border-radius: 20px;
-    padding: 8px 14px; font-size: 0.9rem; resize: none; outline: none;
-    max-height: 120px; font-family: inherit; line-height: 1.35;
-  }
-  .chat-input:focus { border-color: var(--gemcor-blue); }
-  .chat-send-btn {
-    border-radius: 50%; width: 40px; height: 40px;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0; padding: 0;
-  }
-  @media (max-width: 767.98px) {
-    .chat-wrapper {
-      height: calc(100dvh - 130px);
-      min-height: 400px;
-      border-radius: 8px;
-      position: relative;
-    }
-    .chat-sidebar { width: 100%; border-right: none; border-radius: 8px; }
-    .chat-main { width: 100%; border-radius: 8px; }
-    .chat-wrapper.mobile-chat-open .chat-sidebar { display: none !important; }
-    .chat-wrapper.mobile-chat-open .chat-main  { display: flex !important; }
-    .chat-wrapper:not(.mobile-chat-open) .chat-main  { display: none !important; }
-    .chat-wrapper:not(.mobile-chat-open) .chat-sidebar { display: flex !important; }
-    .chat-empty-state { padding: 24px 16px; }
-    .chat-empty-state i { font-size: 2.5rem; }
-    .chat-panel-header { padding: 10px 12px; position: sticky; top: 0; z-index: 5; background: #fff; }
-    .chat-panel-header .btn-link { color: var(--gemcor-blue); text-decoration: none; padding: 4px 8px !important; }
-    .chat-messages { padding: 12px; gap: 4px; }
-    .chat-bubble { max-width: 85%; font-size: 0.88rem; padding: 8px 12px; }
-    .chat-bubble-time { font-size: 0.6rem; }
-    .chat-input-row { padding: 8px 10px; gap: 6px; position: sticky; bottom: 0; background: #fff; border-top: 1px solid var(--gemcor-border); }
-    .chat-input { font-size: 16px; padding: 10px 14px; min-height: 40px; max-height: 100px; }
-    .chat-send-btn { width: 42px; height: 42px; flex-shrink: 0; }
-    .chat-doc-banner { font-size: 0.78rem; padding: 6px 12px; }
-    .chat-conv-item { padding: 14px 16px; }
-    .chat-tab-btn { font-size: 0.82rem; padding: 11px 6px; }
-  }
-  @media (max-width: 380px) {
-    .chat-wrapper { height: calc(100dvh - 120px); }
-    .chat-bubble { max-width: 90%; font-size: 0.85rem; }
-    .chat-conv-item { padding: 12px 12px; }
-  }
-
-    /* ─── PREP STATUS COLOR CODING ─── */
-  .pending-mrif-item {
-    border-left: 5px solid #dee2e6;
-    transition: background 0.15s;
-  }
-  .pending-mrif-item.prep-new {
-    border-left-color: #dc3545;
-    background: #fff5f5;
-  }
-  .pending-mrif-item.prep-prepared {
-    border-left-color: #198754;
-    background: #f4fbf7;
-  }
-  .pending-mrif-item.prep-pickedup {
-    border-left-color: #ffc107;
-    background: #fffaf0;
-  }
-
-  .prep-badge {
-    display: inline-block;
-    font-size: 0.62rem;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    padding: 3px 8px;
-    border-radius: 10px;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-  .prep-new .prep-badge { background: #dc3545; color: #fff; }
-  .prep-prepared .prep-badge { background: #198754; color: #fff; }
-  .prep-pickedup .prep-badge { background: #ffc107; color: #212529; }
-
-  .btn-prep-action {
-    font-size: 0.72rem;
-    padding: 4px 10px;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
-  /* Small legend at the top of the pending modal */
-  .prep-legend {
-    display: flex;
-    gap: 14px;
-    flex-wrap: wrap;
-    padding: 6px 10px;
-    background: #f8f9fa;
-    border-radius: 6px;
-    font-size: 0.72rem;
-  }
-  .prep-legend-item { display: flex; align-items: center; gap: 5px; }
-  .prep-legend-swatch {
-    width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0;
-  }
-  .prep-legend-swatch.red { background: #dc3545; }
-  .prep-legend-swatch.green { background: #198754; }
-  .prep-legend-swatch.yellow { background: #ffc107; }
-
-    .prep-legend-mini {
-    display: flex;
-    gap: 12px;
-    font-size: 0.7rem;
-    color: #6c757d;
-    flex-wrap: wrap;
-  }
-  .prep-legend-mini .prep-legend-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-  .prep-legend-mini .prep-legend-swatch {
-    width: 10px;
-    height: 10px;
-    border-radius: 2px;
-    flex-shrink: 0;
-  }
-  .prep-legend-mini .prep-legend-swatch.red    { background: #dc3545; }
-  .prep-legend-mini .prep-legend-swatch.green  { background: #198754; }
-  .prep-legend-mini .prep-legend-swatch.yellow { background: #ffc107; }
-
-    /* ─── ALL REQUESTS CARD ─── */
-  .all-request-card {
-    border-left: 4px solid #0d6efd;
-    transition: background 0.15s;
-  }
-  .all-request-card:hover { background: #f0f4f8; }
-
-  /* Active (non-completed) docs get prep-status coloring */
-  .all-request-card.prep-new       { border-left-color: #dc3545; background: #fff5f5; }
-  .all-request-card.prep-prepared  { border-left-color: #198754; background: #f4fbf7; }
-  .all-request-card.prep-pickedup  { border-left-color: #ffc107; background: #fffaf0; }
-
-  /* Completed docs always use a neutral green border */
-  .all-request-card.completed      { border-left-color: #198754; background: #f8fbf9; }
-  .all-request-card.completed:hover { background: #eef7f1; }
-
-  /* Partial docs (not yet picked up) keep cyan unless prep says otherwise */
-  .all-request-card.partial:not(.prep-prepared):not(.prep-pickedup) { border-left-color: #0dcaf0; }
-
-    /* ═══════════════════════════════════════════════════════════
-     LAYOUT SAFETY — prevents sections from being pushed down
-     ═══════════════════════════════════════════════════════════ */
-
-  /* Ensure the app-wrapper stretches properly */
-  .app-wrapper { align-items: stretch; }
-
-  /* Fix the sidebar to not interfere with content flow */
-  .sidebar {
-    align-self: flex-start;
-    height: 100vh;
-    max-height: 100vh;
-  }
-
-  /* Guarantee every section starts at the top of its container */
-  .section-page {
-    display: none;
-    animation: fadeIn 0.25s ease;
-    margin-top: 0;
-    padding-top: 0;
-    position: relative;
-  }
-  .section-page.active {
-    display: block;
-  }
-
-  /* Chat wrapper: don't allow it to overflow past the viewport */
-  .chat-wrapper {
-    max-height: calc(100vh - 120px);
-  }
-
-  /* Make sure no section artificially inflates its own height */
-  #section-messages,
-  #section-returns,
-  #section-receiving,
-  #section-releasing,
-  #section-allrequests,
-  #section-dashboard,
-  #section-requests,
-  #section-myrequests,
-  #section-inventory,
-  #section-settings,
-  #section-about {
-    height: auto;
-    max-height: none;
-  }
-
-  /* On desktop, sidebar stays in flow */
-  @media (min-width: 769px) {
-    .sidebar {
-      position: sticky;
-      top: 0;
-    }
-    .sidebar-toggle { display: none !important; }
-  }
-
-  /* ═══════════════════════════════════════════════════════════
-     PRINT-ONLY MODE (public PDF view — no app shell)
-     ═══════════════════════════════════════════════════════════ */
-  body.print-only-mode .app-wrapper,
-  body.print-only-mode #loadingOverlay,
-  body.print-only-mode #sidebarBackdrop,
-  body.print-only-mode .modal,
-  body.print-only-mode .modal-backdrop,
-  body.print-only-mode .toast-container,
-  body.print-only-mode #whNotificationsList,
-  body.print-only-mode #mrrPrintOnly,
-  body.print-only-mode #qrImageDecoder {
-    display: none !important;
-  }
-
-  body.print-only-mode {
-    background: #e5e5e5 !important;
-  }
-
-  #printOnlyView {
-    background: #e5e5e5;
-    min-height: 100vh;
-    padding: 20px;
-  }
-
-  #printOnlyView .print-only-toolbar {
-    background: #fff;
-    padding: 12px 20px;
-    border-radius: 8px;
-    margin: 0 auto 16px;
-    max-width: 8.5in;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    border: 1px solid var(--gemcor-border);
-  }
-
-  #printOnlyView .print-only-sheet-wrap {
-    background: #fff;
-    max-width: 8.5in;
-    margin: 0 auto;
-    border-radius: 4px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-    overflow-x: auto;
-  }
-
-  @media (max-width: 900px) {
-    #printOnlyView { padding: 10px; }
-    #printOnlyView .print-only-toolbar { padding: 10px 12px; font-size: 0.85rem; }
-    #printOnlyView .print-only-toolbar .btn { font-size: 0.8rem; padding: 6px 10px; }
-  }
-
-  @media print {
-    body.print-only-mode { background: #fff !important; }
-    #printOnlyView { padding: 0 !important; background: #fff !important; }
-    #printOnlyView .print-only-toolbar { display: none !important; }
-    #printOnlyView .print-only-sheet-wrap {
-      box-shadow: none !important;
-      border-radius: 0 !important;
-      max-width: 100% !important;
-      overflow: visible !important;
-    }
-  }
-  /* ═══════════════════════════════════════════════════════════
-   SENIOR-FRIENDLY NEW REQUEST MODAL
-   Bigger size, bigger fonts, bigger touch targets
-   ═══════════════════════════════════════════════════════════ */
-
-/* Full-screen sizing on desktop (95% width × 95% height) */
-.new-request-dialog {
-  max-width: 95vw;
-  width: 95vw;
-  margin: 2.5vh auto;
-}
-
-.new-request-dialog .modal-content {
-  min-height: 95vh;
-  border-radius: 16px;
-}
-
-.new-request-dialog .modal-body {
-  padding: 24px 32px;
-  font-size: 1.05rem;
-}
-
-/* Bigger wizard step indicators */
-.new-request-dialog .wizard-steps {
-  justify-content: center;
-  gap: 24px;
-  margin-bottom: 28px;
-}
-
-.new-request-dialog .wizard-step {
-  font-size: 1rem;
-  gap: 10px;
-}
-
-.new-request-dialog .wizard-step .step-num {
-  width: 42px;
-  height: 42px;
-  font-size: 1.05rem;
-  font-weight: 800;
-}
-
-/* Bigger step title */
-.new-request-dialog .step-icon {
-  font-size: 2.5rem;
-  display: block;
-  margin-bottom: 8px;
-  color: var(--gemcor-blue);
-}
-
-.new-request-dialog h5 {
-  font-size: 1.4rem;
-  font-weight: 700;
-}
-
-/* Bigger form labels & inputs */
-.new-request-dialog .form-label,
-.new-request-dialog .form-label.small,
-.new-request-dialog label {
-  font-size: 1rem !important;
-  font-weight: 600;
-  color: #374151;
-}
-
-.new-request-dialog .form-control,
-.new-request-dialog .form-select {
-  font-size: 1.05rem;
-  padding: 12px 16px;
-  min-height: 48px;
-  border-radius: 10px;
-}
-
-.new-request-dialog .form-control-lg,
-.new-request-dialog .form-select-lg {
-  font-size: 1.15rem;
-  padding: 14px 18px;
-  min-height: 56px;
-}
-
-/* Bigger inputs inside the item rows */
-.new-request-dialog .step5-item-row .form-control,
-.new-request-dialog .step5-item-row .form-select {
-  font-size: 1rem;
-  padding: 10px 14px;
-  min-height: 44px;
-}
-
-/* Bigger doc-type cards (MRIF / MRS) */
-.new-request-dialog .doc-type-card {
-  padding: 32px 20px;
-  border-radius: 14px;
-}
-
-.new-request-dialog .doc-type-card .doc-type-icon,
-.new-request-dialog .doc-type-card i {
-  font-size: 3.2rem;
-  margin-bottom: 10px;
-}
-
-.new-request-dialog .doc-type-card .doc-type-title {
-  font-size: 1.4rem;
-  font-weight: 800;
-  margin-bottom: 6px;
-}
-
-.new-request-dialog .doc-type-card .doc-type-desc,
-.new-request-dialog .doc-type-card .doc-type-subtitle {
-  font-size: 1rem;
-  color: #6b7280;
-}
-
-/* Bigger review rows */
-.new-request-dialog .review-card {
-  padding: 16px 22px;
-  font-size: 1.05rem;
-}
-
-.new-request-dialog .review-row {
-  padding: 12px 0;
-  font-size: 1.05rem;
-}
-
-.new-request-dialog .review-label,
-.new-request-dialog .review-value {
-  font-size: 1.05rem;
-}
-
-/* Bigger wizard navigation buttons */
-.new-request-dialog .wizard-nav {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 32px;
-  padding-top: 20px;
-  border-top: 1px solid #e5e7eb;
-}
-
-.new-request-dialog .wizard-nav .btn {
-  font-size: 1.05rem;
-  padding: 12px 28px;
-  min-height: 50px;
-  border-radius: 10px;
-  font-weight: 700;
-}
-
-/* Bigger Add Another Item button */
-.new-request-dialog #step5ItemsContainer + .btn {
-  font-size: 1.05rem;
-  padding: 12px 20px;
-  min-height: 50px;
-}
-
-/* Bigger item search dropdown */
-.new-request-dialog .req-dropdown {
-  font-size: 1rem;
-  border-radius: 10px;
-  border: 1px solid #ced4da;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-  max-height: 320px !important;
-  width: 100% !important;
-  left: 0 !important;
-  margin-top: 4px;
-}
-
-.new-request-dialog .req-dropdown .list-group-item {
-  padding: 14px 18px !important;
-  font-size: 1rem !important;
-  line-height: 1.4;
-  cursor: pointer;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.new-request-dialog .req-dropdown .list-group-item:last-child {
-  border-bottom: none;
-}
-
-.new-request-dialog .req-dropdown .list-group-item:hover {
-  background: #eef4fb !important;
-}
-
-.new-request-dialog .req-dropdown .list-group-item .fw-bold {
-  font-size: 1.05rem;
-  color: #1e3a5f;
-  font-weight: 700 !important;
-}
-
-.new-request-dialog .req-dropdown .list-group-item .small {
-  font-size: 0.95rem !important;
-  color: #6b7280;
-  margin-top: 4px;
-}
-
-/* Bigger final review table */
-.new-request-dialog #finalItemsTable {
-  font-size: 1.05rem;
-}
-
-.new-request-dialog #finalItemsTable th,
-.new-request-dialog #finalItemsTable td {
-  padding: 12px 14px;
-}
-
-/* Bigger item row remove button */
-.new-request-dialog .step5-item-row .btn-outline-danger {
-  min-height: 44px;
-  font-size: 1.05rem;
-}
-
-/* Scrollable modal body */
-.new-request-dialog .modal-body {
-  overflow-y: auto;
-}
-
-/* Bigger close button */
-.new-request-dialog .btn-close {
-  background-size: 1.4rem;
-  padding: 0.75rem;
-}
-
-/* ─── Mobile: full screen ─── */
-@media (max-width: 768px) {
-  .new-request-dialog {
-    max-width: 100vw;
-    width: 100vw;
-    margin: 0;
-    min-height: 100vh;
-  }
-
-  .new-request-dialog .modal-content {
-    min-height: 100vh;
-    border-radius: 0;
-  }
-
-  .new-request-dialog .modal-body {
-    padding: 16px;
-    font-size: 1rem;
-  }
-
-  .new-request-dialog .wizard-steps {
-    gap: 12px;
-  }
-
-  .new-request-dialog .wizard-step {
-    flex-direction: column;
-    font-size: 0.82rem;
-    gap: 4px;
-  }
-
-  .new-request-dialog .wizard-step .step-num {
-    width: 34px;
-    height: 34px;
-    font-size: 0.9rem;
-  }
-
-  .new-request-dialog .step5-item-row > .col-8,
-  .new-request-dialog .step5-item-row > .col-2,
-  .new-request-dialog .step5-item-row > .col-3,
-  .new-request-dialog .step5-item-row > .col-1 {
-    width: 100% !important;
-    flex: 0 0 100% !important;
-    max-width: 100% !important;
-  }
-
-  .new-request-dialog .wizard-nav .btn {
-    flex: 1;
-    font-size: 1rem;
-    padding: 12px 16px;
-  }
-}
-
-/* ─── Large tablet / small laptop ─── */
-@media (min-width: 769px) and (max-width: 1199px) {
-  .new-request-dialog {
-    max-width: 92vw;
-    width: 92vw;
-  }
-}
-  /* ═══════════════════════════════════════════════════════════
-   LOCKED FIELD — Requestor / Department / Prepared By
-   ═══════════════════════════════════════════════════════════ */
-.locked-field-display {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 18px;
-  background: #f0f4f8;
-  border: 2px solid #cbd5e1;
-  border-radius: 10px;
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: #1e3a5f;
-}
-
-.locked-field-display .lock-icon {
-  color: #64748b;
-  font-size: 1.2rem;
-  flex-shrink: 0;
-}
-
-.locked-field-display .locked-value {
-  flex: 1;
-  word-break: break-word;
-}
-
-.locked-field-display .locked-hint {
-  font-size: 0.82rem;
-  font-weight: 400;
-  color: #94a3b8;
-  display: block;
-  margin-top: 2px;
-}
-
-/* Disabled inputs get a "locked" visual */
-input[readonly].locked-input,
-select:disabled.locked-input,
-textarea[readonly].locked-input {
-  background: #f0f4f8 !important;
-  border-color: #cbd5e1 !important;
-  color: #1e3a5f !important;
-  font-weight: 600 !important;
-  cursor: not-allowed;
-}
-</style>
-</style>
 </head>
 <body>
 
@@ -1149,14 +84,14 @@ textarea[readonly].locked-input {
         <i class="bi bi-box-arrow-right"></i> Logout
       </div>
     </nav>
-   <div class="sidebar-footer">
-  <div id="sidebarAppVersion" title="Click to check for updates">
-    <span id="sidebarAppVersionText">v2.1.0</span>
-    <span id="sidebarUpdateDot" class="update-dot d-none" title="New version available"></span>
-  </div>
-  <div id="sidebarRole" class="small">Warehouse</div>
-  <div id="sidebarBuild" class="small text-muted" style="font-size:0.68rem;opacity:0.7;"></div>
-</div>
+    <div class="sidebar-footer">
+      <div id="sidebarAppVersion" title="Click to check for updates">
+        <span id="sidebarAppVersionText">v3.2.8</span>
+        <span id="sidebarUpdateDot" class="update-dot d-none" title="New version available"></span>
+      </div>
+      <div id="sidebarRole" class="small">Warehouse</div>
+      <div id="sidebarBuild" class="small text-muted" style="font-size:0.68rem;opacity:0.7;"></div>
+    </div>
   </aside>
 
   <main class="main-content">
@@ -1213,26 +148,26 @@ textarea[readonly].locked-input {
               </div>
             </div>
           </div>
-         <div class="col-6 col-md-3">
-  <div class="kpi-card kpi-clickable" onclick="openPartialMrrModal()" title="Click to view partially received MRRs">
-    <div class="kpi-icon amber"><i class="bi bi-box-arrow-in-down"></i></div>
-    <div>
-      <div class="kpi-label">Partial MRR</div>
-      <div class="kpi-value" id="kpiPartialMrr">0</div>
-      <div class="kpi-sub">Partially received</div>
-    </div>
-  </div>
-</div>
-<div class="col-6 col-md-3">
-  <div class="kpi-card kpi-clickable" onclick="openPartialMrifModal()" title="Click to view partially issued MRIFs">
-    <div class="kpi-icon amber"><i class="bi bi-box-arrow-up"></i></div>
-    <div>
-      <div class="kpi-label">Partial MRIF</div>
-      <div class="kpi-value" id="kpiPartial">0</div>
-      <div class="kpi-sub">Partially issued</div>
-    </div>
-  </div>
-</div>
+          <div class="col-6 col-md-3">
+            <div class="kpi-card kpi-clickable" onclick="openPartialMrrModal()" title="Click to view partially received MRRs">
+              <div class="kpi-icon amber"><i class="bi bi-box-arrow-in-down"></i></div>
+              <div>
+                <div class="kpi-label">Partial MRR</div>
+                <div class="kpi-value" id="kpiPartialMrr">0</div>
+                <div class="kpi-sub">Partially received</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="kpi-card kpi-clickable" onclick="openPartialMrifModal()" title="Click to view partially issued MRIFs">
+              <div class="kpi-icon amber"><i class="bi bi-box-arrow-up"></i></div>
+              <div>
+                <div class="kpi-label">Partial MRIF</div>
+                <div class="kpi-value" id="kpiPartial">0</div>
+                <div class="kpi-sub">Partially issued</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="row g-3 mb-4">
@@ -1403,7 +338,7 @@ textarea[readonly].locked-input {
       </div>
     </div>
 
-    <!-- ALL REQUESTS (Warehouse) -->
+    <!-- ALL REQUESTS -->
     <div id="section-allrequests" class="section-page">
       <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h5 class="mb-0"><i class="bi bi-inbox-fill me-2"></i>All Requests</h5>
@@ -1413,14 +348,14 @@ textarea[readonly].locked-input {
             <option value="MRIF">MRIF only</option>
             <option value="MRS">MRS only</option>
           </select>
-       <select id="allRequestsStatusFilter" class="form-select form-select-sm" style="width:auto;" onchange="loadAllRequests()">
-  <option value="today_and_partial" selected>Today + All Partials</option>
-  <option value="today">Today Only</option>
-  <option value="partial">Partials (All Dates)</option>
-  <option value="active">Active (Pending + Partial)</option>
-  <option value="all">All Statuses</option>
-  <option value="completed">Completed Only</option>
-</select>
+          <select id="allRequestsStatusFilter" class="form-select form-select-sm" style="width:auto;" onchange="loadAllRequests()">
+            <option value="today_and_partial" selected>Today + All Partials</option>
+            <option value="today">Today Only</option>
+            <option value="partial">Partials (All Dates)</option>
+            <option value="active">Active (Pending + Partial)</option>
+            <option value="all">All Statuses</option>
+            <option value="completed">Completed Only</option>
+          </select>
           <button class="btn btn-sm btn-outline-primary" onclick="loadAllRequests()">
             <i class="bi bi-arrow-clockwise me-1"></i>Refresh
           </button>
@@ -1469,7 +404,7 @@ textarea[readonly].locked-input {
                 <i class="bi bi-palette"></i>
               </button>
             </div>
-                       <select id="docSelect" class="form-select" onchange="onDocSelect(this.value)">
+            <select id="docSelect" class="form-select" onchange="onDocSelect(this.value)">
               <option value="">-- Select Document --</option>
             </select>
           </div>
@@ -1635,38 +570,29 @@ textarea[readonly].locked-input {
       </div>
     </div>
 
-    <!-- NEW REQUEST -->
-<div id="section-requests" class="section-page">
-  <div class="card">
-    <div class="card-body text-center py-5">
-      <i class="bi bi-plus-circle" style="font-size:3rem;color:var(--gemcor-blue);"></i>
-      <h4 class="mt-3">Create New Request</h4>
-      <p class="text-muted">Start a new material request or return slip.</p>
+    <!-- NEW REQUEST (single clean section) -->
+    <div id="section-requests" class="section-page">
+      <div class="card">
+        <div class="card-body text-center py-5">
+          <i class="bi bi-plus-circle" style="font-size:3rem;color:var(--gemcor-blue);"></i>
+          <h4 class="mt-3">Create New Request</h4>
+          <p class="text-muted">Start a new material request or return slip.</p>
 
-      <div class="d-flex flex-column flex-md-row gap-3 justify-content-center mt-4">
-        <button class="btn btn-primary btn-lg" onclick="openNewRequest()">
-          <i class="bi bi-file-earmark-text me-2"></i>New Request (with JO)
-          <small class="d-block" style="font-size:0.75rem;opacity:0.8;">For requests tied to a Job Order</small>
-        </button>
+          <div class="d-flex flex-column flex-md-row gap-3 justify-content-center mt-4">
+            <button class="btn btn-primary btn-lg" onclick="openNewRequest()">
+              <i class="bi bi-file-earmark-text me-2"></i>New Request (with JO)
+              <small class="d-block" style="font-size:0.75rem;opacity:0.85;">For requests tied to a Job Order</small>
+            </button>
 
-        <button class="btn btn-outline-primary btn-lg" onclick="openNewRequestNoJO()">
-          <i class="bi bi-file-earmark-plus me-2"></i>New Request (No JO)
-          <small class="d-block" style="font-size:0.75rem;opacity:0.8;">For requests without Job Order</small>
-        </button>
-      </div>
+            <button class="btn btn-outline-primary btn-lg" onclick="openNewRequestNoJO()">
+              <i class="bi bi-file-earmark-plus me-2"></i>New Request (No JO)
+              <small class="d-block" style="font-size:0.75rem;opacity:0.85;">For requests without Job Order</small>
+            </button>
+          </div>
 
-      <hr class="my-4">
-      <h6><i class="bi bi-box-seam me-2"></i>Need to find an item?</h6>
-      <p class="text-muted small">Browse the inventory catalog to search for item codes and descriptions.</p>
-      <button class="btn btn-outline-primary" onclick="openInventoryBrowser()">
-        <i class="bi bi-search me-2"></i>Browse Inventory
-      </button>
-    </div>
-  </div>
-</div>
           <hr class="my-4">
           <h6><i class="bi bi-box-seam me-2"></i>Need to find an item?</h6>
-          <p class="text-muted small">Browse the inventory catalog to search for item codes and descriptions.</p>
+          <p class="text-muted small mb-2">Browse the inventory catalog to search for item codes and descriptions.</p>
           <button class="btn btn-outline-primary" onclick="openInventoryBrowser()">
             <i class="bi bi-search me-2"></i>Browse Inventory
           </button>
@@ -1764,7 +690,8 @@ textarea[readonly].locked-input {
           <h6><i class="bi bi-plus-circle"></i> New Request</h6>
           <ul>
             <li>Production staff can create new MRIF or MRS requests.</li>
-            <li>Wizard: Document Type → JO Number → Requestor → Review → Add Items → Submit.</li>
+            <li><strong>With JO</strong> – use the wizard (JO lookup, requestor, items).</li>
+            <li><strong>No JO</strong> – standalone request with editable optional fields (GEM SO, Client, Project).</li>
           </ul>
 
           <h6><i class="bi bi-clock-history"></i> My Requests</h6>
@@ -1793,13 +720,6 @@ textarea[readonly].locked-input {
             <li>Anyone with the printed sheet can scan and download the PDF, but <strong>cannot access the WMS</strong>.</li>
             <li>The production request QR (in My Requests) is different — it opens the live system and requires login.</li>
           </ul>
-
-          <h6><i class="bi bi-arrow-repeat"></i> Updates</h6>
-<ul>
-  <li>When a new version is deployed, a <strong>green banner</strong> appears at the top.</li>
-  <li>Click <strong>Update Now</strong> to load the latest version — no refresh needed.</li>
-  <li>If you missed the banner, click the version number at the bottom of the sidebar to check manually.</li>
-</ul>
 
           <hr>
           <div class="text-center mt-4">
@@ -1886,7 +806,7 @@ textarea[readonly].locked-input {
         </div>
         <div class="mb-3">
           <label class="form-label" id="modalInputLabel">Enter Issued Qty</label>
-         <input type="number" id="modalInputQty" class="form-control" min="0" step="0.01" oninput="onQtyInput()">
+          <input type="number" id="modalInputQty" class="form-control" min="0" step="0.01" oninput="onQtyInput()">
           <div id="modalHint" class="form-text"></div>
         </div>
         <div class="mb-3">
@@ -2176,12 +1096,12 @@ textarea[readonly].locked-input {
         <div id="syncSection">
           <button class="btn btn-outline-primary w-100 mb-3" onclick="syncModuleLinks()">
             <span id="syncBtnText">Sync IDs from Master Sheet</span>
+          </button>
           <button class="btn btn-outline-success w-100 mb-3" onclick="forceSupabaseSync()">
-            <button class="btn btn-outline-warning w-100 mb-3" onclick="forceAppReload()">
-  <i class="bi bi-arrow-clockwise me-2"></i>Force App Reload
-</button>
-  <i class="bi bi-cloud-arrow-up me-2"></i>Sync to Supabase Now
-</button>
+            <i class="bi bi-cloud-arrow-up me-2"></i>Sync to Supabase Now
+          </button>
+          <button class="btn btn-outline-warning w-100 mb-3" onclick="forceAppReload()">
+            <i class="bi bi-arrow-clockwise me-2"></i>Force App Reload
           </button>
         </div>
         <div id="sheetIdsSection">
@@ -2206,7 +1126,7 @@ textarea[readonly].locked-input {
           </div>
         </div>
         <div class="mt-2 text-center text-muted small">
-          <span id="appVersion">v3.7.0</span>
+          <span id="appVersion">v3.2.8</span>
         </div>
       </div>
       <div class="modal-footer">
@@ -2229,11 +1149,12 @@ textarea[readonly].locked-input {
   </div>
 </div>
 
+<!-- NEW REQUEST (with JO) MODAL -->
 <div class="modal fade" id="newRequestModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog modal-dialog-scrollable new-request-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>New Request</h5>
+        <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>New Request (with JO)</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
@@ -2390,9 +1311,8 @@ textarea[readonly].locked-input {
     </div>
   </div>
 </div>
-<!-- ═══════════════════════════════════════════════════════════════
-     NEW REQUEST (No JO) MODAL
-     ═══════════════════════════════════════════════════════════════ -->
+
+<!-- NEW REQUEST (No JO) MODAL -->
 <div class="modal fade" id="newRequestNoJoModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -2404,7 +1324,6 @@ textarea[readonly].locked-input {
       </div>
       <div class="modal-body">
 
-        <!-- Type -->
         <div class="mb-3">
           <label class="form-label fw-bold">Document Type <span class="text-danger">*</span></label>
           <div class="row g-2">
@@ -2426,7 +1345,6 @@ textarea[readonly].locked-input {
           <input type="hidden" id="noJoDocType">
         </div>
 
-        <!-- Requestor (Locked) -->
         <div class="mb-3">
           <label class="form-label fw-bold">Requestor</label>
           <div class="locked-field-display">
@@ -2439,7 +1357,6 @@ textarea[readonly].locked-input {
           <input type="hidden" id="noJoRequestor">
         </div>
 
-        <!-- Department (Locked) -->
         <div class="mb-3">
           <label class="form-label fw-bold">Department / Section</label>
           <div class="locked-field-display">
@@ -2452,7 +1369,6 @@ textarea[readonly].locked-input {
           <input type="hidden" id="noJoDepartment">
         </div>
 
-        <!-- Optional Fields -->
         <div class="mb-3">
           <label class="form-label fw-bold">
             Additional Info <span class="text-muted small">(all optional)</span>
@@ -2477,7 +1393,6 @@ textarea[readonly].locked-input {
           </div>
         </div>
 
-        <!-- Items -->
         <hr>
         <div class="d-flex justify-content-between align-items-center mb-2">
           <h6 class="mb-0 fw-bold"><i class="bi bi-box-seam me-1"></i>Items <span class="text-danger">*</span></h6>
@@ -2502,6 +1417,7 @@ textarea[readonly].locked-input {
     </div>
   </div>
 </div>
+
 <div class="modal fade" id="whNotifModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -2838,19 +1754,19 @@ textarea[readonly].locked-input {
       </div>
       <div class="modal-body">
         <div class="input-group mb-3"><span class="input-group-text"><i class="bi bi-search"></i></span><input type="text" class="form-control" id="inventorySearchInput" placeholder="Search item code or description..." oninput="filterInventoryItems()"></div>
-       <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
-  <table class="table table-sm table-hover">
-    <thead class="table-light sticky-top"><tr>
-      <th style="width:8%">QR</th>
-      <th style="width:22%">ITEM CODE</th>
-      <th style="width:50%">DESCRIPTION</th>
-      <th style="width:20%">ITEM CLASS</th>
-    </tr></thead>
-    <tbody id="inventoryBrowserBody">
-      <tr><td colspan="4" class="text-center py-3 text-muted">Loading inventory...</td></tr>
-    </tbody>
-  </table>
-</div>
+        <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
+          <table class="table table-sm table-hover">
+            <thead class="table-light sticky-top"><tr>
+              <th style="width:8%">QR</th>
+              <th style="width:22%">ITEM CODE</th>
+              <th style="width:50%">DESCRIPTION</th>
+              <th style="width:20%">ITEM CLASS</th>
+            </tr></thead>
+            <tbody id="inventoryBrowserBody">
+              <tr><td colspan="4" class="text-center py-3 text-muted">Loading inventory...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
       <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
     </div>
@@ -2861,12 +1777,12 @@ textarea[readonly].locked-input {
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content text-center">
       <div class="modal-header"><h6 class="modal-title" id="qrZoomCode">Item Code</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body">
-  <img id="qrZoomImg" src="" alt="QR" style="max-width:280px;width:100%;margin:0 auto;display:block;">
-  <div id="qrZoomFallback" class="alert alert-warning d-none">QR generation failed</div>
-  <div id="qrZoomDesc" class="small text-muted mt-2">Item description</div>
-  <div id="qrZoomClass" class="mt-2"></div>
-</div>
+      <div class="modal-body">
+        <img id="qrZoomImg" src="" alt="QR" style="max-width:280px;width:100%;margin:0 auto;display:block;">
+        <div id="qrZoomFallback" class="alert alert-warning d-none">QR generation failed</div>
+        <div id="qrZoomDesc" class="small text-muted mt-2">Item description</div>
+        <div id="qrZoomClass" class="mt-2"></div>
+      </div>
       <div class="modal-footer justify-content-center"><button class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
     </div>
   </div>
@@ -3042,7 +1958,6 @@ textarea[readonly].locked-input {
   </div>
 </div>
 
-<!-- Edit Requests Modal (warehouse) -->
 <div class="modal fade" id="editRequestsModal" tabindex="-1">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -3084,7 +1999,6 @@ textarea[readonly].locked-input {
   </div>
 </div>
 
-<!-- Edit Request Modal (production side — actual editing form) -->
 <div class="modal fade" id="editRequestModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
@@ -3164,11 +2078,6 @@ textarea[readonly].locked-input {
 <div id="mrrPrintOnly" class="d-none"></div>
 <div id="qrImageDecoder" style="display:none;"></div>
 
-<!-- ═══════════════════════════════════════════════════════════════
-     PRINT-ONLY VIEW (hidden by default; only shown when
-     ?view=print is present in the URL — this is a public, read-only
-     preview that anyone with the printed QR code can open.
-     ═══════════════════════════════════════════════════════════════ -->
 <div id="printOnlyView" class="d-none">
   <div class="print-only-toolbar d-print-none">
     <div>
@@ -3205,7 +2114,7 @@ textarea[readonly].locked-input {
 </script>
 
 <script defer src="/GEMCORQR/js/supabase-config.js?v=1.0.0"></script>
-<script defer src="/GEMCORQR/js/supabase-api.js?v=1.0.0"></script>  
+<script defer src="/GEMCORQR/js/supabase-api.js?v=1.0.0"></script>
 <script defer src="/GEMCORQR/js/config.js?v=3.4.0"></script>
 <script defer src="/GEMCORQR/js/net.js?v=3.4.0"></script>
 <script defer src="/GEMCORQR/js/cache.js?v=3.4.0"></script>
@@ -3218,7 +2127,7 @@ textarea[readonly].locked-input {
 <script defer src="/GEMCORQR/js/inventory.js?v=4.0.0"></script>
 <script defer src="/GEMCORQR/js/prints.js?v=5.0.0"></script>
 <script defer src="/GEMCORQR/js/notifications.js?v=7.0.0"></script>
-<script defer src="/GEMCORQR/js/analytics.js?v=7.0.0"></script>
+<script defer src="/GEMCORQR/js/analytics.js?v=3.0.0"></script>
 <script defer src="/GEMCORQR/js/history.js?v=3.4.0"></script>
 <script defer src="/GEMCORQR/js/pending.js?v=3.7.0"></script>
 <script defer src="/GEMCORQR/js/chat.js?v=3.4.0"></script>
