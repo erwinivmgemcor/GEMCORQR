@@ -71,21 +71,30 @@ function initRole() {
 }
 
 async function preloadWarehouseLists() {
-  try {
-    Promise.allSettled([
-      loadRequestInventory(false),
-      loadVendorList(false),
-      loadIvmTeamList(false)
-    ]).then(function() {
-      var prev = state.currentModule;
-      state.currentModule = 'MRIF'; fetchPendingDocs(false).catch(function() {});
-      state.currentModule = 'MRR';  fetchPendingDocs(false).catch(function() {});
-      state.currentModule = 'MRS';  fetchPendingDocs(false).catch(function() {});
-      state.currentModule = prev;
-    });
-  } catch(e) {
-    console.warn('[Preload] Failed:', e);
-  }
+  // ★ Load essentials FIRST (inventory + vendors needed for new requests)
+  // Then load documents in background with delays
+  
+  // 1. Critical for opening the app
+  Promise.allSettled([
+    loadRequestInventory(false),
+    loadVendorList(false)
+  ]).then(function() {
+    console.log('[Preload] Essentials loaded');
+  });
+
+  // 2. Defer IVM team (only needed for Manual MRR modal)
+  setTimeout(function() {
+    loadIvmTeamList(false).catch(function() {});
+  }, 5000);
+
+  // 3. Defer pending docs (only needed when user navigates to module)
+  // Skip loading all 3 at once — only load current module
+  setTimeout(function() {
+    var prev = state.currentModule;
+    state.currentModule = 'MRIF';
+    fetchPendingDocs(false).catch(function() {});
+    state.currentModule = prev;
+  }, 3000);
 }
 
 function selectRole(role) {
