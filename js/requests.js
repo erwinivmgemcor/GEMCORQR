@@ -1,6 +1,7 @@
 // ============================================================
 // NEW REQUEST FUNCTIONS
-// v5 — Requestor locked to login + Robust QR scan matching
+// v6 — Requestor locked to login + Robust QR scan matching
+//      + New Request (No JO) standalone requests
 // ============================================================
 
 if (typeof state !== 'undefined' && state._reqIdemKey === undefined) {
@@ -166,7 +167,6 @@ function goToStep(step) {
   if (step === 4) populateReviewData();
   if (step === 6) populateFinalReview();
 
-  // ★ NEW: Ensure inventory list is loaded before scanning in step 5
   if (step === 5) {
     if (typeof state !== 'undefined' && (!state.requestInventoryList || state.requestInventoryList.length === 0)) {
       loadRequestInventory().then(function() {
@@ -352,7 +352,6 @@ function openWizardScanner(rowIndex) {
   closeWizardScanner();
   wizardScannerRowIndex = rowIndex;
 
-  // ★ Ensure inventory list is loaded BEFORE opening the scanner
   if (typeof state !== 'undefined' && (!state.requestInventoryList || state.requestInventoryList.length === 0)) {
     showLoading('Loading inventory...');
     loadRequestInventory().then(function() {
@@ -389,40 +388,23 @@ function closeWizardScanner() {
   wizardScannerRowIndex = null;
 }
 
-// ─── Extract a clean item code from any QR payload ───
 function _extractItemCode(decodedText) {
   if (!decodedText) return '';
-
   var raw = String(decodedText).trim();
-
-  // Strip surrounding quotes or whitespace artifacts
   raw = raw.replace(/^["'\s]+|["'\s]+$/g, '');
-
-  // Case 1: URL with ?code= or ?item= parameter (some QR generators)
   var urlMatch = raw.match(/[?&](?:code|item|id|inventory)=([^&\s]+)/i);
-  if (urlMatch) {
-    return decodeURIComponent(urlMatch[1]).trim();
-  }
-
-  // Case 2: Full WMS URL with ?doc= — NOT an item, ignore
-  if (/[?&]doc=/i.test(raw)) {
-    return ''; // treated as document QR, not item
-  }
-
-  // Case 3: Just the raw code (most common)
+  if (urlMatch) return decodeURIComponent(urlMatch[1]).trim();
+  if (/[?&]doc=/i.test(raw)) return '';
   return raw;
 }
 
-// ─── Score an inventory item against a scanned code ───
 function _findInventoryMatch(scannedCode) {
   var code = String(scannedCode || '').trim();
   if (!code) return null;
-
   var codeUpper = code.toUpperCase();
   var list = (typeof state !== 'undefined' && state.requestInventoryList) ? state.requestInventoryList : [];
   if (!list.length) return null;
 
-  // Pass 1: Exact match (case-insensitive), checking all common field names
   for (var i = 0; i < list.length; i++) {
     var it = list[i];
     var idCandidates = [it.inventoryId, it.code, it.itemCode, it.id];
@@ -432,7 +414,6 @@ function _findInventoryMatch(scannedCode) {
     }
   }
 
-  // Pass 2: Partial match — scanned code contains item code or vice versa
   for (var j = 0; j < list.length; j++) {
     var it2 = list[j];
     var idCandidates2 = [it2.inventoryId, it2.code, it2.itemCode, it2.id];
@@ -450,7 +431,6 @@ function _findInventoryMatch(scannedCode) {
 function onWizardScanSuccess(decodedText) {
   console.log('[WizardScan] Decoded:', decodedText);
 
-  // Extract item code from payload
   var extracted = _extractItemCode(decodedText);
   if (!extracted) {
     closeWizardScanner();
@@ -466,7 +446,6 @@ function onWizardScanSuccess(decodedText) {
 
   var matchedItem = _findInventoryMatch(extracted);
 
-  // ─── Find the target row and its inputs ───
   var row = document.querySelector('#step5ItemsContainer .step5-item-row:nth-child(' + (idx + 1) + ')');
   if (!row) {
     closeWizardScanner();
@@ -481,11 +460,9 @@ function onWizardScanSuccess(decodedText) {
   var dropdown = document.getElementById('step5Dropdown' + idx);
   if (dropdown) dropdown.classList.add('d-none');
 
-  // ─── Close scanner BEFORE filling (avoids race on mobile) ───
   closeWizardScanner();
 
   if (matchedItem) {
-    // Fill everything from the matched inventory item
     var code = matchedItem.inventoryId || matchedItem.code || matchedItem.itemCode || '';
     var desc = matchedItem.description || '';
     var unit = matchedItem.unit || 'PIECE';
@@ -494,7 +471,6 @@ function onWizardScanSuccess(decodedText) {
     if (codeInput) codeInput.value = code;
     if (descInput) descInput.value = desc;
 
-    // Set unit dropdown
     if (unitSelect) {
       var found = false;
       for (var opt = 0; opt < unitSelect.options.length; opt++) {
@@ -505,7 +481,6 @@ function onWizardScanSuccess(decodedText) {
         }
       }
       if (!found) {
-        // Add the unit as a temporary option if not in the standard list
         var newOpt = document.createElement('option');
         newOpt.value = unit;
         newOpt.textContent = unit;
@@ -518,14 +493,12 @@ function onWizardScanSuccess(decodedText) {
     playSuccessBeep();
     showToast('✅ ' + code + ' filled in', 'success');
 
-    // Auto-focus the qty field so the user can immediately type
     setTimeout(function() {
       var qtyInput = row.querySelector('.req-qty');
       if (qtyInput) { qtyInput.focus(); qtyInput.select(); }
     }, 250);
 
   } else {
-    // Not found — still fill what we can, let the user edit manually
     if (searchInput) searchInput.value = extracted;
     if (codeInput) codeInput.value = extracted;
     if (descInput) descInput.value = '';
@@ -534,7 +507,6 @@ function onWizardScanSuccess(decodedText) {
     playErrorBuzz();
     showToast('⚠️ Code "' + extracted + '" not in inventory. Type the description manually.', 'warning', 6000);
 
-    // Focus the search input so user can see what was filled
     setTimeout(function() {
       if (searchInput) searchInput.focus();
     }, 250);
@@ -581,14 +553,14 @@ async function submitNewRequest() {
   }
 
   var items = [];
-document.querySelectorAll('#step5ItemsContainer .step5-item-row').forEach(function(row) {
-  var code = row.querySelector('.req-item-code').value;
-  var desc = row.querySelector('.req-item-desc').value;
-  var qty = parseFloat(row.querySelector('.req-qty').value);
-  var unit = row.querySelector('.req-unit').value || 'PIECE';
-  var remarks = row.querySelector('.req-remarks').value || '';
-  if (code && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty, unit: unit, remarks: remarks });
-});
+  document.querySelectorAll('#step5ItemsContainer .step5-item-row').forEach(function(row) {
+    var code = row.querySelector('.req-item-code').value;
+    var desc = row.querySelector('.req-item-desc').value;
+    var qty = parseFloat(row.querySelector('.req-qty').value);
+    var unit = row.querySelector('.req-unit').value || 'PIECE';
+    var remarks = row.querySelector('.req-remarks').value || '';
+    if (code && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty, unit: unit, remarks: remarks });
+  });
 
   if (items.length === 0) { showToast('Add at least one item', 'warning'); _resetSubmitState(submitBtn, origHtml); return; }
 
@@ -754,21 +726,22 @@ async function loadMyRequests() {
   if (!requestor) return;
   showLoading('Loading requests...');
   try {
-   var data;
-if (typeof sbGetMyRequests === 'function') {
-  data = await sbGetMyRequests(requestor);
-} else {
-  var url = API_URL + '?action=getMyRequests&requestor=' + encodeURIComponent(requestor) + '&_t=' + Date.now();
-  var res = await fetch(url);
-  var text = await res.text();
-  var trimmed = String(text || '').trim();
-  if (!trimmed || trimmed.charAt(0) === '<') {
-    var listEl = document.getElementById('myRequestsList');
-    if (listEl) listEl.innerHTML = '<div class="list-group-item text-warning text-center py-3">Server unavailable.</div>';
-    return;
-  }
-  data = JSON.parse(trimmed);
-}
+    var data;
+    if (typeof sbGetMyRequests === 'function') {
+      data = await sbGetMyRequests(requestor);
+    } else {
+      var url = API_URL + '?action=getMyRequests&requestor=' + encodeURIComponent(requestor) + '&_t=' + Date.now();
+      var res = await fetch(url);
+      var text = await res.text();
+      var trimmed = String(text || '').trim();
+      if (!trimmed || trimmed.charAt(0) === '<') {
+        var listEl = document.getElementById('myRequestsList');
+        if (listEl) listEl.innerHTML = '<div class="list-group-item text-warning text-center py-3">Server unavailable.</div>';
+        return;
+      }
+      data = JSON.parse(trimmed);
+    }
+
     if (data.success && data.requests) {
       data.requests = data.requests.filter(function(req) {
         var t = (req.type || '').toUpperCase();
@@ -885,15 +858,19 @@ async function openRequestDetails(docNo, docType) {
   var bsModal = new bootstrap.Modal(modal);
   bsModal.show();
   try {
-    var sheetKey = 'sheetId_' + (docType || 'MRIF');
-    var sheetIdVal = localStorage.getItem(sheetKey);
-    var sheetIdClean = sheetIdVal ? extractSheetId(sheetIdVal) : '';
-    var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
-              '&docType=' + (docType || 'MRIF') + '&sheetId=' + encodeURIComponent(sheetIdClean) + '&_t=' + Date.now();
-    var res = await fetch(url, { redirect: 'follow' });
-    var text = await res.text();
     var data;
-    try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+    if (typeof sbGetDocItems === 'function') {
+      data = await sbGetDocItems(docNo, docType || 'MRIF');
+    } else {
+      var sheetKey = 'sheetId_' + (docType || 'MRIF');
+      var sheetIdVal = localStorage.getItem(sheetKey);
+      var sheetIdClean = sheetIdVal ? extractSheetId(sheetIdVal) : '';
+      var url = API_URL + '?action=getDocItems&docNo=' + encodeURIComponent(docNo) +
+                '&docType=' + (docType || 'MRIF') + '&sheetId=' + encodeURIComponent(sheetIdClean) + '&_t=' + Date.now();
+      var res = await fetch(url, { redirect: 'follow' });
+      var text = await res.text();
+      try { data = JSON.parse(text); } catch(e) { throw new Error('Invalid response'); }
+    }
     if (!data.success) throw new Error(data.error || 'Failed to load request');
     var info = data.info || {};
     var items = data.items || [];
@@ -1035,8 +1012,8 @@ function renderManualMrifItems() {
         '<input type="hidden" class="manual-mrif-desc" id="manualMrifDesc' + i + '" value="' + (it.description || '') + '">' +
       '</div></td>' +
       '<td><input type="text" class="form-control form-control-sm" value="' + (it.description || '') + '" onchange="updateManualMrifItem(' + i + ', \'description\', this.value)" placeholder="Description"></td>' +
-     '<td><input type="number" class="form-control form-control-sm text-center" value="' + (it.qty || 1) + '" onchange="updateManualMrifItem(' + i + ', \'qty\', parseFloat(this.value)||0)" min="0" step="0.01"></td>' +
-'<td><input type="number" class="form-control form-control-sm text-center" value="' + (it.atlQty || 0) + '" onchange="updateManualMrifItem(' + i + ', \'atlQty\', parseFloat(this.value)||0)" min="0" step="0.01"></td>' +
+      '<td><input type="number" class="form-control form-control-sm text-center" value="' + (it.qty || 1) + '" onchange="updateManualMrifItem(' + i + ', \'qty\', parseFloat(this.value)||0)" min="0" step="0.01"></td>' +
+      '<td><input type="number" class="form-control form-control-sm text-center" value="' + (it.atlQty || 0) + '" onchange="updateManualMrifItem(' + i + ', \'atlQty\', parseFloat(this.value)||0)" min="0" step="0.01"></td>' +
       '<td><select class="form-select form-select-sm manual-mrif-unit" onchange="updateManualMrifItem(' + i + ', \'unit\', this.value)">' + buildUnitOptions(it.unit || 'PIECE') + '</select></td>' +
       '<td><input type="text" class="form-control form-control-sm" value="' + (it.remarks || '') + '" onchange="updateManualMrifItem(' + i + ', \'remarks\', this.value)" placeholder="Remarks" maxlength="200"></td>' +
       '<td class="align-middle text-center"><button class="btn btn-sm btn-outline-danger" onclick="removeManualMrifItem(' + i + ')" title="Remove"><i class="bi bi-trash"></i></button></td>' +
@@ -1167,8 +1144,8 @@ async function submitManualMrif() {
       var remarksInput = rows[i].querySelector('td:nth-child(7) input');
       var code = codeInput ? codeInput.value.trim() : '';
       var desc = descInput ? descInput.value.trim() : '';
-     var qty = qtyInput ? parseFloat(qtyInput.value) : 0;
-var atl = atlInput ? parseFloat(atlInput.value) : 0;
+      var qty = qtyInput ? parseFloat(qtyInput.value) : 0;
+      var atl = atlInput ? parseFloat(atlInput.value) : 0;
       var unit = unitSelect ? unitSelect.value : 'PIECE';
       var remarks = remarksInput ? remarksInput.value.trim() : '';
       if (code && desc && qty > 0) items.push({ inventoryId: code, description: desc, qty: qty, atlQty: atl, unit: unit, remarks: remarks });
@@ -1215,7 +1192,9 @@ var atl = atlInput ? parseFloat(atlInput.value) : 0;
       btn.innerHTML = origHtml || '<i class="bi bi-check-circle me-1"></i>Create MRIF';
     }
   }
-  // =============================================================================
+}
+
+// =============================================================================
 // NEW REQUEST (NO JO) — standalone request without Job Order
 // =============================================================================
 
@@ -1223,47 +1202,69 @@ var _noJoItems = [];
 var _noJoModal = null;
 
 window.openNewRequestNoJO = function() {
-  // Reset state
+  console.log('[NoJO] Opening modal...');
+
   _noJoItems = [];
-  document.getElementById('noJoDocType').value = '';
-  document.getElementById('noJoJoNo').value = '';
-  document.getElementById('noJoGemSoNo').value = '';
-  document.getElementById('noJoClientName').value = '';
-  document.getElementById('noJoProject').value = '';
+  var el;
 
-  // Un-select doc type cards
-  document.querySelectorAll('#noJoDocTypeMRIF, #noJoDocTypeMRS').forEach(function(el) {
-    el.classList.remove('selected');
-  });
+  el = document.getElementById('noJoDocType');
+  if (el) el.value = '';
+  el = document.getElementById('noJoJoNo');
+  if (el) el.value = '';
+  el = document.getElementById('noJoGemSoNo');
+  if (el) el.value = '';
+  el = document.getElementById('noJoClientName');
+  if (el) el.value = '';
+  el = document.getElementById('noJoProject');
+  if (el) el.value = '';
 
-  // Lock requestor/department to login user
-  var locked = _getLockedRequestor();
-  document.getElementById('noJoRequestorDisplay').textContent = locked.name || '(missing)';
-  document.getElementById('noJoDepartmentDisplay').textContent = locked.department || '(not set — contact admin)';
-  document.getElementById('noJoRequestor').value = locked.name || '';
-  document.getElementById('noJoDepartment').value = locked.department || '';
+  var cardMRIF = document.getElementById('noJoDocTypeMRIF');
+  var cardMRS = document.getElementById('noJoDocTypeMRS');
+  if (cardMRIF) cardMRIF.classList.remove('selected');
+  if (cardMRS) cardMRS.classList.remove('selected');
 
-  // Reset items
-  renderNoJoItems();
+  var locked = (typeof _getLockedRequestor === 'function') ? _getLockedRequestor() : { name: '', department: '' };
+  var reqDisp = document.getElementById('noJoRequestorDisplay');
+  var deptDisp = document.getElementById('noJoDepartmentDisplay');
+  var reqHidden = document.getElementById('noJoRequestor');
+  var deptHidden = document.getElementById('noJoDepartment');
 
-  // Ensure inventory list is loaded
-  if (typeof loadRequestInventory === 'function' && (!state.requestInventoryList || state.requestInventoryList.length === 0)) {
-    loadRequestInventory().catch(function() {});
+  if (reqDisp) reqDisp.textContent = locked.name || '(missing)';
+  if (deptDisp) deptDisp.textContent = locked.department || '(not set — contact admin)';
+  if (reqHidden) reqHidden.value = locked.name || '';
+  if (deptHidden) deptHidden.value = locked.department || '';
+
+  if (typeof renderNoJoItems === 'function') renderNoJoItems();
+
+  if (typeof loadRequestInventory === 'function' && typeof state !== 'undefined') {
+    if (!state.requestInventoryList || state.requestInventoryList.length === 0) {
+      loadRequestInventory().catch(function() {});
+    }
   }
 
-  // Show modal
+  var modalEl = document.getElementById('newRequestNoJoModal');
+  if (!modalEl) {
+    console.error('[NoJO] Modal element not found!');
+    if (typeof showToast === 'function') showToast('Modal not found. Please refresh.', 'danger');
+    return;
+  }
+
   if (!_noJoModal) {
-    _noJoModal = new bootstrap.Modal(document.getElementById('newRequestNoJoModal'));
+    _noJoModal = new bootstrap.Modal(modalEl);
   }
   _noJoModal.show();
+  console.log('[NoJO] Modal shown');
 };
 
 window.selectNoJoDocType = function(type) {
-  document.getElementById('noJoDocType').value = type;
-  document.querySelectorAll('#noJoDocTypeMRIF, #noJoDocTypeMRS').forEach(function(el) {
-    el.classList.remove('selected');
-  });
-  document.getElementById('noJoDocType' + type).classList.add('selected');
+  var el = document.getElementById('noJoDocType');
+  if (el) el.value = type;
+  var cardMRIF = document.getElementById('noJoDocTypeMRIF');
+  var cardMRS = document.getElementById('noJoDocTypeMRS');
+  if (cardMRIF) cardMRIF.classList.remove('selected');
+  if (cardMRS) cardMRS.classList.remove('selected');
+  var card = document.getElementById('noJoDocType' + type);
+  if (card) card.classList.add('selected');
 };
 
 window.addNoJoItem = function() {
@@ -1330,7 +1331,7 @@ window.renderNoJoItems = function() {
           '<div class="col-6 col-md-1">' +
             '<label class="form-label small fw-bold mb-1">Unit</label>' +
             '<select class="form-select no-jo-unit" onchange="updateNoJoItem(' + i + ', \'unit\', this.value)">' +
-              buildUnitOptions(it.unit || 'PIECE') +
+              (typeof buildUnitOptions === 'function' ? buildUnitOptions(it.unit || 'PIECE') : '<option>PIECE</option>') +
             '</select>' +
           '</div>' +
           '<div class="col-12 col-md-1">' +
@@ -1421,19 +1422,21 @@ window.selectNoJoItem = function(idx, code, desc, unit) {
 };
 
 window.submitNewRequestNoJo = async function() {
-  var docType = document.getElementById('noJoDocType').value;
+  var docTypeEl = document.getElementById('noJoDocType');
+  var docType = docTypeEl ? docTypeEl.value : '';
   if (!docType) { showToast('Please select document type (MRIF or MRS)', 'warning'); return; }
 
-  var requestor = document.getElementById('noJoRequestor').value;
-  var department = document.getElementById('noJoDepartment').value;
+  var reqEl = document.getElementById('noJoRequestor');
+  var deptEl = document.getElementById('noJoDepartment');
+  var requestor = reqEl ? reqEl.value : '';
+  var department = deptEl ? deptEl.value : '';
   if (!requestor) { showToast('Your account is missing a full name. Contact admin.', 'danger'); return; }
 
-  var joNo = document.getElementById('noJoJoNo').value.trim();
-  var gemSoNo = document.getElementById('noJoGemSoNo').value.trim();
-  var clientName = document.getElementById('noJoClientName').value.trim();
-  var project = document.getElementById('noJoProject').value.trim();
+  var joNo = document.getElementById('noJoJoNo') ? document.getElementById('noJoJoNo').value.trim() : '';
+  var gemSoNo = document.getElementById('noJoGemSoNo') ? document.getElementById('noJoGemSoNo').value.trim() : '';
+  var clientName = document.getElementById('noJoClientName') ? document.getElementById('noJoClientName').value.trim() : '';
+  var project = document.getElementById('noJoProject') ? document.getElementById('noJoProject').value.trim() : '';
 
-  // Collect items
   var items = [];
   var rows = document.querySelectorAll('#noJoItemsContainer .card');
   for (var i = 0; i < rows.length; i++) {
@@ -1498,4 +1501,5 @@ window.submitNewRequestNoJo = async function() {
     }
   }, 'Submitting...');
 };
-}
+
+console.log('✅ requests.js v6 loaded (with No JO feature)');
