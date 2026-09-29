@@ -601,11 +601,16 @@
     </div>
 
     <!-- MY REQUESTS -->
-    <div id="section-myrequests" class="section-page">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5><i class="bi bi-clock-history me-2"></i>My Requests</h5>
-        <span id="myRequestsBadgePage" class="badge bg-danger d-none">0</span>
-      </div>
+   <div id="section-myrequests" class="section-page">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5><i class="bi bi-clock-history me-2"></i>My Requests</h5>
+    <div class="d-flex gap-2 align-items-center">
+      <span id="myRequestsBadgePage" class="badge bg-danger d-none">0</span>
+      <button class="btn btn-sm btn-outline-primary" onclick="refreshMyRequests()" id="btnRefreshMyReq">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+      </button>
+    </div>
+  </div>
       <div class="card">
         <div class="card-body p-0">
           <div id="myRequestsListPage" class="list-group list-group-flush">
