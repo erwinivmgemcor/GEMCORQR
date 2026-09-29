@@ -1152,3 +1152,28 @@ window.forceSupabaseSync = async function() {
 };
 
 console.log('✅ main.js v7.1 loaded (forceSupabaseSync ready)');
+
+window.forceAppReload = function() {
+  if (!confirm('Force reload the app?\n\nThis will clear all caches and reload.')) return;
+  
+  try {
+    localStorage.clear();
+    sessionStorage.clear();
+    if ('caches' in window) {
+      caches.keys().then(function(keys) {
+        return Promise.all(keys.map(function(k) { return caches.delete(k); }));
+      });
+    }
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        return Promise.all(regs.map(function(r) { return r.unregister(); }));
+      }).then(function() {
+        window.location.reload(true);
+      });
+    } else {
+      window.location.reload(true);
+    }
+  } catch(e) {
+    alert('Reload failed: ' + e.message);
+  }
+};
