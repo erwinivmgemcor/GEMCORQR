@@ -1,8 +1,6 @@
 // ============================================================
 // WAREHOUSE NOTIFICATIONS
-// v5 — No safeFetch (plain fetch, no auto-abort)
-//      Partial modal uses plain fetch + native fetch timeout
-//      KPI client cache (60s) to reduce GAS hammering
+// v5 — plain fetch, no safeFetch, client-side modal cache
 // ============================================================
 
 (function() {
@@ -28,7 +26,6 @@
       .replace(/'/g, '&#39;');
   }
 
-  // ─── Internal: parse JSON safely, detect HTML ───
   async function _fetchJson(url, timeoutMs) {
     timeoutMs = timeoutMs || 90000;
     var ctrl = new AbortController();
@@ -47,7 +44,7 @@
   }
 
   // ═══════════════════════════════════════════════════════════
-  // KPI UPDATER — client cache (60s)
+  // KPI UPDATER
   // ═══════════════════════════════════════════════════════════
   window.updateWarehouseKPIs = async function() {
     try {
@@ -114,7 +111,7 @@
   };
 
   // ═══════════════════════════════════════════════════════════
-  // WAREHOUSE NOTIFICATIONS
+  // NOTIFICATIONS
   // ═══════════════════════════════════════════════════════════
   function processNotifications(requests) {
     if (!requests) requests = [];
@@ -313,6 +310,15 @@
   };
 
   async function _openPartialDocModal(docType) {
+    var cacheKey = 'partial_modal_' + docType;
+    if (typeof getCache === 'function') {
+      var cached = getCache(cacheKey);
+      if (cached && cached.success) {
+        renderPartialDocModal(docType, cached.documents || []);
+        return;
+      }
+    }
+
     showLoading('Loading partial ' + docType + 's...');
     try {
       var data = await _fetchJson(
@@ -327,111 +333,11 @@
         return;
       }
 
-      var docs = data.documents || [];
-      var modalId = 'partialDocModal_' + docType;
-      var existing = document.getElementById(modalId);
-      if (existing) existing.remove();
-
-      var headerClass = docType === 'MRR' ? 'bg-success text-white'
-                      : docType === 'MRIF' ? 'bg-warning text-dark'
-                      : 'bg-danger text-white';
-      var closeClass = docType === 'MRIF' ? '' : ' btn-close-white';
-      var headerIcon = docType === 'MRR' ? 'bi-box-arrow-in-down'
-                     : docType === 'MRIF' ? 'bi-box-arrow-up'
-                     : 'bi-arrow-counterclockwise';
-      var label = 'Partial ' + docType + 's';
-      var btnClass = docType === 'MRR' ? 'btn-success' : 'btn-warning';
-      var typeBadgeClass = docType === 'MRR' ? 'bg-success'
-                         : docType === 'MRIF' ? 'bg-warning text-dark'
-                         : 'bg-danger';
-
-      var html = '<div class="modal fade" id="' + modalId + '" tabindex="-1">' +
-        '<div class="modal-dialog modal-lg modal-dialog-scrollable">' +
-          '<div class="modal-content">' +
-            '<div class="modal-header ' + headerClass + '">' +
-              '<h5 class="modal-title"><i class="bi ' + headerIcon + ' me-2"></i>' +
-                label + ' (' + docs.length + ')</h5>' +
-              '<button type="button" class="btn-close' + closeClass + '" data-bs-dismiss="modal"></button>' +
-            '</div>' +
-            '<div class="modal-body p-0">';
-
-      if (docs.length === 0) {
-        html += '<div class="text-center text-muted py-5">' +
-          '<i class="bi bi-check-circle fs-1 d-block mb-2 text-success"></i>' +
-          '<div>No partial ' + docType + 's found.</div>' +
-          '<div class="small mt-1">All ' + docType + ' documents are either fully processed or pending.</div>' +
-          '</div>';
-      } else {
-        html += '<div class="list-group list-group-flush">';
-        docs.forEach(function(d) {
-          var docNo = String(d.docNo || '');
-          var docNoSafe = _esc(docNo);
-          var docNoJs = docNo.replace(/'/g, "\\'");
-          var balTag = d.isBal ? ' <span class="badge bg-info text-dark">BAL</span>' : '';
-          var subtitleParts = [];
-          if (d.poNo) subtitleParts.push('PO: ' + d.poNo);
-          if (d.vendor) subtitleParts.push('Vendor: ' + d.vendor);
-          if (d.drNo) subtitleParts.push('DR: ' + d.drNo);
-          if (d.joNo) subtitleParts.push('JO: ' + d.joNo);
-          if (d.gemSoNo) subtitleParts.push('GEM SO: ' + d.gemSoNo);
-          if (d.requestor) subtitleParts.push(d.requestor);
-          var subtitle = _esc(subtitleParts.join(' · '));
-          var dateStr = '';
-          var dateRaw = d.receivingDate || d.datePrepared || '';
-          if (dateRaw) {
-            try { dateStr = new Date(dateRaw).toLocaleDateString(); } catch(e) { dateStr = String(dateRaw); }
-          }
-          var partialCount = d.partialItems != null ? d.partialItems : 0;
-          var totalItems = d.totalItems != null ? d.totalItems : 0;
-          var servedCount = d.servedItems != null ? d.servedItems : 0;
-
-          html += '<div class="list-group-item">' +
-            '<div class="d-flex justify-content-between align-items-start flex-wrap gap-2">' +
-              '<div class="flex-grow-1" style="min-width:0;">' +
-                '<div class="fw-bold">' + docNoSafe +
-                  ' <span class="badge ' + typeBadgeClass + '">' + docType + '</span>' +
-                  balTag +
-                  ' <span class="badge bg-danger">' + partialCount + ' partial</span>' +
-                  (servedCount > 0 ? ' <span class="badge bg-success">' + servedCount + ' served</span>' : '') +
-                  ' <span class="badge bg-secondary">' + totalItems + ' total</span>' +
-                '</div>' +
-                (subtitle ? '<div class="small text-muted mt-1">' + subtitle + '</div>' : '') +
-                (dateStr ? '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + _esc(dateStr) + '</div>' : '') +
-                '<div class="small mt-1"><i class="bi bi-box me-1"></i>Total remaining: <strong>' + (d.remainingQty || 0) + '</strong></div>' +
-                (d.firstItemCode ? '<div class="small text-muted"><i class="bi bi-info-circle me-1"></i>First partial: <code>' + _esc(d.firstItemCode) + '</code></div>' : '') +
-              '</div>' +
-              '<div class="d-flex flex-column gap-1 flex-shrink-0">' +
-                '<button class="btn btn-sm ' + btnClass + '" ' +
-                  'onclick="closePartialDocModal(\'' + docType + '\');processPartialDoc(\'' + docNoJs + '\', \'' + docType + '\')">' +
-                  '<i class="bi bi-arrow-right-circle me-1"></i>Process' +
-                '</button>' +
-              '</div>' +
-            '</div>' +
-          '</div>';
-        });
-        html += '</div>';
+      if (typeof setCache === 'function') {
+        setCache(cacheKey, data, 60000);
       }
 
-      html += '</div>' +
-            '<div class="modal-footer">' +
-              '<button class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>' +
-            '</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
-
-      var wrapper = document.createElement('div');
-      wrapper.innerHTML = html;
-      document.body.appendChild(wrapper.firstChild);
-
-      var modalEl = document.getElementById(modalId);
-      var bsModal = new bootstrap.Modal(modalEl);
-      bsModal.show();
-
-      modalEl.addEventListener('hidden.bs.modal', function() {
-        modalEl.remove();
-      });
-
+      renderPartialDocModal(docType, data.documents || []);
     } catch (err) {
       hideLoading();
       if (err.name === 'AbortError') {
@@ -445,6 +351,112 @@
     }
   }
 
+  function renderPartialDocModal(docType, docs) {
+    var modalId = 'partialDocModal_' + docType;
+    var existing = document.getElementById(modalId);
+    if (existing) existing.remove();
+
+    var headerClass = docType === 'MRR' ? 'bg-success text-white'
+                    : docType === 'MRIF' ? 'bg-warning text-dark'
+                    : 'bg-danger text-white';
+    var closeClass = docType === 'MRIF' ? '' : ' btn-close-white';
+    var headerIcon = docType === 'MRR' ? 'bi-box-arrow-in-down'
+                   : docType === 'MRIF' ? 'bi-box-arrow-up'
+                   : 'bi-arrow-counterclockwise';
+    var label = 'Partial ' + docType + 's';
+    var btnClass = docType === 'MRR' ? 'btn-success' : 'btn-warning';
+    var typeBadgeClass = docType === 'MRR' ? 'bg-success'
+                       : docType === 'MRIF' ? 'bg-warning text-dark'
+                       : 'bg-danger';
+
+    var html = '<div class="modal fade" id="' + modalId + '" tabindex="-1">' +
+      '<div class="modal-dialog modal-lg modal-dialog-scrollable">' +
+        '<div class="modal-content">' +
+          '<div class="modal-header ' + headerClass + '">' +
+            '<h5 class="modal-title"><i class="bi ' + headerIcon + ' me-2"></i>' +
+              label + ' (' + docs.length + ')</h5>' +
+            '<button type="button" class="btn-close' + closeClass + '" data-bs-dismiss="modal"></button>' +
+          '</div>' +
+          '<div class="modal-body p-0">';
+
+    if (docs.length === 0) {
+      html += '<div class="text-center text-muted py-5">' +
+        '<i class="bi bi-check-circle fs-1 d-block mb-2 text-success"></i>' +
+        '<div>No partial ' + docType + 's found.</div>' +
+        '<div class="small mt-1">All ' + docType + ' documents are either fully processed or pending.</div>' +
+        '</div>';
+    } else {
+      html += '<div class="list-group list-group-flush">';
+      docs.forEach(function(d) {
+        var docNo = String(d.docNo || '');
+        var docNoSafe = _esc(docNo);
+        var docNoJs = docNo.replace(/'/g, "\\'");
+        var balTag = d.isBal ? ' <span class="badge bg-info text-dark">BAL</span>' : '';
+        var subtitleParts = [];
+        if (d.poNo) subtitleParts.push('PO: ' + d.poNo);
+        if (d.vendor) subtitleParts.push('Vendor: ' + d.vendor);
+        if (d.drNo) subtitleParts.push('DR: ' + d.drNo);
+        if (d.joNo) subtitleParts.push('JO: ' + d.joNo);
+        if (d.gemSoNo) subtitleParts.push('GEM SO: ' + d.gemSoNo);
+        if (d.requestor) subtitleParts.push(d.requestor);
+        var subtitle = _esc(subtitleParts.join(' · '));
+        var dateStr = '';
+        var dateRaw = d.receivingDate || d.datePrepared || '';
+        if (dateRaw) {
+          try { dateStr = new Date(dateRaw).toLocaleDateString(); } catch(e) { dateStr = String(dateRaw); }
+        }
+        var partialCount = d.partialItems != null ? d.partialItems : 0;
+        var totalItems = d.totalItems != null ? d.totalItems : 0;
+        var servedCount = d.servedItems != null ? d.servedItems : 0;
+
+        html += '<div class="list-group-item">' +
+          '<div class="d-flex justify-content-between align-items-start flex-wrap gap-2">' +
+            '<div class="flex-grow-1" style="min-width:0;">' +
+              '<div class="fw-bold">' + docNoSafe +
+                ' <span class="badge ' + typeBadgeClass + '">' + docType + '</span>' +
+                balTag +
+                ' <span class="badge bg-danger">' + partialCount + ' partial</span>' +
+                (servedCount > 0 ? ' <span class="badge bg-success">' + servedCount + ' served</span>' : '') +
+                ' <span class="badge bg-secondary">' + totalItems + ' total</span>' +
+              '</div>' +
+              (subtitle ? '<div class="small text-muted mt-1">' + subtitle + '</div>' : '') +
+              (dateStr ? '<div class="small text-muted"><i class="bi bi-calendar me-1"></i>' + _esc(dateStr) + '</div>' : '') +
+              '<div class="small mt-1"><i class="bi bi-box me-1"></i>Total remaining: <strong>' + (d.remainingQty || 0) + '</strong></div>' +
+              (d.firstItemCode ? '<div class="small text-muted"><i class="bi bi-info-circle me-1"></i>First partial: <code>' + _esc(d.firstItemCode) + '</code></div>' : '') +
+            '</div>' +
+            '<div class="d-flex flex-column gap-1 flex-shrink-0">' +
+              '<button class="btn btn-sm ' + btnClass + '" ' +
+                'onclick="closePartialDocModal(\'' + docType + '\');processPartialDoc(\'' + docNoJs + '\', \'' + docType + '\')">' +
+                '<i class="bi bi-arrow-right-circle me-1"></i>Process' +
+              '</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+    }
+
+    html += '</div>' +
+          '<div class="modal-footer">' +
+            '<button class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+    var wrapper = document.createElement('div');
+    wrapper.innerHTML = html;
+    document.body.appendChild(wrapper.firstChild);
+
+    var modalEl = document.getElementById(modalId);
+    var bsModal = new bootstrap.Modal(modalEl);
+    bsModal.show();
+
+    modalEl.addEventListener('hidden.bs.modal', function() {
+      modalEl.remove();
+    });
+  }
+
   window.closePartialDocModal = function(docType) {
     var modalEl = document.getElementById('partialDocModal_' + docType);
     if (modalEl) {
@@ -455,6 +467,14 @@
 
   window.processPartialDoc = function(docNo, docType) {
     if (!docNo || !docType) return;
+
+    if (typeof clearCache === 'function') {
+      clearCache('partial_modal_MRIF');
+      clearCache('partial_modal_MRR');
+      clearCache('kpi_partial_MRIF');
+      clearCache('kpi_partial_MRR');
+    }
+
     if (docType === 'MRR') {
       if (typeof prefillManualMrrFromDoc === 'function') prefillManualMrrFromDoc(docNo);
       else showToast('Manual MRR form not available', 'danger');
@@ -471,5 +491,5 @@
     if (typeof window.openPartialMrifModal === 'function') return window.openPartialMrifModal();
   };
 
-  console.log('✅ notifications.js loaded (v5 — plain fetch, no auto-abort)');
+  console.log('✅ notifications.js loaded (v5 — plain fetch)');
 })();
