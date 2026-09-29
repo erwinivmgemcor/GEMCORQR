@@ -1,6 +1,7 @@
 // ============================================================
 // MAIN - DOM Ready & Initialization
-// v5 — All Requests: Partial + Today default filter (persisted)
+// v6 — All Requests: "Today + All Partials" default
+//      Fixed: fetch includeCompleted when 'today_and_partial'
 //      Removed duplicate openPartialMrrModal (handled by notifications.js)
 // ============================================================
 
@@ -153,14 +154,11 @@ function toggleSidebar(open) {
 }
 
 // ─── Edit request action button helper ───
-// docStatus (optional): current document status. If provided and NOT 'PENDING',
-//   the edit button is replaced with a lock chip. Only PENDING docs are editable.
 function _editActionButtonHtml(docNo, docType, docStatus) {
   var safeDoc = String(docNo).replace(/'/g, "\\'");
   var safeType = String(docType || 'MRIF').replace(/'/g, "\\'");
   var statusUpper = String(docStatus || '').toUpperCase();
 
-  // If we know the doc status, gate on it first.
   if (statusUpper && statusUpper !== 'PENDING') {
     if (statusUpper === 'COMPLETED') {
       return '<span class="btn btn-sm btn-outline-success disabled" title="This document is fully processed — no more edits allowed">' +
@@ -177,11 +175,9 @@ function _editActionButtonHtml(docNo, docType, docStatus) {
     '</span>';
   }
 
-  // From here down, docStatus was blank OR 'PENDING'.
   var map = window._editReqMap || {};
   var entry = map[docNo] || map[String(docNo || '').toUpperCase()];
 
-  // If the map has a status but no doc-specific entry (unlikely), bail.
   if (entry && typeof entry === 'object' && !entry.status) entry = null;
 
   if (!entry) {
@@ -213,7 +209,6 @@ function _editActionButtonHtml(docNo, docType, docStatus) {
   return '';
 }
 
-// ─── Refresh just the edit-status portion of the modal ───
 window.refreshEditStatusInModal = async function(docNo, docType, docStatus) {
   var container = document.getElementById('editBtnContainer');
   if (!container) return;
@@ -247,9 +242,6 @@ window.refreshEditStatusInModal = async function(docNo, docType, docStatus) {
   }
 };
 
-// ─── My Request Details (also used by Warehouse All Requests view) ───
-// opts.warehouse = true   → shows Process Request button instead of edit
-// opts.status    = current doc status ('PENDING'|'PARTIAL'|'COMPLETED')
 window.openMyRequestDetails = async function(docNo, docType, opts) {
   opts = opts || {};
   var isWarehouseView = opts.warehouse === true;
@@ -273,7 +265,6 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
   content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><div class="text-muted mt-2">Loading request details...</div></div>';
   modal.show();
 
-  // ─── ★ Always fetch fresh edit-request map for production users ───
   if (isWarehouseView) {
     window._editReqMap = {};
   } else {
@@ -286,7 +277,6 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
       var emText = await emRes.text();
       var emData = JSON.parse(emText);
       window._editReqMap = (emData && emData.success && emData.map) ? emData.map : {};
-      console.log('[EditReqMap] Loaded for', _reqUser, ':', window._editReqMap);
     } catch(e) {
       console.warn('[EditReqMap] Failed to load:', e);
       window._editReqMap = {};
@@ -386,15 +376,12 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
     '<i class="bi bi-chat-dots me-1"></i>Discuss' +
   '</button>';
 
-    if (isWarehouseView) {
+  if (isWarehouseView) {
     if (isCompletedDoc) {
       actionButtons += '<span class="btn btn-sm btn-outline-success disabled" title="This document is already fully processed">' +
         '<i class="bi bi-check-circle-fill me-1"></i>Completed' +
       '</span>';
     } else {
-      // ★ Warehouse: FULL EDIT AUTHORITY
-      //   - Can edit any PENDING doc directly (no approval needed)
-      //   - Can also process it in the scanner
       var statusUpper = String(docStatusRaw || '').toUpperCase();
       if (statusUpper === 'PENDING') {
         actionButtons += '<button class="btn btn-sm btn-outline-warning fw-bold" onclick="openWarehouseEditModal(\'' + jsDoc + '\', \'' + jsType + '\')">' +
@@ -406,7 +393,6 @@ window.openMyRequestDetails = async function(docNo, docType, opts) {
       '</button>';
     }
   } else {
-    // ★ Production side — wrap edit button in a container so refresh works
     actionButtons += '<span id="editBtnContainer">' + _editActionButtonHtml(docNo, docType || 'MRIF', docStatusRaw) + '</span>' +
       '<button class="btn btn-sm btn-outline-secondary" title="Refresh edit status" ' +
         'onclick="refreshEditStatusInModal(\'' + jsDoc + '\', \'' + jsType + '\', \'' + String(docStatusRaw || '').replace(/'/g, "\\'") + '\')">' +
@@ -461,7 +447,6 @@ window.downloadMyRequestQr = function() {
 };
 
 // ─── Render My Requests (production view) ───
-// Prep status shown ONLY for PENDING / PARTIAL docs. Completed docs show no prep badge.
 var originalRenderMyRequests = window.renderMyRequests || function() {};
 
 window.renderMyRequests = async function(requests) {
@@ -518,7 +503,6 @@ window.renderMyRequests = async function(requests) {
     var itemCode = _escMain(req.itemCode || '');
     var qty = parseInt(req.qty, 10) || 0;
 
-    // ★ Prep status only applies to active docs. Completed docs show no prep badge.
     var prepClass = '';
     var prepBadge = '';
     if (!isCompleted) {
@@ -553,7 +537,6 @@ window.renderMyRequests = async function(requests) {
   });
 };
 
-// ─── Wrappers ───
 var originalLoadMyRequests = window.loadMyRequests || function() {};
 window.loadMyRequests = function() {
   if (typeof originalLoadMyRequests === 'function') {
@@ -569,8 +552,8 @@ window.updateWarehouseKPIs = function() {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// ALL REQUESTS (Warehouse view — active + completed)
-// ★ v2 — Partial + Today filter (persisted), plus date-aware filters
+// ALL REQUESTS (Warehouse view)
+// ★ v3 — Fixed: "today_and_partial" now fetches completed docs
 // ═══════════════════════════════════════════════════════════════
 
 window.loadAllRequests = async function() {
@@ -591,14 +574,20 @@ window.loadAllRequests = async function() {
   }
 
   var filterRaw = typeEl ? typeEl.value : 'MRIF,MRS';
-   var statusFilter = statusEl ? statusEl.value : 'today_and_partial';
+  var statusFilter = statusEl ? statusEl.value : 'today_and_partial';
 
   // ★ Persist current choice
   try { localStorage.setItem('ivm_allReqStatusFilter', statusFilter); } catch(e) {}
 
   var allowedTypes = (filterRaw || 'MRIF,MRS').split(',').map(function(s) { return s.trim().toUpperCase(); });
 
-  var needCompleted = (statusFilter === 'all' || statusFilter === 'completed' || statusFilter === 'today');
+  // ★ CRITICAL FIX: today_and_partial needs completed docs from today
+  var needCompleted = (
+    statusFilter === 'all' ||
+    statusFilter === 'completed' ||
+    statusFilter === 'today' ||
+    statusFilter === 'today_and_partial'   // ← was missing before
+  );
 
   try {
     var url = API_URL + '?action=getAllPendingDocs&_t=' + Date.now();
@@ -613,7 +602,7 @@ window.loadAllRequests = async function() {
 
     var allDocs = data.documents || [];
 
-    // ─── Sidebar badge (active = pending + partial, regardless of date) ───
+    // ─── Sidebar badge (active = pending + partial) ───
     var activeCount = allDocs.filter(function(d) {
       var s = (d.status || 'PENDING').toUpperCase();
       return s === 'PENDING' || s === 'PARTIAL';
@@ -624,12 +613,12 @@ window.loadAllRequests = async function() {
       badge.classList.toggle('d-none', activeCount === 0);
     }
 
-       // ─── Prepare date boundaries for "today" ───
+    // ─── Today boundaries ───
     var now = new Date();
     var todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     var todayEnd = todayStart + 24 * 60 * 60 * 1000;
 
-    // ─── Filter docs ───
+    // ─── Filter ───
     var docs = allDocs.filter(function(d) {
       var t = (d.docType || '').toUpperCase();
       if (allowedTypes.indexOf(t) === -1) return false;
@@ -638,12 +627,10 @@ window.loadAllRequests = async function() {
       var ts = d.timestamp ? new Date(d.timestamp).getTime() : 0;
       var isToday = ts >= todayStart && ts < todayEnd;
 
-      // ★ DEFAULT VIEW: everything from today (any status)
-      //                + any PARTIAL from older dates
+      // ★ Default: everything from today (any status) + any partial from older dates
       if (statusFilter === 'today_and_partial') {
         return isToday || s === 'PARTIAL';
       }
-
       if (statusFilter === 'today') {
         return isToday;
       }
@@ -658,7 +645,8 @@ window.loadAllRequests = async function() {
       }
       return true; // 'all'
     });
-    // ─── Fetch prep statuses (only useful for active docs) ───
+
+    // ─── Fetch prep statuses ───
     var prepMap = {};
     if (statusFilter !== 'completed') {
       try {
@@ -671,7 +659,12 @@ window.loadAllRequests = async function() {
       } catch(e) { /* silent */ }
     }
 
+    // ─── Sort ───
     docs.sort(function(a, b) {
+      // Partials first
+      var sa = (a.status || '').toUpperCase() === 'PARTIAL' ? 0 : 1;
+      var sb = (b.status || '').toUpperCase() === 'PARTIAL' ? 0 : 1;
+      if (sa !== sb) return sa - sb;
       var ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
       var tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
       return tb - ta;
@@ -685,10 +678,6 @@ window.loadAllRequests = async function() {
   }
 };
 
-// ─── REMOVED duplicate openPartialMrrModal ───
-// The canonical version lives in notifications.js (loaded after main.js).
-// Keeping this comment as a breadcrumb for future refactors.
-
 function renderAllRequests(docs, statusFilter, prepMap) {
   var container = document.getElementById('allRequestsListPage');
   if (!container) return;
@@ -697,18 +686,18 @@ function renderAllRequests(docs, statusFilter, prepMap) {
   if (!docs || docs.length === 0) {
     var emptyMsg = 'No requests found.';
     var emptyHint = 'New requests from production will appear here automatically.';
-        if (statusFilter === 'today_and_partial') {
+    if (statusFilter === 'today_and_partial') {
       emptyMsg = 'No requests today and no partials pending. 🎉';
       emptyHint = 'Switch to "All Statuses" to see past work.';
+    } else if (statusFilter === 'today') {
+      emptyMsg = 'No requests submitted today.';
+      emptyHint = 'Try switching to "Today + All Partials" or "All Statuses".';
     } else if (statusFilter === 'partial') {
       emptyMsg = 'No partial requests at the moment.';
       emptyHint = 'Everything is either pending or completed.';
-    } else if (statusFilter === 'today') {
-      emptyMsg = 'No requests submitted today.';
-      emptyHint = 'Try switching to "Partial + Today" or "All Statuses".';
     } else if (statusFilter === 'active') {
       emptyMsg = 'No active requests right now.';
-      emptyHint = 'All requests have been processed. Switch the filter to "All Statuses" to review past work.';
+      emptyHint = 'All requests have been processed.';
     } else if (statusFilter === 'completed') {
       emptyMsg = 'No completed requests yet.';
       emptyHint = 'Processed requests will appear here once they are fully served.';
@@ -828,7 +817,6 @@ window.processRequestFromDetails = function(docNo, docType) {
   }, 300);
 };
 
-// ─── Test connection ───
 async function testConnection() {
   var resultDiv = document.getElementById('testResult');
   if (!resultDiv) return;
@@ -854,7 +842,6 @@ async function testConnection() {
   }
 }
 
-// ─── URL doc parameter ───
 function checkUrlDocParam() {
   var params = new URLSearchParams(window.location.search);
   var docNo = params.get('doc');
@@ -881,24 +868,20 @@ function checkUrlDocParam() {
   }
 }
 
-// ─── Warehouse: Edit any PENDING request directly (no approval needed) ───
 window.openWarehouseEditModal = async function(docNo, docType) {
   if (!docNo) return;
   docType = String(docType || 'MRIF').toUpperCase();
 
-  // Close the details modal first
   var detailsModal = document.getElementById('myRequestDetailsModal');
   if (detailsModal) {
     var dm = bootstrap.Modal.getInstance(detailsModal);
     if (dm) dm.hide();
   }
 
-  // Reuse the existing edit modal, but without the "Approved" banner
   var modalEl = document.getElementById('editRequestModal');
   if (!modalEl) { showToast('Edit modal not found', 'danger'); return; }
   var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
 
-  // Change header + banner text for warehouse
   var headerEl = document.getElementById('editReqHeader');
   if (headerEl) {
     headerEl.innerHTML = '<i class="bi bi-pencil-square me-2"></i>Editing ' +
@@ -906,7 +889,6 @@ window.openWarehouseEditModal = async function(docNo, docType) {
       ' <span class="badge bg-warning text-dark ms-1">Warehouse Edit</span>';
   }
 
-  // Replace the "Approved" banner
   var banner = modalEl.querySelector('.alert-warning');
   if (banner) {
     banner.className = 'alert alert-info small py-2';
@@ -914,13 +896,11 @@ window.openWarehouseEditModal = async function(docNo, docType) {
       'Warehouse can edit this document directly. Save your changes to update the sheet.';
   }
 
-  // Set hidden fields
   var elDocNo = document.getElementById('editReqDocNo');
   var elDocType = document.getElementById('editReqDocType');
   if (elDocNo) elDocNo.value = docNo;
   if (elDocType) elDocType.value = docType;
 
-  // Clear existing fields + show loading
   var tbody = document.getElementById('editReqItemsBody');
   if (tbody) {
     tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3">' +
@@ -928,7 +908,6 @@ window.openWarehouseEditModal = async function(docNo, docType) {
   }
   modal.show();
 
-  // Fetch the document items
   try {
     var sheetKey = 'sheetId_' + docType;
     var sheetIdVal = localStorage.getItem(sheetKey);
@@ -948,8 +927,6 @@ window.openWarehouseEditModal = async function(docNo, docType) {
     var info = data.info || {};
     var items = data.items || [];
 
-    // ★ Warehouse edit: keep the ORIGINAL requestor/department of the doc.
-    //   Do NOT overwrite with warehouse's own login name.
     var elReq = document.getElementById('editReqRequestor');
     var elDept = document.getElementById('editReqDepartment');
     if (elReq) {
@@ -970,7 +947,6 @@ window.openWarehouseEditModal = async function(docNo, docType) {
     document.getElementById('editReqClient').value = info['Client Name'] || info.clientName || '';
     document.getElementById('editReqProject').value = info.Project || info.project || '';
 
-    // Populate items into the edit modal
     if (typeof _editReqState !== 'undefined') {
       _editReqState.items = items.map(function(it) {
         return {
@@ -993,9 +969,7 @@ window.openWarehouseEditModal = async function(docNo, docType) {
   }
 };
 
-// ─── DOM Ready ───
 document.addEventListener('DOMContentLoaded', function() {
-  // ★ PRINT-ONLY MODE — must be the FIRST thing we check.
   var _urlParams = new URLSearchParams(window.location.search);
   var _urlDoc = _urlParams.get('doc');
   var _urlView = (_urlParams.get('view') || '').toLowerCase();
@@ -1093,10 +1067,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 });
-
-// ═══════════════════════════════════════════════════════════════
-// PRINT-ONLY MODE — public read-only view of a document
-// ═══════════════════════════════════════════════════════════════
 
 async function enterPrintOnlyMode(docNo) {
   var content = document.getElementById('printOnlyContent');
