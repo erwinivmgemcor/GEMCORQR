@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gemcor-wms-v2.5.32';
+const CACHE_NAME = 'gemcor-wms-v2.5.40';
 const urlsToCache = [
   '/GEMCORQR/',
   '/GEMCORQR/index.html',
@@ -31,7 +31,6 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(urlsToCache))
-    // No skipWaiting — the update banner prompts the user
   );
 });
 
