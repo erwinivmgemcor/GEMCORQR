@@ -263,7 +263,7 @@ function addStep5ItemRow() {
         '<input type="hidden" class="req-item-code" id="step5Code' + idx + '">' +
         '<input type="hidden" class="req-item-desc" id="step5Desc' + idx + '">' +
       '</div>' +
-      '<div class="col-2 col-md-2"><label class="form-label small">Qty</label><input type="number" class="form-control req-qty" min="1" value="1"></div>' +
+      '<div class="col-2 col-md-2"><label class="form-label small">Qty</label><input type="number" class="form-control req-qty" min="0" step="0.01" value="1"></div>' +
       '<div class="col-2 col-md-2"><label class="form-label small">Unit</label><select class="form-select req-unit">' + buildUnitOptions('PIECE') + '</select></div>' +
       '<div class="col-3 col-md-3"><label class="form-label small">Remarks</label><input type="text" class="form-control req-remarks" placeholder="Optional note..." maxlength="200"></div>' +
       '<div class="col-1 col-md-1"><button class="btn btn-outline-danger btn-sm w-100" onclick="this.closest(\'.step5-item-row\').remove(); checkStep5Items();"><i class="bi bi-trash"></i></button></div>' +
