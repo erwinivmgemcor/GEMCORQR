@@ -982,20 +982,22 @@ window.openWarehouseEditModal = async function(docNo, docType) {
     var info = data.info || {};
     var items = data.items || [];
 
-    // Fill header fields (requestor + department LOCKED)
-    var locked = (typeof _getLockedRequestor === 'function') ? _getLockedRequestor() : { name: '', department: '' };
-    var elReq = document.getElementById('editReqRequestor');
-    var elDept = document.getElementById('editReqDepartment');
-    if (elReq) {
-      elReq.value = locked.name || info.Requestor || '';
-      elReq.setAttribute('readonly', 'readonly');
-      elReq.classList.add('locked-input');
-    }
-    if (elDept) {
-      elDept.value = locked.department || info.Department || '';
-      elDept.setAttribute('readonly', 'readonly');
-      elDept.classList.add('locked-input');
-    }
+   // ★ Warehouse edit: keep the ORIGINAL requestor/department of the doc.
+//   Do NOT overwrite with warehouse's own login name.
+var elReq = document.getElementById('editReqRequestor');
+var elDept = document.getElementById('editReqDepartment');
+if (elReq) {
+  elReq.value = info.Requestor || info.requestor || '';
+  elReq.setAttribute('readonly', 'readonly');
+  elReq.classList.add('locked-input');
+  elReq.title = 'Original requestor — cannot be changed by warehouse';
+}
+if (elDept) {
+  elDept.value = info.Department || info.department || '';
+  elDept.setAttribute('readonly', 'readonly');
+  elDept.classList.add('locked-input');
+  elDept.title = 'Original department — cannot be changed by warehouse';
+}
 
     document.getElementById('editReqJoNo').value = info['JO No.'] || info.joNo || '';
     document.getElementById('editReqGemSoNo').value = info['GEM SO No.'] || info.gemSoNo || '';
