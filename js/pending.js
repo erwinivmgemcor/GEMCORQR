@@ -262,7 +262,7 @@ window.openPendingProcessModal = async function(docNo, docType) {
         '<td>' + escapeHtmlPending(it.description) + '</td>' +
         '<td class="text-center">' + escapeHtmlPending(it.unit) + '</td>' +
         '<td class="text-center fw-bold text-danger process-remaining-cell" data-idx="' + idx + '">' + remaining + '</td>' +
-        '<td class="text-center"><input type="number" class="form-control form-control-sm text-center process-qty-input" data-idx="' + idx + '" value="0" min="0" max="' + remaining + '" step="1" style="width:90px;margin:0 auto;" oninput="onProcessQtyInput(this)"></td>' +
+       '<td class="text-center"><input type="number" class="form-control form-control-sm text-center process-qty-input" data-idx="' + idx + '" value="0" min="0" max="' + remaining + '" step="0.01" style="width:90px;margin:0 auto;" oninput="onProcessQtyInput(this)"></td>' +
         '<td><input type="text" class="form-control form-control-sm process-remarks-input" data-idx="' + idx + '" placeholder="Optional" maxlength="200"></td></tr>';
     });
     html += '</tbody></table></div>' +
