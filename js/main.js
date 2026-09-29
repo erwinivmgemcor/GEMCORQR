@@ -1120,4 +1120,33 @@ async function enterPrintOnlyMode(docNo) {
         '<p class="small text-muted">If you are the document owner, please verify the QR code is intact.</p>' +
       '</div>';
   }
+  // =============================================================================
+// FORCE SUPABASE SYNC
+// =============================================================================
+window.forceSupabaseSync = async function() {
+  if (!confirm('Sync all data to Supabase now?\n\nThis may take 10-30 seconds.')) return;
+
+  showToast('Syncing to Supabase...', 'info');
+
+  try {
+    var url = API_URL + '?action=forceSyncToSupabase&_t=' + Date.now();
+    var res = await fetch(url, { redirect: 'follow' });
+    var text = await res.text();
+    var trimmed = String(text || '').trim();
+    if (!trimmed || trimmed.charAt(0) === '<') throw new Error('Server returned HTML');
+    var data = JSON.parse(trimmed);
+
+    if (data.success) {
+      showToast('✅ Sync complete!', 'success');
+      // Refresh data
+      if (typeof sbGetAllPendingDocs === 'function') {
+        sbGetAllPendingDocs(true).catch(function() {});
+      }
+    } else {
+      showToast('Sync failed: ' + (data.error || 'Unknown'), 'danger');
+    }
+  } catch(e) {
+    showToast('Sync error: ' + e.message, 'danger');
+  }
+};
 }
