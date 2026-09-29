@@ -480,17 +480,25 @@ window.submitEditedRequest = async function() {
   }
 
   try {
-       var payload = {
+          // ★ When warehouse edits, do NOT overwrite requestor/department.
+    //   Keep the original owner of the document.
+    var updates = { items: items };
+    if (!isWarehouseEdit) {
+      updates.requestor   = document.getElementById('editReqRequestor').value.trim();
+      updates.department  = document.getElementById('editReqDepartment').value.trim();
+      updates.joNo        = document.getElementById('editReqJoNo').value.trim();
+      updates.gemSoNo     = document.getElementById('editReqGemSoNo').value.trim();
+      updates.clientName  = document.getElementById('editReqClient').value.trim();
+      updates.project     = document.getElementById('editReqProject').value.trim();
+    }
+
+    var payload = {
       action: 'applyRequestEdit',
       docNo: docNo,
       docType: docType,
       editedBy: _editReqState.currentUser,
-      isWarehouseEdit: isWarehouseEdit,      // ★ new flag
-      updates: {
-        items: items,
-        requestor: document.getElementById('editReqRequestor').value.trim(),
-        // ... etc (unchanged)
-      }
+      isWarehouseEdit: isWarehouseEdit,
+      updates: updates
     };
     var fetchFn = (typeof safeFetch === 'function') ? safeFetch : fetch;
     var res = await fetchFn(API_URL, {
