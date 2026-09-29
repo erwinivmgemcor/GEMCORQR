@@ -531,10 +531,10 @@
   };
 
   window.confirmBatchVerify = function() {
-    var qtyInput = document.getElementById('batchQtyInput');
-    if (!qtyInput) return;
-    var qtyVal = parseInt(qtyInput.value, 10);
-    if (isNaN(qtyVal) || qtyVal < 0) { showToast('Enter a valid quantity', 'warning'); return; }
+  var qtyInput = document.getElementById('batchQtyInput');
+  if (!qtyInput) return;
+  var qtyVal = parseFloat(qtyInput.value);
+  if (isNaN(qtyVal) || qtyVal < 0) { showToast('Enter a valid quantity', 'warning'); return; }
     var unit = qtyInput.dataset.unit || 'PIECE';
     var selectedRows = document.querySelectorAll('#itemsTable .item-select:checked');
     selectedRows.forEach(function(cb) {
@@ -1020,11 +1020,11 @@
   };
 
   window.confirmQty = function() {
-    if (!currentModalItem) return;
-    var input = document.getElementById('modalInputQty');
-    if (!input) return;
-    var qtyVal = parseInt(input.value, 10);
-    if (isNaN(qtyVal) || qtyVal < 0) { input.classList.add('is-invalid'); playErrorBuzz(); return; }
+  if (!currentModalItem) return;
+  var input = document.getElementById('modalInputQty');
+  if (!input) return;
+  var qtyVal = parseFloat(input.value);
+  if (isNaN(qtyVal) || qtyVal < 0) { input.classList.add('is-invalid'); playErrorBuzz(); return; }
     var isMRR = state.currentModule === 'MRR';
     if (!isMRR && qtyVal > currentModalItem.qty) {
       var max = currentModalItem.qty;
