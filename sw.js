@@ -5,7 +5,7 @@
 //  - Cache cleared when CACHE_NAME changes
 // ============================================================
 
-const CACHE_NAME = 'gemcor-wms-v3.2.7';
+const CACHE_NAME = 'gemcor-wms-v3.2.6';
 const RUNTIME_CACHE = 'gemcor-runtime-v3.2.0';
 
 const STATIC_ASSETS = [
