@@ -1,7 +1,8 @@
 // ============================================================
 // NEW REQUEST FUNCTIONS
-// v6 — Requestor locked to login + Robust QR scan matching
+// v7 — Requestor locked to login + Robust QR scan matching
 //      + New Request (No JO) standalone requests
+//      + FIXED: double-submit guard on No JO submit
 // ============================================================
 
 if (typeof state !== 'undefined' && state._reqIdemKey === undefined) {
@@ -1200,6 +1201,7 @@ async function submitManualMrif() {
 
 var _noJoItems = [];
 var _noJoModal = null;
+var _isSubmittingNoJo = false;
 
 window.openNewRequestNoJO = async function() {
   console.log('[NoJO] Opening modal...');
@@ -1236,7 +1238,6 @@ window.openNewRequestNoJO = async function() {
 
   renderNoJoItems();
 
-  // ★ AWAIT inventory load BEFORE opening modal
   if (typeof loadRequestInventory === 'function' && typeof state !== 'undefined') {
     if (!state.requestInventoryList || state.requestInventoryList.length === 0) {
       showLoading('Loading inventory...');
@@ -1262,6 +1263,7 @@ window.openNewRequestNoJO = async function() {
   _noJoModal.show();
   console.log('[NoJO] Modal shown, inventory items:', state.requestInventoryList.length);
 };
+
 window.selectNoJoDocType = function(type) {
   var el = document.getElementById('noJoDocType');
   if (el) el.value = type;
@@ -1372,10 +1374,8 @@ window.filterNoJoItems = function(input, idx) {
       '</div>';
     _positionNoJoDropdown(dropdown, input);
     dropdown.classList.remove('d-none');
-    // Try loading again
     if (typeof loadRequestInventory === 'function') {
       loadRequestInventory().then(function() {
-        // Re-trigger filter once loaded
         if (list.length > 0) {
           filterNoJoItems(input, idx);
         }
@@ -1383,7 +1383,6 @@ window.filterNoJoItems = function(input, idx) {
     }
     return;
   }
-  // ... rest of the function unchanged
 
   var matches = list.filter(function(it) {
     var c = (it.code || it.inventoryId || '').toLowerCase();
@@ -1439,25 +1438,32 @@ window.selectNoJoItem = function(idx, code, desc, unit) {
   renderNoJoItems();
 };
 
-var _isSubmittingNoJo = false;
-
 window.submitNewRequestNoJo = async function() {
+  // ★ PREVENT DOUBLE-SUBMIT (slow internet + double-click)
   if (_isSubmittingNoJo) {
     console.warn('[NoJO] Submission already in progress, ignoring duplicate click');
     return;
   }
   _isSubmittingNoJo = true;
 
-  try {
-    var docTypeEl = document.getElementById('noJoDocType');
+  var docTypeEl = document.getElementById('noJoDocType');
   var docType = docTypeEl ? docTypeEl.value : '';
-  if (!docType) { showToast('Please select document type (MRIF or MRS)', 'warning'); return; }
+
+  if (!docType) {
+    showToast('Please select document type (MRIF or MRS)', 'warning');
+    _isSubmittingNoJo = false;
+    return;
+  }
 
   var reqEl = document.getElementById('noJoRequestor');
   var deptEl = document.getElementById('noJoDepartment');
   var requestor = reqEl ? reqEl.value : '';
   var department = deptEl ? deptEl.value : '';
-  if (!requestor) { showToast('Your account is missing a full name. Contact admin.', 'danger'); return; }
+  if (!requestor) {
+    showToast('Your account is missing a full name. Contact admin.', 'danger');
+    _isSubmittingNoJo = false;
+    return;
+  }
 
   var joNo = document.getElementById('noJoJoNo') ? document.getElementById('noJoJoNo').value.trim() : '';
   var gemSoNo = document.getElementById('noJoGemSoNo') ? document.getElementById('noJoGemSoNo').value.trim() : '';
@@ -1481,7 +1487,11 @@ window.submitNewRequestNoJo = async function() {
       items.push({ inventoryId: code, description: desc, qty: qty, unit: unit, remarks: remarks });
     }
   }
-  if (items.length === 0) { showToast('Please add at least one valid item', 'warning'); return; }
+  if (items.length === 0) {
+    showToast('Please add at least one valid item', 'warning');
+    _isSubmittingNoJo = false;
+    return;
+  }
 
   var btn = document.getElementById('btnSubmitNoJo');
   return withButtonLoading(btn, async function() {
@@ -1526,13 +1536,13 @@ window.submitNewRequestNoJo = async function() {
     } catch(err) {
       showToast('Error: ' + err.message, 'danger');
     }
-   }, 'Submitting...')
-  .finally(function() {
+  }, 'Submitting...').finally(function() {
     _isSubmittingNoJo = false;
   });
 };
 
-console.log('✅ requests.js v6 loaded (with No JO feature)');
+console.log('✅ requests.js v7 loaded (with No JO + double-submit guard)');
+
 // =============================================================================
 // REFRESH MY REQUESTS — force-sync then reload
 // =============================================================================
@@ -1546,7 +1556,6 @@ window.refreshMyRequests = async function() {
   showToast('Syncing to Supabase...', 'info');
 
   try {
-    // 1. Force sync to Supabase (calls GAS which syncs DOCLINKS + items)
     var url = API_URL + '?action=forceSyncToSupabase&_t=' + Date.now();
     var res = await fetch(url, { redirect: 'follow' });
     var text = await res.text();
@@ -1558,14 +1567,12 @@ window.refreshMyRequests = async function() {
       }
     }
 
-    // 2. Clear cache so next load fetches fresh from Supabase
     if (typeof clearCache === 'function') {
       clearCache('my_requests');
       clearCache('partial_modal_MRIF');
       clearCache('partial_modal_MRR');
     }
 
-    // 3. Reload from Supabase
     if (typeof loadMyRequests === 'function') {
       await loadMyRequests();
     }
