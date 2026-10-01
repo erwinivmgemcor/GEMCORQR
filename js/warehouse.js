@@ -619,7 +619,7 @@
           isSubmitting = false;
           window._recentlyProcessedDoc = null;
 
-          // ★ CLEAR ALL RELEVANT CACHES FIRST
+          // ★ CLEAR ALL RELEVANT CACHES
           if (typeof clearCache === 'function') {
             clearCache('partial_modal_MRIF');
             clearCache('partial_modal_MRR');
@@ -637,7 +637,7 @@
           if (typeof updatePartialCount === 'function') updatePartialCount();
           if (typeof loadAllRequests === 'function') loadAllRequests();
 
-          // ★ Refresh analytics KPI numbers
+          // ★ Refresh analytics KPI
           setTimeout(function() {
             if (typeof loadAnalytics === 'function') loadAnalytics(true);
           }, 800);
@@ -1754,9 +1754,6 @@
   var _processPartialDocNo = null;
   var _processPartialItems = [];
 
-  // ═══════════════════════════════════════════════════════════
-  // ★ FIXED: openProcessPartialModal with 5-step fallback
-  // ═══════════════════════════════════════════════════════════
   window.openProcessPartialModal = async function(docNo) {
     if (!docNo) return;
     _processPartialDocNo = docNo;
@@ -1771,14 +1768,14 @@
     modal.show();
 
     try {
-      // ★ STEP 1: Try PARTIAL ITEMS sheet first (fast path)
+      // STEP 1: Try PARTIAL ITEMS sheet first
       var all = await fetchPartialItems();
       _processPartialItems = all.filter(function(it) {
         return (it.originalDocNo || it.docNo) === docNo;
       });
       window._processPartialItems = _processPartialItems;
 
-      // ★ STEP 2: Fallback — read from Supabase/GAS doc items directly
+      // STEP 2: Fallback — read from Supabase/GAS doc items
       if (!_processPartialItems.length) {
         console.log('[openProcessPartialModal] No partial items in sheet — falling back to doc items read for:', docNo);
 
@@ -1791,7 +1788,6 @@
           }
         }
 
-        // GAS fallback if Supabase empty/failed
         if (!docData || !docData.success || !docData.items || docData.items.length === 0) {
           try {
             var sheetKey = 'sheetId_MRIF';
@@ -1817,7 +1813,7 @@
           }
         }
 
-        // ★ STEP 3: Build the processPartialItems array from the doc items
+        // STEP 3: Rebuild from doc items
         if (docData && docData.success && docData.items && docData.items.length > 0) {
           var rebuiltItems = [];
           docData.items.forEach(function(it) {
@@ -1851,7 +1847,7 @@
         }
       }
 
-      // ★ STEP 4: Still empty? Show helpful error.
+      // STEP 4: Still empty — show error
       if (!_processPartialItems.length) {
         if (body) {
           body.innerHTML =
@@ -1878,7 +1874,7 @@
         return;
       }
 
-      // ★ STEP 5: Render the modal
+      // STEP 5: Render
       var html = '<div class="alert alert-info small py-2 mb-3">' +
         '<i class="bi bi-info-circle me-1"></i> A new sheet <strong>Bal.' + docNo +
         '</strong> will be created.</div>' +
@@ -1930,7 +1926,6 @@
     }
   };
 
-  // ★ Helper to close the modal safely
   window.closeProcessPartialModal = function() {
     var modalEl = document.getElementById('processPartialModal');
     if (!modalEl) return;
@@ -1955,7 +1950,6 @@
     });
   };
 
-  // ★ FIXED submitProcessBalance — uses window-scoped items
   window.submitProcessBalance = function() {
     var processDocNo = window._processPartialDocNo || _processPartialDocNo;
     var processItems = window._processPartialItems || _processPartialItems || [];
@@ -2026,12 +2020,10 @@
           var newBalanceDoc = data.balDocNo || data.docNo || '';
           showToast('Balance MRIF created: ' + newBalanceDoc + ' (' + (data.status || 'COMPLETED') + ')', 'success');
 
-          // ★ Clear the shared state
           window._processPartialItems = null;
           window._processPartialDocNo = null;
           window._processDocType = null;
 
-          // ★ Clear caches
           if (typeof clearCache === 'function') {
             clearCache('partial_modal_MRIF');
             clearCache('partial_modal_MRR');
@@ -2047,7 +2039,6 @@
           if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
           if (typeof loadAllRequests === 'function') loadAllRequests();
 
-          // ★ Broadcast to other tabs
           try {
             if (window.BroadcastChannel) {
               var bc = new BroadcastChannel('gemcor_sync');
