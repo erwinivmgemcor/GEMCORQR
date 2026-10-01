@@ -480,7 +480,7 @@ function buildSingleMrifHtml(docNo, info, items) {
       itemsHtml += '<tr>' +
         '<td class="td-center">' + (i + 1) + '</td>' +
         '<td class="td-center">' + code + '</td>' +
-        '<td class="td-center qr-cell"><img class="print-qr-sm" alt="" data-qr="' + encodeURIComponent(codeRaw) + '" data-qr-size="100"></td>' +
+        '<td class="td-center qr-cell"><img class="print-qr-sm" alt="" data-qr="' + encodeURIComponent(codeRaw) + '" data-qr-size="55"></td>' +
         '<td class="td-left">' + desc + '</td>' +
         '<td class="td-center">' + qty + '</td>' +
         '<td class="td-center">' + issuedDisplay + '</td>' +
@@ -688,7 +688,7 @@ function buildSingleMrsHtml(docNo, info, items) {
       itemsHtml += '<tr>' +
         '<td class="td-center">' + (i + 1) + '</td>' +
         '<td class="td-center">' + code + '</td>' +
-        '<td class="td-center qr-cell"><img class="print-qr-sm" alt="" data-qr="' + encodeURIComponent(codeRaw) + '" data-qr-size="100"></td>' +
+        '<td class="td-center qr-cell"><img class="print-qr-sm" alt="" data-qr="' + encodeURIComponent(codeRaw) + '" data-qr-size="55"></td>' +
         '<td class="td-left">' + desc + '</td>' +
         '<td class="td-center">' + qtyReturned + '</td>' +
         '<td class="td-center">' + actualDisplay + '</td>' +
