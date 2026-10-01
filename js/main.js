@@ -1,7 +1,7 @@
 // ============================================================
 // MAIN - DOM Ready & Initialization
 // v7.2 — Supabase fast reads + forceSyncToSupabase
-//      + BroadcastChannel cross-tab refresh (v7.2)
+//      + BroadcastChannel cross-tab refresh
 //      + forceRefreshAll() global helper
 // ============================================================
 
@@ -82,10 +82,10 @@ function _initBroadcastChannel() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ★ GLOBAL FORCE REFRESH (call from console: forceRefreshAll())
+// ★ GLOBAL FORCE REFRESH
 // ═══════════════════════════════════════════════════════════════
 window.forceRefreshAll = function() {
-  if (typeof clearCache === 'function') clearCache();  // clears ALL ivm_cache_*
+  if (typeof clearCache === 'function') clearCache();
   console.log('[ForceRefresh] Cleared all caches. Reloading...');
   try {
     if (window.BroadcastChannel) {
@@ -694,64 +694,35 @@ window.loadAllRequests = async function() {
       badge.classList.toggle('d-none', activeCount === 0);
     }
 
-    // ★ Compute "today" using PH timezone (Asia/Manila) to avoid UTC mismatches
-function _getPHDateString(d) {
-  try {
-    var parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Manila',
-      year: 'numeric', month: '2-digit', day: '2-digit'
-    }).formatToParts(d);
-    var y = '', m = '', dd = '';
-    parts.forEach(function(p) {
-      if (p.type === 'year') y = p.value;
-      else if (p.type === 'month') m = p.value;
-      else if (p.type === 'day') dd = p.value;
+    var now = new Date();
+    var todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    var todayEnd = todayStart + 24 * 60 * 60 * 1000;
+
+    var docs = allDocs.filter(function(d) {
+      var t = (d.docType || '').toUpperCase();
+      if (allowedTypes.indexOf(t) === -1) return false;
+
+      var s = (d.status || 'PENDING').toUpperCase();
+      var ts = d.timestamp ? new Date(d.timestamp).getTime() : 0;
+      var isToday = ts >= todayStart && ts < todayEnd;
+
+      if (statusFilter === 'today_and_partial') {
+        return isToday || s === 'PARTIAL';
+      }
+      if (statusFilter === 'today') {
+        return isToday;
+      }
+      if (statusFilter === 'partial') {
+        return s === 'PARTIAL';
+      }
+      if (statusFilter === 'active') {
+        return s === 'PENDING' || s === 'PARTIAL';
+      }
+      if (statusFilter === 'completed') {
+        return s === 'COMPLETED';
+      }
+      return true;
     });
-    return y + '-' + m + '-' + dd;
-  } catch(e) {
-    // Fallback to local
-    var yy = d.getFullYear();
-    var mm = String(d.getMonth() + 1).padStart(2, '0');
-    var dd2 = String(d.getDate()).padStart(2, '0');
-    return yy + '-' + mm + '-' + dd2;
-  }
-}
-
-var todayPH = _getPHDateString(new Date());
-
-var docs = allDocs.filter(function(d) {
-  var t = (d.docType || '').toUpperCase();
-  if (allowedTypes.indexOf(t) === -1) return false;
-
-  var s = (d.status || 'PENDING').toUpperCase();
-
-  // Convert timestamp to PH date string
-  var ts = d.timestamp ? new Date(d.timestamp) : null;
-  var tsPH = ts && !isNaN(ts.getTime()) ? _getPHDateString(ts) : '';
-  var isToday = (tsPH === todayPH);
-
-  if (statusFilter === 'today_and_partial') {
-    // Today's requests (any status) OR any partial regardless of date
-    return isToday || s === 'PARTIAL';
-  }
-  if (statusFilter === 'today') {
-    return isToday;
-  }
-  if (statusFilter === 'partial') {
-    return s === 'PARTIAL';
-  }
-  if (statusFilter === 'active') {
-    // Pending + Partial, ALL dates — the "monitoring" filter you need
-    return s === 'PENDING' || s === 'PARTIAL';
-  }
-    if (statusFilter === 'pending') {
-    return s === 'PENDING';
-  }
-  if (statusFilter === 'completed') {
-    return s === 'COMPLETED';
-  }
-  return true;
-});
 
     var prepMap = {};
     if (statusFilter !== 'completed') {
@@ -805,9 +776,6 @@ function renderAllRequests(docs, statusFilter, prepMap) {
     } else if (statusFilter === 'active') {
       emptyMsg = 'No active requests right now.';
       emptyHint = 'All requests have been processed.';
-          } else if (statusFilter === 'pending') {
-      emptyMsg = 'No pending requests at the moment.';
-      emptyHint = 'Switch to "For Monitoring" to see partials too.';
     } else if (statusFilter === 'completed') {
       emptyMsg = 'No completed requests yet.';
       emptyHint = 'Processed requests will appear here once they are fully served.';
@@ -1106,7 +1074,7 @@ document.addEventListener('DOMContentLoaded', function() {
     return;
   }
 
-  // ★ Start BroadcastChannel listener
+  // Start BroadcastChannel
   _initBroadcastChannel();
 
   var sidebarVerText = document.getElementById('sidebarAppVersionText');
@@ -1197,7 +1165,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// PRINT-ONLY MODE (public QR scan)
+// PRINT-ONLY MODE
 // ═══════════════════════════════════════════════════════════════
 async function enterPrintOnlyMode(docNo) {
   var content = document.getElementById('printOnlyContent');
@@ -1215,7 +1183,6 @@ async function enterPrintOnlyMode(docNo) {
   try { document.title = docNo + ' — Print View'; } catch(e) {}
 
   try {
-    // ★ Supabase-first for print-only view
     var data;
     if (typeof sbGetDocItems === 'function') {
       try { data = await sbGetDocItems(docNo, docType); } catch(e) { data = null; }
@@ -1250,7 +1217,6 @@ async function enterPrintOnlyMode(docNo) {
     else if (docType === 'MRR')  html = buildSingleMrrHtml(docNo, info, items);
     else if (docType === 'MRS')  html = buildSingleMrsHtml(docNo, info, items);
 
-    // Embed QR codes
     if (typeof _embedQrInHtml === 'function') {
       try { html = await _embedQrInHtml(html); } catch(e) {}
     }
@@ -1268,7 +1234,7 @@ async function enterPrintOnlyMode(docNo) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// FORCE SUPABASE SYNC (manual)
+// FORCE SUPABASE SYNC
 // ═══════════════════════════════════════════════════════════════
 window.forceSupabaseSync = async function() {
   if (!confirm('Sync all data to Supabase now?\n\nThis may take 10-30 seconds.')) return;
@@ -1302,7 +1268,7 @@ window.forceSupabaseSync = async function() {
 console.log('✅ main.js v7.2 loaded (BroadcastChannel + forceRefreshAll ready)');
 
 // ═══════════════════════════════════════════════════════════════
-// FORCE APP RELOAD (nuclear option)
+// FORCE APP RELOAD
 // ═══════════════════════════════════════════════════════════════
 window.forceAppReload = function() {
   if (!confirm('Force reload the app?\n\nThis will clear all caches and reload.')) return;
