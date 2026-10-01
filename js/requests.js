@@ -1439,8 +1439,17 @@ window.selectNoJoItem = function(idx, code, desc, unit) {
   renderNoJoItems();
 };
 
+var _isSubmittingNoJo = false;
+
 window.submitNewRequestNoJo = async function() {
-  var docTypeEl = document.getElementById('noJoDocType');
+  if (_isSubmittingNoJo) {
+    console.warn('[NoJO] Submission already in progress, ignoring duplicate click');
+    return;
+  }
+  _isSubmittingNoJo = true;
+
+  try {
+    var docTypeEl = document.getElementById('noJoDocType');
   var docType = docTypeEl ? docTypeEl.value : '';
   if (!docType) { showToast('Please select document type (MRIF or MRS)', 'warning'); return; }
 
@@ -1517,7 +1526,10 @@ window.submitNewRequestNoJo = async function() {
     } catch(err) {
       showToast('Error: ' + err.message, 'danger');
     }
-  }, 'Submitting...');
+   }, 'Submitting...')
+  .finally(function() {
+    _isSubmittingNoJo = false;
+  });
 };
 
 console.log('✅ requests.js v6 loaded (with No JO feature)');
