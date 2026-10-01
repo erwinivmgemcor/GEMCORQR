@@ -1,7 +1,7 @@
 // ============================================================
 // PRINT PREVIEW FUNCTIONS
-// v6.1 — Supabase-first reads (0.2s vs 15s from GAS)
-//        + FIXED: double-render race in render*Print functions
+// v6.2 — COMPACT LAYOUT: shrunk QRs + tight rows (fits 20+ items/page)
+//        Supabase-first reads (0.2s vs 15s from GAS)
 // ============================================================
 
 function _escPrint(s) {
@@ -158,15 +158,15 @@ function autoOpenPrintPreview(docNo, docType) {
       if (cleanType === 'MRIF') {
         await renderMrifPrint(cleanDoc, info, items);
         if (typeof mrifListModal !== 'undefined' && mrifListModal) mrifListModal.hide();
-        setTimeout(function() { if (mrifPrintModal) mrifPrintModal.show(); }, 200);
+        setTimeout(function() { if (mrifPrintModal) mrifPrintModal.show(); }, 150);
       } else if (cleanType === 'MRR') {
         await renderMrrPrint(cleanDoc, info, items);
         if (typeof mrrListModal !== 'undefined' && mrrListModal) mrrListModal.hide();
-        setTimeout(function() { if (mrrPrintModal) mrrPrintModal.show(); }, 200);
+        setTimeout(function() { if (mrrPrintModal) mrrPrintModal.show(); }, 150);
       } else if (cleanType === 'MRS') {
         await renderMrsPrint(cleanDoc, info, items);
         if (typeof mrsListModal !== 'undefined' && mrsListModal) mrsListModal.hide();
-        setTimeout(function() { if (mrsPrintModal) mrsPrintModal.show(); }, 200);
+        setTimeout(function() { if (mrsPrintModal) mrsPrintModal.show(); }, 150);
       }
     } catch(err) {
       hideLoading();
@@ -350,7 +350,6 @@ async function printSelectedDocs() {
 
   showLoading('Loading ' + docNos.length + ' documents...');
   try {
-    // ★ Supabase-first: fetch each doc from Supabase in parallel
     var results = [];
     if (typeof sbGetDocItems === 'function') {
       var promises = docNos.map(function(dn) {
@@ -363,7 +362,6 @@ async function printSelectedDocs() {
       results = await Promise.all(promises);
     }
 
-    // Filter out failures; if any failed, fallback to GAS for those
     var failedDocs = results.filter(function(r) { return !r.success || r.items.length === 0; });
     if (failedDocs.length > 0) {
       console.log('[print] Falling back to GAS for ' + failedDocs.length + ' docs');
@@ -376,7 +374,6 @@ async function printSelectedDocs() {
         var gasData;
         try { gasData = JSON.parse(text); } catch(e) { gasData = {}; }
         if (gasData && gasData.success && gasData.documents) {
-          // Merge GAS results with Supabase results
           gasData.documents.forEach(function(g) {
             for (var i = 0; i < results.length; i++) {
               if (results[i].docNo === g.docNo) {
@@ -389,7 +386,6 @@ async function printSelectedDocs() {
       } catch(e) { console.warn('[print] GAS fallback failed:', e); }
     }
 
-    // Filter out still-failed
     var validResults = results.filter(function(r) { return r.success && r.items.length > 0; });
     if (validResults.length === 0) throw new Error('No document data returned');
 
@@ -439,7 +435,7 @@ async function renderBulkPrintPreview(documents, docType) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BUILD MRIF PRINT HTML
+// BUILD MRIF PRINT HTML — COMPACT (small QR, tight rows)
 // ═══════════════════════════════════════════════════════════════
 function buildSingleMrifHtml(docNo, info, items) {
   var requestor = _escPrint(info.Requestor || info.requestor || info.requestorName || '');
@@ -477,10 +473,11 @@ function buildSingleMrifHtml(docNo, info, items) {
       var unit = _escPrint(it.unit || 'PIECE');
       var remarks = _escPrint(_cleanRemarksForPrint(it.remarks || ''));
 
+      // ★ SMALLER QR: 32 instead of 100
       itemsHtml += '<tr>' +
         '<td class="td-center">' + (i + 1) + '</td>' +
         '<td class="td-center">' + code + '</td>' +
-        '<td class="td-center qr-cell"><img class="print-qr-sm" alt="" data-qr="' + encodeURIComponent(codeRaw) + '" data-qr-size="55"></td>' +
+        '<td class="td-center qr-cell"><img class="print-qr-sm" alt="" data-qr="' + encodeURIComponent(codeRaw) + '" data-qr-size="32"></td>' +
         '<td class="td-left">' + desc + '</td>' +
         '<td class="td-center">' + qty + '</td>' +
         '<td class="td-center">' + issuedDisplay + '</td>' +
@@ -491,7 +488,6 @@ function buildSingleMrifHtml(docNo, info, items) {
   } else {
     itemsHtml += '<tr><td class="td-center" colspan="8" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
   }
-  itemsHtml += '<tr><td class="td-center" colspan="8">&nbsp;</td></tr>';
 
   var docQrData = _printQrData(docNo);
 
@@ -500,7 +496,7 @@ function buildSingleMrifHtml(docNo, info, items) {
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
       '<div class="mrif-docno">' +
         '<div><span class="mrif-dn-label">MRIF No.:</span><span class="mrif-dn-box">' + _escPrint(displayDocNo) + '</span></div>' +
-        '<div class="mrif-doc-qr"><img class="print-qr-lg" alt="MRIF QR" data-qr="' + encodeURIComponent(docQrData) + '" data-qr-size="140"></div>' +
+        '<div class="mrif-doc-qr"><img class="print-qr-lg" alt="MRIF QR" data-qr="' + encodeURIComponent(docQrData) + '" data-qr-size="62"></div>' +
       '</div>' +
     '</div>' +
     '<div class="mrif-title">' + titleText + '</div>' +
@@ -513,8 +509,8 @@ function buildSingleMrifHtml(docNo, info, items) {
       '<thead><tr>' +
         '<th style="width:5%">ITEM<br>NO.</th>' +
         '<th style="width:14%">ITEM<br>CODE</th>' +
-        '<th style="width:9%">QR<br>IMG</th>' +
-        '<th style="width:33%">ITEM DESCRIPTION</th>' +
+        '<th style="width:7%">QR<br>IMG</th>' +
+        '<th style="width:35%">ITEM DESCRIPTION</th>' +
         '<th style="width:9%">REQ.<br>QTY</th>' +
         '<th style="width:9%">ISSUED<br>QTY</th>' +
         '<th style="width:7%">UNIT</th>' +
@@ -543,7 +539,7 @@ function buildSingleMrifHtml(docNo, info, items) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BUILD MRR PRINT HTML
+// BUILD MRR PRINT HTML — COMPACT
 // ═══════════════════════════════════════════════════════════════
 function buildSingleMrrHtml(docNo, info, items) {
   var receivingSite = _escPrint(info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON');
@@ -605,7 +601,7 @@ function buildSingleMrrHtml(docNo, info, items) {
       '<div class="mrr-logo"><img src="gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'"></div>' +
       '<div class="mrr-docno">' +
         '<div><span class="mrr-dn-label">Receipt No.:</span><span class="mrr-dn-box">' + _escPrint(cleanDocNo(docNo)) + '</span></div>' +
-        '<div class="mrr-doc-qr"><img class="print-qr-lg" alt="MRR QR" data-qr="' + encodeURIComponent(docQrData) + '" data-qr-size="140"></div>' +
+        '<div class="mrr-doc-qr"><img class="print-qr-lg" alt="MRR QR" data-qr="' + encodeURIComponent(docQrData) + '" data-qr-size="62"></div>' +
       '</div>' +
     '</div>' +
     '<div class="mrr-title">MATERIALS RECEIVING REPORT</div>' +
@@ -651,7 +647,7 @@ function buildSingleMrrHtml(docNo, info, items) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// BUILD MRS PRINT HTML
+// BUILD MRS PRINT HTML — COMPACT
 // ═══════════════════════════════════════════════════════════════
 function buildSingleMrsHtml(docNo, info, items) {
   var requestor = _escPrint(info.Requestor || info.requestor || info.requestorName || '');
@@ -685,10 +681,11 @@ function buildSingleMrsHtml(docNo, info, items) {
       var unit = _escPrint(it.unit || 'PIECE');
       var remarks = _escPrint(_cleanRemarksForPrint(it.remarks || ''));
 
+      // ★ SMALLER QR: 32 instead of 100
       itemsHtml += '<tr>' +
         '<td class="td-center">' + (i + 1) + '</td>' +
         '<td class="td-center">' + code + '</td>' +
-        '<td class="td-center qr-cell"><img class="print-qr-sm" alt="" data-qr="' + encodeURIComponent(codeRaw) + '" data-qr-size="55"></td>' +
+        '<td class="td-center qr-cell"><img class="print-qr-sm" alt="" data-qr="' + encodeURIComponent(codeRaw) + '" data-qr-size="32"></td>' +
         '<td class="td-left">' + desc + '</td>' +
         '<td class="td-center">' + qtyReturned + '</td>' +
         '<td class="td-center">' + actualDisplay + '</td>' +
@@ -699,7 +696,6 @@ function buildSingleMrsHtml(docNo, info, items) {
   } else {
     itemsHtml += '<tr><td class="td-center" colspan="8" style="padding:20px;color:#999;font-style:italic;">No items found in this document</td></tr>';
   }
-  itemsHtml += '<tr><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-left">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td><td class="td-center">&nbsp;</td></tr>';
 
   var docQrData = _printQrData(docNo);
 
@@ -708,7 +704,7 @@ function buildSingleMrsHtml(docNo, info, items) {
       '<div class="mrif-logo"><img src="gemcor-logo.png" alt="GEMCOR"></div>' +
       '<div class="mrif-docno">' +
         '<div><span class="mrif-dn-label">MRS No.:</span><span class="mrif-dn-box">' + _escPrint(cleanDocNo(docNo)) + '</span></div>' +
-        '<div class="mrif-doc-qr"><img class="print-qr-lg" alt="MRS QR" data-qr="' + encodeURIComponent(docQrData) + '" data-qr-size="140"></div>' +
+        '<div class="mrif-doc-qr"><img class="print-qr-lg" alt="MRS QR" data-qr="' + encodeURIComponent(docQrData) + '" data-qr-size="62"></div>' +
       '</div>' +
     '</div>' +
     '<div class="mrif-title">MATERIALS RETURN SLIP</div>' +
@@ -721,8 +717,8 @@ function buildSingleMrsHtml(docNo, info, items) {
       '<thead><tr>' +
         '<th style="width:5%">ITEM<br>NO.</th>' +
         '<th style="width:14%">ITEM<br>CODE</th>' +
-        '<th style="width:9%">QR<br>IMG</th>' +
-        '<th style="width:33%">ITEM DESCRIPTION</th>' +
+        '<th style="width:7%">QR<br>IMG</th>' +
+        '<th style="width:35%">ITEM DESCRIPTION</th>' +
         '<th style="width:9%">QTY<br>RETURNED</th>' +
         '<th style="width:9%">ATL QTY<br>(Actual)</th>' +
         '<th style="width:7%">UNIT</th>' +
@@ -806,16 +802,13 @@ async function openMrsPrint(docNo) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// RENDER PRINT FUNCTIONS — FIXED (no more double-render)
+// RENDER PRINT FUNCTIONS
 // ═══════════════════════════════════════════════════════════════
 async function renderMrifPrint(docNo, info, items) {
   var container = document.getElementById('mrifPrintContent');
   if (!container) return;
-  // 1. Build initial HTML (QR placeholders still in place)
   var html = buildSingleMrifHtml(docNo, info, items);
-  // 2. Await QR embedding — do NOT touch the container until fully done
   var finalHtml = await _embedQrInHtml(html);
-  // 3. Set container ONCE with the final result
   container.innerHTML = finalHtml;
 }
 
@@ -849,43 +842,43 @@ function printWithIframe(containerId, title) {
   var printStyles =
     '@page { size: letter portrait; margin: 0.25in; }' +
     '* { box-sizing: border-box; }' +
-    'body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #000; line-height: 1.3; }' +
-    '.mrif-print-sheet { width: 100%; max-width: 8in; margin: 0 auto; background: #fff; padding: 0.2in; }' +
-    '.mrr-print-sheet { width: 100%; max-width: 8in; margin: 0 auto; background: #fff; padding: 0.2in; }' +
-    '.mrif-header, .mrr-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }' +
-    '.mrif-logo img, .mrr-logo img { height: 48px; width: auto; }' +
+    'body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; color: #000; line-height: 1.15; }' +
+    '.mrif-print-sheet { width: 100%; max-width: 8in; margin: 0 auto; background: #fff; padding: 0.15in; }' +
+    '.mrr-print-sheet { width: 100%; max-width: 8in; margin: 0 auto; background: #fff; padding: 0.15in; }' +
+    '.mrif-header, .mrr-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }' +
+    '.mrif-logo img, .mrr-logo img { height: 42px; width: auto; }' +
     '.mrif-docno, .mrr-docno { text-align: right; }' +
     '.mrif-dn-label, .mrr-dn-label { font-weight: bold; font-size: 9pt; margin-right: 4px; }' +
-    '.mrif-dn-box, .mrr-dn-box { display: inline-block; background: #f4cccc; border: 1px solid #e6b8b8; padding: 2px 10px; font-weight: bold; font-size: 10pt; color: #000; }' +
-    '.mrif-doc-qr img, .mrr-doc-qr img { width: 82px; height: 82px; margin-top: 4px; display: block; margin-left: auto; margin-right: auto; }' +
-    '.print-qr-sm { width: 42px; height: 42px; display: block; margin: 0 auto; }' +
-    '.print-qr-lg { width: 82px; height: 82px; display: block; margin: 0 auto; }' +
-    '.mrif-title, .mrr-title { text-align: center; font-size: 12pt; font-weight: bold; letter-spacing: 5px; margin: 8px 0 14px 0; text-transform: uppercase; }' +
-    '.mrif-meta, .mrr-meta-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 8.5pt; }' +
-    '.mrif-meta td, .mrr-meta-table td { padding: 3px 6px; vertical-align: top; }' +
+    '.mrif-dn-box, .mrr-dn-box { display: inline-block; background: #f4cccc; border: 1px solid #e6b8b8; padding: 1px 8px; font-weight: bold; font-size: 10pt; color: #000; }' +
+    '.mrif-doc-qr img, .mrr-doc-qr img { width: 58px; height: 58px; margin-top: 3px; display: block; margin-left: auto; margin-right: auto; }' +
+    '.print-qr-sm { width: 32px; height: 32px; display: block; margin: 0 auto; }' +
+    '.print-qr-lg { width: 58px; height: 58px; display: block; margin: 0 auto; }' +
+    '.mrif-title, .mrr-title { text-align: center; font-size: 12pt; font-weight: bold; letter-spacing: 4px; margin: 6px 0 10px 0; text-transform: uppercase; }' +
+    '.mrif-meta, .mrr-meta-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 8pt; }' +
+    '.mrif-meta td, .mrr-meta-table td { padding: 1px 4px; vertical-align: top; }' +
     '.meta-label, .mrr-meta-label { font-weight: bold; width: 18%; text-align: left; white-space: nowrap; }' +
     '.meta-value, .mrr-meta-value { width: 32%; text-align: left; border-bottom: 1px solid #000; }' +
-    '.meta-label-right, .mrr-meta-label-right { font-weight: bold; width: 18%; text-align: left; white-space: nowrap; padding-left: 12px; }' +
+    '.meta-label-right, .mrr-meta-label-right { font-weight: bold; width: 18%; text-align: left; white-space: nowrap; padding-left: 8px; }' +
     '.meta-value-right, .mrr-meta-value-right { width: 32%; text-align: left; border-bottom: 1px solid #000; }' +
-    '.meta-blue { background: #cfe2f3; padding: 2px 6px; font-weight: bold; }' +
-    '.mrif-items, .mrr-items { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 8.5pt; }' +
-    '.mrif-items th, .mrif-items td, .mrr-items th, .mrr-items td { border: 1px solid #000; padding: 4px 5px; vertical-align: middle; }' +
-    '.mrif-items th, .mrr-items th { background: #fff; font-weight: bold; text-align: center; font-size: 8pt; }' +
+    '.meta-blue { background: #cfe2f3; padding: 1px 5px; font-weight: bold; }' +
+    '.mrif-items, .mrr-items { width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 8pt; line-height: 1.1; }' +
+    '.mrif-items th, .mrif-items td, .mrr-items th, .mrr-items td { border: 1px solid #000; padding: 1px 3px; vertical-align: middle; }' +
+    '.mrif-items th, .mrr-items th { background: #fff; font-weight: bold; text-align: center; font-size: 7.5pt; padding: 2px 3px; }' +
     '.td-center { text-align: center; vertical-align: middle; }' +
     '.td-left { text-align: left; vertical-align: middle; }' +
-    '.qr-cell { text-align: center; vertical-align: middle; padding: 4px 2px; line-height: 0; }' +
+    '.qr-cell { text-align: center; vertical-align: middle; padding: 0 !important; line-height: 0; }' +
     '.qr-cell img { display: inline-block; margin: 0 auto; vertical-align: middle; }' +
-    '.mrr-checkboxes { font-size: 7.5pt; margin-top: 6px; margin-bottom: 16px; }' +
-    '.mrr-cb-section { margin-bottom: 6px; }' +
+    '.mrr-checkboxes { font-size: 7.5pt; margin-top: 5px; margin-bottom: 12px; }' +
+    '.mrr-cb-section { margin-bottom: 5px; }' +
     '.mrr-cb-title { font-weight: bold; font-size: 7.5pt; letter-spacing: 0.5px; margin-bottom: 3px; text-transform: uppercase; }' +
-    '.mrr-cb-row { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-bottom: 4px; padding-left: 2px; }' +
+    '.mrr-cb-row { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-bottom: 3px; padding-left: 2px; }' +
     '.mrr-cb-item { font-size: 7.5pt; display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }' +
     '.mrr-cb-circle { font-size: 9pt; line-height: 1; font-family: "Courier New", monospace; }' +
-    '.mrif-sigs, .mrr-sigs { display: flex; justify-content: center; gap: 40px; margin-top: 32px; text-align: center; }' +
+    '.mrif-sigs, .mrr-sigs { display: flex; justify-content: center; gap: 40px; margin-top: 16px; text-align: center; }' +
     '.mrif-sig, .mrr-sig { width: 26%; min-width: 140px; }' +
     '.mrif-sig-name, .mrr-sig-name { font-size: 9pt; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; min-height: 14px; letter-spacing: 0.3px; color: #000; }' +
-    '.mrif-sig-line, .mrr-sig-line { border-bottom: 1px solid #000; height: 32px; margin-bottom: 2px; }' +
-    '.mrif-sig-label, .mrr-sig-label { font-size: 8.5pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }';
+    '.mrif-sig-line, .mrr-sig-line { border-bottom: 1px solid #000; height: 22px; margin-bottom: 2px; }' +
+    '.mrif-sig-label, .mrr-sig-label { font-size: 8pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }';
 
   var fullHtml = '<!DOCTYPE html>' +
     '<html><head><meta charset="utf-8"><title>' + title + '</title><style>' + printStyles + '</style></head>' +
@@ -963,4 +956,4 @@ async function openMrsList() {
   }
 }
 
-console.log('✅ prints.js v6.1 loaded (Supabase-first, double-render FIXED)');
+console.log('✅ prints.js v6.2 loaded (COMPACT — 32px QR, tight rows)');
