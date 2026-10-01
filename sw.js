@@ -1,12 +1,12 @@
 // ============================================================
-// SERVICE WORKER — v3
+// SERVICE WORKER — v4
 //  - Stale-while-revalidate for static assets
 //  - NEVER cache config.js, /exec URLs, or any script.google.com request
 //  - Cache cleared when CACHE_NAME changes
 // ============================================================
 
-const CACHE_NAME = 'gemcor-wms-v3.3.10';
-const RUNTIME_CACHE = 'gemcor-runtime-v3.2.0';
+const CACHE_NAME = 'gemcor-wms-v4.0.0';
+const RUNTIME_CACHE = 'gemcor-runtime-v4.0.0';
 
 const STATIC_ASSETS = [
   '/GEMCORQR/',
