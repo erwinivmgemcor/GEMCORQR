@@ -1,5 +1,5 @@
 // ============================================================
-// CONFIGURATION — v3
+// CONFIGURATION — v4
 // Auto health check + auto cache bust on unreachable API
 // ============================================================
 
@@ -7,7 +7,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbwTiA7IOQOdq7cfuiiptoA0
 
 const DEFAULT_PIN = '0000';
 const APP_VERSION = '4.0.0';
-const APP_BUILD = '20261001-0232-0f6035a';
+const APP_BUILD = '20261001-1200-4.0.0';
 
 const UNIT_OPTIONS = [
   'ASSEMB', 'BOX', 'CAN', 'GAL', 'KG', 'LENGTH', 'LITERS',
