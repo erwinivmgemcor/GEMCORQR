@@ -1,5 +1,5 @@
 // ============================================================
-// GEMCOR ERP — Supabase API Layer
+// GEMCOR ERP — Supabase API Layer (v2)
 // All reads/writes to erp_* tables
 // ============================================================
 
@@ -28,7 +28,7 @@ async function erpFetch(table, query, opts) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// STOCK SUMMARY — KPI cards
+// STOCK SUMMARY
 // ═══════════════════════════════════════════════════════════
 async function erpGetStockSummary(force) {
   var cacheKey = 'stock_summary';
@@ -49,11 +49,10 @@ async function erpGetStockSummary(force) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ALL ITEMS — table data
+// ALL ITEMS
 // ═══════════════════════════════════════════════════════════
 async function erpGetAllItems(filters) {
   filters = filters || {};
-  
   var query = 'select=*&order=item_code.asc';
   var limit = filters.limit || 5000;
   query += '&limit=' + limit;
@@ -90,7 +89,7 @@ async function erpGetItemDetails(itemCode) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ITEM MOVEMENTS (ledger)
+// ITEM MOVEMENTS
 // ═══════════════════════════════════════════════════════════
 async function erpGetItemMovements(itemCode, limit) {
   limit = limit || 50;
@@ -105,7 +104,7 @@ async function erpGetItemMovements(itemCode, limit) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// REORDER LIST — for PR
+// REORDER LIST
 // ═══════════════════════════════════════════════════════════
 async function erpGetReorderList(force) {
   var cacheKey = 'reorder_list';
@@ -125,7 +124,7 @@ async function erpGetReorderList(force) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// WEEKLY MOVEMENT — monitoring
+// WEEKLY MOVEMENT (view-based)
 // ═══════════════════════════════════════════════════════════
 async function erpGetWeeklyMovement(force) {
   var cacheKey = 'weekly_movement';
@@ -140,6 +139,77 @@ async function erpGetWeeklyMovement(force) {
     return { success: true, items: rows || [] };
   } catch(err) {
     console.error('[erpGetWeeklyMovement]', err);
+    return { success: false, error: err.message, items: [] };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// ★ NEW: WEEKLY DATA FOR SPECIFIC WEEK (Mon-Sun)
+// Aggregates from erp_stock_ledger + erp_items
+// ═══════════════════════════════════════════════════════════
+async function erpGetWeeklyData(weekStartISO, weekEndISO) {
+  try {
+    // 1. Fetch all items (for metadata: desc, category, location, unit)
+    var items = await erpFetch('erp_items',
+      'select=item_code,description,category,location,base_unit,on_hand,unit_cost,abc_classification,inventory_movement&is_active=eq.true&limit=10000');
+    
+    // 2. Fetch all ledger entries within the week
+    var ledger = await erpFetch('erp_stock_ledger',
+      'select=item_code,qty_in,qty_out,transaction_type,transaction_date,balance_before,balance_after' +
+      '&transaction_date=gte.' + encodeURIComponent(weekStartISO) +
+      '&transaction_date=lt.' + encodeURIComponent(weekEndISO) +
+      '&order=transaction_date.asc&limit=50000');
+    
+    // 3. Build map: item_code → {in, out, opening, closing, tx count}
+    var movementMap = {};
+    
+    (ledger || []).forEach(function(tx) {
+      var code = tx.item_code;
+      if (!movementMap[code]) {
+        movementMap[code] = {
+          in: 0,
+          out: 0,
+          opening: Number(tx.balance_before || 0),
+          closing: Number(tx.balance_after || 0),
+          txCount: 0,
+          firstTxDate: tx.transaction_date,
+          lastTxDate: tx.transaction_date
+        };
+      }
+      movementMap[code].in += Number(tx.qty_in || 0);
+      movementMap[code].out += Number(tx.qty_out || 0);
+      movementMap[code].closing = Number(tx.balance_after || 0);
+      movementMap[code].txCount++;
+      movementMap[code].lastTxDate = tx.transaction_date;
+    });
+    
+    // 4. Combine items + movement
+    var result = (items || []).map(function(it) {
+      var mov = movementMap[it.item_code] || {
+        in: 0, out: 0, opening: null, closing: null, txCount: 0
+      };
+      
+      return {
+        item_code: it.item_code,
+        description: it.description,
+        category: it.category,
+        location: it.location,
+        base_unit: it.base_unit,
+        unit_cost: Number(it.unit_cost || 0),
+        abc_classification: it.abc_classification,
+        inventory_movement: it.inventory_movement,
+        current_on_hand: Number(it.on_hand || 0),
+        opening: mov.opening !== null ? mov.opening : Number(it.on_hand || 0),
+        qty_in: mov.in,
+        qty_out: mov.out,
+        closing: mov.closing !== null ? mov.closing : Number(it.on_hand || 0),
+        tx_count: mov.txCount
+      };
+    });
+    
+    return { success: true, items: result };
+  } catch(err) {
+    console.error('[erpGetWeeklyData]', err);
     return { success: false, error: err.message, items: [] };
   }
 }
@@ -166,7 +236,7 @@ async function erpGetActiveAlerts(force) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// CATEGORY STATS — for charts
+// CATEGORY STATS
 // ═══════════════════════════════════════════════════════════
 async function erpGetCategoryStats() {
   try {
@@ -176,33 +246,24 @@ async function erpGetCategoryStats() {
     var byCategory = {};
     var byABC = { A: 0, B: 0, C: 0, 'N/A': 0 };
     var byMovement = {};
-    var byLocation = {};
     
     (rows || []).forEach(function(it) {
-      // Category
       var cat = it.category || 'UNCATEGORIZED';
       if (!byCategory[cat]) byCategory[cat] = { count: 0, value: 0, units: 0 };
       byCategory[cat].count++;
       byCategory[cat].value += Number(it.on_hand || 0) * Number(it.unit_cost || 0);
       byCategory[cat].units += Number(it.on_hand || 0);
       
-      // ABC
       var abc = String(it.abc_classification || 'N/A').toUpperCase();
       if (byABC[abc] === undefined) byABC[abc] = 0;
       byABC[abc] += Number(it.on_hand || 0) * Number(it.unit_cost || 0);
       
-      // Movement
       var mov = String(it.inventory_movement || 'UNCLASSIFIED').toUpperCase();
       if (!byMovement[mov]) byMovement[mov] = 0;
       byMovement[mov]++;
     });
     
-    return {
-      success: true,
-      byCategory: byCategory,
-      byABC: byABC,
-      byMovement: byMovement
-    };
+    return { success: true, byCategory: byCategory, byABC: byABC, byMovement: byMovement };
   } catch(err) {
     console.error('[erpGetCategoryStats]', err);
     return { success: false, error: err.message, byCategory: {}, byABC: {}, byMovement: {} };
@@ -210,7 +271,7 @@ async function erpGetCategoryStats() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SOF LOOKUP — for MRIF auto-fill
+// SOF LOOKUP
 // ═══════════════════════════════════════════════════════════
 async function erpGetSofByJo(joNo) {
   try {
@@ -223,7 +284,7 @@ async function erpGetSofByJo(joNo) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// PRF PO LOOKUP — for MRR auto-fill
+// PRF PO LOOKUP
 // ═══════════════════════════════════════════════════════════
 async function erpGetPrfPoByPo(poNo) {
   try {
@@ -237,7 +298,7 @@ async function erpGetPrfPoByPo(poNo) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// DISTINCT FILTER VALUES
+// DISTINCT VALUES
 // ═══════════════════════════════════════════════════════════
 async function erpGetDistinctValues(column) {
   try {
@@ -247,10 +308,7 @@ async function erpGetDistinctValues(column) {
     var values = [];
     (rows || []).forEach(function(r) {
       var v = r[column];
-      if (v && !seen[v]) {
-        seen[v] = true;
-        values.push(v);
-      }
+      if (v && !seen[v]) { seen[v] = true; values.push(v); }
     });
     return { success: true, values: values };
   } catch(err) {
@@ -267,13 +325,10 @@ async function erpHealthCheck() {
     var res = await fetch(erpUrl('erp_items') + '?select=id&limit=1', {
       headers: erpHeaders()
     });
-    return {
-      success: res.ok,
-      latency: Date.now() - t0
-    };
+    return { success: res.ok, latency: Date.now() - t0 };
   } catch(err) {
     return { success: false, error: err.message };
   }
 }
 
-console.log('✅ erp-supabase.js loaded');
+console.log('✅ erp-supabase.js loaded — v2');
