@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEMCOR ERP — Stock Monitor</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="erp-styles.css">
+
+<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script defer src="erp-config.js"></script>
+<script defer src="erp-supabase.js"></script>
+<script defer src="stock-monitor.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TOP BAR -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<nav class="erp-topbar">
+  <div class="erp-topbar-left">
+    <img src="../gemcor-logo.png" alt="GEMCOR" class="erp-logo" onerror="this.style.display='none'">
+    <div>
+      <div class="erp-brand">GEMCOR ERP</div>
+      <div class="erp-brand-sub">Stock Monitor <span class="badge-live">LIVE</span></div>
+    </div>
+  </div>
+  <div class="erp-topbar-right">
+    <div class="erp-health" id="erpHealthBadge">
+      <span class="dot dot-pending"></span>
+      <span id="erpHealthText">Checking...</span>
+    </div>
+    <button class="erp-btn-icon" onclick="erpRefreshAll()" title="Refresh all data">
+      <i class="bi bi-arrow-clockwise"></i>
+    </button>
+    <a href="../index.html" class="erp-btn-outline" title="Back to main system">
+      <i class="bi bi-arrow-left"></i> Main System
+    </a>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- KPI CARDS -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="erp-container">
+  <div class="erp-kpi-row">
+    <div class="erp-kpi-card kpi-blue">
+      <div class="kpi-icon"><i class="bi bi-box-seam-fill"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Total Items</div>
+        <div class="kpi-value" id="kpiTotalItems">—</div>
+        <div class="kpi-sub" id="kpiTotalItemsSub">Active SKUs</div>
+      </div>
+    </div>
+
+    <div class="erp-kpi-card kpi-green">
+      <div class="kpi-icon"><i class="bi bi-cash-stack"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Stock Value</div>
+        <div class="kpi-value" id="kpiStockValue">—</div>
+        <div class="kpi-sub">Total on-hand value</div>
+      </div>
+    </div>
+
+    <div class="erp-kpi-card kpi-amber" onclick="erpShowReorderModal()">
+      <div class="kpi-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Below Reorder</div>
+        <div class="kpi-value" id="kpiBelowReorder">—</div>
+        <div class="kpi-sub">Needs replenishment</div>
+      </div>
+    </div>
+
+    <div class="erp-kpi-card kpi-red">
+      <div class="kpi-icon"><i class="bi bi-x-circle-fill"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Out of Stock</div>
+        <div class="kpi-value" id="kpiZeroStock">—</div>
+        <div class="kpi-sub">Zero on-hand</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- CHARTS ROW -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="erp-charts-row">
+    <div class="erp-chart-card">
+      <div class="erp-chart-header">Stock Value by Category</div>
+      <div class="erp-chart-body">
+        <canvas id="chartCategory"></canvas>
+      </div>
+    </div>
+    <div class="erp-chart-card">
+      <div class="erp-chart-header">ABC Classification</div>
+      <div class="erp-chart-body">
+        <canvas id="chartABC"></canvas>
+      </div>
+    </div>
+    <div class="erp-chart-card">
+      <div class="erp-chart-header">Movement Classification</div>
+      <div class="erp-chart-body">
+        <canvas id="chartMovement"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- FILTERS + SEARCH -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="erp-card erp-filters-card">
+    <div class="erp-filters-row">
+      <div class="erp-search-wrap">
+        <i class="bi bi-search"></i>
+        <input type="text" id="erpSearchInput" class="erp-search" placeholder="Search item code or description..." oninput="erpOnSearchInput()">
+      </div>
+      <select id="erpCategoryFilter" class="erp-select" onchange="erpLoadItems()">
+        <option value="">All Categories</option>
+      </select>
+      <select id="erpLocationFilter" class="erp-select" onchange="erpLoadItems()">
+        <option value="">All Locations</option>
+      </select>
+      <select id="erpMovementFilter" class="erp-select" onchange="erpLoadItems()">
+        <option value="">All Movements</option>
+        <option value="FAST MOVING">Fast Moving</option>
+        <option value="MODERATE MOVING">Moderate</option>
+        <option value="SLOW MOVING">Slow Moving</option>
+        <option value="NO MOVEMENT">No Movement</option>
+      </select>
+      <select id="erpAbcFilter" class="erp-select" onchange="erpLoadItems()">
+        <option value="">All ABC</option>
+        <option value="A">Class A</option>
+        <option value="B">Class B</option>
+        <option value="C">Class C</option>
+      </select>
+      <button class="erp-btn-clear" onclick="erpClearFilters()" title="Clear all filters">
+        <i class="bi bi-x-lg"></i> Clear
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- STOCK TABLE -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="erp-card erp-table-card">
+    <div class="erp-table-header">
+      <div>
+        <i class="bi bi-table me-2"></i>
+        <strong>Inventory Master</strong>
+      </div>
+      <div>
+        <span class="erp-badge" id="erpTableCount">0 items</span>
+      </div>
+    </div>
+
+    <div class="erp-table-wrap">
+      <table class="erp-table">
+        <thead>
+          <tr>
+            <th class="col-code">Item Code</th>
+            <th>Description</th>
+            <th class="col-cat">Category</th>
+            <th class="col-loc">Location</th>
+            <th class="col-qty text-end">On-Hand</th>
+            <th class="col-unit text-center">Unit</th>
+            <th class="col-cost text-end">Unit Cost</th>
+            <th class="col-value text-end">Total Value</th>
+            <th class="col-abc text-center">ABC</th>
+            <th class="col-mov text-center">Movement</th>
+          </tr>
+        </thead>
+        <tbody id="erpTableBody">
+          <tr>
+            <td colspan="10" class="erp-empty">
+              <div class="erp-spinner"></div>
+              <div class="mt-2">Loading inventory...</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="erp-table-footer">
+      <div>Showing <span id="erpPageStart">0</span>–<span id="erpPageEnd">0</span> of <span id="erpPageTotal">0</span></div>
+      <div class="erp-pagination">
+        <button id="erpBtnPrev" onclick="erpPagePrev()" disabled>
+          <i class="bi bi-chevron-left"></i> Prev
+        </button>
+        <span id="erpPageLabel">Page 1</span>
+        <button id="erpBtnNext" onclick="erpPageNext()">
+          Next <i class="bi bi-chevron-right"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- FOOTER -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="erp-footer">
+    <div>GEMCOR ERP — Stock Monitor v1.0.0</div>
+    <div>Pure Supabase • No Google Sheets • Live Data</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- ITEM DETAIL MODAL -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="erpItemModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header erp-modal-header">
+        <h5 class="modal-title">
+          <i class="bi bi-box-seam me-2"></i>
+          <span id="erpModalTitle">Item Details</span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="erpModalBody">
+        <div class="erp-empty">
+          <div class="erp-spinner"></div>
+          <div class="mt-2">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- REORDER LIST MODAL -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="erpReorderModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header erp-modal-header bg-amber">
+        <h5 class="modal-title">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i>
+          Reorder List (For PR)
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="erpReorderBody">
+        <div class="erp-empty">
+          <div class="erp-spinner"></div>
+          <div class="mt-2">Loading reorder list...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TOAST -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="erpToast" class="toast erp-toast">
+    <div class="toast-body" id="erpToastBody">Message</div>
+  </div>
+</div>
+
+</body>
+</html>
