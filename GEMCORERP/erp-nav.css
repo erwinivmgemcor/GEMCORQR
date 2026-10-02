@@ -1,0 +1,71 @@
+/* ============================================================
+   GEMCOR ERP — Navigation Bar Styles
+   ============================================================ */
+
+.erp-navbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  margin-left: 24px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.erp-navbar::-webkit-scrollbar { display: none; }
+
+.erp-nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.7);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all 0.15s;
+  border: 1.5px solid transparent;
+}
+
+.erp-nav-item i {
+  font-size: 1rem;
+}
+
+.erp-nav-item:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.1);
+}
+
+.erp-nav-item.active {
+  color: #fff;
+  background: rgba(255,255,255,0.18);
+  border-color: rgba(255,255,255,0.3);
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .erp-navbar {
+    margin-left: 12px;
+    gap: 2px;
+  }
+  .erp-nav-item {
+    padding: 6px 10px;
+    font-size: 0.78rem;
+  }
+  .erp-nav-item i {
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .erp-nav-item span {
+    display: none;
+  }
+  .erp-nav-item {
+    padding: 8px 12px;
+  }
+  .erp-nav-item i {
+    font-size: 1.1rem;
+  }
+}
