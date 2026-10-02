@@ -655,3 +655,153 @@ body {
   .erp-filters-row { flex-direction: column; align-items: stretch; }
   .erp-select { width: 100%; }
 }
+/* ═══════════════════════════════════════════════════════════
+   WEEKLY MONITORING STYLES
+   ═══════════════════════════════════════════════════════════ */
+
+.erp-week-header {
+  background: var(--erp-card);
+  border-radius: var(--erp-radius);
+  box-shadow: var(--erp-shadow);
+  border: 1px solid var(--erp-border);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.erp-week-picker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.erp-week-nav {
+  background: #f0f4f8;
+  border: 1.5px solid var(--erp-border);
+  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.15rem;
+  color: var(--erp-text);
+  transition: all 0.15s;
+}
+.erp-week-nav:hover {
+  background: var(--erp-blue);
+  color: #fff;
+  border-color: var(--erp-blue);
+}
+
+.erp-week-display { min-width: 220px; }
+.erp-week-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--erp-gray);
+}
+.erp-week-dates {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--erp-text);
+  line-height: 1.3;
+}
+
+.erp-week-today {
+  background: var(--erp-blue);
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.erp-week-today:hover {
+  background: var(--erp-blue-light);
+}
+
+.erp-week-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.erp-btn-outline-dark {
+  background: transparent;
+  border: 1.5px solid var(--erp-border);
+  color: var(--erp-text);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.erp-btn-outline-dark:hover {
+  background: var(--erp-blue);
+  color: #fff;
+  border-color: var(--erp-blue);
+}
+
+/* 2-column charts row */
+.erp-charts-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 992px) {
+  .erp-charts-row-2 { grid-template-columns: 1fr; }
+}
+
+.erp-table-subtitle {
+  font-weight: 400;
+  font-size: 0.85rem;
+  color: var(--erp-gray);
+  margin-left: 8px;
+}
+
+@media (max-width: 768px) {
+  .erp-week-header { padding: 12px 14px; }
+  .erp-week-picker { flex-wrap: wrap; }
+  .erp-week-display { min-width: unset; flex: 1; }
+  .erp-week-actions { width: 100%; }
+  .erp-week-actions button { flex: 1; justify-content: center; }
+}
+
+/* Print styles */
+@media print {
+  .erp-topbar,
+  .erp-navbar,
+  .erp-week-header,
+  .erp-filters-card,
+  .erp-table-footer,
+  .erp-footer,
+  .erp-btn-icon,
+  .erp-btn-outline,
+  .erp-week-nav,
+  .erp-week-today,
+  .erp-week-actions { display: none !important; }
+  
+  .erp-container { padding: 0; max-width: 100%; }
+  .erp-card { box-shadow: none; border: 1px solid #ccc; }
+  .erp-table { font-size: 9pt; }
+}
