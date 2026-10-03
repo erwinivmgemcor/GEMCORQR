@@ -818,4 +818,210 @@ function _csvEscErp(val) {
   return s;
 }
 
+// ═══════════════════════════════════════════════════════════
+// ADD NEW ITEM MODAL
+// ═══════════════════════════════════════════════════════════
+
+var _addItemModal = null;
+var _addItemSuccessModal = null;
+var _addItemCheckTimer = null;
+var _addItemLastCheckCode = '';
+var _isSubmittingAddItem = false;
+
+function erpOpenAddItemModal() {
+  var modalEl = document.getElementById('erpAddItemModal');
+  if (!modalEl) return;
+  
+  if (!_addItemModal) {
+    _addItemModal = new bootstrap.Modal(modalEl);
+  }
+  
+  // Reset form
+  document.getElementById('addItemCode').value = '';
+  document.getElementById('addItemDesc').value = '';
+  document.getElementById('addItemCategory').value = '';
+  document.getElementById('addItemLocation').value = 'GEMCATM001';
+  document.getElementById('addItemUnit').value = 'PIECE';
+  document.getElementById('addItemCost').value = '';
+  document.getElementById('addItemCodeStatus').innerHTML = '';
+  
+  _addItemLastCheckCode = '';
+  _isSubmittingAddItem = false;
+  
+  _addItemModal.show();
+  
+  // Auto-focus sa Item Code
+  setTimeout(function() {
+    var el = document.getElementById('addItemCode');
+    if (el) el.focus();
+  }, 300);
+}
+
+function erpCheckAddItemCode() {
+  clearTimeout(_addItemCheckTimer);
+  var code = (document.getElementById('addItemCode').value || '').trim();
+  var statusEl = document.getElementById('addItemCodeStatus');
+  
+  if (!code) {
+    statusEl.innerHTML = '';
+    _addItemLastCheckCode = '';
+    return;
+  }
+  
+  statusEl.innerHTML = '<span class="text-muted"><i class="bi bi-hourglass-split me-1"></i>Checking...</span>';
+  
+  _addItemCheckTimer = setTimeout(async function() {
+    // Skip if same code na-check na
+    if (code === _addItemLastCheckCode) return;
+    _addItemLastCheckCode = code;
+    
+    try {
+      var rows = await erpFetch('erp_items',
+        'select=item_code&item_code=ilike.' + encodeURIComponent(code) + '&limit=1');
+      
+      if (rows && rows.length > 0) {
+        statusEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle-fill me-1"></i>' +
+          'Item code already exists: <strong>' + erpEsc(rows[0].item_code) + '</strong></span>';
+      } else {
+        statusEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>' +
+          'Available</span>';
+      }
+    } catch(err) {
+      statusEl.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>' +
+        'Could not verify (will check on save)</span>';
+    }
+  }, 500);  // 500ms debounce
+}
+
+async function erpSubmitNewItem() {
+  if (_isSubmittingAddItem) return;
+  
+  // Collect values
+  var code = (document.getElementById('addItemCode').value || '').trim();
+  var desc = (document.getElementById('addItemDesc').value || '').trim();
+  var category = (document.getElementById('addItemCategory').value || '').trim();
+  var location = (document.getElementById('addItemLocation').value || '').trim();
+  var unit = (document.getElementById('addItemUnit').value || '').trim();
+  var costRaw = (document.getElementById('addItemCost').value || '').trim();
+  var cost = costRaw ? parseFloat(costRaw) : 0;
+  
+  // Validation
+  if (!code) {
+    erpShowToast('Item Code is required', 'warning');
+    document.getElementById('addItemCode').focus();
+    return;
+  }
+  
+  if (!desc) {
+    erpShowToast('Description is required', 'warning');
+    document.getElementById('addItemDesc').focus();
+    return;
+  }
+  
+  if (!category) {
+    erpShowToast('Category is required', 'warning');
+    document.getElementById('addItemCategory').focus();
+    return;
+  }
+  
+  if (!location) {
+    erpShowToast('Location is required', 'warning');
+    document.getElementById('addItemLocation').focus();
+    return;
+  }
+  
+  if (!unit) {
+    erpShowToast('Base Unit is required', 'warning');
+    document.getElementById('addItemUnit').focus();
+    return;
+  }
+  
+  if (isNaN(cost) || cost < 0) {
+    erpShowToast('Unit Cost must be a valid positive number', 'warning');
+    document.getElementById('addItemCost').focus();
+    return;
+  }
+  
+  // Get current user
+  var createdBy = localStorage.getItem('ivm_userFullname') || 
+                  localStorage.getItem('ivm_username') || 
+                  'WAREHOUSE';
+  
+  // Submit
+  _isSubmittingAddItem = true;
+  var btn = document.getElementById('btnSaveNewItem');
+  var originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+  
+  try {
+    var res = await fetch(erpUrl('rpc/erp_add_item'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({
+        p_item_code: code,
+        p_description: desc,
+        p_category: category,
+        p_location: location,
+        p_base_unit: unit,
+        p_unit_cost: cost,
+        p_created_by: createdBy
+      })
+    });
+    
+    if (!res.ok) {
+      var errText = await res.text();
+      throw new Error('API error: ' + res.status + ' ' + errText);
+    }
+    
+    var data = await res.json();
+    
+    if (!data || !data.success) {
+      throw new Error((data && data.error) || 'Failed to add item');
+    }
+    
+    // Success
+    if (_addItemModal) _addItemModal.hide();
+    
+    // Show success modal
+    var successEl = document.getElementById('erpAddItemSuccessModal');
+    if (!_addItemSuccessModal) {
+      _addItemSuccessModal = new bootstrap.Modal(successEl);
+    }
+    document.getElementById('addItemSuccessCode').textContent = data.item_code || code;
+    _addItemSuccessModal.show();
+    
+    // Refresh table
+    if (typeof erpLoadItems === 'function') {
+      erpLoadItems();
+    }
+    
+    // Refresh KPI summary
+    if (typeof erpLoadSummary === 'function') {
+      erpLoadSummary();
+    }
+    
+  } catch(err) {
+    console.error('[erpSubmitNewItem]', err);
+    erpShowToast('Failed: ' + err.message, 'danger');
+  } finally {
+    _isSubmittingAddItem = false;
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+  }
+}
+
+function erpAddAnotherItem() {
+  // Hide success modal
+  if (_addItemSuccessModal) _addItemSuccessModal.hide();
+  
+  // Open add modal again after slight delay
+  setTimeout(function() {
+    erpOpenAddItemModal();
+  }, 300);
+}
+
+function erpCloseAddItemSuccess() {
+  if (_addItemSuccessModal) _addItemSuccessModal.hide();
+}
 console.log('✅ stock-monitor.js loaded');
