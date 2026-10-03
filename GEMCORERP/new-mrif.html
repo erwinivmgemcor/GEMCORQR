@@ -127,20 +127,41 @@
   <!-- ═══════════════════════════════════════════════════════════ -->
   <!-- STEP 3: REQUESTOR (LOCKED) -->
   <!-- ═══════════════════════════════════════════════════════════ -->
-  <div class="erp-wizard-panel" id="erpStep3">
-    <div class="erp-card" style="padding:32px;">
-      <h4 style="margin-bottom:24px;"><i class="bi bi-person-lock me-2"></i>Requestor Info</h4>
-      
-      <div class="erp-form-group">
-        <label>Requestor</label>
-        <div class="erp-locked-field">
-          <i class="bi bi-lock-fill"></i>
-          <div>
-            <div class="locked-value" id="erpRequestorDisplay">Loading...</div>
-            <div class="locked-hint">Locked to your account — cannot be changed</div>
-          </div>
+ <div class="erp-wizard-panel" id="erpStep3">
+  <div class="erp-card" style="padding:32px;">
+    <h4 style="margin-bottom:24px;"><i class="bi bi-person-lock me-2"></i>Requestor Info</h4>
+    
+    <div class="erp-form-group">
+      <label>Requestor</label>
+      <!-- Locked display (kung may login) -->
+      <div class="erp-locked-field" id="erpRequestorLocked">
+        <i class="bi bi-lock-fill"></i>
+        <div>
+          <div class="locked-value" id="erpRequestorDisplay">Loading...</div>
+          <div class="locked-hint">Locked to your account — cannot be changed</div>
         </div>
       </div>
+      <!-- Manual input (kung walang login) -->
+      <div id="erpRequestorManual" style="display:none;">
+        <input type="text" id="erpRequestorInput" class="erp-input-lg" placeholder="Enter your full name" oninput="newMrifOnRequestorInput()">
+        <div class="erp-hint text-muted">No login detected — please enter your name manually.</div>
+      </div>
+    </div>
+
+    <div class="erp-form-group">
+      <label>Department / Section</label>
+      <div class="erp-locked-field" id="erpDepartmentLocked">
+        <i class="bi bi-lock-fill"></i>
+        <div>
+          <div class="locked-value" id="erpDepartmentDisplay">Loading...</div>
+          <div class="locked-hint">Locked to your account — cannot be changed</div>
+        </div>
+      </div>
+      <div id="erpDepartmentManual" style="display:none;">
+        <input type="text" id="erpDepartmentInput" class="erp-input-lg" placeholder="Enter your department" oninput="newMrifOnRequestorInput()">
+      </div>
+    </div>
+    <!-- ... rest ... -->
 
       <div class="erp-form-group">
         <label>Department / Section</label>
