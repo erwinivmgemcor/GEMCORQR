@@ -254,33 +254,71 @@ async function mrifListView(docNo) {
 // FILTERS
 // ═══════════════════════════════════════════════════════════
 async function mrifListPopulateFilterOptions() {
+  var selReq = document.getElementById('mrifRequestorFilter');
+  var selDept = document.getElementById('mrifDeptFilter');
+  if (!selReq || !selDept) return;
+  
   try {
+    // ─── REQUESTORS ───
+    // Try from erp_documents first
     var result = await erpGetDistinctValues('requestor');
-    if (result.success) {
-      var sel = document.getElementById('mrifRequestorFilter');
-      result.values.forEach(function(v) {
-        var opt = document.createElement('option');
-        opt.value = v;
-        opt.textContent = v;
-        sel.appendChild(opt);
-      });
+    var requestorValues = (result.success && result.values.length > 0) ? result.values : [];
+    
+    // If empty, fallback to erp_requestors table
+    if (requestorValues.length === 0) {
+      try {
+        var reqRows = await erpFetch('erp_requestors', 'select=name&order=name.asc');
+        requestorValues = (reqRows || []).map(function(r) { return r.name; }).filter(Boolean);
+      } catch(e) {
+        console.warn('[Requestors fallback]', e.message);
+      }
     }
     
+    // Rebuild dropdown
+    selReq.innerHTML = '<option value="">All Requestors</option>';
+    requestorValues.forEach(function(v) {
+      var opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      selReq.appendChild(opt);
+    });
+    
+    // ─── DEPARTMENTS ───
+    // Try from erp_documents first
     var result2 = await erpGetDistinctValues('department');
-    if (result2.success) {
-      var sel2 = document.getElementById('mrifDeptFilter');
-      result2.values.forEach(function(v) {
-        var opt = document.createElement('option');
-        opt.value = v;
-        opt.textContent = v;
-        sel2.appendChild(opt);
-      });
+    var deptValues = (result2.success && result2.values.length > 0) ? result2.values : [];
+    
+    // If empty, fallback to erp_requestors (department field)
+    if (deptValues.length === 0) {
+      try {
+        var deptRows = await erpFetch('erp_requestors', 'select=department&department=not.is.null&order=department.asc');
+        var seen = {};
+        deptValues = [];
+        (deptRows || []).forEach(function(r) {
+          if (r.department && !seen[r.department]) {
+            seen[r.department] = true;
+            deptValues.push(r.department);
+          }
+        });
+      } catch(e) {
+        console.warn('[Depts fallback]', e.message);
+      }
     }
+    
+    // Rebuild dropdown
+    selDept.innerHTML = '<option value="">All Departments</option>';
+    deptValues.forEach(function(v) {
+      var opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      selDept.appendChild(opt);
+    });
+    
+    console.log('[MRIF Filters] Requestors:', requestorValues.length, '| Departments:', deptValues.length);
   } catch(err) {
     console.warn('[mrifListPopulateFilterOptions]', err);
   }
 }
-
 function mrifListOnSearch() {
   clearTimeout(_mrifSearchTimer);
   _mrifSearchTimer = setTimeout(function() {
