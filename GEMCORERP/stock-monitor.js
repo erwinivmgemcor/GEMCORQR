@@ -1,3 +1,33 @@
+// Add sa simula ng stock-monitor.js
+var ERP_VALID_CATEGORIES = [
+  'COMPONENTS',
+  'CONSUMABLES',
+  'ENCLOSURE',
+  'EWMAT',
+  'FABMAT',
+  'OFABP',
+  'PANEL',
+  'UNCATEGORIZED'  // para sa mga NULL items
+];
+
+async function erpLoadFilterOptions() {
+  // ... existing code ...
+  
+  if (results[0].success) {
+    var sel = document.getElementById('erpCategoryFilter');
+    // Filter to valid categories only
+    var validValues = results[0].values.filter(function(v) {
+      return ERP_VALID_CATEGORIES.indexOf(String(v).toUpperCase()) !== -1;
+    });
+    validValues.sort().forEach(function(v) {
+      var opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      sel.appendChild(opt);
+    });
+  }
+  // ...
+}
 // ============================================================
 // GEMCOR ERP — Stock Monitor Logic
 // ============================================================
@@ -389,6 +419,28 @@ function erpClearFilters() {
 // ═══════════════════════════════════════════════════════════
 // FILTER OPTIONS (populate dropdowns)
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// FILTER OPTIONS — Custom order for categories
+// ═══════════════════════════════════════════════════════════
+
+// ★ Custom order: COMPONENTS first, then alphabetical
+var ERP_CATEGORY_ORDER = [
+  'COMPONENTS',
+  'CONSUMABLES',
+  'ENCLOSURE',
+  'EWMAT',
+  'FABMAT',
+  'OFABP',
+  'PANEL',
+  'COGSLAB',
+  'COGSMAT',
+  'COGSOH',
+  'FIXEDASSET',
+  'OPEX',
+  'OFFICE SUPPLIES',
+  'UNCATEGORIZED'
+];
+
 async function erpLoadFilterOptions() {
   try {
     var results = await Promise.all([
@@ -398,12 +450,50 @@ async function erpLoadFilterOptions() {
     
     if (results[0].success) {
       var sel = document.getElementById('erpCategoryFilter');
-      results[0].values.forEach(function(v) {
+      
+      // Get DB values
+      var dbValues = results[0].values || [];
+      var dbSet = {};
+      dbValues.forEach(function(v) {
+        if (v) dbSet[String(v).toUpperCase()] = v;
+      });
+      
+      // Build final list: custom order + any extra from DB
+      var finalCategories = [];
+      var seen = {};
+      
+      // 1. Add in custom order first
+      ERP_CATEGORY_ORDER.forEach(function(cat) {
+        var key = cat.toUpperCase();
+        if (dbSet[key]) {
+          finalCategories.push(dbSet[key]);
+          seen[key] = true;
+        } else {
+          // Add anyway if it's a valid category even if no items yet
+          finalCategories.push(cat);
+          seen[key] = true;
+        }
+      });
+      
+      // 2. Add any extra categories from DB not in our custom list
+      dbValues.forEach(function(v) {
+        if (!v) return;
+        var key = String(v).toUpperCase();
+        if (!seen[key]) {
+          finalCategories.push(v);
+          seen[key] = true;
+        }
+      });
+      
+      // Render options
+      finalCategories.forEach(function(v) {
         var opt = document.createElement('option');
         opt.value = v;
         opt.textContent = v;
         sel.appendChild(opt);
       });
+      
+      console.log('[ERP Filters] Categories loaded:', finalCategories.length);
     }
     
     if (results[1].success) {
