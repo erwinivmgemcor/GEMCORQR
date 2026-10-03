@@ -132,6 +132,10 @@ window.applySidebarRole = function(role) {
   if (logoutItem) {
     logoutItem.style.display = (isWarehouse || isProduction) && state.currentUser ? 'flex' : 'none';
   }
+    // ★ I-hide yung ERP links para sa production users
+  document.querySelectorAll('.erp-only').forEach(function(el) {
+    el.style.display = isProduction ? 'none' : 'flex';
+  });
 
   if (isProduction) {
     navigateTo('myrequests');
