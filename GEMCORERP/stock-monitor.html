@@ -37,11 +37,14 @@
   <!-- NAV INJECTED HERE -->
   <div id="erpNavBar"></div>
 
-  <div class="erp-topbar-right">
+   <div class="erp-topbar-right">
     <div class="erp-health" id="erpHealthBadge">
       <span class="dot dot-pending"></span>
       <span id="erpHealthText">Checking...</span>
     </div>
+    <button class="theme-toggle-btn" onclick="erpToggleTheme()" id="themeToggleBtn" title="Toggle light/dark mode">
+      <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
+    </button>
     <button class="erp-btn-icon" onclick="erpRefreshAll()" title="Refresh all data">
       <i class="bi bi-arrow-clockwise"></i>
     </button>
