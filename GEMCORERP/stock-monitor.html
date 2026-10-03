@@ -83,12 +83,12 @@
       </div>
     </div>
 
-    <div class="erp-kpi-card kpi-red">
+          <div class="erp-kpi-card kpi-red kpi-clickable" onclick="erpShowOutOfStockModal()" title="Click to view zero-stock items" style="cursor:pointer;">
       <div class="kpi-icon"><i class="bi bi-x-circle-fill"></i></div>
       <div class="kpi-content">
         <div class="kpi-label">Out of Stock</div>
         <div class="kpi-value" id="kpiZeroStock">—</div>
-        <div class="kpi-sub">Zero on-hand</div>
+        <div class="kpi-sub">Zero on-hand — click to view</div>
       </div>
     </div>
   </div>
@@ -241,6 +241,65 @@
   </div>
 </div>
 
+  <!-- ═══════════════════════════════════════════════════════════ -->
+<!-- OUT OF STOCK MODAL -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="erpOutOfStockModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#dc3545;color:#fff;">
+        <h5 class="modal-title">
+          <i class="bi bi-x-circle-fill me-2"></i>
+          Out of Stock Items
+          <span class="badge bg-light text-dark ms-2" id="outOfStockCount">0</span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="erp-filters-row mb-3">
+          <select id="outOfStockFilter" class="erp-select" onchange="erpFilterOutOfStock()">
+            <option value="all">All Zero-Stock Items</option>
+            <option value="standard">Standard Stock Only (has usage)</option>
+            <option value="no-usage">No Usage Items</option>
+          </select>
+          <div class="erp-search-wrap" style="flex:1;">
+            <i class="bi bi-search"></i>
+            <input type="text" id="outOfStockSearch" class="erp-search" placeholder="Search item code or description..." oninput="erpFilterOutOfStock()">
+          </div>
+          <button class="erp-btn-outline-dark" onclick="erpExportOutOfStock()" title="Export to Excel (CSV)">
+            <i class="bi bi-file-earmark-excel"></i> Export
+          </button>
+        </div>
+        <div class="table-responsive">
+          <table class="erp-table">
+            <thead>
+              <tr>
+                <th>Item Code</th>
+                <th>Description</th>
+                <th>Category</th>
+                <th>Location</th>
+                <th class="text-center">On-Hand</th>
+                <th class="text-end">Buffer</th>
+                <th class="text-center">Ave/Mo</th>
+                <th class="text-center">Active Mo</th>
+                <th class="text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody id="outOfStockBody">
+              <tr><td colspan="9" class="erp-empty">
+                <div class="erp-spinner"></div>
+                <div class="mt-2">Loading zero-stock items...</div>
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="modal fade" id="erpReorderModal" tabindex="-1">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
