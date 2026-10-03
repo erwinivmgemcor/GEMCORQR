@@ -423,6 +423,10 @@ function applyRoleUI() {
   if (switchModeNavItem) {
     switchModeNavItem.style.display = (hasBoth && state.currentUser) ? 'flex' : 'none';
   }
+    // ★ I-hide yung ERP links para sa production users
+  document.querySelectorAll('.erp-only').forEach(function(el) {
+    el.style.display = isProduction ? 'none' : 'flex';
+  });
 
   var logoutItem = document.getElementById('logoutNavItem');
   if (logoutItem) {
