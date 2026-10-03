@@ -94,9 +94,9 @@ function erpPeso(n) {
 // ─── Utility: format number ───
 function erpNum(n) {
   if (n === null || n === undefined || isNaN(n)) return '0';
-  return Number(n).toLocaleString('en-PH', {
+  return Number(n).toLocaleString('en-US', {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 4
+    maximumFractionDigits: 2
   });
 }
 
