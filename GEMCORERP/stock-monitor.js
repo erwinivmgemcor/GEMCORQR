@@ -572,4 +572,159 @@ function erpShowToast(msg) {
   toast.show();
 }
 
+// ═══════════════════════════════════════════════════════════
+// OUT OF STOCK MODAL
+// ═══════════════════════════════════════════════════════════
+var _outOfStockAll = [];
+var _outOfStockFiltered = [];
+
+async function erpShowOutOfStockModal() {
+  var modalEl = document.getElementById('erpOutOfStockModal');
+  if (!modalEl) return;
+  
+  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  var tbody = document.getElementById('outOfStockBody');
+  
+  tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
+    '<div class="erp-spinner"></div>' +
+    '<div class="mt-2">Loading zero-stock items...</div></td></tr>';
+  
+  modal.show();
+  
+  try {
+    // Fetch items with on_hand = 0
+    var rows = await erpFetch('erp_items',
+      'select=item_code,description,category,location,on_hand,buffer_stock,ave_monthly_consumption,active_consumption_months,stock_classification,abc_classification,inventory_movement' +
+      '&is_active=eq.true&on_hand=eq.0&order=item_code.asc&limit=5000');
+    
+    _outOfStockAll = rows || [];
+    
+    document.getElementById('outOfStockCount').textContent = _outOfStockAll.length;
+    
+    erpFilterOutOfStock();
+    
+  } catch(err) {
+    console.error('[erpShowOutOfStockModal]', err);
+    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty text-danger">' +
+      'Failed to load: ' + erpEsc(err.message) + '</td></tr>';
+  }
+}
+
+function erpFilterOutOfStock() {
+  var filter = document.getElementById('outOfStockFilter').value;
+  var search = (document.getElementById('outOfStockSearch').value || '').toLowerCase().trim();
+  
+  _outOfStockFiltered = _outOfStockAll.filter(function(it) {
+    var activeMo = Number(it.active_consumption_months || 0);
+    
+    // Filter by type
+    if (filter === 'standard' && activeMo < 4) return false;
+    if (filter === 'no-usage' && activeMo > 0) return false;
+    
+    // Search
+    if (search) {
+      var code = String(it.item_code || '').toLowerCase();
+      var desc = String(it.description || '').toLowerCase();
+      if (code.indexOf(search) === -1 && desc.indexOf(search) === -1) return false;
+    }
+    
+    return true;
+  });
+  
+  erpRenderOutOfStock();
+}
+
+function erpRenderOutOfStock() {
+  var tbody = document.getElementById('outOfStockBody');
+  if (!tbody) return;
+  
+  document.getElementById('outOfStockCount').textContent = _outOfStockFiltered.length;
+  
+  if (_outOfStockFiltered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
+      '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
+      'No items match your filters.</td></tr>';
+    return;
+  }
+  
+  var html = '';
+  _outOfStockFiltered.forEach(function(it) {
+    var activeMo = Number(it.active_consumption_months || 0);
+    var buffer = Number(it.buffer_stock || 0);
+    var aveMo = Number(it.ave_monthly_consumption || 0);
+    
+    var statusBadge = '';
+    if (activeMo >= 4 && buffer > 0) {
+      statusBadge = '<span class="reorder-badge reorder-critical">CRITICAL</span>';
+    } else if (activeMo >= 4) {
+      statusBadge = '<span class="reorder-badge reorder-critical">STANDARD</span>';
+    } else if (activeMo >= 1) {
+      statusBadge = '<span class="reorder-badge reorder-new">NEW</span>';
+    } else {
+      statusBadge = '<span class="reorder-badge reorder-none">NO USAGE</span>';
+    }
+    
+    html += '<tr>' +
+      '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
+      '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
+      '<td>' + erpEsc(it.category || '—') + '</td>' +
+      '<td>' + erpEsc(it.location || '—') + '</td>' +
+      '<td class="text-center qty-zero">0</td>' +
+      '<td class="text-end">' + erpNum(buffer) + '</td>' +
+      '<td class="text-center">' + erpNum(aveMo) + '</td>' +
+      '<td class="text-center">' + activeMo + '</td>' +
+      '<td class="text-center">' + statusBadge + '</td>' +
+      '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+function erpExportOutOfStock() {
+  if (_outOfStockFiltered.length === 0) {
+    erpShowToast('No data to export');
+    return;
+  }
+  
+  var headers = ['Item Code', 'Description', 'Category', 'Location', 'On-Hand', 'Buffer Stock', 'Ave Monthly', 'Active Months', 'Status'];
+  var rows = _outOfStockFiltered.map(function(it) {
+    var activeMo = Number(it.active_consumption_months || 0);
+    var status = activeMo >= 4 ? 'STANDARD' : (activeMo >= 1 ? 'NEW' : 'NO USAGE');
+    return [
+      it.item_code || '',
+      it.description || '',
+      it.category || '',
+      it.location || '',
+      0,
+      Number(it.buffer_stock || 0),
+      Number(it.ave_monthly_consumption || 0),
+      activeMo,
+      status
+    ];
+  });
+  
+  var csv = headers.map(_csvEscErp).join(',') + '\n';
+  rows.forEach(function(row) {
+    csv += row.map(_csvEscErp).join(',') + '\n';
+  });
+  
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'OutOfStock_' + new Date().toISOString().slice(0, 10) + '.csv';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  erpShowToast('✅ Exported ' + rows.length + ' rows');
+}
+
+function _csvEscErp(val) {
+  if (val === null || val === undefined) return '';
+  var s = String(val);
+  if (s.indexOf(',') !== -1 || s.indexOf('"') !== -1 || s.indexOf('\n') !== -1) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
 console.log('✅ stock-monitor.js loaded');
