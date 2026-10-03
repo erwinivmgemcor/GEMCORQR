@@ -99,5 +99,4 @@ function erpNum(n) {
     maximumFractionDigits: 2
   });
 }
-
 console.log('✅ erp-config.js loaded — v' + ERP_APP_VERSION);
