@@ -77,8 +77,9 @@ function newMrifLoadUserInfo() {
 
 async function newMrifLoadInventory() {
   try {
+    // ★ FIXED: use base_unit instead of unit
     var rows = await erpFetch('erp_items',
-      'select=item_code,description,unit&is_active=eq.true&order=item_code.asc&limit=10000');
+      'select=item_code,description,base_unit&is_active=eq.true&order=item_code.asc&limit=10000');
     _newMrifInventory = rows || [];
     console.log('[New MRIF] Inventory loaded:', _newMrifInventory.length);
   } catch(err) {
@@ -304,11 +305,13 @@ function newMrifFilterItems(input, idx) {
     matches.forEach(function(it) {
       var el = document.createElement('div');
       el.className = 'erp-item-dropdown-item';
+      // ★ FIXED: use base_unit instead of unit
       el.innerHTML = '<div class="item-code">' + erpEsc(it.item_code) + '</div>' +
-                     '<div class="item-desc">' + erpEsc(it.description) + ' <span class="item-unit">' + erpEsc(it.unit) + '</span></div>';
+                     '<div class="item-desc">' + erpEsc(it.description) + ' <span class="item-unit">' + erpEsc(it.base_unit || '') + '</span></div>';
       el.onmousedown = function(e) {
         e.preventDefault();
-        newMrifSelectItem(idx, it.item_code, it.description, it.unit);
+        // ★ FIXED: use base_unit instead of unit
+        newMrifSelectItem(idx, it.item_code, it.description, it.base_unit);
         dropdown.classList.add('d-none');
       };
       dropdown.appendChild(el);
