@@ -260,17 +260,30 @@ if (erpReturn && requestedRole === 'warehouse') {
   return;
 }
 
-if (requestedRole === 'warehouse') {
-  preloadWarehouseLists();
-  if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
-    setTimeout(function() { if (settingsModal) settingsModal.show(); }, 500);
-  }
-  selectModule('MRIF');
-  loadWarehouseNotifications();
-  setTimeout(loadAnalytics, 500);
-} else {
-  loadMyRequests();
-}
+      applyRoleUI();
+
+      // ★ Auto-return sa ERP kung galing dun
+      var erpReturn = sessionStorage.getItem('ivm_erpReturnUrl');
+      if (erpReturn && requestedRole === 'warehouse') {
+        sessionStorage.removeItem('ivm_erpReturnUrl');
+        showToast('Welcome back! Redirecting to ERP...', 'success');
+        setTimeout(function() {
+          window.location.href = erpReturn;
+        }, 800);
+        return;
+      }
+
+      if (requestedRole === 'warehouse') {
+        preloadWarehouseLists();
+        if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
+          setTimeout(function() { if (settingsModal) settingsModal.show(); }, 500);
+        }
+        selectModule('MRIF');
+        loadWarehouseNotifications();
+        setTimeout(loadAnalytics, 500);
+      } else {
+        loadMyRequests();
+      }
 
     } catch(err) {
       _showLoginError(errorField,
