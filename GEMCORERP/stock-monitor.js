@@ -289,13 +289,14 @@ function erpRenderTable() {
     var html = '';
   pageItems.forEach(function(it) {
     var onHand = Number(it.on_hand || 0);
-    var reorder = Number(it.reorder_point || 0);
     var buffer = Number(it.buffer_stock || 0);
+    var aveMo = Number(it.ave_monthly_consumption || 0);
+    var aveDay = Number(it.ave_daily_consumption || 0);
+    var activeMo = Number(it.active_consumption_months || 0);
     
     var qtyClass = 'qty-ok';
     if (onHand === 0) qtyClass = 'qty-zero';
-    else if (onHand <= buffer) qtyClass = 'qty-zero';
-    else if (onHand <= reorder) qtyClass = 'qty-low';
+    else if (onHand <= buffer) qtyClass = 'qty-low';
     
     var value = onHand * Number(it.unit_cost || 0);
     
@@ -315,21 +316,18 @@ function erpRenderTable() {
       movBadge = '<span class="mov-badge ' + mClass + '">' + erpEsc(shortLabel) + '</span>';
     }
     
-    // ★ BAGONG DAGDAG: Usage columns
-    var activeMo = Number(it.active_consumption_months || 0);
-    var aveMo = Number(it.ave_monthly_consumption || 0);
-    var aveDay = Number(it.ave_daily_consumption || 0);
-    
-    // Standard stock badge (4+ months = standard)
-    var statusBadge = '';
-    if (activeMo >= 4 && aveMo > 0) {
-      statusBadge = '<span class="usage-badge usage-standard">STANDARD</span>';
-    } else if (activeMo >= 2) {
-      statusBadge = '<span class="usage-badge usage-monitor">MONITOR</span>';
+    // ★ Reorder Status (based on STANDARD STOCK + buffer)
+    var reorderStatus = '';
+    if (activeMo >= 4 && buffer > 0 && onHand <= buffer) {
+      reorderStatus = '<span class="reorder-badge reorder-critical">FOR REPLENISHMENT</span>';
+    } else if (activeMo >= 4 && buffer > 0 && onHand <= buffer * 1.25) {
+      reorderStatus = '<span class="reorder-badge reorder-low">LOW STOCK</span>';
+    } else if (activeMo >= 4 && buffer > 0) {
+      reorderStatus = '<span class="reorder-badge reorder-ok">OK</span>';
     } else if (activeMo >= 1) {
-      statusBadge = '<span class="usage-badge usage-new">NEW</span>';
+      reorderStatus = '<span class="reorder-badge reorder-new">NEW</span>';
     } else {
-      statusBadge = '<span class="usage-badge usage-none">NO USAGE</span>';
+      reorderStatus = '<span class="reorder-badge reorder-none">NO USAGE</span>';
     }
     
     html += '<tr onclick="erpShowItemDetails(\'' + erpEsc(it.item_code).replace(/'/g, "\\'") + '\')">' +
@@ -338,13 +336,12 @@ function erpRenderTable() {
       '<td>' + erpEsc(it.category || '—') + '</td>' +
       '<td>' + erpEsc(it.location || '—') + '</td>' +
       '<td class="text-end ' + qtyClass + '">' + erpNum(onHand) + '</td>' +
+      '<td class="text-end buffer-cell">' + erpNum(buffer) + '</td>' +
       '<td class="text-center">' + erpEsc(it.base_unit || '') + '</td>' +
-      '<td class="text-end">' + erpPeso(it.unit_cost) + '</td>' +
-      '<td class="text-end value-cell">' + erpPeso(value) + '</td>' +
-      '<td class="text-center usage-cell">' + activeMo + '</td>' +     // ★ BAGO
-      '<td class="text-end usage-cell">' + erpNum(aveMo) + '</td>' +    // ★ BAGO
-      '<td class="text-end usage-cell">' + erpNum(aveDay) + '</td>' +   // ★ BAGO
-      '<td class="text-center">' + statusBadge + '</td>' +              // ★ BAGO
+      '<td class="text-center usage-cell">' + activeMo + '</td>' +
+      '<td class="text-end usage-cell">' + erpNum(aveMo) + '</td>' +
+      '<td class="text-end usage-cell">' + erpNum(aveDay) + '</td>' +
+      '<td class="text-center">' + reorderStatus + '</td>' +
       '<td class="text-center">' + abcBadge + '</td>' +
       '<td class="text-center">' + movBadge + '</td>' +
       '</tr>';
