@@ -273,6 +273,19 @@ if (erpReturn && requestedRole === 'warehouse') {
         return;
       }
 
+      applyRoleUI();
+
+      // ★ Auto-return sa ERP kung galing dun
+      var erpReturn = sessionStorage.getItem('ivm_erpReturnUrl');
+      if (erpReturn && requestedRole === 'warehouse') {
+        sessionStorage.removeItem('ivm_erpReturnUrl');
+        showToast('Welcome back! Redirecting to ERP...', 'success');
+        setTimeout(function() {
+          window.location.href = erpReturn;
+        }, 800);
+        return;
+      }
+
       if (requestedRole === 'warehouse') {
         preloadWarehouseLists();
         if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
