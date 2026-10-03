@@ -52,27 +52,30 @@ function newMrifLoadUserInfo() {
   var fullname = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || '';
   var dept = localStorage.getItem('ivm_userDepartment') || '';
   
-  if (!fullname) {
-    // Try to get from erp_users
-    var username = localStorage.getItem('ivm_username');
-    if (username) {
-      (async function() {
-        try {
-          var rows = await erpFetch('erp_users', 'username=eq.' + encodeURIComponent(username) + '&limit=1');
-          if (rows && rows[0]) {
-            fullname = rows[0].fullname || username;
-            dept = rows[0].department || '';
-          }
-        } catch(e) { console.warn(e); }
-      })();
-    }
+  if (fullname) {
+    // May login — ipakita yung locked display
+    _newMrifState.requestor = fullname;
+    _newMrifState.department = dept;
+    document.getElementById('erpRequestorDisplay').textContent = fullname;
+    document.getElementById('erpDepartmentDisplay').textContent = dept || '(not set)';
+    document.getElementById('erpRequestorLocked').style.display = '';
+    document.getElementById('erpRequestorManual').style.display = 'none';
+    document.getElementById('erpDepartmentLocked').style.display = '';
+    document.getElementById('erpDepartmentManual').style.display = 'none';
+  } else {
+    // Walang login — ipakita yung manual input
+    document.getElementById('erpRequestorLocked').style.display = 'none';
+    document.getElementById('erpRequestorManual').style.display = '';
+    document.getElementById('erpDepartmentLocked').style.display = 'none';
+    document.getElementById('erpDepartmentManual').style.display = '';
   }
-  
-  _newMrifState.requestor = fullname;
-  _newMrifState.department = dept;
-  
-  document.getElementById('erpRequestorDisplay').textContent = fullname || '(not set)';
-  document.getElementById('erpDepartmentDisplay').textContent = dept || '(not set)';
+}
+
+function newMrifOnRequestorInput() {
+  var reqInput = document.getElementById('erpRequestorInput');
+  var deptInput = document.getElementById('erpDepartmentInput');
+  if (reqInput) _newMrifState.requestor = reqInput.value.trim();
+  if (deptInput) _newMrifState.department = deptInput.value.trim();
 }
 
 async function newMrifLoadInventory() {
