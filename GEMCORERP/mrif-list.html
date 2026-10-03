@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEMCOR ERP — MRIF List</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="erp-styles.css">
+<link rel="stylesheet" href="erp-nav.css">
+
+<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script defer src="erp-config.js"></script>
+<script defer src="erp-supabase.js"></script>
+<script defer src="erp-nav.js"></script>
+<script defer src="prints-erp.js"></script>
+<script defer src="mrif-list.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TOP BAR WITH NAV -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<nav class="erp-topbar">
+  <div class="erp-topbar-left">
+    <img src="../gemcor-logo.png" alt="GEMCOR" class="erp-logo" onerror="this.style.display='none'">
+    <div>
+      <div class="erp-brand">GEMCOR ERP</div>
+      <div class="erp-brand-sub">MRIF List <span class="badge-live">LIVE</span></div>
+    </div>
+  </div>
+
+  <div id="erpNavBar"></div>
+
+  <div class="erp-topbar-right">
+    <div class="erp-health" id="erpHealthBadge">
+      <span class="dot dot-pending"></span>
+      <span id="erpHealthText">Checking...</span>
+    </div>
+    <button class="erp-btn-icon" onclick="mrifListRefresh()" title="Refresh">
+      <i class="bi bi-arrow-clockwise"></i>
+    </button>
+    <a href="../index.html" class="erp-btn-outline" title="Back to main system">
+      <i class="bi bi-arrow-left"></i> <span>Main System</span>
+    </a>
+  </div>
+</nav>
+
+<div class="erp-container">
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- KPI CARDS -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="erp-kpi-row">
+    <div class="erp-kpi-card kpi-blue">
+      <div class="kpi-icon"><i class="bi bi-file-earmark-text"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Total MRIF</div>
+        <div class="kpi-value" id="mrifKpiTotal">—</div>
+        <div class="kpi-sub" id="mrifKpiTotalSub">All documents</div>
+      </div>
+    </div>
+
+    <div class="erp-kpi-card kpi-amber">
+      <div class="kpi-icon"><i class="bi bi-clock-history"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Pending</div>
+        <div class="kpi-value" id="mrifKpiPending">—</div>
+        <div class="kpi-sub">Awaiting processing</div>
+      </div>
+    </div>
+
+    <div class="erp-kpi-card kpi-green">
+      <div class="kpi-icon"><i class="bi bi-check-circle-fill"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Completed</div>
+        <div class="kpi-value" id="mrifKpiCompleted">—</div>
+        <div class="kpi-sub">Fully processed</div>
+      </div>
+    </div>
+
+    <div class="erp-kpi-card kpi-red">
+      <div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Partial</div>
+        <div class="kpi-value" id="mrifKpiPartial">—</div>
+        <div class="kpi-sub">Partially issued</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- FILTERS + SEARCH -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="erp-card erp-filters-card">
+    <div class="erp-filters-row">
+      <div class="erp-search-wrap">
+        <i class="bi bi-search"></i>
+        <input type="text" id="mrifSearchInput" class="erp-search" placeholder="Search MRIF No. or requestor..." oninput="mrifListOnSearch()">
+      </div>
+      <select id="mrifStatusFilter" class="erp-select" onchange="mrifListLoad()">
+        <option value="">All Status</option>
+        <option value="PENDING">Pending</option>
+        <option value="PARTIAL">Partial</option>
+        <option value="COMPLETED">Completed</option>
+      </select>
+      <select id="mrifRequestorFilter" class="erp-select" onchange="mrifListLoad()">
+        <option value="">All Requestors</option>
+      </select>
+      <select id="mrifDeptFilter" class="erp-select" onchange="mrifListLoad()">
+        <option value="">All Departments</option>
+      </select>
+      <input type="date" id="mrifDateFrom" class="erp-select" style="min-width:150px;" onchange="mrifListLoad()" title="From date">
+      <input type="date" id="mrifDateTo" class="erp-select" style="min-width:150px;" onchange="mrifListLoad()" title="To date">
+      <button class="erp-btn-clear" onclick="mrifListClearFilters()" title="Clear all filters">
+        <i class="bi bi-x-lg"></i> Clear
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- MRIF TABLE -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="erp-card erp-table-card">
+    <div class="erp-table-header">
+      <div>
+        <i class="bi bi-file-earmark-text me-2"></i>
+        <strong>MRIF Documents</strong>
+        <span class="erp-table-subtitle" id="mrifTableSubtitle">All documents</span>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <button class="erp-btn-outline-dark" onclick="mrifListExport()" title="Export to Excel (CSV)">
+          <i class="bi bi-file-earmark-excel"></i> Export
+        </button>
+        <span class="erp-badge" id="mrifTableCount">0 items</span>
+      </div>
+    </div>
+
+    <div class="erp-table-wrap">
+      <table class="erp-table">
+        <thead>
+          <tr>
+            <th class="col-code">MRIF No.</th>
+            <th class="col-date">Date</th>
+            <th class="col-req">Requestor</th>
+            <th class="col-dept">Department</th>
+            <th class="col-jo">JO No.</th>
+            <th class="col-status text-center">Status</th>
+            <th class="col-items text-center">Items</th>
+            <th class="col-actions text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="mrifTableBody">
+          <tr>
+            <td colspan="8" class="erp-empty">
+              <div class="erp-spinner"></div>
+              <div class="mt-2">Loading MRIF documents...</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="erp-table-footer">
+      <div>Showing <span id="mrifPageStart">0</span>–<span id="mrifPageEnd">0</span> of <span id="mrifPageTotal">0</span></div>
+      <div class="erp-pagination">
+        <button id="mrifBtnPrev" onclick="mrifListPagePrev()" disabled>
+          <i class="bi bi-chevron-left"></i> Prev
+        </button>
+        <span id="mrifPageLabel">Page 1</span>
+        <button id="mrifBtnNext" onclick="mrifListPageNext()">
+          Next <i class="bi bi-chevron-right"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- FOOTER -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="erp-footer">
+    <div>GEMCOR ERP — MRIF List v1.0.0</div>
+    <div>Pure Supabase • No Google Sheets • Live Data</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TOAST -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="erpToast" class="toast erp-toast">
+    <div class="toast-body" id="erpToastBody">Message</div>
+  </div>
+</div>
+
+</body>
+</html>
