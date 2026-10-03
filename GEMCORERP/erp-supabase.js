@@ -300,22 +300,45 @@ async function erpGetPrfPoByPo(poNo) {
 // ═══════════════════════════════════════════════════════════
 // DISTINCT VALUES
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// DISTINCT VALUES — Fetch from appropriate table
+// ═══════════════════════════════════════════════════════════
 async function erpGetDistinctValues(column) {
+  // Determine which table to query based on column
+  // requestor / department / status / doc_type → erp_documents
+  // category / location / movement / abc → erp_items
+  
+  var docColumns = ['requestor', 'department', 'status', 'doc_type', 'jo_no', 'gem_so_no', 'client_name', 'project', 'po_no', 'vendor', 'dr_no', 'prepared_by'];
+  var itemColumns = ['category', 'location', 'inventory_movement', 'abc_classification', 'stock_classification', 'base_unit'];
+  
+  var table = null;
+  if (docColumns.indexOf(column) !== -1) table = 'erp_documents';
+  else if (itemColumns.indexOf(column) !== -1) table = 'erp_items';
+  else {
+    console.warn('[erpGetDistinctValues] Unknown column:', column);
+    return { success: false, error: 'Unknown column', values: [] };
+  }
+  
   try {
-    var rows = await erpFetch('erp_items',
-      'select=' + column + '&' + column + '=not.is.null&order=' + column + '.asc');
+    var rows = await erpFetch(table,
+      'select=' + column + '&' + column + '=not.is.null&order=' + column + '.asc&limit=5000');
+    
     var seen = {};
     var values = [];
     (rows || []).forEach(function(r) {
       var v = r[column];
-      if (v && !seen[v]) { seen[v] = true; values.push(v); }
+      if (v && String(v).trim() && !seen[v]) {
+        seen[v] = true;
+        values.push(v);
+      }
     });
+    
     return { success: true, values: values };
   } catch(err) {
+    console.warn('[erpGetDistinctValues]', column, err.message);
     return { success: false, error: err.message, values: [] };
   }
 }
-
 // ═══════════════════════════════════════════════════════════
 // HEALTH CHECK
 // ═══════════════════════════════════════════════════════════
