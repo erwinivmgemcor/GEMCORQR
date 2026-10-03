@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEMCOR ERP — New MRIF</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="erp-styles.css">
+<link rel="stylesheet" href="erp-nav.css">
+
+<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script defer src="erp-config.js"></script>
+<script defer src="erp-supabase.js"></script>
+<script defer src="erp-nav.js"></script>
+<script defer src="prints-erp.js"></script>
+<script defer src="new-mrif.js"></script>
+</head>
+<body>
+
+<nav class="erp-topbar">
+  <div class="erp-topbar-left">
+    <img src="../gemcor-logo.png" alt="GEMCOR" class="erp-logo" onerror="this.style.display='none'">
+    <div>
+      <div class="erp-brand">GEMCOR ERP</div>
+      <div class="erp-brand-sub">New MRIF <span class="badge-live">LIVE</span></div>
+    </div>
+  </div>
+  <div id="erpNavBar"></div>
+  <div class="erp-topbar-right">
+    <div class="erp-health" id="erpHealthBadge">
+      <span class="dot dot-pending"></span>
+      <span id="erpHealthText">Checking...</span>
+    </div>
+    <a href="mrif-list.html" class="erp-btn-outline" title="Back to MRIF list">
+      <i class="bi bi-arrow-left"></i> <span>MRIF List</span>
+    </a>
+  </div>
+</nav>
+
+<div class="erp-container">
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- WIZARD STEPS INDICATOR -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="erp-card" style="padding:20px;margin-bottom:20px;">
+    <div class="erp-wizard-steps">
+      <div class="erp-wizard-step active" data-step="1">
+        <div class="step-num">1</div>
+        <div class="step-label">Type</div>
+      </div>
+      <div class="erp-wizard-line"></div>
+      <div class="erp-wizard-step" data-step="2">
+        <div class="step-num">2</div>
+        <div class="step-label">JO No.</div>
+      </div>
+      <div class="erp-wizard-line"></div>
+      <div class="erp-wizard-step" data-step="3">
+        <div class="step-num">3</div>
+        <div class="step-label">Requestor</div>
+      </div>
+      <div class="erp-wizard-line"></div>
+      <div class="erp-wizard-step" data-step="4">
+        <div class="step-num">4</div>
+        <div class="step-label">Items</div>
+      </div>
+      <div class="erp-wizard-line"></div>
+      <div class="erp-wizard-step" data-step="5">
+        <div class="step-num">5</div>
+        <div class="step-label">Review</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- STEP 1: SELECT TYPE -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="erp-wizard-panel active" id="erpStep1">
+    <div class="erp-card" style="padding:32px;">
+      <h4 style="margin-bottom:24px;"><i class="bi bi-file-earmark-text me-2"></i>Select Document Type</h4>
+      
+      <div class="erp-doc-type-grid">
+        <div class="erp-doc-type-card" onclick="newMrifSelectType('MRIF')" id="typeCardMRIF">
+          <i class="bi bi-box-arrow-up"></i>
+          <div class="doc-type-title">MRIF</div>
+          <div class="doc-type-desc">Materials Request and Issuance Form</div>
+        </div>
+        <div class="erp-doc-type-card" onclick="newMrifSelectType('MRS')" id="typeCardMRS">
+          <i class="bi bi-arrow-counterclockwise"></i>
+          <div class="doc-type-title">MRS</div>
+          <div class="doc-type-desc">Materials Return Slip</div>
+        </div>
+      </div>
+
+      <div class="erp-wizard-nav">
+        <button class="erp-btn-cancel" onclick="window.location.href='mrif-list.html'">Cancel</button>
+        <button class="erp-btn-primary" id="btnStep1Next" onclick="newMrifGoToStep(2)" disabled>Next →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- STEP 2: JO NUMBER -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="erp-wizard-panel" id="erpStep2">
+    <div class="erp-card" style="padding:32px;">
+      <h4 style="margin-bottom:24px;"><i class="bi bi-hash me-2"></i>Enter JO Number</h4>
+      
+      <div class="erp-form-group">
+        <label>JO No. <span class="text-danger">*</span></label>
+        <div class="erp-input-group">
+          <span class="erp-input-icon"><i class="bi bi-hash"></i></span>
+          <input type="text" id="erpJoNo" class="erp-input-lg" placeholder="e.g. 13446" oninput="newMrifOnJoInput()">
+        </div>
+        <div id="erpJoStatus" class="erp-hint"></div>
+      </div>
+
+      <div class="erp-wizard-nav">
+        <button class="erp-btn-cancel" onclick="newMrifGoToStep(1)">← Back</button>
+        <button class="erp-btn-primary" id="btnStep2Next" onclick="newMrifDoLookupJo()">Lookup & Next →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- STEP 3: REQUESTOR (LOCKED) -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="erp-wizard-panel" id="erpStep3">
+    <div class="erp-card" style="padding:32px;">
+      <h4 style="margin-bottom:24px;"><i class="bi bi-person-lock me-2"></i>Requestor Info</h4>
+      
+      <div class="erp-form-group">
+        <label>Requestor</label>
+        <div class="erp-locked-field">
+          <i class="bi bi-lock-fill"></i>
+          <div>
+            <div class="locked-value" id="erpRequestorDisplay">Loading...</div>
+            <div class="locked-hint">Locked to your account — cannot be changed</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="erp-form-group">
+        <label>Department / Section</label>
+        <div class="erp-locked-field">
+          <i class="bi bi-lock-fill"></i>
+          <div>
+            <div class="locked-value" id="erpDepartmentDisplay">Loading...</div>
+            <div class="locked-hint">Locked to your account — cannot be changed</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="erp-form-row">
+        <div class="erp-form-group">
+          <label>GEM SO No. <span class="text-muted small">(auto-filled)</span></label>
+          <input type="text" id="erpGemSoNo" class="erp-input-lg" readonly>
+        </div>
+        <div class="erp-form-group">
+          <label>Client Name <span class="text-muted small">(auto-filled)</span></label>
+          <input type="text" id="erpClientName" class="erp-input-lg" readonly>
+        </div>
+      </div>
+
+      <div class="erp-form-group">
+        <label>Project <span class="text-muted small">(auto-filled)</span></label>
+        <input type="text" id="erpProject" class="erp-input-lg" readonly>
+      </div>
+
+      <div class="erp-wizard-nav">
+        <button class="erp-btn-cancel" onclick="newMrifGoToStep(2)">← Back</button>
+        <button class="erp-btn-primary" onclick="newMrifGoToStep(4)">Next →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- STEP 4: ITEMS -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="erp-wizard-panel" id="erpStep4">
+    <div class="erp-card" style="padding:32px;">
+      <h4 style="margin-bottom:24px;"><i class="bi bi-box-seam me-2"></i>Add Items</h4>
+      
+      <div id="erpItemsContainer"></div>
+      
+      <button class="erp-btn-add-item" onclick="newMrifAddItem()">
+        <i class="bi bi-plus-lg"></i> Add Another Item
+      </button>
+
+      <div class="erp-wizard-nav">
+        <button class="erp-btn-cancel" onclick="newMrifGoToStep(3)">← Back</button>
+        <button class="erp-btn-primary" onclick="newMrifGoToStep(5)">Next →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- STEP 5: REVIEW & SUBMIT -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="erp-wizard-panel" id="erpStep5">
+    <div class="erp-card" style="padding:32px;">
+      <h4 style="margin-bottom:24px;"><i class="bi bi-check-circle me-2"></i>Review & Submit</h4>
+      
+      <div class="erp-review-card">
+        <div class="erp-review-row"><span>Type</span><strong id="reviewType">—</strong></div>
+        <div class="erp-review-row"><span>JO No.</span><strong id="reviewJoNo">—</strong></div>
+        <div class="erp-review-row"><span>Requestor</span><strong id="reviewRequestor">—</strong></div>
+        <div class="erp-review-row"><span>Department</span><strong id="reviewDepartment">—</strong></div>
+        <div class="erp-review-row"><span>GEM SO No.</span><strong id="reviewGemSo">—</strong></div>
+        <div class="erp-review-row"><span>Client</span><strong id="reviewClient">—</strong></div>
+        <div class="erp-review-row"><span>Project</span><strong id="reviewProject">—</strong></div>
+      </div>
+
+      <h5 style="margin-top:24px;margin-bottom:12px;">Items</h5>
+      <table class="table table-sm" style="font-size:0.9rem;">
+        <thead>
+          <tr><th>#</th><th>Item Code</th><th>Description</th><th>Qty</th><th>Unit</th></tr>
+        </thead>
+        <tbody id="reviewItemsBody"></tbody>
+      </table>
+
+      <div class="erp-wizard-nav">
+        <button class="erp-btn-cancel" onclick="newMrifGoToStep(4)">← Back</button>
+        <button class="erp-btn-primary" id="btnSubmitMRIF" onclick="newMrifSubmit()">
+          <i class="bi bi-check-circle me-2"></i>Submit Request
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="erp-footer">
+    <div>GEMCOR ERP — New MRIF v1.0.0</div>
+    <div>Pure Supabase • No Google Sheets • Live Data</div>
+  </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="erpToast" class="toast erp-toast">
+    <div class="toast-body" id="erpToastBody">Message</div>
+  </div>
+</div>
+
+</body>
+</html>
