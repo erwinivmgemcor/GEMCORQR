@@ -1799,3 +1799,41 @@ body {
 .usage-monitor  { background: #fef3c7; color: #92400e; }  /* Amber — 2-3 months */
 .usage-new      { background: #dbeafe; color: #1e40af; }  /* Blue — 1 month */
 .usage-none     { background: #f3f4f6; color: #6b7280; }  /* Gray — no usage */
+
+
+/* ═══════════════════════════════════════════════════════════
+   STOCK MONITOR ENHANCEMENTS
+   ═══════════════════════════════════════════════════════════ */
+
+.col-buffer { width: 8%; }
+.col-usage  { width: 6%; }
+.col-status { width: 12%; }
+
+.buffer-cell {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  color: #1e3a5f;
+}
+
+.usage-cell {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  color: #1e3a5f;
+  font-size: 0.82rem;
+}
+
+.reorder-badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.reorder-critical { background: #fee2e2; color: #991b1b; }
+.reorder-low      { background: #fef3c7; color: #92400e; }
+.reorder-ok       { background: #d1fae5; color: #065f46; }
+.reorder-new      { background: #dbeafe; color: #1e40af; }
+.reorder-none     { background: #f3f4f6; color: #6b7280; }
