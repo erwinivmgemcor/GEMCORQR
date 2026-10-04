@@ -69,7 +69,7 @@ async function mrifListLoad() {
     var toDate = document.getElementById('mrifDateTo') ? document.getElementById('mrifDateTo').value : '';
     if (toDate) query += '&created_at=lt.' + encodeURIComponent(toDate + 'T23:59:59');
     
-    var rows = await erpFetch('erp_documents', query);
+    var rows = await erpFetch('documents', query);
     _mrifAllDocs = rows || [];
     
     // Compute KPIs
