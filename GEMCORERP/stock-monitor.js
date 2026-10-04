@@ -89,10 +89,11 @@ async function erpLoadSummary() {
   }
   
   var s = result.summary || {};
-  document.getElementById('kpiTotalItems').textContent = erpNum(s.total_items);
-  document.getElementById('kpiStockValue').textContent = erpPeso(s.total_stock_value);
-  document.getElementById('kpiBelowReorder').textContent = erpNum(s.below_reorder);
-  document.getElementById('kpiZeroStock').textContent = erpNum(s.zero_stock_items);
+ document.getElementById('kpiTotalItems').textContent = erpNum(s.total_items);
+document.getElementById('kpiStockValue').textContent = erpPeso(s.total_stock_value);
+document.getElementById('kpiBelowReorder').textContent = erpNum(s.below_reorder);
+document.getElementById('kpiNewBelowBuffer').textContent = erpNum(s.new_below_buffer || 0);  // ★ BAGONG LINE
+document.getElementById('kpiZeroStock').textContent = erpNum(s.zero_stock_items);
   
   var subEl = document.getElementById('kpiTotalItemsSub');
   if (subEl) {
@@ -1268,5 +1269,88 @@ async function erpConfirmDeactivateItem() {
     btn.disabled = false;
     btn.innerHTML = originalHtml;
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+// NEW ITEMS MODAL — Bagong items na below buffer
+// ═══════════════════════════════════════════════════════════
+var _newItemsAll = [];
+var _newItemsFiltered = [];
+
+async function erpShowNewItemsModal() {
+  var modalEl = document.getElementById('erpNewItemsModal');
+  if (!modalEl) {
+    console.warn('[erpShowNewItemsModal] Modal not found, create one first');
+    erpShowToast('NEW Items modal not yet built. Loading data...');
+    return;
+  }
+  
+  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  var tbody = document.getElementById('newItemsBody');
+  
+  tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
+    '<div class="erp-spinner"></div>' +
+    '<div class="mt-2">Loading NEW items...</div></td></tr>';
+  
+  modal.show();
+  
+  try {
+    var rows = await erpFetch('erp_items',
+      'select=item_code,description,category,location,on_hand,buffer_stock,ave_monthly_consumption,active_consumption_months,stock_classification,abc_classification,inventory_movement' +
+      '&is_active=eq.true&stock_classification=eq.NEW&buffer_stock=gt.0&order=item_code.asc&limit=1000');
+    
+    _newItemsAll = (rows || []).filter(function(it) {
+      return Number(it.on_hand || 0) <= Number(it.buffer_stock || 0);
+    });
+    
+    document.getElementById('newItemsCount').textContent = _newItemsAll.length;
+    
+    erpRenderNewItems();
+    
+  } catch(err) {
+    console.error('[erpShowNewItemsModal]', err);
+    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty text-danger">' +
+      'Failed to load: ' + erpEsc(err.message) + '</td></tr>';
+  }
+}
+
+function erpRenderNewItems() {
+  var tbody = document.getElementById('newItemsBody');
+  if (!tbody) return;
+  
+  document.getElementById('newItemsCount').textContent = _newItemsAll.length;
+  
+  if (_newItemsAll.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
+      '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
+      'No NEW items below buffer.</td></tr>';
+    return;
+  }
+  
+  var html = '';
+  _newItemsAll.forEach(function(it) {
+    var activeMo = Number(it.active_consumption_months || 0);
+    var buffer = Number(it.buffer_stock || 0);
+    var aveMo = Number(it.ave_monthly_consumption || 0);
+    var onHand = Number(it.on_hand || 0);
+    
+    var statusBadge = '<span class="reorder-badge reorder-new">MONITOR</span>';
+    if (activeMo >= 3) {
+      statusBadge = '<span class="reorder-badge reorder-low">PROMOTE?</span>';
+    }
+    
+    html += '<tr>' +
+      '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
+      '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
+      '<td>' + erpEsc(it.category || '—') + '</td>' +
+      '<td>' + erpEsc(it.location || '—') + '</td>' +
+      '<td class="text-end">' + erpNum(onHand) + '</td>' +
+      '<td class="text-end">' + erpNum(buffer) + '</td>' +
+      '<td class="text-end">' + erpNum(aveMo) + '</td>' +
+      '<td class="text-center">' + activeMo + '</td>' +
+      '<td class="text-center">' + statusBadge + '</td>' +
+      '</tr>';
+  });
+  tbody.innerHTML = html;
 }
 console.log('✅ stock-monitor.js loaded');
