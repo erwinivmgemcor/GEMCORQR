@@ -6,14 +6,6 @@
 (function() {
   'use strict';
   
-  var NAV_ITEMS = [
-    { id: 'stock-monitor', label: 'Stock Monitor', icon: 'bi-speedometer2', href: 'stock-monitor.html' },
-    { id: 'weekly-monitor', label: 'Weekly Monitoring', icon: 'bi-calendar-week', href: 'weekly-monitor.html' }
-    // Future modules:
-    // { id: 'mrif', label: 'MRIF', icon: 'bi-box-arrow-up', href: 'mrif.html' },
-    // { id: 'mrr', label: 'MRR', icon: 'bi-box-arrow-down', href: 'mrr.html' },
-    // { id: 'mrs', label: 'MRS', icon: 'bi-arrow-counterclockwise', href: 'mrs.html' }
-  ];
 var NAV_ITEMS = [
   { id: 'stock-monitor', label: 'Stock Monitor', icon: 'bi-speedometer2', href: 'stock-monitor.html' },
   { id: 'weekly-monitor', label: 'Weekly Monitoring', icon: 'bi-calendar-week', href: 'weekly-monitor.html' },
