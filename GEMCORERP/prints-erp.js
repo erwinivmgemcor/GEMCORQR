@@ -469,7 +469,7 @@ async function erpOpenPrintPreview(docNo, docType) {
 async function erpFetchDocWithItems(docNo, docType) {
   try {
     // Fetch document metadata
-    var docs = await erpFetch('erp_documents',
+    var docs = await erpFetch('documents',
       'doc_no=eq.' + encodeURIComponent(docNo) + '&limit=1');
     
     if (!docs || docs.length === 0) {
@@ -479,7 +479,7 @@ async function erpFetchDocWithItems(docNo, docType) {
     var doc = docs[0];
     
     // Fetch doc items
-    var items = await erpFetch('erp_doc_items',
+    var items = await erpFetch('doc_items',
       'doc_no=eq.' + encodeURIComponent(docNo) + '&order=line_no.asc');
     
     // Build info object (same structure as old GAS format)
