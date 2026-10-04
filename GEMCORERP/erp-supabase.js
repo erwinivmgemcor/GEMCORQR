@@ -312,7 +312,7 @@ async function erpGetDistinctValues(column) {
   var itemColumns = ['category', 'location', 'inventory_movement', 'abc_classification', 'stock_classification', 'base_unit'];
   
   var table = null;
-  if (docColumns.indexOf(column) !== -1) table = 'erp_documents';
+  if (docColumns.indexOf(column) !== -1) table = 'documents';
   else if (itemColumns.indexOf(column) !== -1) table = 'erp_items';
   else {
     console.warn('[erpGetDistinctValues] Unknown column:', column);
