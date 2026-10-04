@@ -58,7 +58,7 @@ async function mrrListLoad() {
     var toDate = document.getElementById('mrrDateTo') ? document.getElementById('mrrDateTo').value : '';
     if (toDate) query += '&created_at=lt.' + encodeURIComponent(toDate + 'T23:59:59');
     
-    var rows = await erpFetch('erp_documents', query);
+    var rows = await erpFetch('documents', query);
     _mrrAllDocs = rows || [];
     
     mrrListComputeKPIs();
