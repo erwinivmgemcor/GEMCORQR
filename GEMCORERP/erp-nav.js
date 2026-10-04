@@ -14,18 +14,20 @@
     // { id: 'mrr', label: 'MRR', icon: 'bi-box-arrow-down', href: 'mrr.html' },
     // { id: 'mrs', label: 'MRS', icon: 'bi-arrow-counterclockwise', href: 'mrs.html' }
   ];
-  var NAV_ITEMS = [
+var NAV_ITEMS = [
   { id: 'stock-monitor', label: 'Stock Monitor', icon: 'bi-speedometer2', href: 'stock-monitor.html' },
   { id: 'weekly-monitor', label: 'Weekly Monitoring', icon: 'bi-calendar-week', href: 'weekly-monitor.html' },
+  { id: 'usage-entry', label: 'Usage Entry', icon: 'bi-calendar-plus', href: 'usage-entry.html' },
   { id: 'mrif-list', label: 'MRIF', icon: 'bi-box-arrow-up', href: 'mrif-list.html' },
-  { id: 'mrr-list', label: 'MRR', icon: 'bi-box-arrow-down', href: 'mrr-list.html' },     // future
-  { id: 'mrs-list', label: 'MRS', icon: 'bi-arrow-counterclockwise', href: 'mrs-list.html' } // future
+  { id: 'mrr-list', label: 'MRR', icon: 'bi-box-arrow-down', href: 'mrr-list.html' },
+  { id: 'mrs-list', label: 'MRS', icon: 'bi-arrow-counterclockwise', href: 'mrs-list.html' }
 ];
   
- function getCurrentPage() {
+function getCurrentPage() {
   var path = window.location.pathname;
   if (path.indexOf('weekly-monitor') !== -1) return 'weekly-monitor';
   if (path.indexOf('stock-monitor') !== -1) return 'stock-monitor';
+  if (path.indexOf('usage-entry') !== -1) return 'usage-entry';
   if (path.indexOf('mrif-list') !== -1) return 'mrif-list';
   if (path.indexOf('mrr-list') !== -1) return 'mrr-list';
   if (path.indexOf('mrs-list') !== -1) return 'mrs-list';
