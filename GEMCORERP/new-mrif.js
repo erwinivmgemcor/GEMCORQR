@@ -1,6 +1,7 @@
 // ============================================================
-// GEMCOR ERP — New MRIF Creation (v2)
+// GEMCOR ERP — New MRIF Creation (v3 - FIXED)
 // Direct Supabase insert + Auto-department from user
+// FIXED: Auto-reset after success + prevent double submission
 // ============================================================
 
 var _mrifState = {
@@ -13,7 +14,9 @@ var _mrifState = {
   items: [],
   inventoryList: [],
   inventoryLoaded: false,
-  isSubmitting: false
+  isSubmitting: false,
+  lastSubmittedDocNo: '',        // Track last submitted doc
+  lastSubmittedAt: 0             // Timestamp to prevent double
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -24,20 +27,16 @@ document.addEventListener('DOMContentLoaded', function() {
   
   mrifCheckHealth();
   
-  // Get requestor from login
   var userFullname = localStorage.getItem('ivm_userFullname') || 
                      localStorage.getItem('ivm_username') || '';
   _mrifState.requestor = userFullname;
   
-  // Set date
   document.getElementById('mrifDate').value = new Date().toLocaleDateString('en-US', {
     month: '2-digit', day: '2-digit', year: 'numeric'
   });
   
-  // Auto-load department from users table
   loadUserDepartment();
   
-  // Enter key sa JO input
   document.getElementById('mrifJoNo').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -45,7 +44,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
   
-  // Preload inventory
   preloadInventory();
   
   console.log('[New MRIF] Ready. Requestor:', userFullname);
@@ -80,10 +78,7 @@ async function mrifCheckHealth() {
 // ═══════════════════════════════════════════════════════════
 async function loadUserDepartment() {
   var username = localStorage.getItem('ivm_username') || '';
-  if (!username) {
-    console.warn('[New MRIF] No username in localStorage');
-    return;
-  }
+  if (!username) return;
   
   var deptField = document.getElementById('mrifDepartment');
   deptField.placeholder = 'Loading department...';
@@ -103,7 +98,6 @@ async function loadUserDepartment() {
       deptField.classList.add('locked-input');
       deptField.title = 'Auto-filled from your profile — cannot be changed';
       
-      // Update label
       var label = deptField.previousElementSibling;
       if (label) {
         label.innerHTML = 'Department <span class="badge bg-success ms-1"><i class="bi bi-lock-fill me-1"></i>Locked</span>';
@@ -111,11 +105,9 @@ async function loadUserDepartment() {
       
       console.log('[New MRIF] Department loaded:', dept);
     } else {
-      // Walang department sa profile — allow manual input
       deptField.placeholder = 'Enter department (not set in your profile)';
       deptField.disabled = false;
       deptField.readOnly = false;
-      console.warn('[New MRIF] No department in user profile');
     }
   } catch(err) {
     console.warn('[New MRIF] Could not load department:', err.message);
@@ -163,10 +155,9 @@ async function lookupJoNo() {
     document.getElementById('mrifProject').value = _mrifState.project;
     document.getElementById('mrifRequestor').value = _mrifState.requestor;
     
-    // ═══ SHOW ALL STEPS ═══
     document.getElementById('step2Card').style.display = 'block';
-    document.getElementById('step3Card').style.display = 'block';  // ✅ SHOW items section
-    document.getElementById('step4Card').style.display = 'block';  // ✅ SHOW submit section
+    document.getElementById('step3Card').style.display = 'block';
+    document.getElementById('step4Card').style.display = 'block';
     
     statusEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> JO No. found!</span>';
     resultEl.className = 'alert alert-success mb-0 py-2';
@@ -174,7 +165,6 @@ async function lookupJoNo() {
     
     erpShowToast('JO No. found! Ready to add items.', 'success');
     
-    // Focus Add Item button
     setTimeout(function() {
       var addBtn = document.querySelector('#step3Card .btn-primary');
       if (addBtn) addBtn.focus();
@@ -214,7 +204,6 @@ async function preloadInventory() {
 }
 
 function addItemRow() {
-  // Show step 3 & 4 (kung naka-hide pa)
   document.getElementById('step3Card').style.display = 'block';
   document.getElementById('step4Card').style.display = 'block';
   
@@ -358,11 +347,23 @@ function hideItemDropdown(input) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT MRIF
+// SUBMIT MRIF (with double-submit protection)
 // ═══════════════════════════════════════════════════════════
 async function submitMrif() {
-  if (_mrifState.isSubmitting) return;
+  if (_mrifState.isSubmitting) {
+    console.warn('[Submit] Already in progress');
+    return;
+  }
   
+  // ═══ Double-submit protection ═══
+  var now = Date.now();
+  if (_mrifState.lastSubmittedAt && (now - _mrifState.lastSubmittedAt) < 10000) {
+    var elapsed = Math.round((now - _mrifState.lastSubmittedAt) / 1000);
+    erpShowToast('Please wait ' + (10 - elapsed) + 's before submitting again', 'warning');
+    return;
+  }
+  
+  // ═══ Validation ═══
   if (!_mrifState.joNo) {
     erpShowToast('Please lookup a JO No. first', 'warning');
     return;
@@ -407,6 +408,8 @@ async function submitMrif() {
   if (!confirm('Create MRIF with ' + validItems.length + ' item(s)?')) return;
   
   _mrifState.isSubmitting = true;
+  _mrifState.lastSubmittedAt = now;
+  
   var btn = document.getElementById('btnSubmitMrif');
   var originalHtml = btn.innerHTML;
   btn.disabled = true;
@@ -490,6 +493,8 @@ async function submitMrif() {
       throw new Error('Insert items failed: ' + itemsRes.status + ' ' + itemsErrText);
     }
     
+    _mrifState.lastSubmittedDocNo = docNo;
+    
     erpShowToast('✅ MRIF created: ' + docNo, 'success');
     showSuccessModal(docNo);
     
@@ -504,7 +509,7 @@ async function submitMrif() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUCCESS + RESET
+// SUCCESS MODAL
 // ═══════════════════════════════════════════════════════════
 function showSuccessModal(docNo) {
   document.getElementById('successDocNo').textContent = docNo;
@@ -516,18 +521,19 @@ function showSuccessModal(docNo) {
   
   var modal = new bootstrap.Modal(document.getElementById('successModal'));
   modal.show();
-}
-
-function closeSuccessAndReset() {
-  var modalEl = document.getElementById('successModal');
-  var modal = bootstrap.Modal.getInstance(modalEl);
-  if (modal) modal.hide();
-  setTimeout(resetForm, 300);
-}
-
-function resetForm() {
-  if (!confirm('Reset the form? All unsaved data will be lost.')) return;
   
+  // ═══ AUTO-RESET on modal close ═══
+  var modalEl = document.getElementById('successModal');
+  modalEl.addEventListener('hidden.bs.modal', function onHide() {
+    modalEl.removeEventListener('hidden.bs.modal', onHide);
+    resetFormSilent();
+  }, { once: true });
+}
+
+// ═══════════════════════════════════════════════════════════
+// RESET (silent — no confirm)
+// ═══════════════════════════════════════════════════════════
+function resetFormSilent() {
   _mrifState.joNo = '';
   _mrifState.gemSoNo = '';
   _mrifState.clientName = '';
@@ -539,6 +545,7 @@ function resetForm() {
   document.getElementById('mrifClientName').value = '';
   document.getElementById('mrifProject').value = '';
   document.getElementById('mrifRequestor').value = '';
+  // ⚠️ DON'T clear department — auto-filled from user
   document.getElementById('joStatus').innerHTML = '';
   document.getElementById('joLookupResult').className = 'alert alert-secondary mb-0 py-2';
   document.getElementById('joLookupResult').innerHTML = '<span class="text-muted small">Enter a JO No. above to auto-fill details</span>';
@@ -551,7 +558,21 @@ function resetForm() {
   container.querySelectorAll('.erp-item-row').forEach(function(r) { r.remove(); });
   document.getElementById('itemsEmptyState').style.display = 'block';
   
+  console.log('[Reset] Form cleared. Ready for next MRIF.');
+}
+
+// Manual reset (with confirm)
+function resetForm() {
+  if (!confirm('Reset the form? All unsaved data will be lost.')) return;
+  resetFormSilent();
   erpShowToast('Form reset', 'info');
+}
+
+function closeSuccessAndReset() {
+  var modalEl = document.getElementById('successModal');
+  var modal = bootstrap.Modal.getInstance(modalEl);
+  if (modal) modal.hide();
+  // resetFormSilent is called by modal 'hidden' event handler
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -572,4 +593,4 @@ function erpShowToast(msg, type) {
   toast.show();
 }
 
-console.log('✅ new-mrif.js v2 loaded');
+console.log('✅ new-mrif.js v3 loaded (double-submit protection + auto-reset)');
