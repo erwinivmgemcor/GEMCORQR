@@ -237,7 +237,7 @@ async function loginUser() {
         localStorage.setItem('ivm_requestorName', state.currentUserFullname);
       }
 
-            state.pendingRole = null;
+                 state.pendingRole = null;
 
       var loginModalEl = document.getElementById('loginModal');
       if (loginModalEl) {
@@ -245,6 +245,10 @@ async function loginUser() {
         if (m) m.hide();
       }
 
+      // ★ Mark as fresh login for auto-redirect
+      sessionStorage.setItem('ivm_justLoggedIn', '1');
+
+      showToast('Welcome, ' + state.currentUserFullname + '!', 'success');
       // ★ Mark as fresh login for auto-redirect
       sessionStorage.setItem('ivm_justLoggedIn', '1');
 
@@ -503,46 +507,7 @@ function applyRoleUI() {
     window.applySidebarRole(role);
   }
 
-   if (isProduction) {
-    navigateTo('myrequests');
-  } else {
-    navigateTo('dashboard');
-  }
-
-  if (state.currentUser && typeof initChat === 'function') {
-    setTimeout(initChat, 800);
-  }
-  if (state.currentUser && typeof initEditRequests === 'function') {
-    setTimeout(initEditRequests, 900);
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // ★ AUTO-REDIRECT TO ERP (production → my-requests)
-  // ═══════════════════════════════════════════════════════════
-  var erpReturn = sessionStorage.getItem('ivm_erpReturnUrl');
-  if (erpReturn) {
-    // May pending ERP return — don't redirect (babalik sa ERP page)
-    return;
-  }
-
-  // Only auto-redirect kung kaka-login lang (fresh session)
-  var isFreshLogin = sessionStorage.getItem('ivm_justLoggedIn') === '1';
-  if (!isFreshLogin) return;
-
-  // Clear the flag para hindi mag-loop
-  sessionStorage.removeItem('ivm_justLoggedIn');
-
-  // Redirect based sa role — production → ERP my-requests
-  // Warehouse → keep sa WMS (dahil sa legacy warehouse features)
-  setTimeout(function() {
-    if (isProduction && !isWarehouse) {
-      // Pure production user — redirect to ERP
-      window.location.href = 'GEMCORERP/my-requests.html';
-    }
-    // Warehouse + Production (both roles) → stay sa WMS
-    // (user can manually go to ERP via nav)
-  }, 1200);
-}
+ navigateTo('myrequests');
 
   // ═══════════════════════════════════════════════════════════
   // ★ AUTO-REDIRECT TO ERP (production → my-requests, warehouse → stock-monitor)
