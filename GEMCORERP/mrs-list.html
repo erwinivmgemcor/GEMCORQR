@@ -11,8 +11,9 @@
 <link rel="stylesheet" href="erp-styles.css">
 <link rel="stylesheet" href="erp-nav.css">
 
+<script src="erp-guard.js"></script>
+<script src="erp-theme.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="erp-guard.js"></script>  <!-- ← ITO YUNG BAGO -->
 <script defer src="erp-config.js"></script>
 <script defer src="erp-supabase.js"></script>
 <script defer src="erp-nav.js"></script>
@@ -32,9 +33,9 @@
   <div id="erpNavBar"></div>
   <div class="erp-topbar-right">
     <div class="erp-health" id="erpHealthBadge">
-          <button class="theme-toggle-btn" onclick="erpToggleTheme()" id="themeToggleBtn" title="Toggle light/dark mode">
-      <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
-    </button>
+      <button class="theme-toggle-btn" onclick="erpToggleTheme()" id="themeToggleBtn" title="Toggle light/dark mode">
+        <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
+      </button>
       <span class="dot dot-pending"></span>
       <span id="erpHealthText">Checking...</span>
     </div>
@@ -112,17 +113,24 @@
 
   <div class="erp-card erp-table-card">
     <div class="erp-table-header">
-      <div>
-        <i class="bi bi-arrow-counterclockwise me-2"></i>
-        <strong>MRS Documents</strong>
-        <span class="erp-table-subtitle" id="mrsTableSubtitle">All returns</span>
-      </div>
       <div class="d-flex align-items-center gap-2">
+        <a href="new-mrs.html" class="erp-btn-primary" title="Create new MRS">
+          <i class="bi bi-plus-lg"></i> New MRS
+        </a>
+        <a href="new-mrs-manual.html" class="erp-btn-outline-dark" title="Manual MRS entry">
+          <i class="bi bi-pencil-square"></i> Manual
+        </a>
         <button class="erp-btn-outline-dark" onclick="mrsListExport()" title="Export to Excel (CSV)">
           <i class="bi bi-file-earmark-excel"></i> Export
         </button>
         <span class="erp-badge" id="mrsTableCount">0 items</span>
       </div>
+      <div>
+        <i class="bi bi-arrow-counterclockwise me-2"></i>
+        <strong>MRS Documents</strong>
+        <span class="erp-table-subtitle" id="mrsTableSubtitle">All returns</span>
+      </div>
+      <div style="min-width: 200px;"></div>
     </div>
 
     <div class="erp-table-wrap">
