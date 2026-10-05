@@ -245,9 +245,12 @@ async function loginUser() {
         if (m) m.hide();
       }
 
-      showToast('Welcome, ' + state.currentUserFullname + '!', 'success');
+         showToast('Welcome, ' + state.currentUserFullname + '!', 'success');
 
-applyRoleUI();
+      // ★ Mark as fresh login para sa auto-redirect
+      sessionStorage.setItem('ivm_justLoggedIn', '1');
+
+      applyRoleUI();
 
 // ★ ERP auto-return: kung galing sa ERP page, bumalik dun
 var erpReturn = sessionStorage.getItem('ivm_erpReturnUrl');
@@ -497,7 +500,7 @@ function applyRoleUI() {
     window.applySidebarRole(role);
   }
 
-  if (isProduction) navigateTo('myrequests');
+   if (isProduction) navigateTo('myrequests');
   else navigateTo('dashboard');
 
   if (state.currentUser && typeof initChat === 'function') {
@@ -506,6 +509,31 @@ function applyRoleUI() {
   if (state.currentUser && typeof initEditRequests === 'function') {
     setTimeout(initEditRequests, 900);
   }
+
+  // ═══════════════════════════════════════════════════════════
+  // ★ AUTO-REDIRECT TO ERP (production → my-requests, warehouse → stock-monitor)
+  // ═══════════════════════════════════════════════════════════
+  var erpReturn = sessionStorage.getItem('ivm_erpReturnUrl');
+  if (erpReturn) {
+    // May pending ERP return — don't redirect
+    return;
+  }
+
+  // Only auto-redirect kung kaka-login lang (fresh session)
+  var isFreshLogin = sessionStorage.getItem('ivm_justLoggedIn') === '1';
+  if (!isFreshLogin) return;
+
+  // Clear the flag para hindi mag-loop
+  sessionStorage.removeItem('ivm_justLoggedIn');
+
+  // Redirect based sa role
+  setTimeout(function() {
+    if (isWarehouse) {
+      window.location.href = 'GEMCORERP/stock-monitor.html';
+    } else if (isProduction) {
+      window.location.href = 'GEMCORERP/my-requests.html';
+    }
+  }, 1200);
 }
 
 function switchRole() {
