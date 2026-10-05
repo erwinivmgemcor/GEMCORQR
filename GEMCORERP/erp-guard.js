@@ -1,7 +1,7 @@
 // ============================================================
-// GEMCOR ERP — Access Guard (v2 - hybrid)
-// Allows BOTH warehouse and production roles
-// Some pages production-allowed, some warehouse-only
+// GEMCOR ERP — Access Guard (v3 — role-based)
+// Warehouse: full access
+// Production: restricted to specific pages
 // ============================================================
 
 (function() {
@@ -10,12 +10,11 @@
   var RETURN_KEY = 'ivm_erpReturnUrl';
   var MAIN_LOGIN = '../index.html';
 
-  // Pages na pwedeng i-access ng BOTH warehouse + production
-  var PRODUCTION_ALLOWED_PAGES = [
+  // Pages na pwedeng i-access ng production users
+  var PRODUCTION_ALLOWED = [
+    'my-requests.html',
     'new-mrif.html',
-    'new-mrif-manual.html',
-    'new-mrr-manual.html',  // if production can do manual MRR too
-    // Add more pages here kung allowed sa production
+    'new-mrs.html'
   ];
 
   function _redirectToLogin(reason) {
@@ -34,47 +33,40 @@
   function _checkAccess() {
     var role = '';
     var username = '';
-    var allowedRoles = [];
 
     try {
       role = localStorage.getItem('ivm_userRole') || '';
       username = localStorage.getItem('ivm_username') || '';
-      var rolesJson = localStorage.getItem('ivm_allowedRoles');
-      if (rolesJson) {
-        try { allowedRoles = JSON.parse(rolesJson); } catch(e) {}
-      }
     } catch(e) {
       _redirectToLogin('localStorage unavailable');
       return;
     }
 
-    // Must be logged in
     if (!username || !role) {
-      _redirectToLogin('No user session');
+      _redirectToLogin('No session');
       return;
     }
 
-    // Warehouse users: full access to ERP
+    var currentPage = _getCurrentPage();
+
+    // Warehouse: full access
     if (role === 'warehouse') {
       console.log('[ERP Guard] ✓ Warehouse access for ' + username);
       return;
     }
 
-    // Production users: restricted access — only some pages
+    // Production: only whitelisted pages
     if (role === 'production') {
-      var currentPage = _getCurrentPage();
-
-      if (PRODUCTION_ALLOWED_PAGES.indexOf(currentPage) !== -1) {
-        console.log('[ERP Guard] ✓ Production access allowed for ' + currentPage);
+      if (PRODUCTION_ALLOWED.indexOf(currentPage) !== -1) {
+        console.log('[ERP Guard] ✓ Production access: ' + currentPage);
         return;
       }
-
-      // Not allowed — redirect to legacy WMS
-      _redirectToLogin('Production user — page ' + currentPage + ' not allowed');
+      // Redirect production to their home page
+      console.warn('[ERP Guard] Production not allowed on ' + currentPage + ' — redirecting to My Requests');
+      window.location.replace('my-requests.html');
       return;
     }
 
-    // Unknown role
     _redirectToLogin('Unknown role: ' + role);
   }
 
