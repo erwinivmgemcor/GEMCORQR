@@ -74,6 +74,9 @@ async function mrrCheckHealth() {
 // ═══════════════════════════════════════════════════════════
 // STEP 1: PO LOOKUP (loads items from erp_prf_po_cache)
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// STEP 1: PO LOOKUP (loads items from erp_prf_po_cache)
+// ═══════════════════════════════════════════════════════════
 async function lookupPoNo() {
   var poNo = document.getElementById('mrrPoNo').value.trim();
   var statusEl = document.getElementById('poStatus');
@@ -89,14 +92,11 @@ async function lookupPoNo() {
   resultEl.innerHTML = '<span class="small">Searching...</span>';
   
   try {
-    // Query erp_prf_po_cache by PO No.
-    // Note: prf_no format is "PRF#26-878", PO number ay nasa ibang column
-    // We'll try flexible matching
+    // ✅ Direct query by po_no column
+    console.log('[MRR Lookup] Querying erp_prf_po_cache for po_no=' + poNo);
     var rows = await erpFetch('erp_prf_po_cache',
-      'or=(prf_no.ilike.*' + encodeURIComponent(poNo) + '*,client.ilike.*' + encodeURIComponent(poNo) + '*)' +
-      '&order=item_no.asc&limit=500');
+      'po_no=eq.' + encodeURIComponent(poNo) + '&order=item_no.asc&limit=500');
     
-    // If no rows found by that, try by item_no or client
     if (!rows || rows.length === 0) {
       statusEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> PO No. not found</span>';
       resultEl.className = 'alert alert-warning mb-0 py-2';
@@ -104,29 +104,20 @@ async function lookupPoNo() {
       return;
     }
     
-    // Group by PO No. (in case may duplicates)
-    // Actually prf_no is the identifier here. Let's filter by PO
-    var filtered = rows.filter(function(r) {
-      var rPoNo = String(r.po_no || '').trim();
-      return rPoNo === poNo || rPoNo.indexOf(poNo) !== -1;
-    });
+    console.log('[MRR Lookup] Found ' + rows.length + ' rows');
     
-    if (filtered.length === 0) {
-      filtered = rows; // fallback: use all matched rows
-    }
-    
-    var first = filtered[0];
+    var first = rows[0];
     _mrrState.poNo = poNo;
     _mrrState.prfNo = first.prf_no || '';
     _mrrState.client = first.client || '';
-    _mrrState.vendor = first.client || '';
+    _mrrState.vendor = first.supplier || first.client || '';
     
-    // Auto-fill fields
+    // Auto-fill
     document.getElementById('mrrPrfNo').value = _mrrState.prfNo;
     document.getElementById('mrrVendor').value = _mrrState.vendor;
     
-    // Load items from PO
-    _mrrState.items = filtered.map(function(r, i) {
+    // Load items
+    _mrrState.items = rows.map(function(r, i) {
       return {
         itemCode: r.inventory_id || '',
         description: r.description || '',
@@ -138,7 +129,6 @@ async function lookupPoNo() {
       };
     });
     
-    // Render items
     renderItems();
     
     // Show all steps
@@ -148,11 +138,10 @@ async function lookupPoNo() {
     
     statusEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> PO No. found!</span>';
     resultEl.className = 'alert alert-success mb-0 py-2';
-    resultEl.innerHTML = '<span class="small"><i class="bi bi-check-circle me-1"></i>Found: <strong>' + erpEsc(_mrrState.prfNo) + '</strong> — ' + erpEsc(_mrrState.client) + ' (' + filtered.length + ' items)</span>';
+    resultEl.innerHTML = '<span class="small"><i class="bi bi-check-circle me-1"></i>Found: <strong>' + erpEsc(_mrrState.prfNo) + '</strong> — ' + erpEsc(_mrrState.client) + ' (' + rows.length + ' items)</span>';
     
-    erpShowToast('PO No. found! ' + filtered.length + ' items loaded.', 'success');
+    erpShowToast('PO No. found! ' + rows.length + ' items loaded.', 'success');
     
-    // Focus DR No.
     setTimeout(function() {
       document.getElementById('mrrDrNo').focus();
     }, 300);
@@ -164,7 +153,6 @@ async function lookupPoNo() {
     resultEl.innerHTML = '<span class="small">' + erpEsc(err.message) + '</span>';
   }
 }
-
 // ═══════════════════════════════════════════════════════════
 // ITEMS RENDERING
 // ═══════════════════════════════════════════════════════════
