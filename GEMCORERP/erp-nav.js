@@ -107,10 +107,17 @@ document.addEventListener('click', function(e) {
 });
 
 // Init
+// Force render — multiple attempts to be sure
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', erpNavRender);
+  document.addEventListener('DOMContentLoaded', function() {
+    erpNavRender();
+    setTimeout(erpNavRender, 100);  // retry after 100ms
+  });
 } else {
   erpNavRender();
+  setTimeout(erpNavRender, 100);  // retry after 100ms
 }
 
+// Also expose globally for manual retry
+window.erpNavRender = erpNavRender;
 console.log('✅ erp-nav.js loaded (simple version)');
