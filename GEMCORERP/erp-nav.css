@@ -1,7 +1,124 @@
 /* ============================================================
    GEMCOR ERP — Navigation Bar Styles
    ============================================================ */
+/* ─── Dropdown styles ─── */
+.erp-nav-dropdown {
+  position: relative;
+  display: inline-block;
+}
 
+.erp-nav-dropdown-toggle {
+  background: transparent;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.7);
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.erp-nav-dropdown-toggle:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.1);
+}
+
+.erp-nav-dropdown.active .erp-nav-dropdown-toggle,
+.erp-nav-dropdown.open .erp-nav-dropdown-toggle {
+  color: #fff;
+  background: rgba(255,255,255,0.18);
+  border-color: rgba(255,255,255,0.3);
+}
+
+.erp-dropdown-caret {
+  font-size: 0.7rem;
+  margin-left: 2px;
+  transition: transform 0.2s;
+}
+
+.erp-nav-dropdown.open .erp-dropdown-caret {
+  transform: rotate(180deg);
+}
+
+.erp-nav-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  min-width: 200px;
+  padding: 6px 0;
+  z-index: 9999;
+  display: none;
+  overflow: hidden;
+}
+
+.erp-nav-dropdown.open .erp-nav-dropdown-menu {
+  display: block;
+  animation: dropdownFadeIn 0.15s ease;
+}
+
+@keyframes dropdownFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.erp-nav-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  color: #1f2937;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+
+.erp-nav-dropdown-item:hover {
+  background: #f0f4f8;
+  color: #1e3a5f;
+}
+
+.erp-nav-dropdown-item.active {
+  background: #e8f0fe;
+  color: #1e3a5f;
+  font-weight: 700;
+}
+
+.erp-nav-dropdown-item i {
+  font-size: 1rem;
+  width: 18px;
+  text-align: center;
+  color: #6b7280;
+}
+
+.erp-nav-dropdown-item.active i,
+.erp-nav-dropdown-item:hover i {
+  color: #1e3a5f;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .erp-nav-dropdown-menu {
+    position: fixed;
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    min-width: auto;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+}
 .erp-navbar {
   display: flex;
   align-items: center;
