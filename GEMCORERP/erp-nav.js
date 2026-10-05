@@ -1,47 +1,17 @@
 // ============================================================
 // GEMCOR ERP — Navigation Bar (Dropdown + Role-Aware)
-// DOM-based rendering — no HTML string concat bugs
+// DOM-based + Event Delegation — walang duplicate handlers
 // ============================================================
 
 (function() {
   'use strict';
 
-  // ═══════════════════════════════════════════════════════════
-  // NAV STRUCTURE
-  // ═══════════════════════════════════════════════════════════
   var NAV_ITEMS = [
-    // Warehouse-only links
-    {
-      type: 'link',
-      id: 'stock-monitor',
-      label: 'Stock Monitor',
-      icon: 'bi-speedometer2',
-      href: 'stock-monitor.html',
-      roles: ['warehouse']
-    },
-    {
-      type: 'link',
-      id: 'weekly-monitor',
-      label: 'Weekly Monitoring',
-      icon: 'bi-calendar-week',
-      href: 'weekly-monitor.html',
-      roles: ['warehouse']
-    },
-    {
-      type: 'link',
-      id: 'usage-trend',
-      label: 'Usage Trend',
-      icon: 'bi-graph-up-arrow',
-      href: 'usage-trend.html',
-      roles: ['warehouse']
-    },
-
-    // MRIF dropdown
-    {
-      type: 'dropdown',
-      id: 'mrif',
-      label: 'MRIF',
-      icon: 'bi-box-arrow-up',
+    { type: 'link', id: 'stock-monitor', label: 'Stock Monitor', icon: 'bi-speedometer2', href: 'stock-monitor.html', roles: ['warehouse'] },
+    { type: 'link', id: 'weekly-monitor', label: 'Weekly Monitoring', icon: 'bi-calendar-week', href: 'weekly-monitor.html', roles: ['warehouse'] },
+    { type: 'link', id: 'usage-trend', label: 'Usage Trend', icon: 'bi-graph-up-arrow', href: 'usage-trend.html', roles: ['warehouse'] },
+    { 
+      type: 'dropdown', id: 'mrif', label: 'MRIF', icon: 'bi-box-arrow-up',
       roles: ['warehouse', 'production'],
       items: [
         { id: 'mrif-list', label: 'View List', icon: 'bi-list-ul', href: 'mrif-list.html', roles: ['warehouse'] },
@@ -49,13 +19,8 @@
         { id: 'new-mrif-manual', label: 'Manual MRIF', icon: 'bi-pencil-square', href: 'new-mrif-manual.html', roles: ['warehouse', 'production'] }
       ]
     },
-
-    // MRR dropdown
-    {
-      type: 'dropdown',
-      id: 'mrr',
-      label: 'MRR',
-      icon: 'bi-box-arrow-down',
+    { 
+      type: 'dropdown', id: 'mrr', label: 'MRR', icon: 'bi-box-arrow-down',
       roles: ['warehouse'],
       items: [
         { id: 'mrr-list', label: 'View List', icon: 'bi-list-ul', href: 'mrr-list.html', roles: ['warehouse'] },
@@ -63,13 +28,8 @@
         { id: 'new-mrr-manual', label: 'Manual MRR', icon: 'bi-pencil-square', href: 'new-mrr-manual.html', roles: ['warehouse'] }
       ]
     },
-
-    // MRS dropdown
-    {
-      type: 'dropdown',
-      id: 'mrs',
-      label: 'MRS',
-      icon: 'bi-arrow-counterclockwise',
+    { 
+      type: 'dropdown', id: 'mrs', label: 'MRS', icon: 'bi-arrow-counterclockwise',
       roles: ['warehouse', 'production'],
       items: [
         { id: 'mrs-list', label: 'View List', icon: 'bi-list-ul', href: 'mrs-list.html', roles: ['warehouse'] },
@@ -79,15 +39,8 @@
     }
   ];
 
-  // ═══════════════════════════════════════════════════════════
-  // HELPERS
-  // ═══════════════════════════════════════════════════════════
   function _getUserRole() {
-    try {
-      return localStorage.getItem('ivm_userRole') || '';
-    } catch(e) {
-      return '';
-    }
+    try { return localStorage.getItem('ivm_userRole') || ''; } catch(e) { return ''; }
   }
 
   function _getCurrentPage() {
@@ -110,46 +63,34 @@
   }
 
   // ═══════════════════════════════════════════════════════════
-  // RENDER NAV BAR
+  // RENDER
   // ═══════════════════════════════════════════════════════════
   function renderNavBar() {
     var current = _getCurrentPage();
     var userRole = _getUserRole();
     var container = document.getElementById('erpNavBar');
-    if (!container) {
-      console.warn('[erp-nav] #erpNavBar not found');
-      return;
-    }
+    if (!container) return;
 
-    // Clear existing
     container.innerHTML = '';
 
-    // Wrapper
     var wrapper = document.createElement('div');
     wrapper.className = 'erp-navbar';
     wrapper.style.cssText = 'display:flex;align-items:center;gap:4px;';
 
-    // Build items
     NAV_ITEMS.forEach(function(item) {
       if (!_isAllowed(item, userRole)) return;
 
       if (item.type === 'link') {
         wrapper.appendChild(_buildLink(item, current));
       } else if (item.type === 'dropdown') {
-        var dropdown = _buildDropdown(item, current, userRole);
-        if (dropdown) wrapper.appendChild(dropdown);
+        var dd = _buildDropdown(item, current, userRole);
+        if (dd) wrapper.appendChild(dd);
       }
     });
 
     container.appendChild(wrapper);
-
-    // Attach event handlers
-    _attachDropdownHandlers(container);
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // BUILD SIMPLE LINK
-  // ═══════════════════════════════════════════════════════════
   function _buildLink(item, current) {
     var link = document.createElement('a');
     link.href = item.href;
@@ -158,25 +99,16 @@
     return link;
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // BUILD DROPDOWN
-  // ═══════════════════════════════════════════════════════════
   function _buildDropdown(item, current, userRole) {
-    // Filter sub-items by role
-    var visibleSubs = (item.items || []).filter(function(sub) {
-      return _isAllowed(sub, userRole);
-    });
+    var visibleSubs = (item.items || []).filter(function(sub) { return _isAllowed(sub, userRole); });
     if (visibleSubs.length === 0) return null;
 
-    // Check if dropdown is active (current page is one of sub-items)
     var isActive = visibleSubs.some(function(sub) { return sub.id === current; });
 
-    // Outer wrapper
-    var dropdown = document.createElement('div');
-    dropdown.className = 'erp-nav-dropdown' + (isActive ? ' active' : '');
-    dropdown.style.cssText = 'position:relative;display:inline-block;';
+    var dd = document.createElement('div');
+    dd.className = 'erp-nav-dropdown' + (isActive ? ' active' : '');
+    dd.style.cssText = 'position:relative;display:inline-block;';
 
-    // Toggle button
     var toggle = document.createElement('button');
     toggle.type = 'button';
     toggle.className = 'erp-nav-item';
@@ -186,40 +118,25 @@
       '<i class="bi ' + item.icon + '"></i>' +
       '<span>' + item.label + '</span>' +
       '<i class="bi bi-chevron-down" data-caret="1" style="font-size:0.7rem;margin-left:2px;transition:transform 0.2s;"></i>';
-    dropdown.appendChild(toggle);
+    dd.appendChild(toggle);
 
-    // Menu container
     var menu = document.createElement('div');
     menu.className = 'erp-nav-dropdown-menu';
     menu.setAttribute('data-dropdown-menu', item.id);
     menu.style.cssText =
-      'display:none;' +
-      'position:absolute;' +
-      'top:calc(100% + 6px);' +
-      'left:0;' +
-      'background:#fff;' +
-      'border-radius:8px;' +
-      'box-shadow:0 8px 24px rgba(0,0,0,0.15);' +
-      'min-width:220px;' +
-      'padding:6px 0;' +
-      'z-index:9999;' +
-      'overflow:hidden;';
+      'display:none;position:absolute;top:calc(100% + 6px);left:0;' +
+      'background:#fff;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.15);' +
+      'min-width:220px;padding:6px 0;z-index:9999;overflow:hidden;';
 
-    // Sub-items
     visibleSubs.forEach(function(sub) {
+      var isSubActive = (sub.id === current);
       var subLink = document.createElement('a');
       subLink.href = sub.href;
       subLink.className = 'erp-nav-dropdown-item';
-      var isSubActive = (sub.id === current);
       subLink.style.cssText =
-        'display:flex;' +
-        'align-items:center;' +
-        'gap:10px;' +
-        'padding:10px 16px;' +
+        'display:flex;align-items:center;gap:10px;padding:10px 16px;' +
         'color:' + (isSubActive ? '#1e3a5f' : '#1f2937') + ';' +
-        'text-decoration:none;' +
-        'font-size:0.85rem;' +
-        'font-weight:500;' +
+        'text-decoration:none;font-size:0.85rem;font-weight:500;' +
         'background:' + (isSubActive ? '#e8f0fe' : 'transparent') + ';' +
         'white-space:nowrap;';
       subLink.innerHTML =
@@ -228,69 +145,91 @@
       menu.appendChild(subLink);
     });
 
-    dropdown.appendChild(menu);
-    return dropdown;
+    dd.appendChild(menu);
+    return dd;
   }
 
   // ═══════════════════════════════════════════════════════════
-  // ATTACH DROPDOWN HANDLERS
+  // EVENT DELEGATION — single listener, walang duplicates
   // ═══════════════════════════════════════════════════════════
-  function _attachDropdownHandlers(container) {
-    // Toggle on click
-    container.querySelectorAll('[data-dropdown-toggle]').forEach(function(btn) {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        e.preventDefault();
+  function _attachGlobalHandlers() {
+    // ONE listener for the whole document
+    if (window._erpNavHandlerAttached) return;
+    window._erpNavHandlerAttached = true;
 
-        var dropdownId = btn.getAttribute('data-dropdown-toggle');
+    document.addEventListener('click', function(e) {
+      // Find kung may naka-click na toggle button
+      var toggle = e.target.closest('[data-dropdown-toggle]');
+      
+      if (toggle) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        var container = document.getElementById('erpNavBar');
+        if (!container) return;
+
+        var dropdownId = toggle.getAttribute('data-dropdown-toggle');
         var menu = container.querySelector('[data-dropdown-menu="' + dropdownId + '"]');
         if (!menu) return;
 
         var isOpen = menu.style.display === 'block';
 
-        // Close all menus first
-        _closeAllMenus(container);
+        // Close ALL menus
+        container.querySelectorAll('[data-dropdown-menu]').forEach(function(m) {
+          m.style.display = 'none';
+        });
+        container.querySelectorAll('[data-dropdown-toggle] i[data-caret="1"]').forEach(function(c) {
+          c.style.transform = '';
+        });
 
-        // Toggle current
+        // Open current if it was closed
         if (!isOpen) {
           menu.style.display = 'block';
-          var caret = btn.querySelector('i[data-caret="1"]');
+          var caret = toggle.querySelector('i[data-caret="1"]');
           if (caret) caret.style.transform = 'rotate(180deg)';
         }
-      });
-    });
+        return;
+      }
 
-    // Close on outside click
-    document.addEventListener('click', function(e) {
-      if (container.contains(e.target)) return;
-      _closeAllMenus(container);
-    });
-
-    // Close on Escape
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') {
-        _closeAllMenus(container);
+      // Click outside any dropdown — close all
+      if (!e.target.closest('.erp-nav-dropdown')) {
+        var container2 = document.getElementById('erpNavBar');
+        if (container2) {
+          container2.querySelectorAll('[data-dropdown-menu]').forEach(function(m) {
+            m.style.display = 'none';
+          });
+          container2.querySelectorAll('[data-dropdown-toggle] i[data-caret="1"]').forEach(function(c) {
+            c.style.transform = '';
+          });
+        }
       }
     });
-  }
 
-  function _closeAllMenus(container) {
-    container.querySelectorAll('[data-dropdown-menu]').forEach(function(menu) {
-      menu.style.display = 'none';
-    });
-    container.querySelectorAll('[data-dropdown-toggle]').forEach(function(btn) {
-      var caret = btn.querySelector('i[data-caret="1"]');
-      if (caret) caret.style.transform = '';
+    // Escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        var container = document.getElementById('erpNavBar');
+        if (container) {
+          container.querySelectorAll('[data-dropdown-menu]').forEach(function(m) {
+            m.style.display = 'none';
+          });
+        }
+      }
     });
   }
 
   // ═══════════════════════════════════════════════════════════
   // INIT
   // ═══════════════════════════════════════════════════════════
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', renderNavBar);
-  } else {
+  function init() {
     renderNavBar();
+    _attachGlobalHandlers();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
   }
 
   console.log('✅ erp-nav.js loaded (dropdown + role-aware)');
