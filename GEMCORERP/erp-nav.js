@@ -1,5 +1,6 @@
 // ============================================================
-// GEMCOR ERP — Navigation Bar + User Menu (Premium)
+// GEMCOR ERP — Navigation Bar + User Menu (Premium v2.1)
+// Fixed: User menu positioned sa topbar-right
 // ============================================================
 
 (function() {
@@ -48,8 +49,7 @@
       info.fullname = localStorage.getItem('ivm_userFullname') || info.username;
       info.role = localStorage.getItem('ivm_userRole') || '';
       info.department = localStorage.getItem('ivm_userDepartment') || '';
-      
-      // Get initials
+
       if (info.fullname) {
         var parts = info.fullname.trim().split(/\s+/);
         if (parts.length >= 2) {
@@ -97,7 +97,7 @@
     var dropdown = document.createElement('div');
     dropdown.className = 'erp-user-dropdown';
 
-    var dropdownHtml = 
+    dropdown.innerHTML =
       '<div class="erp-user-dropdown-header">' +
         '<div class="fullname">' + (userInfo.fullname || 'User') + '</div>' +
         '<div class="meta">' +
@@ -105,27 +105,23 @@
           (userInfo.department ? ' · ' + userInfo.department : '') +
         '</div>' +
       '</div>' +
-      '<button class="erp-user-dropdown-item" type="button" onclick="erpUserSettings()">' +
-        '<i class="bi bi-gear"></i> Settings' +
-      '</button>' +
       '<button class="erp-user-dropdown-item" type="button" onclick="erpUserRefresh()">' +
         '<i class="bi bi-arrow-clockwise"></i> Refresh Data' +
+      '</button>' +
+      '<button class="erp-user-dropdown-item" type="button" onclick="erpUserSettings()">' +
+        '<i class="bi bi-gear"></i> Settings' +
       '</button>' +
       '<div class="erp-user-dropdown-divider"></div>' +
       '<button class="erp-user-dropdown-item danger" type="button" onclick="erpUserLogout()">' +
         '<i class="bi bi-box-arrow-right"></i> Logout' +
       '</button>';
 
-    dropdown.innerHTML = dropdownHtml;
-
     menu.appendChild(toggle);
     menu.appendChild(dropdown);
 
-    // Toggle dropdown on click
     toggle.onclick = function(e) {
       e.stopPropagation();
       var isOpen = menu.classList.contains('open');
-      // Close all other menus
       document.querySelectorAll('.erp-user-menu.open').forEach(function(m) {
         m.classList.remove('open');
       });
@@ -139,26 +135,39 @@
     var current = _getCurrentPage();
     var userRole = _getUserRole();
     var userInfo = _getUserInfo();
-    var container = document.getElementById('erpNavBar');
-    if (!container) return;
 
-    container.innerHTML = '';
+    // 1. Render nav items sa #erpNavBar
+    var navContainer = document.getElementById('erpNavBar');
+    if (navContainer) {
+      navContainer.innerHTML = '';
+      navContainer.appendChild(_buildNavItems(userRole, current));
+    }
 
-    // Nav items
-    container.appendChild(_buildNavItems(userRole, current));
+    // 2. Render user menu sa .erp-topbar-right (proper placement)
+    var topbarRight = document.querySelector('.erp-topbar-right');
+    if (topbarRight) {
+      // Remove any existing user menu
+      var existing = topbarRight.querySelector('.erp-user-menu');
+      if (existing) existing.remove();
 
-    // User menu
-    container.appendChild(_buildUserMenu(userInfo));
+      var userMenu = _buildUserMenu(userInfo);
+
+      // Insert user menu BEFORE the "Main System" link (or at end)
+      var mainSystemLink = topbarRight.querySelector('a.erp-btn-outline');
+      if (mainSystemLink) {
+        topbarRight.insertBefore(userMenu, mainSystemLink);
+      } else {
+        topbarRight.appendChild(userMenu);
+      }
+    }
   }
 
-  // Close dropdowns on outside click
   document.addEventListener('click', function() {
     document.querySelectorAll('.erp-user-menu.open').forEach(function(m) {
       m.classList.remove('open');
     });
   });
 
-  // Close on Escape
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
       document.querySelectorAll('.erp-user-menu.open').forEach(function(m) {
@@ -167,11 +176,10 @@
     }
   });
 
-  // Global functions
   window.erpUserLogout = function() {
     var userInfo = _getUserInfo();
     if (!confirm('Logout ' + (userInfo.fullname || 'user') + '?')) return;
-    
+
     try {
       localStorage.removeItem('ivm_username');
       localStorage.removeItem('ivm_userFullname');
@@ -183,12 +191,12 @@
       localStorage.removeItem('ivm_editReqCount');
       sessionStorage.clear();
     } catch(e) {}
-    
+
     window.location.href = '../index.html';
   };
 
   window.erpUserRefresh = function() {
-    erpClearCache();
+    if (typeof erpClearCache === 'function') erpClearCache();
     location.reload();
   };
 
@@ -200,12 +208,11 @@
     }
   };
 
-  // Init
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', renderNavBar);
   } else {
     renderNavBar();
   }
 
-  console.log('✅ erp-nav.js loaded (premium v2)');
+  console.log('✅ erp-nav.js loaded (premium v2.1 — fixed placement)');
 })();
