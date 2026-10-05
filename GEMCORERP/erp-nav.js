@@ -16,6 +16,7 @@
     { id: 'new-mrif', label: 'New MRIF', icon: 'bi-plus-circle', href: 'new-mrif.html' },
     { id: 'new-mrr', label: 'New MRR', icon: 'bi-plus-square', href: 'new-mrr.html' },
     { id: 'new-mrif-manual', label: 'Manual MRIF', icon: 'bi-pencil-square', href: 'new-mrif-manual.html' }
+    { id: 'new-mrr-manual', label: 'Manual MRR', icon: 'bi-pencil-square', href: 'new-mrr-manual.html' },
   ];
 
   function getCurrentPage() {
@@ -31,6 +32,7 @@
     if (path.indexOf('mrif-list') !== -1) return 'mrif-list';
     if (path.indexOf('mrr-list') !== -1) return 'mrr-list';
     if (path.indexOf('mrs-list') !== -1) return 'mrs-list';
+    if (path.indexOf('new-mrr-manual') !== -1) return 'new-mrr-manual';
     return '';
   }
 
