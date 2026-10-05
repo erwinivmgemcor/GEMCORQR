@@ -13,10 +13,6 @@
     { id: 'mrif-list', label: 'MRIF', icon: 'bi-box-arrow-up', href: 'mrif-list.html' },
     { id: 'mrr-list', label: 'MRR', icon: 'bi-box-arrow-down', href: 'mrr-list.html' },
     { id: 'mrs-list', label: 'MRS', icon: 'bi-arrow-counterclockwise', href: 'mrs-list.html' },
-    { id: 'new-mrif', label: 'New MRIF', icon: 'bi-plus-circle', href: 'new-mrif.html' },
-    { id: 'new-mrr', label: 'New MRR', icon: 'bi-plus-square', href: 'new-mrr.html' },
-    { id: 'new-mrif-manual', label: 'Manual MRIF', icon: 'bi-pencil-square', href: 'new-mrif-manual.html' }
-    { id: 'new-mrr-manual', label: 'Manual MRR', icon: 'bi-pencil-square', href: 'new-mrr-manual.html' },
   ];
 
   function getCurrentPage() {
@@ -25,14 +21,9 @@
     if (path.indexOf('stock-monitor') !== -1) return 'stock-monitor';
     if (path.indexOf('usage-trend') !== -1) return 'usage-trend';
     if (path.indexOf('usage-entry') !== -1) return 'usage-entry';
-    if (path.indexOf('new-mrif-manual') !== -1) return 'new-mrif-manual';
-    if (path.indexOf('new-mrr-manual') !== -1) return 'new-mrr-manual';
-    if (path.indexOf('new-mrif') !== -1) return 'new-mrif';
-    if (path.indexOf('new-mrr') !== -1) return 'new-mrr';
     if (path.indexOf('mrif-list') !== -1) return 'mrif-list';
     if (path.indexOf('mrr-list') !== -1) return 'mrr-list';
     if (path.indexOf('mrs-list') !== -1) return 'mrs-list';
-    if (path.indexOf('new-mrr-manual') !== -1) return 'new-mrr-manual';
     return '';
   }
 
