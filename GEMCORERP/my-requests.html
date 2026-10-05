@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEMCOR ERP — My Requests</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="erp-styles.css">
+<link rel="stylesheet" href="erp-nav.css">
+
+<script src="erp-guard.js"></script>
+<script src="erp-theme.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script defer src="erp-config.js"></script>
+<script defer src="erp-supabase.js"></script>
+<script defer src="erp-nav.js"></script>
+<script defer src="my-requests.js"></script>
+</head>
+<body>
+
+<nav class="erp-topbar">
+  <div class="erp-topbar-left">
+    <img src="../gemcor-logo.png" alt="GEMCOR" class="erp-logo" onerror="this.style.display='none'">
+    <div>
+      <div class="erp-brand">GEMCOR ERP</div>
+      <div class="erp-brand-sub">My Requests <span class="badge-live">LIVE</span></div>
+    </div>
+  </div>
+  <div id="erpNavBar"></div>
+  <div class="erp-topbar-right">
+    <div class="erp-health" id="erpHealthBadge">
+      <button class="theme-toggle-btn" onclick="erpToggleTheme()" id="themeToggleBtn">
+        <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
+      </button>
+      <span class="dot dot-pending"></span>
+      <span id="erpHealthText">Checking...</span>
+    </div>
+    <button class="erp-btn-icon" onclick="myRequestsRefresh()" title="Refresh">
+      <i class="bi bi-arrow-clockwise"></i>
+    </button>
+    <a href="../index.html" class="erp-btn-outline" title="Back to main system">
+      <i class="bi bi-arrow-left"></i> <span>Main System</span>
+    </a>
+  </div>
+</nav>
+
+<div class="erp-container">
+
+  <!-- WELCOME HEADER -->
+  <div class="erp-card" style="padding:24px;margin-bottom:20px;">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+      <div>
+        <h3 style="margin-bottom:8px;">
+          <i class="bi bi-person-circle me-2"></i>Welcome, <span id="welcomeName">—</span>
+        </h3>
+        <p class="text-muted mb-0" id="welcomeDept">—</p>
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        <a href="new-mrif.html" class="erp-btn-primary btn-lg">
+          <i class="bi bi-plus-circle me-1"></i>New MRIF
+        </a>
+        <a href="new-mrs.html" class="erp-btn-primary btn-lg" style="background:#8b5cf6;">
+          <i class="bi bi-arrow-counterclockwise me-1"></i>New MRS
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI CARDS -->
+  <div class="erp-kpi-row" style="grid-template-columns: repeat(4, 1fr);margin-bottom:20px;">
+    <div class="erp-kpi-card kpi-blue">
+      <div class="kpi-icon"><i class="bi bi-file-earmark-text"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Total Requests</div>
+        <div class="kpi-value" id="myKpiTotal">—</div>
+        <div class="kpi-sub">All time</div>
+      </div>
+    </div>
+    <div class="erp-kpi-card kpi-amber">
+      <div class="kpi-icon"><i class="bi bi-clock-history"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Pending</div>
+        <div class="kpi-value" id="myKpiPending">—</div>
+        <div class="kpi-sub">Awaiting warehouse</div>
+      </div>
+    </div>
+    <div class="erp-kpi-card kpi-green">
+      <div class="kpi-icon"><i class="bi bi-check-circle-fill"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Completed</div>
+        <div class="kpi-value" id="myKpiCompleted">—</div>
+        <div class="kpi-sub">Fully served</div>
+      </div>
+    </div>
+    <div class="erp-kpi-card kpi-red">
+      <div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Partial</div>
+        <div class="kpi-value" id="myKpiPartial">—</div>
+        <div class="kpi-sub">Partially served</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FILTERS -->
+  <div class="erp-card erp-filters-card">
+    <div class="erp-filters-row">
+      <div class="erp-search-wrap">
+        <i class="bi bi-search"></i>
+        <input type="text" id="mySearchInput" class="erp-search" placeholder="Search Doc No. or JO No..." oninput="myRequestsOnSearch()">
+      </div>
+      <select id="myTypeFilter" class="erp-select" onchange="myRequestsLoad()">
+        <option value="">All Types</option>
+        <option value="MRIF">MRIF only</option>
+        <option value="MRS">MRS only</option>
+      </select>
+      <select id="myStatusFilter" class="erp-select" onchange="myRequestsLoad()">
+        <option value="">All Status</option>
+        <option value="PENDING">Pending</option>
+        <option value="PARTIAL">Partial</option>
+        <option value="COMPLETED">Completed</option>
+      </select>
+      <button class="erp-btn-clear" onclick="myRequestsClearFilters()">
+        <i class="bi bi-x-lg"></i> Clear
+      </button>
+    </div>
+  </div>
+
+  <!-- REQUESTS TABLE -->
+  <div class="erp-card erp-table-card">
+    <div class="erp-table-header">
+      <div>
+        <i class="bi bi-list-ul me-2"></i>
+        <strong>My Requests</strong>
+        <span class="erp-table-subtitle" id="myTableSubtitle">All requests</span>
+      </div>
+      <div>
+        <span class="erp-badge" id="myTableCount">0 items</span>
+      </div>
+    </div>
+
+    <div class="erp-table-wrap">
+      <table class="erp-table">
+        <thead>
+          <tr>
+            <th class="col-code">Doc No.</th>
+            <th class="col-date">Date</th>
+            <th class="col-type text-center">Type</th>
+            <th class="col-jo">JO No.</th>
+            <th class="col-status text-center">Status</th>
+            <th class="col-items text-center">Items</th>
+            <th class="col-actions text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="myTableBody">
+          <tr>
+            <td colspan="7" class="erp-empty">
+              <div class="erp-spinner"></div>
+              <div class="mt-2">Loading your requests...</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="erp-table-footer">
+      <div>Showing <span id="myPageStart">0</span>–<span id="myPageEnd">0</span> of <span id="myPageTotal">0</span></div>
+      <div class="erp-pagination">
+        <button id="myBtnPrev" onclick="myRequestsPagePrev()" disabled>
+          <i class="bi bi-chevron-left"></i> Prev
+        </button>
+        <span id="myPageLabel">Page 1</span>
+        <button id="myBtnNext" onclick="myRequestsPageNext()">
+          Next <i class="bi bi-chevron-right"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="erp-footer">
+    <div>GEMCOR ERP — My Requests v1.0.0</div>
+    <div>Pure Supabase • No Google Sheets • Live Data</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- REQUEST DETAILS MODAL -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="requestDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header erp-modal-header">
+        <h5 class="modal-title">
+          <i class="bi bi-file-earmark-text me-2"></i>
+          <span id="detailModalTitle">Request Details</span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="requestDetailBody">
+        <div class="text-center py-4">
+          <div class="erp-spinner"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="btnDownloadQr" onclick="downloadQr()">
+          <i class="bi bi-download me-1"></i>Download QR
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="erpToast" class="toast erp-toast">
+    <div class="toast-body" id="erpToastBody">Message</div>
+  </div>
+</div>
+
+</body>
+</html>
