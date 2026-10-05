@@ -1,6 +1,5 @@
 // ============================================================
-// GEMCOR ERP — Navigation Bar + User Menu (Premium v2.1)
-// Fixed: User menu positioned sa topbar-right
+// GEMCOR ERP — Navigation Bar + User Menu (Premium v2.2)
 // ============================================================
 
 (function() {
@@ -8,6 +7,7 @@
 
   var NAV_ITEMS = [
     { id: 'stock-monitor', label: 'Stock Monitor', icon: 'bi-speedometer2', href: 'stock-monitor.html', roles: ['warehouse'] },
+    { id: 'all-requests', label: 'All Requests', icon: 'bi-inbox-fill', href: 'all-requests.html', roles: ['warehouse'] },
     { id: 'weekly-monitor', label: 'Weekly Monitoring', icon: 'bi-calendar-week', href: 'weekly-monitor.html', roles: ['warehouse'] },
     { id: 'usage-trend', label: 'Usage Trend', icon: 'bi-graph-up-arrow', href: 'usage-trend.html', roles: ['warehouse'] },
     { id: 'mrif-list', label: 'MRIF', icon: 'bi-box-arrow-up', href: 'mrif-list.html', roles: ['warehouse'] },
@@ -16,28 +16,27 @@
     { id: 'my-requests', label: 'My Requests', icon: 'bi-list-check', href: 'my-requests.html', roles: ['production'] },
     { id: 'new-mrif', label: 'New MRIF', icon: 'bi-plus-circle', href: 'new-mrif.html', roles: ['production'] },
     { id: 'new-mrs', label: 'New MRS', icon: 'bi-plus-circle', href: 'new-mrs.html', roles: ['production'] }
-    { id: 'all-requests', label: 'All Requests', icon: 'bi-inbox-fill', href: 'all-requests.html', roles: ['warehouse'] },
   ];
 
   function _getUserRole() {
     try { return localStorage.getItem('ivm_userRole') || ''; } catch(e) { return ''; }
   }
 
- function _getCurrentPage() {
-  var path = window.location.pathname;
-  var pages = [
-    'weekly-monitor', 'stock-monitor', 'usage-trend', 'usage-entry',
-    'all-requests',  // ← ADD
-    'my-requests',
-    'new-mrif-manual', 'new-mrr-manual', 'new-mrs-manual',
-    'new-mrif', 'new-mrr', 'new-mrs',
-    'mrif-list', 'mrr-list', 'mrs-list'
-  ];
-  for (var i = 0; i < pages.length; i++) {
-    if (path.indexOf(pages[i]) !== -1) return pages[i];
+  function _getCurrentPage() {
+    var path = window.location.pathname;
+    var pages = [
+      'weekly-monitor', 'stock-monitor', 'usage-trend', 'usage-entry',
+      'all-requests',
+      'my-requests',
+      'new-mrif-manual', 'new-mrr-manual', 'new-mrs-manual',
+      'new-mrif', 'new-mrr', 'new-mrs',
+      'mrif-list', 'mrr-list', 'mrs-list'
+    ];
+    for (var i = 0; i < pages.length; i++) {
+      if (path.indexOf(pages[i]) !== -1) return pages[i];
+    }
+    return '';
   }
-  return '';
-}
 
   function _isAllowed(item, userRole) {
     if (!item.roles) return true;
@@ -138,23 +137,19 @@
     var userRole = _getUserRole();
     var userInfo = _getUserInfo();
 
-    // 1. Render nav items sa #erpNavBar
     var navContainer = document.getElementById('erpNavBar');
     if (navContainer) {
       navContainer.innerHTML = '';
       navContainer.appendChild(_buildNavItems(userRole, current));
     }
 
-    // 2. Render user menu sa .erp-topbar-right (proper placement)
     var topbarRight = document.querySelector('.erp-topbar-right');
     if (topbarRight) {
-      // Remove any existing user menu
       var existing = topbarRight.querySelector('.erp-user-menu');
       if (existing) existing.remove();
 
       var userMenu = _buildUserMenu(userInfo);
 
-      // Insert user menu BEFORE the "Main System" link (or at end)
       var mainSystemLink = topbarRight.querySelector('a.erp-btn-outline');
       if (mainSystemLink) {
         topbarRight.insertBefore(userMenu, mainSystemLink);
@@ -216,5 +211,5 @@
     renderNavBar();
   }
 
-  console.log('✅ erp-nav.js loaded (premium v2.1 — fixed placement)');
+  console.log('✅ erp-nav.js loaded (premium v2.2)');
 })();
