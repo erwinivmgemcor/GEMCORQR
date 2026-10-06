@@ -16,7 +16,6 @@ var PRF_PRINT_CONFIG = {
 // ═══════════════════════════════════════════════════════════
 async function openPrfPrintPreview(prfId) {
   try {
-    // Fetch PRF doc
     var prfRes = await erpFetch('prf_documents', 'id=eq.' + prfId + '&limit=1');
     if (!prfRes || prfRes.length === 0) {
       erpShowToast('PRF not found', 'danger');
@@ -24,7 +23,6 @@ async function openPrfPrintPreview(prfId) {
     }
     var prf = prfRes[0];
 
-    // Fetch PRF items
     var itemsRes = await erpFetch('prf_items', 
       'prf_id=eq.' + prfId + '&order=line_no.asc');
 
@@ -32,10 +30,7 @@ async function openPrfPrintPreview(prfId) {
 
     console.log('[Print] PRF:', prf.prf_no, 'Items:', items.length);
 
-    // Build HTML
     var html = buildPrfPrintHtml(prf, items);
-
-    // Show modal
     showPrfPrintModal(html, prf.prf_no);
 
   } catch(err) {
@@ -45,32 +40,25 @@ async function openPrfPrintPreview(prfId) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// BUILD PRINT HTML — Match PDF format
+// BUILD PRINT HTML
 // ═══════════════════════════════════════════════════════════
 function buildPrfPrintHtml(prf, items) {
-  // Format dates
   var dateRequested = prf.created_at ? formatPrintDate(prf.created_at) : formatPrintDate(new Date());
-  var dateNeeded = prf.date_needed ? formatPrintDate(prf.date_needed) : '—';
+  var dateNeeded = prf.date_needed ? formatPrintDate(prf.date_needed) : '';
 
-  // Extract PRF number without "PRF#" prefix for the header
   var prfNoDisplay = String(prf.prf_no || '').replace(/^PRF#/, '');
-  var basePrfNo = String(prf.base_prf_no || '').replace(/^PRF#/, '');
-  var batchNumber = prf.batch_number || 1;
 
-  // Build items rows
   var itemsHtml = '';
   var totalItems = items.length;
-
-  // Fill to 30 rows para consistent yung layout (blank rows kung kulang)
   var MIN_ROWS = 30;
+
   for (var i = 0; i < Math.max(totalItems, MIN_ROWS); i++) {
     var it = items[i];
     if (it) {
-      var avgPerDay = Number(it.average_consumption || 0) / 30 || 0;
-      // Compute Ave/day from ave/monthly / 30, if may ave/mo value
-      // Actually yung "average_consumption" sa DB ay yung ave/monthly consumption
-      // Kaya divide by 30 para makuha yung per day
-      var avePerDayDisplay = avgPerDay > 0 ? avgPerDay.toFixed(3) : '0.000';
+      // Compute Ave/day from ave/monthly / 30
+      var aveMonthly = Number(it.average_consumption || 0);
+      var avePerDay = aveMonthly / 30;
+      var avePerDayDisplay = avePerDay > 0 ? avePerDay.toFixed(3) : '0.000';
 
       itemsHtml += '<tr>' +
         '<td class="prf-print-td-center">' + (i + 1) + '</td>' +
@@ -79,12 +67,11 @@ function buildPrfPrintHtml(prf, items) {
         '<td class="prf-print-td-center">' + avePerDayDisplay + '</td>' +
         '<td class="prf-print-td-center">' + printNum(it.buffer_stock || 0) + '</td>' +
         '<td class="prf-print-td-center">' + printNum(it.stock_on_hand || 0) + '</td>' +
-        '<td class="prf-print-td-center qty-blank"></td>' +   /* QTY (For Order) — BLANK */
+        '<td class="prf-print-td-center qty-blank"></td>' +
         '<td class="prf-print-td-center">' + printEsc(it.unit || 'PIECE') + '</td>' +
         '<td class="prf-print-td-remarks">' + printEsc(it.remarks || '') + '</td>' +
       '</tr>';
     } else {
-      // Blank row
       itemsHtml += '<tr>' +
         '<td class="prf-print-td-center">' + (i + 1) + '</td>' +
         '<td class="prf-print-td-item-code"></td>' +
@@ -99,14 +86,12 @@ function buildPrfPrintHtml(prf, items) {
     }
   }
 
-  // Signature names
   var preparedByName = String(prf.prepared_by || '').toUpperCase() || '—';
   var notedByName = PRF_PRINT_CONFIG.notedBy;
   var approvedByName = PRF_PRINT_CONFIG.approvedBy;
 
   return '<div class="prf-print-sheet">' +
 
-    // ═══ HEADER ═══
     '<div class="prf-print-header">' +
       '<div class="prf-print-logo">' +
         '<img src="../gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'">' +
@@ -116,7 +101,6 @@ function buildPrfPrintHtml(prf, items) {
       '</div>' +
     '</div>' +
 
-    // ═══ META INFO ═══
     '<table class="prf-print-meta">' +
       '<tr>' +
         '<td class="prf-print-label">Department:</td>' +
@@ -138,7 +122,6 @@ function buildPrfPrintHtml(prf, items) {
       '</tr>' +
     '</table>' +
 
-    // ═══ ITEMS TABLE ═══
     '<table class="prf-print-items">' +
       '<thead>' +
         '<tr>' +
@@ -156,7 +139,6 @@ function buildPrfPrintHtml(prf, items) {
       '<tbody>' + itemsHtml + '</tbody>' +
     '</table>' +
 
-    // ═══ SIGNATURES ═══
     '<div class="prf-print-signatures">' +
       '<div class="prf-print-sig-block">' +
         '<div class="prf-print-sig-label">Prepared By:</div>' +
@@ -181,7 +163,6 @@ function buildPrfPrintHtml(prf, items) {
       '</div>' +
     '</div>' +
 
-    // ═══ FOOTER ═══
     '<div class="prf-print-footer">' +
       'Printed: ' + new Date().toLocaleString('en-US') +
     '</div>' +
@@ -193,7 +174,6 @@ function buildPrfPrintHtml(prf, items) {
 // PRINT MODAL
 // ═══════════════════════════════════════════════════════════
 function showPrfPrintModal(html, prfNo) {
-  // Remove existing modal
   var existing = document.getElementById('prfPrintModal');
   if (existing) existing.remove();
 
@@ -234,14 +214,13 @@ function showPrfPrintModal(html, prfNo) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// EXECUTE PRINT (via iframe)
+// EXECUTE PRINT
 // ═══════════════════════════════════════════════════════════
 function executePrintPrf() {
   var content = document.getElementById('prfPrintContent');
   if (!content) return;
 
   var html = content.innerHTML;
-
   var printStyles = getPrintStyles();
   var fullHtml = '<!DOCTYPE html><html><head><meta charset="utf-8">' +
     '<title>Print PRF</title><style>' + printStyles + '</style></head>' +
@@ -275,7 +254,7 @@ function executePrintPrf() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// PRINT STYLES (for iframe + preview)
+// PRINT STYLES
 // ═══════════════════════════════════════════════════════════
 function getPrintStyles() {
   return [
@@ -283,20 +262,14 @@ function getPrintStyles() {
     '* { box-sizing: border-box; }',
     'body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 8pt; color: #000; }',
     '.prf-print-sheet { width: 100%; max-width: 8in; margin: 0 auto; background: #fff; padding: 0.1in; }',
-    
-    // Header
     '.prf-print-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; padding-bottom: 6px; }',
     '.prf-print-logo img { height: 55px; width: auto; }',
     '.prf-print-title-block { flex: 1; text-align: center; }',
     '.prf-print-title { font-size: 13pt; font-weight: bold; letter-spacing: 1.5px; margin: 0; }',
-    
-    // Meta
     '.prf-print-meta { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 9pt; }',
     '.prf-print-meta td { padding: 2px 4px; vertical-align: middle; }',
     '.prf-print-label { font-weight: bold; white-space: nowrap; width: 15%; }',
     '.prf-print-value { border-bottom: 1px solid #000; min-width: 15%; }',
-    
-    // Items table
     '.prf-print-items { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 8pt; }',
     '.prf-print-items th, .prf-print-items td { border: 1px solid #000; padding: 3px 4px; vertical-align: middle; }',
     '.prf-print-items th { background: #f0f0f0; font-weight: bold; text-align: center; font-size: 7.5pt; letter-spacing: 0.3px; line-height: 1.2; }',
@@ -306,16 +279,12 @@ function getPrintStyles() {
     '.prf-print-td-remarks { text-align: left; font-size: 7.5pt; }',
     '.qty-blank { background: #fafafa; min-height: 16px; }',
     '.qty-header { background: #f0f0f0 !important; }',
-    
-    // Signatures
     '.prf-print-signatures { display: flex; justify-content: space-between; margin-top: 30px; padding: 0 5%; }',
     '.prf-print-sig-block { width: 30%; text-align: center; }',
     '.prf-print-sig-label { font-weight: bold; font-size: 8pt; text-align: left; margin-bottom: 6px; }',
     '.prf-print-sig-line { border-bottom: 1px solid #000; min-height: 22px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 2px; }',
     '.prf-print-sig-name { font-weight: bold; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.3px; }',
     '.prf-print-sig-caption { font-size: 7.5pt; margin-top: 3px; }',
-    
-    // Footer
     '.prf-print-footer { text-align: center; font-size: 6.5pt; color: #666; margin-top: 12px; padding-top: 6px; border-top: 1px solid #ddd; }'
   ].join('');
 }
@@ -324,7 +293,7 @@ function getPrintStyles() {
 // HELPERS
 // ═══════════════════════════════════════════════════════════
 function formatPrintDate(dateVal) {
-  if (!dateVal) return '—';
+  if (!dateVal) return '';
   try {
     var d = new Date(dateVal);
     if (isNaN(d.getTime())) return String(dateVal);
@@ -332,7 +301,7 @@ function formatPrintDate(dateVal) {
     var day = d.getDate();
     var year = d.getFullYear();
     return month + '/' + day + '/' + year;
-  } catch(e) { return '—'; }
+  } catch(e) { return ''; }
 }
 
 function printNum(n) {
