@@ -44,7 +44,7 @@ async function phCheckHealth() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// LOAD EVENTS (Aggregate from multiple tables)
+// LOAD EVENTS
 // ═══════════════════════════════════════════════════════════
 async function processHistoryLoad() {
   if (_ph.isLoading && _ph.loadPromise) return _ph.loadPromise;
@@ -62,8 +62,10 @@ async function processHistoryLoad() {
       var events = [];
 
       // Date range filter
-      var fromDate = document.getElementById('phDateFrom') ? document.getElementById('phDateFrom').value : '';
-      var toDate = document.getElementById('phDateTo') ? document.getElementById('phDateTo').value : '';
+      var fromDateEl = document.getElementById('phDateFrom');
+      var toDateEl = document.getElementById('phDateTo');
+      var fromDate = fromDateEl ? fromDateEl.value : '';
+      var toDate = toDateEl ? toDateEl.value : '';
       var fromISO = fromDate ? fromDate + 'T00:00:00' : '';
       var toISO = toDate ? toDate + 'T23:59:59' : '';
 
@@ -86,11 +88,10 @@ async function processHistoryLoad() {
         var docs = await erpFetch('documents', docQuery);
 
         if (docs && docs.length > 0) {
-          // ✅ OPTIMIZED: Bulk fetch lahat ng items sa isang query
+          // ✅ OPTIMIZED: Bulk fetch items in chunks
           var docNos = docs.map(function(d) { return d.doc_no; });
           var allItems = [];
-          
-          // Split into chunks of 100 (para safe sa URL length)
+
           var chunkSize = 100;
           for (var c = 0; c < docNos.length; c += chunkSize) {
             var chunk = docNos.slice(c, c + chunkSize);
@@ -129,7 +130,6 @@ async function processHistoryLoad() {
                 });
               });
             } else {
-              // Doc-level event (no items)
               events.push({
                 timestamp: doc.processed_at || doc.updated_at,
                 staff: doc.processed_by,
@@ -456,7 +456,7 @@ function processHistoryClearFilters() {
     if (el) el.value = '';
   });
   _ph.currentPage = 1;
-  _ph.allEvents = []; // Force reload
+  _ph.allEvents = [];
   processHistoryLoad();
 }
 
@@ -539,4 +539,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
 }
 
-console.log('✅ process-history.js v2 loaded (search fix + bulk items + ledger support)');
+console.log('✅ process-history.js v2 loaded (search fix + bulk items + staff search)');
