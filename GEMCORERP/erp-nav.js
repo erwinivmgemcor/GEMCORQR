@@ -1,13 +1,13 @@
 // ============================================================
-// GEMCOR ERP — Navigation Bar + User Menu (Premium v2.3)
-// Includes: PRF Monitor, All Requests, role-based access
+// GEMCOR ERP — Navigation Bar + User Menu + Notifications
+// Premium v2.4 — with notification bell
 // ============================================================
 
 (function() {
   'use strict';
 
   var NAV_ITEMS = [
-    // ═══ WAREHOUSE ONLY ═══
+    // WAREHOUSE
     { id: 'stock-monitor', label: 'Stock Monitor', icon: 'bi-speedometer2', href: 'stock-monitor.html', roles: ['warehouse'] },
     { id: 'all-requests', label: 'All Requests', icon: 'bi-inbox-fill', href: 'all-requests.html', roles: ['warehouse'] },
     { id: 'prf-monitor', label: 'PRF Monitor', icon: 'bi-file-earmark-text', href: 'prf-monitor.html', roles: ['warehouse'] },
@@ -17,7 +17,7 @@
     { id: 'mrr-list', label: 'MRR', icon: 'bi-box-arrow-down', href: 'mrr-list.html', roles: ['warehouse'] },
     { id: 'mrs-list', label: 'MRS', icon: 'bi-arrow-counterclockwise', href: 'mrs-list.html', roles: ['warehouse'] },
 
-    // ═══ PRODUCTION ONLY ═══
+    // PRODUCTION
     { id: 'my-requests', label: 'My Requests', icon: 'bi-list-check', href: 'my-requests.html', roles: ['production'] },
     { id: 'new-mrif', label: 'New MRIF', icon: 'bi-plus-circle', href: 'new-mrif.html', roles: ['production'] },
     { id: 'new-mrs', label: 'New MRS', icon: 'bi-plus-circle', href: 'new-mrs.html', roles: ['production'] }
@@ -131,6 +131,9 @@
       document.querySelectorAll('.erp-user-menu.open').forEach(function(m) {
         m.classList.remove('open');
       });
+      document.querySelectorAll('#erpNotifContainer.open').forEach(function(c) {
+        c.classList.remove('open');
+      });
       if (!isOpen) menu.classList.add('open');
     };
 
@@ -149,14 +152,29 @@
       navContainer.appendChild(_buildNavItems(userRole, current));
     }
 
-    // 2. User menu sa .erp-topbar-right
+    // 2. Bell + User menu sa .erp-topbar-right
     var topbarRight = document.querySelector('.erp-topbar-right');
     if (topbarRight) {
-      var existing = topbarRight.querySelector('.erp-user-menu');
-      if (existing) existing.remove();
+      // Remove existing
+      var existingNotif = document.getElementById('erpBellContainer');
+      if (existingNotif) existingNotif.remove();
+      var existingNotifDD = document.getElementById('erpNotifContainer');
+      if (existingNotifDD) existingNotifDD.remove();
+      var existingUser = topbarRight.querySelector('.erp-user-menu');
+      if (existingUser) existingUser.remove();
 
+      // Insert bell container
+      var bellContainer = document.createElement('div');
+      bellContainer.id = 'erpBellContainer';
+      topbarRight.insertBefore(bellContainer, topbarRight.firstChild);
+
+      // Insert notif dropdown container (fixed positioned, outside flow)
+      var notifDD = document.createElement('div');
+      notifDD.id = 'erpNotifContainer';
+      document.body.appendChild(notifDD);
+
+      // Insert user menu
       var userMenu = _buildUserMenu(userInfo);
-
       var mainSystemLink = topbarRight.querySelector('a.erp-btn-outline');
       if (mainSystemLink) {
         topbarRight.insertBefore(userMenu, mainSystemLink);
@@ -164,11 +182,19 @@
         topbarRight.appendChild(userMenu);
       }
     }
+
+    // Re-init notifications (para mag-fetch agad)
+    if (typeof initNotifications === 'function') {
+      setTimeout(initNotifications, 100);
+    }
   }
 
   document.addEventListener('click', function() {
     document.querySelectorAll('.erp-user-menu.open').forEach(function(m) {
       m.classList.remove('open');
+    });
+    document.querySelectorAll('#erpNotifContainer.open').forEach(function(c) {
+      c.classList.remove('open');
     });
   });
 
@@ -177,13 +203,15 @@
       document.querySelectorAll('.erp-user-menu.open').forEach(function(m) {
         m.classList.remove('open');
       });
+      document.querySelectorAll('#erpNotifContainer.open').forEach(function(c) {
+        c.classList.remove('open');
+      });
     }
   });
 
   window.erpUserLogout = function() {
     var userInfo = _getUserInfo();
     if (!confirm('Logout ' + (userInfo.fullname || 'user') + '?')) return;
-
     try {
       localStorage.removeItem('ivm_username');
       localStorage.removeItem('ivm_userFullname');
@@ -195,7 +223,6 @@
       localStorage.removeItem('ivm_editReqCount');
       sessionStorage.clear();
     } catch(e) {}
-
     window.location.href = '../index.html';
   };
 
@@ -218,5 +245,5 @@
     renderNavBar();
   }
 
-  console.log('✅ erp-nav.js loaded (premium v2.3 — with PRF Monitor)');
+  console.log('✅ erp-nav.js loaded (premium v2.4 — with notifications)');
 })();
