@@ -1,5 +1,5 @@
 // ============================================================
-// GEMCOR ERP — PRF Monitor
+// GEMCOR ERP — PRF Monitor (v2)
 // List + filter + view + edit + print
 // ============================================================
 
@@ -54,15 +54,12 @@ async function prfMonitorLoad() {
   try {
     var query = 'select=*&order=created_at.desc&limit=2000';
 
-    // Category filter
     var catFilter = document.getElementById('prfCategoryFilter').value;
     if (catFilter) query += '&category=eq.' + encodeURIComponent(catFilter);
 
-    // Requestor filter
     var reqFilter = document.getElementById('prfRequestorFilter').value;
     if (reqFilter) query += '&requestor=eq.' + encodeURIComponent(reqFilter);
 
-    // Date filters
     var fromDate = document.getElementById('prfDateFrom').value;
     if (fromDate) query += '&created_at=gte.' + encodeURIComponent(fromDate + 'T00:00:00');
 
@@ -85,14 +82,10 @@ async function prfMonitorLoad() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// COMPUTE STATUS (aggregate from items)
-// ═══════════════════════════════════════════════════════════
 async function prfMonitorComputeStatus() {
   if (_prfMonitor.allPrfs.length === 0) return;
 
   try {
-    // Fetch all items for these PRFs
     var prfIds = _prfMonitor.allPrfs.map(function(p) { return p.id; });
     var itemsRes = await erpFetch('prf_items', 
       'prf_id=in.(' + prfIds.join(',') + ')&select=prf_id,status&limit=5000');
@@ -103,7 +96,6 @@ async function prfMonitorComputeStatus() {
       itemsByPrf[it.prf_id].push(it.status || 'UNSERVED');
     });
 
-    // Compute aggregate status per PRF
     _prfMonitor.allPrfs.forEach(function(prf) {
       var statuses = itemsByPrf[prf.id] || [];
       var counts = { UNSERVED: 0, STAGGERED: 0, SERVED: 0, CANCELED: 0 };
@@ -117,7 +109,6 @@ async function prfMonitorComputeStatus() {
       var canceledCount = counts.CANCELED;
       var activeCount = total - canceledCount;
 
-      // Determine PRF status
       if (activeCount === 0) {
         prf._status = 'CANCELED';
       } else if (servedCount === activeCount) {
@@ -168,10 +159,8 @@ function prfMonitorRender() {
   var statusFilter = document.getElementById('prfStatusFilter').value;
 
   _prfMonitor.filteredPrfs = _prfMonitor.allPrfs.filter(function(p) {
-    // Status filter
     if (statusFilter && String(p._status || '').toUpperCase() !== statusFilter) return false;
 
-    // Search filter
     if (search) {
       var prfNo = String(p.prf_no || '').toLowerCase();
       var req = String(p.requestor || '').toLowerCase();
@@ -238,6 +227,9 @@ function prfMonitorRender() {
         '<button class="erp-action-btn primary" onclick="viewPrfDetails(' + safeId + ')" title="View Details">' +
           '<i class="bi bi-eye"></i>' +
         '</button>' +
+        '<button class="erp-action-btn" onclick="openPrfPrintPreview(' + safeId + ')" title="Print">' +
+          '<i class="bi bi-printer"></i>' +
+        '</button>' +
         '<button class="erp-action-btn" onclick="openEditPrfNo(' + safeId + ', \'' + safePrf + '\')" title="Edit PRF No.">' +
           '<i class="bi bi-pencil"></i>' +
         '</button>' +
@@ -270,7 +262,6 @@ async function viewPrfDetails(prfId) {
 
     var html = '';
 
-    // Info
     html += '<div class="row g-2 mb-3" style="font-size:0.9rem;">';
     html += '<div class="col-md-6"><strong>PRF No.:</strong> <code>' + erpEsc(prf.prf_no) + '</code></div>';
     html += '<div class="col-md-6"><strong>Category:</strong> <span class="badge bg-primary">' + erpEsc(prf.category) + '</span></div>';
@@ -284,7 +275,6 @@ async function viewPrfDetails(prfId) {
     if (prf.notes) html += '<div class="col-12"><strong>Notes:</strong> ' + erpEsc(prf.notes) + '</div>';
     html += '</div>';
 
-    // Status summary
     var counts = prf._statusCounts || {};
     html += '<div class="alert alert-info small">' +
       '<strong>Items:</strong> ' + (items.length) + 
@@ -294,7 +284,6 @@ async function viewPrfDetails(prfId) {
       ' · <span class="text-danger">Canceled: ' + (counts.CANCELED || 0) + '</span>' +
       '</div>';
 
-    // Items table
     html += '<h6 class="mt-3">Items (' + items.length + ')</h6>';
     html += '<div class="table-responsive"><table class="erp-table" style="font-size:0.85rem;">';
     html += '<thead><tr>' +
@@ -370,8 +359,6 @@ async function updateItemStatus(itemId, newStatus) {
     if (!res.ok) throw new Error('Update failed: ' + res.status);
 
     erpShowToast('✓ Status updated to ' + newStatus, 'success');
-
-    // Refresh list
     prfMonitorLoad();
   } catch(err) {
     erpShowToast('Failed: ' + err.message, 'danger');
@@ -413,7 +400,6 @@ async function saveEditedPrfNo() {
   }
 
   try {
-    // Update prf_documents
     var res = await fetch(erpUrl('prf_documents?id=eq.' + prfId), {
       method: 'PATCH',
       headers: erpHeaders(),
@@ -425,7 +411,6 @@ async function saveEditedPrfNo() {
 
     if (!res.ok) throw new Error('Update failed');
 
-    // Also update prf_items denormalized prf_no
     await fetch(erpUrl('prf_items?prf_id=eq.' + prfId), {
       method: 'PATCH',
       headers: erpHeaders(),
@@ -445,7 +430,6 @@ async function saveEditedPrfNo() {
 // FILTERS + PAGINATION
 // ═══════════════════════════════════════════════════════════
 async function prfMonitorPopulateFilters() {
-  // Categories
   var cats = ['COMPONENTS', 'CONSUMABLES', 'ENCLOSURE', 'EWMAT', 'FABMAT', 'OFABP', 'PANEL', 'UNCATEGORIZED'];
   var catSel = document.getElementById('prfCategoryFilter');
   cats.forEach(function(c) {
@@ -455,7 +439,6 @@ async function prfMonitorPopulateFilters() {
     catSel.appendChild(opt);
   });
 
-  // Requestors
   try {
     var rows = await erpFetch('prf_documents', 'select=requestor&requestor=not.is.null&limit=1000');
     var seen = {};
@@ -556,12 +539,18 @@ function _csvEsc(val) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// PRINT (placeholder — full format next)
+// PRINT (delegates to prf-print.js)
 // ═══════════════════════════════════════════════════════════
 function printCurrentPrf() {
-  if (!_prfMonitor.currentPrf) return;
-  erpShowToast('Print preview coming soon — full format next', 'info');
-  console.log('[Print] Would print PRF:', _prfMonitor.currentPrf.prf_no);
+  if (!_prfMonitor.currentPrf) {
+    erpShowToast('No PRF selected', 'warning');
+    return;
+  }
+  if (typeof openPrfPrintPreview === 'function') {
+    openPrfPrintPreview(_prfMonitor.currentPrf.id);
+  } else {
+    erpShowToast('Print module not loaded', 'danger');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -584,4 +573,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
 }
 
-console.log('✅ prf-monitor.js loaded');
+console.log('✅ prf-monitor.js v2 loaded');
