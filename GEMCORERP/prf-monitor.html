@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="erp-design-system.css">
 <link rel="stylesheet" href="erp-styles.css">
 <link rel="stylesheet" href="erp-nav.css">
-  <link rel="stylesheet" href="erp-notif.css">
+<link rel="stylesheet" href="erp-notif.css">
 
 <style>
 /* Print Preview Specific */
@@ -56,7 +56,7 @@
 <script defer src="erp-nav.js"></script>
 <script defer src="prf-print.js"></script>
 <script defer src="prf-monitor.js"></script>
-  <script defer src="notifications.js"></script>
+<script defer src="notifications.js"></script>
 </head>
 <body>
 
@@ -108,14 +108,14 @@
     </div>
   </div>
 
-  <!-- KPI CARDS -->
+  <!-- KPI CARDS — ✅ CHANGED TO ITEM-LEVEL COUNTING -->
   <div class="erp-kpi-row" style="grid-template-columns: repeat(5, 1fr);margin-bottom:20px;">
     <div class="erp-kpi-card kpi-blue">
-      <div class="kpi-icon"><i class="bi bi-file-earmark-text"></i></div>
+      <div class="kpi-icon"><i class="bi bi-list-ol"></i></div>
       <div class="kpi-content">
-        <div class="kpi-label">Total PRF</div>
+        <div class="kpi-label">Total Items</div>
         <div class="kpi-value" id="prfKpiTotal">—</div>
-        <div class="kpi-sub">All PRFs</div>
+        <div class="kpi-sub" id="prfKpiTotalSub">All PRF items</div>
       </div>
     </div>
     <div class="erp-kpi-card kpi-amber">
@@ -123,7 +123,7 @@
       <div class="kpi-content">
         <div class="kpi-label">Unserved</div>
         <div class="kpi-value" id="prfKpiUnserved">—</div>
-        <div class="kpi-sub">Awaiting items</div>
+        <div class="kpi-sub" id="prfKpiUnservedSub">Awaiting serving</div>
       </div>
     </div>
     <div class="erp-kpi-card kpi-blue">
@@ -131,7 +131,7 @@
       <div class="kpi-content">
         <div class="kpi-label">Staggered</div>
         <div class="kpi-value" id="prfKpiStaggered">—</div>
-        <div class="kpi-sub">Partial deliveries</div>
+        <div class="kpi-sub" id="prfKpiStaggeredSub">Partial deliveries</div>
       </div>
     </div>
     <div class="erp-kpi-card kpi-green">
@@ -139,7 +139,7 @@
       <div class="kpi-content">
         <div class="kpi-label">Served</div>
         <div class="kpi-value" id="prfKpiServed">—</div>
-        <div class="kpi-sub">Fully served</div>
+        <div class="kpi-sub" id="prfKpiServedSub">Fully served items</div>
       </div>
     </div>
     <div class="erp-kpi-card kpi-red">
@@ -147,7 +147,7 @@
       <div class="kpi-content">
         <div class="kpi-label">Canceled</div>
         <div class="kpi-value" id="prfKpiCanceled">—</div>
-        <div class="kpi-sub">Canceled items</div>
+        <div class="kpi-sub" id="prfKpiCanceledSub">Canceled items</div>
       </div>
     </div>
   </div>
@@ -237,7 +237,7 @@
   </div>
 
   <div class="erp-footer">
-    <div>GEMCOR ERP — PRF Monitor v1.0.0</div>
+    <div>GEMCOR ERP — PRF Monitor v1.1.0</div>
     <div>Pure Supabase • No Google Sheets • Live Data</div>
   </div>
 </div>
