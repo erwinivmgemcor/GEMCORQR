@@ -1,6 +1,7 @@
 // ============================================================
 // GEMCOR ERP — PRF Monitor (v2)
 // List + filter + view + edit + print
+// ✅ v2: Item-Level KPI counting
 // ============================================================
 
 var _prfMonitor = {
@@ -16,7 +17,7 @@ var _prfMonitor = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[PRF Monitor] Initializing...');
+  console.log('[PRF Monitor v2] Initializing...');
 
   prfMonitorCheckHealth();
   prfMonitorLoad();
@@ -54,22 +55,30 @@ async function prfMonitorLoad() {
   try {
     var query = 'select=*&order=created_at.desc&limit=2000';
 
-    var catFilter = document.getElementById('prfCategoryFilter').value;
-    if (catFilter) query += '&category=eq.' + encodeURIComponent(catFilter);
+    var catFilterEl = document.getElementById('prfCategoryFilter');
+    if (catFilterEl && catFilterEl.value) {
+      query += '&category=eq.' + encodeURIComponent(catFilterEl.value);
+    }
 
-    var reqFilter = document.getElementById('prfRequestorFilter').value;
-    if (reqFilter) query += '&requestor=eq.' + encodeURIComponent(reqFilter);
+    var reqFilterEl = document.getElementById('prfRequestorFilter');
+    if (reqFilterEl && reqFilterEl.value) {
+      query += '&requestor=eq.' + encodeURIComponent(reqFilterEl.value);
+    }
 
-    var fromDate = document.getElementById('prfDateFrom').value;
-    if (fromDate) query += '&created_at=gte.' + encodeURIComponent(fromDate + 'T00:00:00');
+    var fromDateEl = document.getElementById('prfDateFrom');
+    if (fromDateEl && fromDateEl.value) {
+      query += '&created_at=gte.' + encodeURIComponent(fromDateEl.value + 'T00:00:00');
+    }
 
-    var toDate = document.getElementById('prfDateTo').value;
-    if (toDate) query += '&created_at=lt.' + encodeURIComponent(toDate + 'T23:59:59');
+    var toDateEl = document.getElementById('prfDateTo');
+    if (toDateEl && toDateEl.value) {
+      query += '&created_at=lt.' + encodeURIComponent(toDateEl.value + 'T23:59:59');
+    }
 
     var rows = await erpFetch('prf_documents', query);
     _prfMonitor.allPrfs = rows || [];
 
-    console.log('[PRF Monitor] Loaded', _prfMonitor.allPrfs.length, 'PRFs');
+    console.log('[PRF Monitor v2] Loaded', _prfMonitor.allPrfs.length, 'PRFs');
 
     await prfMonitorComputeStatus();
     prfMonitorComputeKPIs();
@@ -82,13 +91,16 @@ async function prfMonitorLoad() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+// COMPUTE STATUS (per document — for table)
+// ═══════════════════════════════════════════════════════════
 async function prfMonitorComputeStatus() {
   if (_prfMonitor.allPrfs.length === 0) return;
 
   try {
     var prfIds = _prfMonitor.allPrfs.map(function(p) { return p.id; });
-    var itemsRes = await erpFetch('prf_items', 
-      'prf_id=in.(' + prfIds.join(',') + ')&select=prf_id,status&limit=5000');
+    var itemsRes = await erpFetch('prf_items',
+      'prf_id=in.(' + prfIds.join(',') + ')&select=prf_id,status&limit=10000');
 
     var itemsByPrf = {};
     (itemsRes || []).forEach(function(it) {
@@ -99,7 +111,7 @@ async function prfMonitorComputeStatus() {
     _prfMonitor.allPrfs.forEach(function(prf) {
       var statuses = itemsByPrf[prf.id] || [];
       var counts = { UNSERVED: 0, STAGGERED: 0, SERVED: 0, CANCELED: 0 };
-      statuses.forEach(function(s) { 
+      statuses.forEach(function(s) {
         var key = String(s).toUpperCase();
         if (counts[key] !== undefined) counts[key]++;
       });
@@ -129,34 +141,69 @@ async function prfMonitorComputeStatus() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+// COMPUTE KPIs — ✅ v2: ITEM-LEVEL COUNTING
+// ═══════════════════════════════════════════════════════════
 function prfMonitorComputeKPIs() {
-  var total = _prfMonitor.allPrfs.length;
-  var unserved = 0, staggered = 0, served = 0, canceled = 0;
+  // Aggregate item-level counts from all PRFs
+  var totalItems = 0;
+  var unservedItems = 0;
+  var staggeredItems = 0;
+  var servedItems = 0;
+  var canceledItems = 0;
 
-  _prfMonitor.allPrfs.forEach(function(p) {
-    var s = String(p._status || 'UNSERVED').toUpperCase();
-    if (s === 'UNSERVED') unserved++;
-    else if (s === 'STAGGERED') staggered++;
-    else if (s === 'SERVED') served++;
-    else if (s === 'CANCELED') canceled++;
+  _prfMonitor.allPrfs.forEach(function(prf) {
+    var counts = prf._statusCounts || { UNSERVED: 0, STAGGERED: 0, SERVED: 0, CANCELED: 0 };
+    totalItems += (prf._statusTotal || 0);
+    unservedItems += (counts.UNSERVED || 0);
+    staggeredItems += (counts.STAGGERED || 0);
+    servedItems += (counts.SERVED || 0);
+    canceledItems += (counts.CANCELED || 0);
   });
 
-  document.getElementById('prfKpiTotal').textContent = total;
-  document.getElementById('prfKpiUnserved').textContent = unserved;
-  document.getElementById('prfKpiStaggered').textContent = staggered;
-  document.getElementById('prfKpiServed').textContent = served;
-  document.getElementById('prfKpiCanceled').textContent = canceled;
+  var prfCount = _prfMonitor.allPrfs.length;
+
+  // Update KPI VALUES (item counts)
+  document.getElementById('prfKpiTotal').textContent = erpNum(totalItems);
+  document.getElementById('prfKpiUnserved').textContent = erpNum(unservedItems);
+  document.getElementById('prfKpiStaggered').textContent = erpNum(staggeredItems);
+  document.getElementById('prfKpiServed').textContent = erpNum(servedItems);
+  document.getElementById('prfKpiCanceled').textContent = erpNum(canceledItems);
+
+  // Update KPI SUBTITLES (show document count for context)
+  var totalSub = document.getElementById('prfKpiTotalSub');
+  var unservedSub = document.getElementById('prfKpiUnservedSub');
+  var staggeredSub = document.getElementById('prfKpiStaggeredSub');
+  var servedSub = document.getElementById('prfKpiServedSub');
+  var canceledSub = document.getElementById('prfKpiCanceledSub');
+
+  if (totalSub) totalSub.textContent = 'across ' + prfCount + ' PRF' + (prfCount === 1 ? '' : 's');
+  if (unservedSub) unservedSub.textContent = 'items awaiting serving';
+  if (staggeredSub) staggeredSub.textContent = 'partially served items';
+  if (servedSub) servedSub.textContent = 'fully served items';
+  if (canceledSub) canceledSub.textContent = 'canceled items';
+
+  console.log('[PRF KPI]',
+    'Items:', totalItems,
+    '| Unserved:', unservedItems,
+    '| Staggered:', staggeredItems,
+    '| Served:', servedItems,
+    '| Canceled:', canceledItems,
+    '| PRFs:', prfCount);
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER
+// RENDER TABLE
 // ═══════════════════════════════════════════════════════════
 function prfMonitorRender() {
   var tbody = document.getElementById('prfTableBody');
   if (!tbody) return;
 
-  var search = (document.getElementById('prfSearchInput').value || '').toLowerCase().trim();
-  var statusFilter = document.getElementById('prfStatusFilter').value;
+  var searchInput = document.getElementById('prfSearchInput');
+  var statusFilterEl = document.getElementById('prfStatusFilter');
+
+  var search = (searchInput ? searchInput.value : '').toLowerCase().trim();
+  var statusFilter = statusFilterEl ? statusFilterEl.value : '';
 
   _prfMonitor.filteredPrfs = _prfMonitor.allPrfs.filter(function(p) {
     if (statusFilter && String(p._status || '').toUpperCase() !== statusFilter) return false;
@@ -252,7 +299,7 @@ async function viewPrfDetails(prfId) {
   var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
 
   document.getElementById('prfDetailTitle').textContent = prf.prf_no;
-  document.getElementById('prfDetailBody').innerHTML = 
+  document.getElementById('prfDetailBody').innerHTML =
     '<div class="text-center py-4"><div class="erp-spinner"></div></div>';
 
   modal.show();
@@ -277,7 +324,7 @@ async function viewPrfDetails(prfId) {
 
     var counts = prf._statusCounts || {};
     html += '<div class="alert alert-info small">' +
-      '<strong>Items:</strong> ' + (items.length) + 
+      '<strong>Items:</strong> ' + (items.length) +
       ' · <span class="text-warning">Unserved: ' + (counts.UNSERVED || 0) + '</span>' +
       ' · <span class="text-info">Staggered: ' + (counts.STAGGERED || 0) + '</span>' +
       ' · <span class="text-success">Served: ' + (counts.SERVED || 0) + '</span>' +
@@ -303,10 +350,6 @@ async function viewPrfDetails(prfId) {
     } else {
       items.forEach(function(it, idx) {
         var status = String(it.status || 'UNSERVED').toUpperCase();
-        var statusBadge = 'bg-warning text-dark';
-        if (status === 'SERVED') statusBadge = 'bg-success';
-        else if (status === 'STAGGERED') statusBadge = 'bg-info text-dark';
-        else if (status === 'CANCELED') statusBadge = 'bg-danger';
 
         html += '<tr>' +
           '<td>' + (idx + 1) + '</td>' +
@@ -334,7 +377,7 @@ async function viewPrfDetails(prfId) {
 
   } catch(err) {
     console.error('[viewPrfDetails]', err);
-    document.getElementById('prfDetailBody').innerHTML = 
+    document.getElementById('prfDetailBody').innerHTML =
       '<div class="alert alert-danger">Failed: ' + erpEsc(err.message) + '</div>';
   }
 }
@@ -573,4 +616,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
 }
 
-console.log('✅ prf-monitor.js v2 loaded');
+console.log('✅ prf-monitor.js v2 loaded (item-level KPI)');
