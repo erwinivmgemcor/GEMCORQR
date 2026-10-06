@@ -213,7 +213,11 @@ function renderItems() {
         'data-idx="' + idx + '" value="' + qtyOrder + '" min="0" step="1" ' +
         'placeholder="' + Math.ceil(suggested) + '" onchange="updateQty(' + idx + ', this.value)">' +
       '</td>' +
-      '<td class="text-center">' + erpEsc(it.base_unit || '—') + '</td>' +
+     '<td class="text-center">' +
+  '<select class="form-select form-select-sm unit-select" data-idx="' + idx + '" onchange="updateUnit(' + idx + ', this.value)" style="font-size:0.75rem;padding:2px 4px;">' +
+    buildUnitOptions(it.base_unit || 'PIECE') +
+  '</select>' +
+'</td>' +
       '<td>' +
         '<input type="text" class="form-control form-control-sm remarks-input" ' +
         'data-idx="' + idx + '" value="' + erpEsc(remarks) + '" placeholder="Optional" ' +
@@ -263,7 +267,30 @@ function erpNum(n) {
   if (n === null || n === undefined || isNaN(n)) return '0';
   return Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
+// ═══════════════════════════════════════════════════════════
+// UNIT EDITABLE
+// ═══════════════════════════════════════════════════════════
+var UNIT_OPTIONS_LIST = [
+  'PIECE', 'PCS', 'PAIR', 'SET', 'BOX', 'ROLL', 'SHEET',
+  'KG', 'LITERS', 'GAL', 'METER', 'MM', 'LENGTH',
+  'ASSEMB', 'CAN', 'REAM', 'TANK', 'UNIT'
+];
 
+function buildUnitOptions(selected) {
+  var html = '';
+  UNIT_OPTIONS_LIST.forEach(function(u) {
+    var sel = (u === selected) ? ' selected' : '';
+    html += '<option value="' + u + '"' + sel + '>' + u + '</option>';
+  });
+  return html;
+}
+
+function updateUnit(idx, value) {
+  var item = _prf.items[idx];
+  if (!item) return;
+  item.base_unit = value;
+  console.log('[PRF] Unit updated:', item.item_code, '→', value);
+}
 // ═══════════════════════════════════════════════════════════
 // SELECTION
 // ═══════════════════════════════════════════════════════════
@@ -491,7 +518,7 @@ async function createSinglePrf(prfNo, basePrfNo, batchNumber, items, category, p
       buffer_stock: Number(it.buffer_stock || 0),
       stock_on_hand: Number(it.on_hand || 0),
       qty_for_order: Number(it._qtyOrder || 0),
-      unit: it.base_unit || 'PIECE',
+            unit: it.base_unit || 'PIECE',
       status: 'UNSERVED',
       remarks: it._remarks || ''
     };
