@@ -1,18 +1,23 @@
 // ============================================================
-// GEMCOR ERP — Navigation Bar + User Menu (Premium v2.2)
+// GEMCOR ERP — Navigation Bar + User Menu (Premium v2.3)
+// Includes: PRF Monitor, All Requests, role-based access
 // ============================================================
 
 (function() {
   'use strict';
 
   var NAV_ITEMS = [
+    // ═══ WAREHOUSE ONLY ═══
     { id: 'stock-monitor', label: 'Stock Monitor', icon: 'bi-speedometer2', href: 'stock-monitor.html', roles: ['warehouse'] },
     { id: 'all-requests', label: 'All Requests', icon: 'bi-inbox-fill', href: 'all-requests.html', roles: ['warehouse'] },
+    { id: 'prf-monitor', label: 'PRF Monitor', icon: 'bi-file-earmark-text', href: 'prf-monitor.html', roles: ['warehouse'] },
     { id: 'weekly-monitor', label: 'Weekly Monitoring', icon: 'bi-calendar-week', href: 'weekly-monitor.html', roles: ['warehouse'] },
     { id: 'usage-trend', label: 'Usage Trend', icon: 'bi-graph-up-arrow', href: 'usage-trend.html', roles: ['warehouse'] },
     { id: 'mrif-list', label: 'MRIF', icon: 'bi-box-arrow-up', href: 'mrif-list.html', roles: ['warehouse'] },
     { id: 'mrr-list', label: 'MRR', icon: 'bi-box-arrow-down', href: 'mrr-list.html', roles: ['warehouse'] },
     { id: 'mrs-list', label: 'MRS', icon: 'bi-arrow-counterclockwise', href: 'mrs-list.html', roles: ['warehouse'] },
+
+    // ═══ PRODUCTION ONLY ═══
     { id: 'my-requests', label: 'My Requests', icon: 'bi-list-check', href: 'my-requests.html', roles: ['production'] },
     { id: 'new-mrif', label: 'New MRIF', icon: 'bi-plus-circle', href: 'new-mrif.html', roles: ['production'] },
     { id: 'new-mrs', label: 'New MRS', icon: 'bi-plus-circle', href: 'new-mrs.html', roles: ['production'] }
@@ -26,7 +31,7 @@
     var path = window.location.pathname;
     var pages = [
       'weekly-monitor', 'stock-monitor', 'usage-trend', 'usage-entry',
-      'all-requests',
+      'all-requests', 'prf-monitor', 'new-prf',
       'my-requests',
       'new-mrif-manual', 'new-mrr-manual', 'new-mrs-manual',
       'new-mrif', 'new-mrr', 'new-mrs',
@@ -137,12 +142,14 @@
     var userRole = _getUserRole();
     var userInfo = _getUserInfo();
 
+    // 1. Nav items sa #erpNavBar
     var navContainer = document.getElementById('erpNavBar');
     if (navContainer) {
       navContainer.innerHTML = '';
       navContainer.appendChild(_buildNavItems(userRole, current));
     }
 
+    // 2. User menu sa .erp-topbar-right
     var topbarRight = document.querySelector('.erp-topbar-right');
     if (topbarRight) {
       var existing = topbarRight.querySelector('.erp-user-menu');
@@ -211,5 +218,5 @@
     renderNavBar();
   }
 
-  console.log('✅ erp-nav.js loaded (premium v2.2)');
+  console.log('✅ erp-nav.js loaded (premium v2.3 — with PRF Monitor)');
 })();
