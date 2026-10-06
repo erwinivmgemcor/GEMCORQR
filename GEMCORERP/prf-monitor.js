@@ -1,13 +1,13 @@
 // ============================================================
-// GEMCOR ERP — PRF Monitor (v3)
-// Two Tabs: "By PRF" + "By Item"
-// + Bulk Status Update + Select All Filtered
+// GEMCOR ERP — PRF Monitor (v3.1)
+// Two Tabs + Bulk Status Update + PO# Display from erp_prf_po_cache
 // ============================================================
 
 var _prfMonitor = {
-  activeTab: 'prf',             // 'prf' | 'item'
+  activeTab: 'prf',
   allPrfs: [],
-  allItems: [],                 // Flat list of all items
+  allItems: [],
+  poCacheMap: {},              // "PRF_NO|ITEM_NO" → { po_no, supplier, date_delivered }
   filteredPrfs: [],
   filteredItems: [],
   currentPrfPage: 1,
@@ -16,14 +16,14 @@ var _prfMonitor = {
   itemPageSize: 50,
   searchTimer: null,
   currentPrf: null,
-  selectedItems: {}             // { itemId: true }
+  selectedItems: {}
 };
 
 // ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[PRF Monitor v3] Initializing...');
+  console.log('[PRF Monitor v3.1] Initializing...');
 
   prfMonitorCheckHealth();
   prfMonitorLoad();
@@ -48,17 +48,43 @@ async function prfMonitorCheckHealth() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// FETCH PO CACHE (from erp_prf_po_cache)
+// ═══════════════════════════════════════════════════════════
+async function prfMonitorFetchPoCache() {
+  try {
+    // Fetch lahat ng may PO# — limit 10000 para safe
+    var rows = await erpFetch('erp_prf_po_cache',
+      'select=prf_no,item_no,po_no,supplier,date_delivered&po_no=not.is.null&limit=10000');
+
+    // Build lookup map
+    var map = {};
+    (rows || []).forEach(function(r) {
+      var key = String(r.prf_no || '').trim() + '|' + (parseInt(r.item_no, 10) || 0);
+      map[key] = {
+        po_no: String(r.po_no || '').trim(),
+        supplier: String(r.supplier || '').trim(),
+        date_delivered: r.date_delivered || ''
+      };
+    });
+
+    console.log('[PRF Monitor] PO cache loaded:', Object.keys(map).length, 'entries');
+    return map;
+  } catch(err) {
+    console.warn('[PRF Monitor] PO cache fetch failed:', err.message);
+    return {};
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
 // TAB SWITCHING
 // ═══════════════════════════════════════════════════════════
 function prfSwitchTab(tab) {
   _prfMonitor.activeTab = tab;
 
-  // Update tab buttons
   document.querySelectorAll('.prf-tab').forEach(function(el) {
     el.classList.toggle('active', el.dataset.tab === tab);
   });
 
-  // Show/hide tab content
   var prfContent = document.getElementById('tabContentPrf');
   var itemContent = document.getElementById('tabContentItem');
 
@@ -83,13 +109,13 @@ async function prfMonitorLoad() {
       '<div class="mt-2">Loading PRFs...</div></td></tr>';
   }
   if (itemBody) {
-    itemBody.innerHTML = '<tr><td colspan="12" class="erp-empty">' +
+    itemBody.innerHTML = '<tr><td colspan="13" class="erp-empty">' +
       '<div class="erp-spinner"></div>' +
       '<div class="mt-2">Loading items...</div></td></tr>';
   }
 
   try {
-    // Build query
+    // ─── Query 1: Fetch PRF documents ───
     var query = 'select=*&order=created_at.desc&limit=2000';
 
     var catFilterEl = document.getElementById('prfCategoryFilter');
@@ -112,18 +138,15 @@ async function prfMonitorLoad() {
       query += '&created_at=lt.' + encodeURIComponent(toDateEl.value + 'T23:59:59');
     }
 
-    // Fetch PRF documents
     var prfs = await erpFetch('prf_documents', query);
     _prfMonitor.allPrfs = prfs || [];
+    console.log('[PRF Monitor v3.1] Loaded', _prfMonitor.allPrfs.length, 'PRFs');
 
-    console.log('[PRF Monitor v3] Loaded', _prfMonitor.allPrfs.length, 'PRFs');
-
-    // Fetch all items for these PRFs
+    // ─── Query 2: Fetch items ───
     if (_prfMonitor.allPrfs.length > 0) {
       var prfIds = _prfMonitor.allPrfs.map(function(p) { return p.id; });
       var allItems = [];
 
-      // Chunk to avoid URL length limits
       var chunkSize = 100;
       for (var c = 0; c < prfIds.length; c += chunkSize) {
         var chunk = prfIds.slice(c, c + chunkSize);
@@ -138,10 +161,8 @@ async function prfMonitorLoad() {
 
       // Enrich items with PRF metadata
       var prfMap = {};
-      _prfMainPrfMap = {};
       _prfMonitor.allPrfs.forEach(function(p) {
         prfMap[p.id] = p;
-        _prfMainPrfMap[p.id] = p;
       });
 
       allItems.forEach(function(it) {
@@ -153,21 +174,25 @@ async function prfMonitorLoad() {
       });
 
       _prfMonitor.allItems = allItems;
-      console.log('[PRF Monitor v3] Loaded', allItems.length, 'items');
+      console.log('[PRF Monitor v3.1] Loaded', allItems.length, 'items');
     } else {
       _prfMonitor.allItems = [];
     }
 
-    // Compute per-document status (for PRF tab)
+    // ─── Query 3: Fetch PO cache (NEW) ───
+    try {
+      _prfMonitor.poCacheMap = await prfMonitorFetchPoCache();
+    } catch(e) {
+      console.warn('[PRF Monitor] Could not load PO cache:', e.message);
+      _prfMonitor.poCacheMap = {};
+    }
+
+    // ─── Compute statuses + KPIs ───
     prfMonitorComputeStatus();
-
-    // Compute KPIs (item-level)
     prfMonitorComputeKPIs();
-
-    // Update tab counts
     prfUpdateTabCounts();
 
-    // Render both tabs
+    // ─── Render both tabs ───
     prfMonitorRenderPrfTab();
     prfMonitorRenderItemTab();
 
@@ -178,7 +203,7 @@ async function prfMonitorLoad() {
         'Failed: ' + erpEsc(err.message) + '</td></tr>';
     }
     if (itemBody) {
-      itemBody.innerHTML = '<tr><td colspan="12" class="erp-empty text-danger">' +
+      itemBody.innerHTML = '<tr><td colspan="13" class="erp-empty text-danger">' +
         'Failed: ' + erpEsc(err.message) + '</td></tr>';
     }
   }
@@ -193,7 +218,7 @@ function prfUpdateTabCounts() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// COMPUTE STATUS (per document — for PRF tab)
+// COMPUTE STATUS (per document)
 // ═══════════════════════════════════════════════════════════
 function prfMonitorComputeStatus() {
   var itemsByPrf = {};
@@ -361,7 +386,7 @@ function prfMonitorRenderPrfTab() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER TAB 2: BY ITEM (Flat List)
+// RENDER TAB 2: BY ITEM (with PO# columns)
 // ═══════════════════════════════════════════════════════════
 function prfMonitorRenderItemTab() {
   var tbody = document.getElementById('itemTableBody');
@@ -380,9 +405,18 @@ function prfMonitorRenderItemTab() {
       var prfNo = String(it._prfNo || '').toLowerCase();
       var itemCode = String(it.item_code || '').toLowerCase();
       var desc = String(it.description || '').toLowerCase();
+
+      // ✅ Search din sa PO#
+      var cacheKey = String(it._prfNo || '').trim() + '|' + (parseInt(it.line_no, 10) || 0);
+      var poData = (_prfMonitor.poCacheMap || {})[cacheKey] || {};
+      var poNo = String(poData.po_no || '').toLowerCase();
+      var supplier = String(poData.supplier || '').toLowerCase();
+
       if (prfNo.indexOf(search) === -1 &&
           itemCode.indexOf(search) === -1 &&
-          desc.indexOf(search) === -1) return false;
+          desc.indexOf(search) === -1 &&
+          poNo.indexOf(search) === -1 &&
+          supplier.indexOf(search) === -1) return false;
     }
     return true;
   });
@@ -402,7 +436,7 @@ function prfMonitorRenderItemTab() {
   document.getElementById('itemBtnNext').disabled = (end >= total);
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="12" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="13" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No items found.</td></tr>';
     return;
@@ -421,7 +455,25 @@ function prfMonitorRenderItemTab() {
     }) : '—';
 
     var isSelected = _prfMonitor.selectedItems[it.id] === true;
-    var safePrfNo = String(it._prfNo || '').replace(/'/g, "\\'");
+
+    // ✅ PO data lookup
+    var cacheKey = String(it._prfNo || '').trim() + '|' + (parseInt(it.line_no, 10) || 0);
+    var poData = (_prfMonitor.poCacheMap || {})[cacheKey] || {};
+    var poDisplay = poData.po_no ? '<span class="po-badge">' + erpEsc(poData.po_no) + '</span>' : '<span class="text-muted">—</span>';
+    var supplierDisplay = poData.supplier ? erpEsc(truncate(poData.supplier, 25)) : '<span class="text-muted">—</span>';
+    var dateDeliveredDisplay = '<span class="text-muted">—</span>';
+    if (poData.date_delivered) {
+      try {
+        var dd = new Date(poData.date_delivered);
+        if (!isNaN(dd.getTime())) {
+          dateDeliveredDisplay = erpEsc(dd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
+        } else {
+          dateDeliveredDisplay = erpEsc(String(poData.date_delivered));
+        }
+      } catch(e) {
+        dateDeliveredDisplay = erpEsc(String(poData.date_delivered));
+      }
+    }
 
     html += '<tr class="' + rowClass + '" data-item-id="' + it.id + '">' +
       '<td><input type="checkbox" class="item-select-cb" data-item-id="' + it.id + '"' +
@@ -431,11 +483,13 @@ function prfMonitorRenderItemTab() {
       '<td><span class="prf-link" onclick="viewPrfDetailsFromItem(' + it.prf_id + ')">' + erpEsc(it._prfNo) + '</span></td>' +
       '<td>' + erpEsc(dateStr) + '</td>' +
       '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
-      '<td title="' + erpEsc(it.description || '') + '">' + erpEsc(truncate(it.description || '—', 60)) + '</td>' +
+      '<td title="' + erpEsc(it.description || '') + '">' + erpEsc(truncate(it.description || '—', 45)) + '</td>' +
       '<td class="text-center">' + erpNum(it.stock_on_hand || 0) + '</td>' +
-      '<td class="text-center">' + erpNum(it.buffer_stock || 0) + '</td>' +
       '<td class="text-center fw-bold">' + erpNum(it.qty_for_order || 0) + '</td>' +
       '<td class="text-center">' + erpEsc(it.unit || '—') + '</td>' +
+      '<td class="text-center">' + poDisplay + '</td>' +
+      '<td>' + supplierDisplay + '</td>' +
+      '<td class="text-center" style="font-size:0.72rem;">' + dateDeliveredDisplay + '</td>' +
       '<td class="text-center">' +
         '<select class="form-select form-select-sm inline-status" onchange="updateItemStatus(' + it.id + ', this.value)">' +
           '<option value="UNSERVED"' + (status === 'UNSERVED' ? ' selected' : '') + '>UNSERVED</option>' +
@@ -444,15 +498,11 @@ function prfMonitorRenderItemTab() {
           '<option value="CANCELED"' + (status === 'CANCELED' ? ' selected' : '') + '>CANCELED</option>' +
         '</select>' +
       '</td>' +
-      '<td>' + erpEsc(truncate(it.remarks || '—', 30)) + '</td>' +
     '</tr>';
   });
   tbody.innerHTML = html;
 
-  // Update bulk bar visibility
   updateBulkActionsBar();
-
-  // Update select-all checkbox state
   updateSelectAllCheckbox();
 }
 
@@ -489,7 +539,6 @@ function toggleSelectAllItems(checked) {
     }
   });
 
-  // Re-render checkboxes
   document.querySelectorAll('.item-select-cb').forEach(function(cb) {
     cb.checked = checked;
   });
@@ -574,7 +623,6 @@ async function bulkUpdateStatus(newStatus) {
     var currentUser = localStorage.getItem('ivm_userFullname') ||
                       localStorage.getItem('ivm_username') || 'WAREHOUSE';
 
-    // Bulk PATCH using `in` operator
     var res = await fetch(erpUrl('prf_items?id=in.(' + selectedIds.join(',') + ')'), {
       method: 'PATCH',
       headers: erpHeaders(),
@@ -592,10 +640,7 @@ async function bulkUpdateStatus(newStatus) {
 
     erpShowToast('✅ ' + selectedIds.length + ' item(s) marked as ' + newStatus, 'success');
 
-    // Clear selection
     _prfMonitor.selectedItems = {};
-
-    // Reload data (to refresh KPIs + statuses)
     await prfMonitorLoad();
 
   } catch(err) {
@@ -626,7 +671,6 @@ async function updateItemStatus(itemId, newStatus) {
 
     erpShowToast('✓ Status updated to ' + newStatus, 'success');
 
-    // Reload data
     await prfMonitorLoad();
 
   } catch(err) {
@@ -651,16 +695,20 @@ function exportSelectedItems() {
     return _prfMonitor.selectedItems[it.id] === true;
   });
 
-  var headers = ['PRF No.', 'Item Code', 'Description', 'Qty Order', 'Unit', 'Status', 'Remarks'];
+  var headers = ['PRF No.', 'Item Code', 'Description', 'Qty Order', 'Unit', 'PO#', 'Supplier', 'Date Delivered', 'Status'];
   var rows = items.map(function(it) {
+    var cacheKey = String(it._prfNo || '').trim() + '|' + (parseInt(it.line_no, 10) || 0);
+    var poData = (_prfMonitor.poCacheMap || {})[cacheKey] || {};
     return [
       it._prfNo || '',
       it.item_code || '',
       it.description || '',
       it.qty_for_order || 0,
       it.unit || '',
-      it.status || 'UNSERVED',
-      it.remarks || ''
+      poData.po_no || '',
+      poData.supplier || '',
+      poData.date_delivered || '',
+      it.status || 'UNSERVED'
     ];
   });
 
@@ -724,33 +772,56 @@ async function viewPrfDetails(prfId) {
       '</div>';
 
     html += '<h6 class="mt-3">Items (' + items.length + ')</h6>';
-    html += '<div class="table-responsive"><table class="erp-table" style="font-size:0.85rem;">';
+    html += '<div class="table-responsive"><table class="erp-table" style="font-size:0.82rem;">';
     html += '<thead><tr>' +
       '<th style="width:4%">#</th>' +
-      '<th style="width:14%">Item Code</th>' +
-      '<th style="width:24%">Description</th>' +
-      '<th style="width:8%" class="text-center">On-Hand</th>' +
-      '<th style="width:8%" class="text-center">Buffer</th>' +
-      '<th style="width:8%" class="text-center">Qty Order</th>' +
-      '<th style="width:6%" class="text-center">Unit</th>' +
-      '<th style="width:12%" class="text-center">Status</th>' +
-      '<th style="width:16%">Remarks</th>' +
+      '<th style="width:12%">Item Code</th>' +
+      '<th style="width:22%">Description</th>' +
+      '<th style="width:7%" class="text-center">On-Hand</th>' +
+      '<th style="width:7%" class="text-center">Qty Order</th>' +
+      '<th style="width:5%" class="text-center">Unit</th>' +
+      '<th style="width:8%" class="text-center">PO#</th>' +
+      '<th style="width:13%">Supplier</th>' +
+      '<th style="width:9%" class="text-center">Date Deliv.</th>' +
+      '<th style="width:8%" class="text-center">Status</th>' +
+      '<th style="width:5%">Remarks</th>' +
     '</tr></thead><tbody>';
 
     if (items.length === 0) {
-      html += '<tr><td colspan="9" class="text-center text-muted py-3">No items</td></tr>';
+      html += '<tr><td colspan="11" class="text-center text-muted py-3">No items</td></tr>';
     } else {
       items.forEach(function(it, idx) {
         var status = String(it.status || 'UNSERVED').toUpperCase();
+
+        // ✅ PO lookup
+        var cacheKey = String(prf.prf_no || '').trim() + '|' + (parseInt(it.line_no, 10) || 0);
+        var poData = (_prfMonitor.poCacheMap || {})[cacheKey] || {};
+        var poDisplay = poData.po_no ? '<span class="po-badge">' + erpEsc(poData.po_no) + '</span>' : '<span class="text-muted">—</span>';
+        var supplierDisplay = poData.supplier ? erpEsc(poData.supplier) : '<span class="text-muted">—</span>';
+        var dateDeliveredDisplay = '<span class="text-muted">—</span>';
+        if (poData.date_delivered) {
+          try {
+            var dd = new Date(poData.date_delivered);
+            if (!isNaN(dd.getTime())) {
+              dateDeliveredDisplay = erpEsc(dd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
+            } else {
+              dateDeliveredDisplay = erpEsc(String(poData.date_delivered));
+            }
+          } catch(e) {
+            dateDeliveredDisplay = erpEsc(String(poData.date_delivered));
+          }
+        }
 
         html += '<tr>' +
           '<td>' + (idx + 1) + '</td>' +
           '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
           '<td>' + erpEsc(it.description || '—') + '</td>' +
           '<td class="text-center">' + erpNum(it.stock_on_hand || 0) + '</td>' +
-          '<td class="text-center">' + erpNum(it.buffer_stock || 0) + '</td>' +
           '<td class="text-center fw-bold">' + erpNum(it.qty_for_order || 0) + '</td>' +
           '<td class="text-center">' + erpEsc(it.unit || '—') + '</td>' +
+          '<td class="text-center">' + poDisplay + '</td>' +
+          '<td>' + supplierDisplay + '</td>' +
+          '<td class="text-center" style="font-size:0.72rem;">' + dateDeliveredDisplay + '</td>' +
           '<td class="text-center">' +
             '<select class="form-select form-select-sm" style="font-size:0.75rem;" onchange="updateItemStatus(' + it.id + ', this.value)">' +
               '<option value="UNSERVED"' + (status === 'UNSERVED' ? ' selected' : '') + '>UNSERVED</option>' +
@@ -775,7 +846,6 @@ async function viewPrfDetails(prfId) {
 }
 
 function viewPrfDetailsFromItem(prfId) {
-  // Switch to PRF tab first, then open modal
   prfSwitchTab('prf');
   setTimeout(function() {
     viewPrfDetails(prfId);
@@ -979,17 +1049,21 @@ function prfMonitorExportItems() {
     erpShowToast('No items to export', 'warning');
     return;
   }
-  var headers = ['PRF No.', 'Date', 'Item Code', 'Description', 'On-Hand', 'Buffer', 'Qty Order', 'Unit', 'Status', 'Remarks'];
+  var headers = ['PRF No.', 'Date', 'Item Code', 'Description', 'On-Hand', 'Qty Order', 'Unit', 'PO#', 'Supplier', 'Date Delivered', 'Status', 'Remarks'];
   var rows = _prfMonitor.filteredItems.map(function(it) {
+    var cacheKey = String(it._prfNo || '').trim() + '|' + (parseInt(it.line_no, 10) || 0);
+    var poData = (_prfMonitor.poCacheMap || {})[cacheKey] || {};
     return [
       it._prfNo || '',
       it._prfDate ? new Date(it._prfDate).toLocaleDateString() : '',
       it.item_code || '',
       it.description || '',
       it.stock_on_hand || 0,
-      it.buffer_stock || 0,
       it.qty_for_order || 0,
       it.unit || '',
+      poData.po_no || '',
+      poData.supplier || '',
+      poData.date_delivered || '',
       it.status || 'UNSERVED',
       it.remarks || ''
     ];
@@ -1014,7 +1088,7 @@ function _csvEsc(val) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// PRINT (delegates to prf-print.js)
+// PRINT
 // ═══════════════════════════════════════════════════════════
 function printCurrentPrf() {
   if (!_prfMonitor.currentPrf) {
@@ -1073,4 +1147,4 @@ window.bulkUpdateStatus = bulkUpdateStatus;
 window.exportSelectedItems = exportSelectedItems;
 window.printCurrentPrf = printCurrentPrf;
 
-console.log('✅ prf-monitor.js v3 loaded (two tabs + bulk actions)');
+console.log('✅ prf-monitor.js v3.1 loaded (with PO# display from cache)');
