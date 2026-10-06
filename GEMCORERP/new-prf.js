@@ -58,6 +58,31 @@ function generatePrfNo() {
   document.getElementById('prfNo').value = 'PRF#' + month + '-' + day;
 }
 
+// Check kung may existing PRF with same name
+async function checkPrfNoAvailable(prfNo) {
+  try {
+    var res = await erpFetch('prf_documents', 
+      'prf_no=eq.' + encodeURIComponent(prfNo) + '&select=id&limit=1');
+    return (!res || res.length === 0);
+  } catch(e) {
+    return true; // Assume available on error
+  }
+}
+
+// Auto-generate unique PRF# suffix
+async function generateUniquePrfNo(basePrfNo) {
+  var candidate = basePrfNo;
+  var suffix = 1;
+  
+  while (!(await checkPrfNoAvailable(candidate))) {
+    suffix++;
+    candidate = basePrfNo + '-' + suffix;
+    if (suffix > 100) break; // Safety
+  }
+  
+  return candidate;
+}
+
 // ═══════════════════════════════════════════════════════════
 // LOAD DATA
 // ═══════════════════════════════════════════════════════════
@@ -323,6 +348,13 @@ async function submitPrf() {
 
   var prfNo = document.getElementById('prfNo').value.trim();
   var category = document.getElementById('prfCategory').value;
+  
+  // Check kung available
+  if (!(await checkPrfNoAvailable(prfNo))) {
+    erpShowToast('PRF No. "' + prfNo + '" already exists. Generating unique...', 'warning');
+    prfNo = await generateUniquePrfNo(prfNo);
+    console.log('[PRF] Using unique PRF No:', prfNo);
+  }
   var preparedBy = document.getElementById('prfPreparedBy').value.trim();
   var department = document.getElementById('prfDepartment').value.trim();
   var notedBy = document.getElementById('prfNotedBy').value.trim();
