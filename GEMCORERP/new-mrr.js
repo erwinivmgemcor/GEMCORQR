@@ -285,7 +285,7 @@ async function submitMrr() {
     var docNo = 'MRR' + padded;
     console.log('[Submit MRR] Doc No:', docNo);
 
-    // ─── Step 2: Determine overall status UPFRONT ───
+    // ─── Step 2: Determine overall status ───
     var allComplete = validItems.every(function(it) {
       return it.issuedQty >= it.requestedQty && it.requestedQty > 0;
     });
@@ -296,18 +296,17 @@ async function submitMrr() {
     var overallStatus = (allComplete && anyReceived) ? 'COMPLETED' :
                         (anyReceived ? 'PARTIAL' : 'PENDING');
 
-    console.log('[Submit MRR] Status will be:', overallStatus);
+    console.log('[Submit MRR] Final status will be:', overallStatus);
 
-    // ─── Step 3: Insert document WITH FINAL STATUS ───
-    // ✅ KEY FIX: Insert as COMPLETED/PARTIAL directly (not PENDING)
-    // This ensures trigger fires on INSERT
+    // ─── Step 3: Insert document as PENDING (to avoid trigger firing early) ───
+    // ✅ KEY FIX: Insert as PENDING first, then patch to final status
     var docRes = await fetch(erpUrl('documents'), {
       method: 'POST',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify({
         doc_no: docNo,
         doc_type: 'MRR',
-        status: overallStatus,  // ✅ Set final status immediately
+        status: 'PENDING',  // ✅ Start as PENDING
         is_bal: false,
         requestor: _mrrState.preparedBy,
         department: '',
@@ -319,8 +318,6 @@ async function submitMrr() {
         receiving_site: _mrrState.receivingSite,
         receiving_date: _mrrState.receivingDate,
         prepared_by: _mrrState.preparedBy,
-        processed_by: overallStatus !== 'PENDING' ? _mrrState.preparedBy : null,
-        processed_at: overallStatus !== 'PENDING' ? new Date().toISOString() : null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
@@ -335,7 +332,9 @@ async function submitMrr() {
     var doc = docArr[0];
     if (!doc || !doc.id) throw new Error('No document ID returned');
 
-    // ─── Step 4: Insert doc items ───
+    console.log('[Submit MRR] Document inserted:', docNo);
+
+    // ─── Step 4: Insert doc_items ───
     var itemPayloads = validItems.map(function(it, idx) {
       var itemStatus = it.issuedQty >= it.requestedQty ? 'COMPLETE' :
                        (it.issuedQty > 0 ? 'PARTIAL' : 'PENDING');
@@ -364,30 +363,31 @@ async function submitMrr() {
       throw new Error('Insert items failed: ' + itemsRes.status + ' ' + itemsErrText);
     }
 
-    // ─── Step 5: Verify status was set correctly ───
-    // Extra safety: patch status again if needed (idempotent)
-    try {
-      var verifyRes = await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(docNo) + '&select=status'), {
-        headers: erpHeaders()
-      });
-      var verifyArr = await verifyRes.json();
-      var currentStatus = verifyArr[0] ? verifyArr[0].status : null;
+    console.log('[Submit MRR] Items inserted:', validItems.length);
 
-      if (currentStatus !== overallStatus && overallStatus !== 'PENDING') {
-        console.log('[Submit MRR] Re-patching status:', currentStatus, '→', overallStatus);
-        await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(docNo)), {
-          method: 'PATCH',
-          headers: erpHeaders(),
-          body: JSON.stringify({
-            status: overallStatus,
-            processed_by: _mrrState.preparedBy,
-            processed_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-        });
+    // ─── Step 5: PATCH documents to final status (trigger fires NOW with items) ───
+    if (overallStatus !== 'PENDING') {
+      console.log('[Submit MRR] Patching status to:', overallStatus);
+
+      var patchRes = await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(docNo)), {
+        method: 'PATCH',
+        headers: erpHeaders({ 'Prefer': 'return=representation' }),
+        body: JSON.stringify({
+          status: overallStatus,  // ✅ Trigger fires now, items are ready
+          processed_by: _mrrState.preparedBy,
+          processed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+      });
+
+      if (!patchRes.ok) {
+        var patchErrText = await patchRes.text();
+        console.error('[Submit MRR] PATCH failed:', patchErrText);
+        // Don't throw — document is created, just status update failed
+        erpShowToast('⚠️ MRR created but status update may have failed. Check Supabase.', 'warning');
+      } else {
+        console.log('[Submit MRR] Status patched to:', overallStatus);
       }
-    } catch(e) {
-      console.warn('[Submit MRR] Verify patch failed:', e.message);
     }
 
     // ─── Success ───
@@ -403,7 +403,6 @@ async function submitMrr() {
     btn.innerHTML = originalHtml;
   }
 }
-
 // ═══════════════════════════════════════════════════════════
 // SUCCESS MODAL
 // ═══════════════════════════════════════════════════════════
