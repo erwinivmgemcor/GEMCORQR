@@ -337,11 +337,17 @@ function processCurrentRequest() {
   var modal = bootstrap.Modal.getInstance(modalEl);
   if (modal) modal.hide();
   
-  // Show toast — full processing page to follow
-  erpShowToast('Processing ' + docNo + ' — feature coming soon', 'info');
-  console.log('[Process] Would open processing page for:', docNo, docType);
+  // Navigate to process page
+  if (docType === 'MRIF') {
+    window.location.href = 'process-mrif.html?doc=' + encodeURIComponent(docNo);
+  } else if (docType === 'MRS') {
+    window.location.href = 'process-mrs.html?doc=' + encodeURIComponent(docNo);
+  } else if (docType === 'MRR') {
+    window.location.href = 'process-mrr.html?doc=' + encodeURIComponent(docNo);
+  } else {
+    erpShowToast('Unknown doc type: ' + docType, 'warning');
+  }
 }
-
 // ═══════════════════════════════════════════════════════════
 // FILTERS + PAGINATION
 // ═══════════════════════════════════════════════════════════
