@@ -9,6 +9,7 @@
   var NAV_ITEMS = [
     // WAREHOUSE
     { id: 'stock-monitor', label: 'Stock Monitor', icon: 'bi-speedometer2', href: 'stock-monitor.html', roles: ['warehouse'] },
+    { id: 'process-history', label: 'Process History', icon: 'bi-clock-history', href: 'process-history.html', roles: ['warehouse'] },
     { id: 'all-requests', label: 'All Requests', icon: 'bi-inbox-fill', href: 'all-requests.html', roles: ['warehouse'] },
     { id: 'prf-monitor', label: 'PRF Monitor', icon: 'bi-file-earmark-text', href: 'prf-monitor.html', roles: ['warehouse'] },
     { id: 'weekly-monitor', label: 'Weekly Monitoring', icon: 'bi-calendar-week', href: 'weekly-monitor.html', roles: ['warehouse'] },
@@ -27,21 +28,22 @@
     try { return localStorage.getItem('ivm_userRole') || ''; } catch(e) { return ''; }
   }
 
-  function _getCurrentPage() {
-    var path = window.location.pathname;
-    var pages = [
-      'weekly-monitor', 'stock-monitor', 'usage-trend', 'usage-entry',
-      'all-requests', 'prf-monitor', 'new-prf',
-      'my-requests',
-      'new-mrif-manual', 'new-mrr-manual', 'new-mrs-manual',
-      'new-mrif', 'new-mrr', 'new-mrs',
-      'mrif-list', 'mrr-list', 'mrs-list'
-    ];
-    for (var i = 0; i < pages.length; i++) {
-      if (path.indexOf(pages[i]) !== -1) return pages[i];
-    }
-    return '';
+function _getCurrentPage() {
+  var path = window.location.pathname;
+  var pages = [
+    'weekly-monitor', 'stock-monitor', 'usage-trend', 'usage-entry',
+    'all-requests', 'prf-monitor', 'new-prf',
+    'process-history',                          // ← ADD ITO
+    'my-requests',
+    'new-mrif-manual', 'new-mrr-manual', 'new-mrs-manual',
+    'new-mrif', 'new-mrr', 'new-mrs',
+    'mrif-list', 'mrr-list', 'mrs-list'
+  ];
+  for (var i = 0; i < pages.length; i++) {
+    if (path.indexOf(pages[i]) !== -1) return pages[i];
   }
+  return '';
+}
 
   function _isAllowed(item, userRole) {
     if (!item.roles) return true;
