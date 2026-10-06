@@ -1,12 +1,16 @@
 // ============================================================
-// GEMCOR ERP — Create PRF (Purchase Requisition Form)
-// From Reorder List → Select items by category → Submit
+// GEMCOR ERP — Create PRF (v2)
+// Internal: suggested qty visible · Print: blank qty
+// Auto-split batches of 30 · Multi-PRF awareness
 // ============================================================
 
+var MAX_ITEMS_PER_PRF = 30;
+
 var _prf = {
-  items: [],              // Reorder items for selected category
-  selectedItems: [],      // Items with qty > 0
-  reorderList: [],        // Full reorder list from view
+  items: [],
+  selectedItems: [],
+  reorderList: [],
+  pendingPrfItems: {},    // item_code → [{prf_no, status, qty}]
   isSubmitting: false
 };
 
@@ -14,12 +18,13 @@ var _prf = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Create PRF] Initializing...');
+  console.log('[Create PRF v2] Initializing...');
 
   prfCheckHealth();
   initUserInfo();
   generatePrfNo();
   loadReorderList();
+  loadPendingPrfItems();
 });
 
 async function prfCheckHealth() {
@@ -42,58 +47,76 @@ async function prfCheckHealth() {
 function initUserInfo() {
   var fullname = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || '';
   var department = localStorage.getItem('ivm_userDepartment') || '';
-
   document.getElementById('prfPreparedBy').value = fullname;
   document.getElementById('prfDepartment').value = department;
 }
 
 function generatePrfNo() {
-  // Default: PRF#MM-DD (e.g., PRF#10-6)
   var now = new Date();
   var month = now.getMonth() + 1;
   var day = now.getDate();
-  var prfNo = 'PRF#' + month + '-' + day;
-  document.getElementById('prfNo').value = prfNo;
+  document.getElementById('prfNo').value = 'PRF#' + month + '-' + day;
 }
 
 // ═══════════════════════════════════════════════════════════
-// LOAD REORDER LIST
+// LOAD DATA
 // ═══════════════════════════════════════════════════════════
 async function loadReorderList() {
   try {
-    // Get reorder list from view (items below buffer)
     var rows = await erpFetch('erp_v_reorder_list', 'select=*');
     _prf.reorderList = rows || [];
-    console.log('[PRF] Loaded reorder list:', _prf.reorderList.length, 'items');
+    console.log('[PRF] Reorder list:', _prf.reorderList.length, 'items');
   } catch(err) {
-    console.error('[PRF] Load reorder list failed:', err);
+    console.error('[PRF] Load failed:', err);
     erpShowToast('Failed to load reorder list: ' + err.message, 'danger');
   }
 }
 
+async function loadPendingPrfItems() {
+  try {
+    var rows = await erpFetch('erp_v_prf_pending_items', 'select=*');
+    _prf.pendingPrfItems = {};
+    (rows || []).forEach(function(r) {
+      var code = String(r.item_code || '').trim();
+      if (!code) return;
+      if (!_prf.pendingPrfItems[code]) _prf.pendingPrfItems[code] = [];
+      _prf.pendingPrfItems[code].push({
+        prf_no: r.prf_no,
+        base_prf_no: r.base_prf_no,
+        status: r.status,
+        qty: Number(r.qty_for_order || 0),
+        created_at: r.created_at
+      });
+    });
+    console.log('[PRF] Pending items loaded:', Object.keys(_prf.pendingPrfItems).length, 'unique items');
+  } catch(err) {
+    console.warn('[PRF] Pending items load failed:', err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// CATEGORY CHANGE
+// ═══════════════════════════════════════════════════════════
 function onCategoryChange() {
   var category = document.getElementById('prfCategory').value;
   if (!category) {
     document.getElementById('itemsContainer').innerHTML = 
-      '<div class="text-center text-muted py-5" id="itemsEmptyState">' +
+      '<div class="text-center text-muted py-5">' +
       '<i class="bi bi-inbox fs-1 d-block mb-2"></i>' +
-      '<div>Select a category above to load items from the Reorder List.</div>' +
-      '</div>';
+      '<div>Select a category above to load items.</div></div>';
     return;
   }
 
-  // Filter reorder list by category
   _prf.items = _prf.reorderList.filter(function(it) {
     return String(it.category || '').toUpperCase() === category;
   });
 
   console.log('[PRF] Category:', category, 'Items:', _prf.items.length);
-
   renderItems();
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER ITEMS
+// RENDER ITEMS (with Suggested column + Pending warning)
 // ═══════════════════════════════════════════════════════════
 function renderItems() {
   var container = document.getElementById('itemsContainer');
@@ -103,34 +126,45 @@ function renderItems() {
     container.innerHTML = 
       '<div class="alert alert-info mb-0">' +
       '<i class="bi bi-info-circle me-2"></i>' +
-      'No items found in the Reorder List for this category.' +
-      '</div>';
+      'No items found for this category.</div>';
     document.getElementById('itemsCountLabel').textContent = '(0 items)';
     updateSubmitButton();
     return;
   }
 
   var html = '<div class="table-responsive">';
-  html += '<table class="erp-table" style="font-size:0.85rem;">';
+  html += '<table class="erp-table" style="font-size:0.82rem;">';
   html += '<thead><tr>' +
     '<th style="width:3%"><input type="checkbox" id="selectAllChk" onchange="toggleSelectAll(this.checked)"></th>' +
-    '<th style="width:5%">#</th>' +
-    '<th style="width:12%">Item Code</th>' +
-    '<th style="width:22%">Description</th>' +
-    '<th style="width:8%" class="text-center">Location</th>' +
-    '<th style="width:7%" class="text-center">Stock On Hand</th>' +
-    '<th style="width:7%" class="text-center">Buffer</th>' +
-    '<th style="width:7%" class="text-center">Ave/Mo</th>' +
+    '<th style="width:4%">#</th>' +
+    '<th style="width:10%">Item Code</th>' +
+    '<th style="width:20%">Description</th>' +
+    '<th style="width:7%" class="text-center">Location</th>' +
+    '<th style="width:6%" class="text-center">On-Hand</th>' +
+    '<th style="width:6%" class="text-center">Buffer</th>' +
+    '<th style="width:6%" class="text-center">Ave/Mo</th>' +
+    '<th style="width:7%" class="text-center">Suggested</th>' +
     '<th style="width:8%" class="text-center">Qty For Order</th>' +
-    '<th style="width:6%" class="text-center">Unit</th>' +
-    '<th style="width:15%">Remarks</th>' +
+    '<th style="width:5%" class="text-center">Unit</th>' +
+    '<th style="width:14%">Remarks</th>' +
   '</tr></thead><tbody>';
 
   _prf.items.forEach(function(it, idx) {
-    var suggested = Number(it.suggested_order_qty || 0) || Math.max(0, Number(it.buffer_stock || 0) - Number(it.on_hand || 0));
+    var suggested = computeSuggested(it);
     var isSelected = it._selected === true;
     var qtyOrder = it._qtyOrder !== undefined ? it._qtyOrder : 0;
     var remarks = it._remarks || '';
+
+    // Pending PRF warning
+    var pendingInfo = _prf.pendingPrfItems[it.item_code] || [];
+    var pendingWarning = '';
+    if (pendingInfo.length > 0) {
+      var pendingText = pendingInfo.map(function(p) {
+        return p.prf_no + ' (' + p.status + ' · qty ' + p.qty + ')';
+      }).join(', ');
+      pendingWarning = ' <span class="badge bg-warning text-dark" title="Already in: ' + 
+        erpEsc(pendingText) + '">⚠ PENDING</span>';
+    }
 
     var urgencyBadge = '';
     if (it.urgency === 'CRITICAL') urgencyBadge = ' <span class="badge bg-danger">CRIT</span>';
@@ -139,16 +173,17 @@ function renderItems() {
     html += '<tr data-idx="' + idx + '"' + (isSelected ? ' style="background:#ecfdf5;"' : '') + '>' +
       '<td><input type="checkbox" class="item-select-chk" data-idx="' + idx + '"' + (isSelected ? ' checked' : '') + ' onchange="toggleItemSelect(' + idx + ', this.checked)"></td>' +
       '<td>' + (idx + 1) + '</td>' +
-      '<td><code>' + erpEsc(it.item_code) + '</code>' + urgencyBadge + '</td>' +
+      '<td><code>' + erpEsc(it.item_code) + '</code>' + urgencyBadge + pendingWarning + '</td>' +
       '<td>' + erpEsc(it.description || '—') + '</td>' +
       '<td class="text-center">' + erpEsc(it.location || '—') + '</td>' +
       '<td class="text-center">' + erpNum(it.on_hand || 0) + '</td>' +
       '<td class="text-center">' + erpNum(it.buffer_stock || 0) + '</td>' +
       '<td class="text-center">' + erpNum(it.ave_monthly_consumption || 0) + '</td>' +
+      '<td class="text-center" style="color:#6b7280;font-style:italic;">' + erpNum(suggested) + '</td>' +
       '<td class="text-center">' +
         '<input type="number" class="form-control form-control-sm qty-order-input" ' +
-        'data-idx="' + idx + '" value="' + qtyOrder + '" min="0" step="0.01" ' +
-        'placeholder="' + suggested + '" onchange="updateQty(' + idx + ', this.value)">' +
+        'data-idx="' + idx + '" value="' + qtyOrder + '" min="0" step="1" ' +
+        'placeholder="' + Math.ceil(suggested) + '" onchange="updateQty(' + idx + ', this.value)">' +
       '</td>' +
       '<td class="text-center">' + erpEsc(it.base_unit || '—') + '</td>' +
       '<td>' +
@@ -162,16 +197,40 @@ function renderItems() {
   html += '</tbody></table></div>';
 
   // Summary
+  recomputeSelected();
   var totalQty = _prf.selectedItems.reduce(function(s, it) { return s + (it._qtyOrder || 0); }, 0);
-  html += '<div class="mt-3 d-flex justify-content-between align-items-center">';
-  html += '<div class="small text-muted"><i class="bi bi-info-circle me-1"></i>Suggested qty is based on (Buffer - On-Hand).</div>';
-  html += '<div><strong>Selected:</strong> ' + _prf.selectedItems.length + ' items · <strong>Total Qty:</strong> ' + erpNum(totalQty) + '</div>';
+
+  var batchingInfo = '';
+  if (_prf.selectedItems.length > MAX_ITEMS_PER_PRF) {
+    var batches = Math.ceil(_prf.selectedItems.length / MAX_ITEMS_PER_PRF);
+    batchingInfo = '<span class="text-warning ms-3">' +
+      '<i class="bi bi-exclamation-triangle-fill me-1"></i>' +
+      'Will split into <strong>' + batches + '</strong> PRFs (max ' + MAX_ITEMS_PER_PRF + ' items each)' +
+      '</span>';
+  }
+
+  html += '<div class="mt-3 d-flex justify-content-between align-items-center flex-wrap gap-2">';
+  html += '<div class="small text-muted">' +
+    '<i class="bi bi-info-circle me-1"></i>' +
+    'Suggested qty = (Buffer − On-Hand). Not printed.' +
+    batchingInfo +
+    '</div>';
+  html += '<div><strong>Selected:</strong> ' + _prf.selectedItems.length + 
+    ' items · <strong>Total Qty:</strong> ' + erpNum(totalQty) + '</div>';
   html += '</div>';
 
   container.innerHTML = html;
 
   document.getElementById('itemsCountLabel').textContent = '(' + _prf.items.length + ' items)';
   updateSubmitButton();
+}
+
+function computeSuggested(it) {
+  var buffer = Number(it.buffer_stock || 0);
+  var onHand = Number(it.on_hand || 0);
+  var diff = buffer - onHand;
+  if (diff > 0) return Math.ceil(diff);
+  return Number(it.suggested_order_qty || 0);
 }
 
 function erpNum(n) {
@@ -187,16 +246,9 @@ function toggleItemSelect(idx, checked) {
   if (!item) return;
   item._selected = checked;
 
-  if (checked) {
-    // Auto-fill suggested qty if empty
-    if (!item._qtyOrder) {
-      item._qtyOrder = Math.max(0, Number(item.buffer_stock || 0) - Number(item.on_hand || 0));
-      if (item._qtyOrder <= 0 && item.suggested_order_qty) {
-        item._qtyOrder = Number(item.suggested_order_qty);
-      }
-      item._qtyOrder = Math.ceil(item._qtyOrder);
-    }
-  } else {
+  if (checked && (!item._qtyOrder || item._qtyOrder === 0)) {
+    item._qtyOrder = computeSuggested(item);
+  } else if (!checked) {
     item._qtyOrder = 0;
   }
 
@@ -205,14 +257,10 @@ function toggleItemSelect(idx, checked) {
 }
 
 function toggleSelectAll(checked) {
-  _prf.items.forEach(function(it, idx) {
+  _prf.items.forEach(function(it) {
     it._selected = checked;
     if (checked) {
-      it._qtyOrder = Math.max(0, Number(it.buffer_stock || 0) - Number(it.on_hand || 0));
-      if (it._qtyOrder <= 0 && it.suggested_order_qty) {
-        it._qtyOrder = Number(it.suggested_order_qty);
-      }
-      it._qtyOrder = Math.ceil(it._qtyOrder);
+      it._qtyOrder = computeSuggested(it);
     } else {
       it._qtyOrder = 0;
     }
@@ -258,44 +306,62 @@ function updateSubmitButton() {
     summary.textContent = 'Select items and enter quantities.';
   } else {
     btn.disabled = false;
-    summary.textContent = count + ' item(s) selected · Total qty: ' + erpNum(totalQty);
+    var batchInfo = '';
+    if (count > MAX_ITEMS_PER_PRF) {
+      var batches = Math.ceil(count / MAX_ITEMS_PER_PRF);
+      batchInfo = ' (will create ' + batches + ' PRF batches)';
+    }
+    summary.textContent = count + ' item(s) selected · Total qty: ' + erpNum(totalQty) + batchInfo;
   }
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT PRF
+// SUBMIT (with batching)
 // ═══════════════════════════════════════════════════════════
 async function submitPrf() {
   if (_prf.isSubmitting) return;
 
   var prfNo = document.getElementById('prfNo').value.trim();
-  if (!prfNo) {
-    erpShowToast('PRF No. is required', 'warning');
-    return;
-  }
-
   var category = document.getElementById('prfCategory').value;
-  if (!category) {
-    erpShowToast('Category is required', 'warning');
-    return;
-  }
-
-  recomputeSelected();
-  if (_prf.selectedItems.length === 0) {
-    erpShowToast('Please select at least one item with qty > 0', 'warning');
-    return;
-  }
-
   var preparedBy = document.getElementById('prfPreparedBy').value.trim();
   var department = document.getElementById('prfDepartment').value.trim();
   var notedBy = document.getElementById('prfNotedBy').value.trim();
   var approvedBy = document.getElementById('prfApprovedBy').value.trim();
   var notes = document.getElementById('prfNotes').value.trim();
 
-  var totalItems = _prf.selectedItems.length;
-  var totalQty = _prf.selectedItems.reduce(function(s, it) { return s + (it._qtyOrder || 0); }, 0);
+  if (!prfNo) { erpShowToast('PRF No. required', 'warning'); return; }
+  if (!category) { erpShowToast('Category required', 'warning'); return; }
 
-  if (!confirm('Create PRF ' + prfNo + ' with ' + totalItems + ' item(s)?')) return;
+  recomputeSelected();
+  if (_prf.selectedItems.length === 0) {
+    erpShowToast('Select at least one item with qty > 0', 'warning');
+    return;
+  }
+
+  // Check batching
+  var items = _prf.selectedItems;
+  var batches = [];
+  if (items.length > MAX_ITEMS_PER_PRF) {
+    for (var i = 0; i < items.length; i += MAX_ITEMS_PER_PRF) {
+      batches.push(items.slice(i, i + MAX_ITEMS_PER_PRF));
+    }
+  } else {
+    batches.push(items);
+  }
+
+  // Confirm
+  var confirmMsg = 'Create PRF with ' + items.length + ' item(s)?\n\n';
+  if (batches.length > 1) {
+    confirmMsg += 'Will be split into ' + batches.length + ' batches:\n';
+    batches.forEach(function(b, idx) {
+      var suffix = idx === 0 ? '' : '.' + (idx + 1);
+      confirmMsg += '  • ' + prfNo + suffix + ' (' + b.length + ' items)\n';
+    });
+    confirmMsg += '\n';
+  }
+  confirmMsg += 'Total qty: ' + items.reduce(function(s, it) { return s + (it._qtyOrder || 0); }, 0);
+
+  if (!confirm(confirmMsg)) return;
 
   _prf.isSubmitting = true;
   var btn = document.getElementById('btnSubmitPrf');
@@ -304,69 +370,18 @@ async function submitPrf() {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
 
   try {
-    // 1. Insert prf_documents
-    var docRes = await fetch(erpUrl('prf_documents'), {
-      method: 'POST',
-      headers: erpHeaders({ 'Prefer': 'return=representation' }),
-      body: JSON.stringify({
-        prf_no: prfNo,
-        category: category,
-        requestor: preparedBy,
-        department: department,
-        notes: notes,
-        total_items: totalItems,
-        total_qty: totalQty,
-        prepared_by: preparedBy,
-        noted_by: notedBy,
-        approved_by: approvedBy,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-    });
+    var createdPrfs = [];
 
-    if (!docRes.ok) {
-      var errText = await docRes.text();
-      throw new Error('Insert PRF failed: ' + docRes.status + ' ' + errText);
-    }
-
-    var docArr = await docRes.json();
-    var doc = docArr[0];
-    if (!doc || !doc.id) throw new Error('No PRF ID returned');
-
-    // 2. Insert prf_items
-    var itemPayloads = _prf.selectedItems.map(function(it, idx) {
-      return {
-        prf_id: doc.id,
-        prf_no: prfNo,
-        line_no: idx + 1,
-        item_code: it.item_code,
-        description: it.description || '',
-        category: it.category || category,
-        location: it.location || '',
-        average_consumption: Number(it.ave_monthly_consumption || 0),
-        buffer_stock: Number(it.buffer_stock || 0),
-        stock_on_hand: Number(it.on_hand || 0),
-        qty_for_order: Number(it._qtyOrder || 0),
-        unit: it.base_unit || 'PIECE',
-        status: 'UNSERVED',
-        remarks: it._remarks || ''
-      };
-    });
-
-    var itemsRes = await fetch(erpUrl('prf_items'), {
-      method: 'POST',
-      headers: erpHeaders(),
-      body: JSON.stringify(itemPayloads)
-    });
-
-    if (!itemsRes.ok) {
-      var itemsErrText = await itemsRes.text();
-      throw new Error('Insert items failed: ' + itemsRes.status + ' ' + itemsErrText);
+    for (var bIdx = 0; bIdx < batches.length; bIdx++) {
+      var batch = batches[bIdx];
+      var batchPrfNo = prfNo + (bIdx === 0 ? '' : '.' + (bIdx + 1));
+      var result = await createSinglePrf(batchPrfNo, prfNo, bIdx + 1, batch, category, preparedBy, department, notedBy, approvedBy, notes);
+      createdPrfs.push(result);
     }
 
     // Success
-    document.getElementById('successPrfNo').textContent = prfNo;
-    document.getElementById('successItemCount').textContent = totalItems;
+    document.getElementById('successPrfNo').textContent = createdPrfs.map(function(p) { return p.prf_no; }).join(', ');
+    document.getElementById('successItemCount').textContent = items.length;
     document.getElementById('successCategory').textContent = category;
 
     new bootstrap.Modal(document.getElementById('successModal')).show();
@@ -379,6 +394,75 @@ async function submitPrf() {
   } finally {
     _prf.isSubmitting = false;
   }
+}
+
+async function createSinglePrf(prfNo, basePrfNo, batchNumber, items, category, preparedBy, department, notedBy, approvedBy, notes) {
+  var totalQty = items.reduce(function(s, it) { return s + (it._qtyOrder || 0); }, 0);
+
+  // Insert document
+  var docRes = await fetch(erpUrl('prf_documents'), {
+    method: 'POST',
+    headers: erpHeaders({ 'Prefer': 'return=representation' }),
+    body: JSON.stringify({
+      prf_no: prfNo,
+      base_prf_no: basePrfNo,
+      batch_number: batchNumber,
+      category: category,
+      requestor: preparedBy,
+      department: department,
+      notes: notes,
+      purpose: 'STOCK',
+      total_items: items.length,
+      total_qty: totalQty,
+      prepared_by: preparedBy,
+      noted_by: notedBy,
+      approved_by: approvedBy,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+  });
+
+  if (!docRes.ok) {
+    var errText = await docRes.text();
+    throw new Error('Insert PRF failed: ' + docRes.status + ' ' + errText);
+  }
+
+  var docArr = await docRes.json();
+  var doc = docArr[0];
+  if (!doc || !doc.id) throw new Error('No PRF ID');
+
+  // Insert items
+  var itemPayloads = items.map(function(it, idx) {
+    return {
+      prf_id: doc.id,
+      prf_no: prfNo,
+      line_no: idx + 1,
+      item_code: it.item_code,
+      description: it.description || '',
+      category: it.category || category,
+      location: it.location || '',
+      average_consumption: Number(it.ave_monthly_consumption || 0),
+      buffer_stock: Number(it.buffer_stock || 0),
+      stock_on_hand: Number(it.on_hand || 0),
+      qty_for_order: Number(it._qtyOrder || 0),
+      unit: it.base_unit || 'PIECE',
+      status: 'UNSERVED',
+      remarks: it._remarks || ''
+    };
+  });
+
+  var itemsRes = await fetch(erpUrl('prf_items'), {
+    method: 'POST',
+    headers: erpHeaders(),
+    body: JSON.stringify(itemPayloads)
+  });
+
+  if (!itemsRes.ok) {
+    var itemsErrText = await itemsRes.text();
+    throw new Error('Insert items failed: ' + itemsRes.status + ' ' + itemsErrText);
+  }
+
+  return { prf_no: prfNo, items: items.length };
 }
 
 function closeSuccessAndReset() {
@@ -409,4 +493,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
 }
 
-console.log('✅ new-prf.js loaded');
+console.log('✅ new-prf.js v2 loaded (30-item batch, suggested qty, pending warning)');
