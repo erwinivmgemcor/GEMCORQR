@@ -14,38 +14,152 @@
 <link rel="stylesheet" href="erp-notif.css">
 
 <style>
-/* Print Preview Specific */
-@media screen {
-  .prf-print-sheet {
-    background: #fff;
-    padding: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    border-radius: 4px;
-  }
-  .prf-print-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; padding-bottom: 6px; }
-  .prf-print-logo img { height: 55px; width: auto; }
-  .prf-print-title-block { flex: 1; text-align: center; }
-  .prf-print-title { font-size: 16pt; font-weight: bold; letter-spacing: 1.5px; margin: 0; }
-  .prf-print-meta { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 10pt; }
-  .prf-print-meta td { padding: 2px 4px; vertical-align: middle; }
-  .prf-print-label { font-weight: bold; white-space: nowrap; }
-  .prf-print-value { border-bottom: 1px solid #000; }
-  .prf-print-items { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 9pt; }
-  .prf-print-items th, .prf-print-items td { border: 1px solid #000; padding: 3px 4px; vertical-align: middle; }
-  .prf-print-items th { background: #f0f0f0; font-weight: bold; text-align: center; font-size: 8pt; }
-  .prf-print-td-center { text-align: center; }
-  .prf-print-td-item-code { font-family: "Courier New", monospace; font-weight: 600; }
-  .prf-print-td-desc { text-align: left; }
-  .prf-print-td-remarks { text-align: left; font-size: 8pt; }
-  .qty-blank { background: #fafafa; }
-  .prf-print-signatures { display: flex; justify-content: space-between; margin-top: 30px; padding: 0 5%; }
-  .prf-print-sig-block { width: 30%; text-align: center; }
-  .prf-print-sig-label { font-weight: bold; font-size: 9pt; text-align: left; margin-bottom: 6px; }
-  .prf-print-sig-line { border-bottom: 1px solid #000; min-height: 22px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 2px; }
-  .prf-print-sig-name { font-weight: bold; font-size: 9pt; text-transform: uppercase; }
-  .prf-print-sig-caption { font-size: 8pt; margin-top: 3px; }
-  .prf-print-footer { text-align: center; font-size: 7pt; color: #666; margin-top: 12px; padding-top: 6px; border-top: 1px solid #ddd; }
+/* ═══════════════════════════════════════════════════════════
+   PRF Monitor — Two Tabs + Bulk Actions
+   ═══════════════════════════════════════════════════════════ */
+
+/* Tab Navigation */
+.prf-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 2px solid var(--erp-border, #e5e7eb);
 }
+
+.prf-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--erp-gray, #6c757d);
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: -2px;
+  font-family: inherit;
+}
+
+.prf-tab:hover {
+  color: var(--erp-blue, #1e3a5f);
+  background: #f8fafc;
+}
+
+.prf-tab.active {
+  color: var(--erp-blue, #1e3a5f);
+  border-bottom-color: var(--erp-blue, #1e3a5f);
+}
+
+.prf-tab i {
+  font-size: 1rem;
+}
+
+.prf-tab .tab-count {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #e5e7eb;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+.prf-tab.active .tab-count {
+  background: var(--erp-blue, #1e3a5f);
+  color: #fff;
+}
+
+/* Bulk Actions Bar */
+.bulk-actions-bar {
+  display: none;
+  padding: 12px 18px;
+  background: #eff6ff;
+  border-bottom: 2px solid #3b82f6;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.bulk-actions-bar.active {
+  display: flex;
+}
+
+.bulk-actions-bar .bulk-count {
+  font-weight: 700;
+  color: #1e40af;
+  font-size: 0.88rem;
+  min-width: 130px;
+}
+
+.bulk-actions-bar .bulk-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #475569;
+  margin-left: 4px;
+}
+
+.bulk-status-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1.5px solid;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.bulk-status-btn.bulk-unserved { border-color: #f59e0b; color: #92400e; background: #fff; }
+.bulk-status-btn.bulk-unserved:hover { background: #f59e0b; color: #fff; }
+
+.bulk-status-btn.bulk-staggered { border-color: #3b82f6; color: #1e40af; background: #fff; }
+.bulk-status-btn.bulk-staggered:hover { background: #3b82f6; color: #fff; }
+
+.bulk-status-btn.bulk-served { border-color: #10b981; color: #065f46; background: #fff; }
+.bulk-status-btn.bulk-served:hover { background: #10b981; color: #fff; }
+
+.bulk-status-btn.bulk-canceled { border-color: #ef4444; color: #991b1b; background: #fff; }
+.bulk-status-btn.bulk-canceled:hover { background: #ef4444; color: #fff; }
+
+.bulk-action-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1.5px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.bulk-action-btn:hover { background: #f1f5f9; }
+
+/* Item row status colors */
+.item-row-served { background: #f8fdf9 !important; }
+.item-row-canceled { background: #fef7f7 !important; }
+.item-row-staggered { background: #f5faff !important; }
+
+/* Inline status dropdown */
+.inline-status {
+  font-size: 0.72rem !important;
+  padding: 2px 6px !important;
+  font-weight: 600;
+}
+
+/* Clickable PRF No. */
+.prf-link {
+  cursor: pointer;
+  color: #1e3a5f;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  font-size: 0.82rem;
+}
+.prf-link:hover { color: #3b82f6; text-decoration: underline; }
 </style>
 
 <script src="erp-guard.js"></script>
@@ -108,7 +222,7 @@
     </div>
   </div>
 
-  <!-- KPI CARDS — ✅ CHANGED TO ITEM-LEVEL COUNTING -->
+  <!-- KPI CARDS — Item-level counting -->
   <div class="erp-kpi-row" style="grid-template-columns: repeat(5, 1fr);margin-bottom:20px;">
     <div class="erp-kpi-card kpi-blue">
       <div class="kpi-icon"><i class="bi bi-list-ol"></i></div>
@@ -162,7 +276,7 @@
       <select id="prfCategoryFilter" class="erp-select" onchange="prfMonitorLoad()">
         <option value="">All Categories</option>
       </select>
-      <select id="prfStatusFilter" class="erp-select" onchange="prfMonitorLoad()">
+      <select id="prfStatusFilter" class="erp-select" onchange="prfMonitorApplyFilter()">
         <option value="">All Status</option>
         <option value="UNSERVED">Unserved</option>
         <option value="STAGGERED">Staggered</option>
@@ -180,12 +294,28 @@
     </div>
   </div>
 
-  <!-- TABLE -->
-  <div class="erp-card erp-table-card">
+  <!-- TAB NAVIGATION -->
+  <div class="prf-tabs">
+    <button class="prf-tab active" data-tab="prf" onclick="prfSwitchTab('prf')">
+      <i class="bi bi-file-earmark-text"></i>
+      <span>By PRF</span>
+      <span class="tab-count" id="prfTabCount">0</span>
+    </button>
+    <button class="prf-tab" data-tab="item" onclick="prfSwitchTab('item')">
+      <i class="bi bi-list-ol"></i>
+      <span>By Item</span>
+      <span class="tab-count" id="itemTabCount">0</span>
+    </button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- TAB 1: BY PRF -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div id="tabContentPrf" class="erp-card erp-table-card">
     <div class="erp-table-header">
       <div class="d-flex align-items-center gap-2">
-        <button class="erp-btn-outline-dark" onclick="prfMonitorExport()" title="Export to Excel (CSV)">
-          <i class="bi bi-file-earmark-excel"></i> Export
+        <button class="erp-btn-outline-dark" onclick="prfMonitorExport()" title="Export PRFs">
+          <i class="bi bi-file-earmark-excel"></i> Export PRFs
         </button>
         <span class="erp-badge" id="prfTableCount">0 items</span>
       </div>
@@ -236,8 +366,98 @@
     </div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- TAB 2: BY ITEM (Flat List + Bulk Actions) -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div id="tabContentItem" class="erp-card erp-table-card" style="display:none;">
+
+    <!-- Bulk Actions Bar -->
+    <div class="bulk-actions-bar" id="bulkActionsBar">
+      <span class="bulk-count" id="bulkCount">0 items selected</span>
+      <span class="bulk-label">Mark as:</span>
+      <button class="bulk-status-btn bulk-unserved" onclick="bulkUpdateStatus('UNSERVED')">
+        <i class="bi bi-clock-history me-1"></i>UNSERVED
+      </button>
+      <button class="bulk-status-btn bulk-staggered" onclick="bulkUpdateStatus('STAGGERED')">
+        <i class="bi bi-hourglass me-1"></i>STAGGERED
+      </button>
+      <button class="bulk-status-btn bulk-served" onclick="bulkUpdateStatus('SERVED')">
+        <i class="bi bi-check-circle-fill me-1"></i>SERVED
+      </button>
+      <button class="bulk-status-btn bulk-canceled" onclick="bulkUpdateStatus('CANCELED')">
+        <i class="bi bi-x-circle-fill me-1"></i>CANCELED
+      </button>
+      <button class="bulk-action-btn" onclick="exportSelectedItems()">
+        <i class="bi bi-download me-1"></i>Export
+      </button>
+      <button class="bulk-action-btn" onclick="clearItemSelection()">
+        <i class="bi bi-x-lg me-1"></i>Clear
+      </button>
+    </div>
+
+    <div class="erp-table-header">
+      <div class="d-flex align-items-center gap-2">
+        <button class="erp-btn-outline-dark" onclick="selectAllFilteredItems()" title="Select all items matching current filter">
+          <i class="bi bi-check2-square me-1"></i>Select All Filtered
+        </button>
+        <button class="erp-btn-outline-dark" onclick="prfMonitorExportItems()" title="Export all items">
+          <i class="bi bi-file-earmark-excel"></i> Export Items
+        </button>
+        <span class="erp-badge" id="itemTableCount">0 items</span>
+      </div>
+      <div>
+        <i class="bi bi-list-ol me-2"></i>
+        <strong>All PRF Items</strong>
+        <span class="erp-table-subtitle">Flat item list with bulk status update</span>
+      </div>
+      <div style="min-width: 100px;"></div>
+    </div>
+
+    <div class="erp-table-wrap">
+      <table class="erp-table" style="font-size:0.82rem;">
+        <thead>
+          <tr>
+            <th style="width:3%"><input type="checkbox" id="selectAllItems" onchange="toggleSelectAllItems(this.checked)"></th>
+            <th style="width:3%">#</th>
+            <th style="width:11%">PRF No.</th>
+            <th style="width:7%">Date</th>
+            <th style="width:11%">Item Code</th>
+            <th style="width:22%">Description</th>
+            <th style="width:6%" class="text-center">On-Hand</th>
+            <th style="width:6%" class="text-center">Buffer</th>
+            <th style="width:7%" class="text-center">Qty Order</th>
+            <th style="width:5%" class="text-center">Unit</th>
+            <th style="width:11%" class="text-center">Status</th>
+            <th style="width:8%">Remarks</th>
+          </tr>
+        </thead>
+        <tbody id="itemTableBody">
+          <tr>
+            <td colspan="12" class="erp-empty">
+              <div class="erp-spinner"></div>
+              <div class="mt-2">Loading items...</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="erp-table-footer">
+      <div>Showing <span id="itemPageStart">0</span>–<span id="itemPageEnd">0</span> of <span id="itemPageTotal">0</span></div>
+      <div class="erp-pagination">
+        <button id="itemBtnPrev" onclick="itemPagePrev()" disabled>
+          <i class="bi bi-chevron-left"></i> Prev
+        </button>
+        <span id="itemPageLabel">Page 1</span>
+        <button id="itemBtnNext" onclick="itemPageNext()">
+          Next <i class="bi bi-chevron-right"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="erp-footer">
-    <div>GEMCOR ERP — PRF Monitor v1.1.0</div>
+    <div>GEMCOR ERP — PRF Monitor v3.0.0</div>
     <div>Pure Supabase • No Google Sheets • Live Data</div>
   </div>
 </div>
