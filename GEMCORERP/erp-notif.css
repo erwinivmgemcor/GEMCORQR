@@ -1,0 +1,280 @@
+/* ============================================================
+   GEMCOR ERP — Notification Bell + Dropdown Styles
+   ============================================================ */
+
+/* ─── Bell Container ─── */
+#erpBellContainer {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ─── Dropdown Container ─── */
+#erpNotifContainer {
+  position: fixed;
+  top: 68px;
+  right: 240px;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+#erpNotifContainer.open {
+  pointer-events: auto;
+}
+
+/* ─── Dropdown ─── */
+.erp-notif-dropdown {
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  background: var(--bg-elevated, #fff);
+  border: 1px solid var(--border-light, #e2e8f0);
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px);
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+
+#erpNotifContainer.open .erp-notif-dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* ─── Header ─── */
+.erp-notif-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-light, #e2e8f0);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: var(--text-primary, #0f172a);
+}
+
+.erp-notif-mark-read {
+  background: transparent;
+  border: none;
+  color: #1e3a5f;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.erp-notif-mark-read:hover {
+  background: #eef2f8;
+}
+
+/* ─── List ─── */
+.erp-notif-list {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.erp-notif-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.erp-notif-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+/* ─── Item ─── */
+.erp-notif-item {
+  display: flex;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background 0.15s;
+  position: relative;
+  align-items: flex-start;
+}
+
+.erp-notif-item:hover {
+  background: #f8fafc;
+}
+
+.erp-notif-item.unread {
+  background: #eff6ff;
+}
+
+.erp-notif-item.unread:hover {
+  background: #dbeafe;
+}
+
+.erp-notif-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1.15rem;
+}
+
+.erp-notif-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.erp-notif-title {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #0f172a;
+  margin-bottom: 2px;
+}
+
+.erp-notif-subtitle {
+  font-size: 0.78rem;
+  color: #1e3a5f;
+  margin-bottom: 2px;
+  word-wrap: break-word;
+}
+
+.erp-notif-subtitle code {
+  background: #eef2f8;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: #1e3a5f;
+}
+
+.erp-notif-meta {
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-bottom: 4px;
+  word-wrap: break-word;
+}
+
+.erp-notif-time {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.erp-notif-dot {
+  width: 8px;
+  height: 8px;
+  background: #3b82f6;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 6px;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+/* ─── Empty State ─── */
+.erp-notif-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+/* ─── Footer ─── */
+.erp-notif-footer {
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-light, #e2e8f0);
+  text-align: center;
+}
+
+.erp-notif-view-all {
+  color: #1e3a5f;
+  font-weight: 700;
+  font-size: 0.82rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+
+.erp-notif-view-all:hover {
+  color: #2a4a73;
+}
+
+/* ─── Dark Mode ─── */
+[data-theme="dark"] .erp-notif-dropdown {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+[data-theme="dark"] .erp-notif-header {
+  color: #e2e8f0;
+  border-bottom-color: #334155;
+}
+
+[data-theme="dark"] .erp-notif-mark-read {
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .erp-notif-mark-read:hover {
+  background: #334155;
+}
+
+[data-theme="dark"] .erp-notif-item {
+  border-bottom-color: #334155;
+}
+
+[data-theme="dark"] .erp-notif-item:hover {
+  background: #334155;
+}
+
+[data-theme="dark"] .erp-notif-item.unread {
+  background: rgba(59, 130, 246, 0.15);
+}
+
+[data-theme="dark"] .erp-notif-item.unread:hover {
+  background: rgba(59, 130, 246, 0.25);
+}
+
+[data-theme="dark"] .erp-notif-title {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .erp-notif-subtitle {
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .erp-notif-subtitle code {
+  background: #334155;
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .erp-notif-meta {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .erp-notif-empty {
+  color: #64748b;
+}
+
+[data-theme="dark"] .erp-notif-footer {
+  border-top-color: #334155;
+}
+
+[data-theme="dark"] .erp-notif-view-all {
+  color: #93c5fd;
+}
+
+/* ─── Mobile ─── */
+@media (max-width: 768px) {
+  #erpNotifContainer {
+    top: 60px;
+    right: 8px;
+    left: 8px;
+  }
+  .erp-notif-dropdown {
+    width: 100%;
+    max-width: 100%;
+  }
+  .erp-notif-list {
+    max-height: 60vh;
+  }
+}
