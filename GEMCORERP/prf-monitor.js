@@ -1,23 +1,29 @@
 // ============================================================
-// GEMCOR ERP — PRF Monitor (v2)
-// List + filter + view + edit + print
-// ✅ v2: Item-Level KPI counting
+// GEMCOR ERP — PRF Monitor (v3)
+// Two Tabs: "By PRF" + "By Item"
+// + Bulk Status Update + Select All Filtered
 // ============================================================
 
 var _prfMonitor = {
+  activeTab: 'prf',             // 'prf' | 'item'
   allPrfs: [],
+  allItems: [],                 // Flat list of all items
   filteredPrfs: [],
-  currentPage: 1,
-  pageSize: 20,
+  filteredItems: [],
+  currentPrfPage: 1,
+  currentItemPage: 1,
+  prfPageSize: 20,
+  itemPageSize: 50,
   searchTimer: null,
-  currentPrf: null
+  currentPrf: null,
+  selectedItems: {}             // { itemId: true }
 };
 
 // ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[PRF Monitor v2] Initializing...');
+  console.log('[PRF Monitor v3] Initializing...');
 
   prfMonitorCheckHealth();
   prfMonitorLoad();
@@ -42,17 +48,48 @@ async function prfMonitorCheckHealth() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// LOAD PRFS
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════════════
+function prfSwitchTab(tab) {
+  _prfMonitor.activeTab = tab;
+
+  // Update tab buttons
+  document.querySelectorAll('.prf-tab').forEach(function(el) {
+    el.classList.toggle('active', el.dataset.tab === tab);
+  });
+
+  // Show/hide tab content
+  var prfContent = document.getElementById('tabContentPrf');
+  var itemContent = document.getElementById('tabContentItem');
+
+  if (prfContent) prfContent.style.display = (tab === 'prf') ? 'block' : 'none';
+  if (itemContent) itemContent.style.display = (tab === 'item') ? 'block' : 'none';
+
+  console.log('[PRF Monitor] Switched to tab:', tab);
+}
+
+window.prfSwitchTab = prfSwitchTab;
+
+// ═══════════════════════════════════════════════════════════
+// LOAD DATA
 // ═══════════════════════════════════════════════════════════
 async function prfMonitorLoad() {
-  var tbody = document.getElementById('prfTableBody');
-  if (!tbody) return;
+  var prfBody = document.getElementById('prfTableBody');
+  var itemBody = document.getElementById('itemTableBody');
 
-  tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
-    '<div class="erp-spinner"></div>' +
-    '<div class="mt-2">Loading PRFs...</div></td></tr>';
+  if (prfBody) {
+    prfBody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
+      '<div class="erp-spinner"></div>' +
+      '<div class="mt-2">Loading PRFs...</div></td></tr>';
+  }
+  if (itemBody) {
+    itemBody.innerHTML = '<tr><td colspan="12" class="erp-empty">' +
+      '<div class="erp-spinner"></div>' +
+      '<div class="mt-2">Loading items...</div></td></tr>';
+  }
 
   try {
+    // Build query
     var query = 'select=*&order=created_at.desc&limit=2000';
 
     var catFilterEl = document.getElementById('prfCategoryFilter');
@@ -75,127 +112,164 @@ async function prfMonitorLoad() {
       query += '&created_at=lt.' + encodeURIComponent(toDateEl.value + 'T23:59:59');
     }
 
-    var rows = await erpFetch('prf_documents', query);
-    _prfMonitor.allPrfs = rows || [];
+    // Fetch PRF documents
+    var prfs = await erpFetch('prf_documents', query);
+    _prfMonitor.allPrfs = prfs || [];
 
-    console.log('[PRF Monitor v2] Loaded', _prfMonitor.allPrfs.length, 'PRFs');
+    console.log('[PRF Monitor v3] Loaded', _prfMonitor.allPrfs.length, 'PRFs');
 
-    await prfMonitorComputeStatus();
+    // Fetch all items for these PRFs
+    if (_prfMonitor.allPrfs.length > 0) {
+      var prfIds = _prfMonitor.allPrfs.map(function(p) { return p.id; });
+      var allItems = [];
+
+      // Chunk to avoid URL length limits
+      var chunkSize = 100;
+      for (var c = 0; c < prfIds.length; c += chunkSize) {
+        var chunk = prfIds.slice(c, c + chunkSize);
+        try {
+          var itemsQuery = 'select=*&prf_id=in.(' + chunk.join(',') + ')&order=prf_no.asc,line_no.asc&limit=10000';
+          var itemsChunk = await erpFetch('prf_items', itemsQuery);
+          if (itemsChunk) allItems = allItems.concat(itemsChunk);
+        } catch(e) {
+          console.warn('[PRF Monitor] Items chunk failed:', e.message);
+        }
+      }
+
+      // Enrich items with PRF metadata
+      var prfMap = {};
+      _prfMainPrfMap = {};
+      _prfMonitor.allPrfs.forEach(function(p) {
+        prfMap[p.id] = p;
+        _prfMainPrfMap[p.id] = p;
+      });
+
+      allItems.forEach(function(it) {
+        var prf = prfMap[it.prf_id] || {};
+        it._prfNo = prf.prf_no || '';
+        it._prfDate = prf.created_at || '';
+        it._prfCategory = prf.category || '';
+        it._prfRequestor = prf.requestor || '';
+      });
+
+      _prfMonitor.allItems = allItems;
+      console.log('[PRF Monitor v3] Loaded', allItems.length, 'items');
+    } else {
+      _prfMonitor.allItems = [];
+    }
+
+    // Compute per-document status (for PRF tab)
+    prfMonitorComputeStatus();
+
+    // Compute KPIs (item-level)
     prfMonitorComputeKPIs();
-    prfMonitorRender();
+
+    // Update tab counts
+    prfUpdateTabCounts();
+
+    // Render both tabs
+    prfMonitorRenderPrfTab();
+    prfMonitorRenderItemTab();
 
   } catch(err) {
     console.error('[prfMonitorLoad]', err);
-    tbody.innerHTML = '<tr><td colspan="8" class="erp-empty text-danger">' +
-      'Failed: ' + erpEsc(err.message) + '</td></tr>';
+    if (prfBody) {
+      prfBody.innerHTML = '<tr><td colspan="8" class="erp-empty text-danger">' +
+        'Failed: ' + erpEsc(err.message) + '</td></tr>';
+    }
+    if (itemBody) {
+      itemBody.innerHTML = '<tr><td colspan="12" class="erp-empty text-danger">' +
+        'Failed: ' + erpEsc(err.message) + '</td></tr>';
+    }
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// COMPUTE STATUS (per document — for table)
-// ═══════════════════════════════════════════════════════════
-async function prfMonitorComputeStatus() {
-  if (_prfMonitor.allPrfs.length === 0) return;
+function prfUpdateTabCounts() {
+  var prfCountEl = document.getElementById('prfTabCount');
+  var itemCountEl = document.getElementById('itemTabCount');
 
-  try {
-    var prfIds = _prfMonitor.allPrfs.map(function(p) { return p.id; });
-    var itemsRes = await erpFetch('prf_items',
-      'prf_id=in.(' + prfIds.join(',') + ')&select=prf_id,status&limit=10000');
-
-    var itemsByPrf = {};
-    (itemsRes || []).forEach(function(it) {
-      if (!itemsByPrf[it.prf_id]) itemsByPrf[it.prf_id] = [];
-      itemsByPrf[it.prf_id].push(it.status || 'UNSERVED');
-    });
-
-    _prfMonitor.allPrfs.forEach(function(prf) {
-      var statuses = itemsByPrf[prf.id] || [];
-      var counts = { UNSERVED: 0, STAGGERED: 0, SERVED: 0, CANCELED: 0 };
-      statuses.forEach(function(s) {
-        var key = String(s).toUpperCase();
-        if (counts[key] !== undefined) counts[key]++;
-      });
-
-      var total = statuses.length;
-      var servedCount = counts.SERVED;
-      var canceledCount = counts.CANCELED;
-      var activeCount = total - canceledCount;
-
-      if (activeCount === 0) {
-        prf._status = 'CANCELED';
-      } else if (servedCount === activeCount) {
-        prf._status = 'SERVED';
-      } else if (servedCount > 0 || counts.STAGGERED > 0) {
-        prf._status = 'STAGGERED';
-      } else {
-        prf._status = 'UNSERVED';
-      }
-
-      prf._statusCounts = counts;
-      prf._statusTotal = total;
-    });
-
-  } catch(err) {
-    console.warn('[PRF Monitor] Status compute failed:', err.message);
-    _prfMonitor.allPrfs.forEach(function(p) { p._status = 'UNSERVED'; });
-  }
+  if (prfCountEl) prfCountEl.textContent = _prfMonitor.allPrfs.length;
+  if (itemCountEl) itemCountEl.textContent = _prfMonitor.allItems.length;
 }
 
 // ═══════════════════════════════════════════════════════════
-// COMPUTE KPIs — ✅ v2: ITEM-LEVEL COUNTING
+// COMPUTE STATUS (per document — for PRF tab)
+// ═══════════════════════════════════════════════════════════
+function prfMonitorComputeStatus() {
+  var itemsByPrf = {};
+  _prfMonitor.allItems.forEach(function(it) {
+    if (!itemsByPrf[it.prf_id]) itemsByPrf[it.prf_id] = [];
+    itemsByPrf[it.prf_id].push(String(it.status || 'UNSERVED').toUpperCase());
+  });
+
+  _prfMonitor.allPrfs.forEach(function(prf) {
+    var statuses = itemsByPrf[prf.id] || [];
+    var counts = { UNSERVED: 0, STAGGERED: 0, SERVED: 0, CANCELED: 0 };
+    statuses.forEach(function(s) {
+      if (counts[s] !== undefined) counts[s]++;
+    });
+
+    var total = statuses.length;
+    var servedCount = counts.SERVED;
+    var canceledCount = counts.CANCELED;
+    var activeCount = total - canceledCount;
+
+    if (activeCount === 0 && total > 0) {
+      prf._status = 'CANCELED';
+    } else if (servedCount === activeCount && activeCount > 0) {
+      prf._status = 'SERVED';
+    } else if (servedCount > 0 || counts.STAGGERED > 0) {
+      prf._status = 'STAGGERED';
+    } else {
+      prf._status = 'UNSERVED';
+    }
+
+    prf._statusCounts = counts;
+    prf._statusTotal = total;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// COMPUTE KPIs (item-level)
 // ═══════════════════════════════════════════════════════════
 function prfMonitorComputeKPIs() {
-  // Aggregate item-level counts from all PRFs
   var totalItems = 0;
   var unservedItems = 0;
   var staggeredItems = 0;
   var servedItems = 0;
   var canceledItems = 0;
 
-  _prfMonitor.allPrfs.forEach(function(prf) {
-    var counts = prf._statusCounts || { UNSERVED: 0, STAGGERED: 0, SERVED: 0, CANCELED: 0 };
-    totalItems += (prf._statusTotal || 0);
-    unservedItems += (counts.UNSERVED || 0);
-    staggeredItems += (counts.STAGGERED || 0);
-    servedItems += (counts.SERVED || 0);
-    canceledItems += (counts.CANCELED || 0);
+  _prfMonitor.allItems.forEach(function(it) {
+    totalItems++;
+    var s = String(it.status || 'UNSERVED').toUpperCase();
+    if (s === 'UNSERVED') unservedItems++;
+    else if (s === 'STAGGERED') staggeredItems++;
+    else if (s === 'SERVED') servedItems++;
+    else if (s === 'CANCELED') canceledItems++;
   });
 
   var prfCount = _prfMonitor.allPrfs.length;
 
-  // Update KPI VALUES (item counts)
   document.getElementById('prfKpiTotal').textContent = erpNum(totalItems);
   document.getElementById('prfKpiUnserved').textContent = erpNum(unservedItems);
   document.getElementById('prfKpiStaggered').textContent = erpNum(staggeredItems);
   document.getElementById('prfKpiServed').textContent = erpNum(servedItems);
   document.getElementById('prfKpiCanceled').textContent = erpNum(canceledItems);
 
-  // Update KPI SUBTITLES (show document count for context)
   var totalSub = document.getElementById('prfKpiTotalSub');
-  var unservedSub = document.getElementById('prfKpiUnservedSub');
-  var staggeredSub = document.getElementById('prfKpiStaggeredSub');
-  var servedSub = document.getElementById('prfKpiServedSub');
-  var canceledSub = document.getElementById('prfKpiCanceledSub');
-
   if (totalSub) totalSub.textContent = 'across ' + prfCount + ' PRF' + (prfCount === 1 ? '' : 's');
-  if (unservedSub) unservedSub.textContent = 'items awaiting serving';
-  if (staggeredSub) staggeredSub.textContent = 'partially served items';
-  if (servedSub) servedSub.textContent = 'fully served items';
-  if (canceledSub) canceledSub.textContent = 'canceled items';
 
-  console.log('[PRF KPI]',
-    'Items:', totalItems,
+  console.log('[PRF KPI] Items:', totalItems,
     '| Unserved:', unservedItems,
     '| Staggered:', staggeredItems,
     '| Served:', servedItems,
-    '| Canceled:', canceledItems,
-    '| PRFs:', prfCount);
+    '| Canceled:', canceledItems);
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER TABLE
+// RENDER TAB 1: BY PRF
 // ═══════════════════════════════════════════════════════════
-function prfMonitorRender() {
+function prfMonitorRenderPrfTab() {
   var tbody = document.getElementById('prfTableBody');
   if (!tbody) return;
 
@@ -217,17 +291,17 @@ function prfMonitorRender() {
   });
 
   var total = _prfMonitor.filteredPrfs.length;
-  var start = (_prfMonitor.currentPage - 1) * _prfMonitor.pageSize;
-  var end = Math.min(start + _prfMonitor.pageSize, total);
+  var start = (_prfMonitor.currentPrfPage - 1) * _prfMonitor.prfPageSize;
+  var end = Math.min(start + _prfMonitor.prfPageSize, total);
   var pageItems = _prfMonitor.filteredPrfs.slice(start, end);
 
   document.getElementById('prfTableCount').textContent = total + ' items';
   document.getElementById('prfPageTotal').textContent = total;
   document.getElementById('prfPageStart').textContent = total > 0 ? start + 1 : 0;
   document.getElementById('prfPageEnd').textContent = end;
-  document.getElementById('prfPageLabel').textContent = 'Page ' + _prfMonitor.currentPage;
+  document.getElementById('prfPageLabel').textContent = 'Page ' + _prfMonitor.currentPrfPage;
 
-  document.getElementById('prfBtnPrev').disabled = (_prfMonitor.currentPage <= 1);
+  document.getElementById('prfBtnPrev').disabled = (_prfMonitor.currentPrfPage <= 1);
   document.getElementById('prfBtnNext').disabled = (end >= total);
 
   if (pageItems.length === 0) {
@@ -287,7 +361,325 @@ function prfMonitorRender() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// VIEW DETAILS
+// RENDER TAB 2: BY ITEM (Flat List)
+// ═══════════════════════════════════════════════════════════
+function prfMonitorRenderItemTab() {
+  var tbody = document.getElementById('itemTableBody');
+  if (!tbody) return;
+
+  var searchInput = document.getElementById('prfSearchInput');
+  var statusFilterEl = document.getElementById('prfStatusFilter');
+
+  var search = (searchInput ? searchInput.value : '').toLowerCase().trim();
+  var statusFilter = statusFilterEl ? statusFilterEl.value : '';
+
+  _prfMonitor.filteredItems = _prfMonitor.allItems.filter(function(it) {
+    if (statusFilter && String(it.status || 'UNSERVED').toUpperCase() !== statusFilter) return false;
+
+    if (search) {
+      var prfNo = String(it._prfNo || '').toLowerCase();
+      var itemCode = String(it.item_code || '').toLowerCase();
+      var desc = String(it.description || '').toLowerCase();
+      if (prfNo.indexOf(search) === -1 &&
+          itemCode.indexOf(search) === -1 &&
+          desc.indexOf(search) === -1) return false;
+    }
+    return true;
+  });
+
+  var total = _prfMonitor.filteredItems.length;
+  var start = (_prfMonitor.currentItemPage - 1) * _prfMonitor.itemPageSize;
+  var end = Math.min(start + _prfMonitor.itemPageSize, total);
+  var pageItems = _prfMonitor.filteredItems.slice(start, end);
+
+  document.getElementById('itemTableCount').textContent = total + ' items';
+  document.getElementById('itemPageTotal').textContent = total;
+  document.getElementById('itemPageStart').textContent = total > 0 ? start + 1 : 0;
+  document.getElementById('itemPageEnd').textContent = end;
+  document.getElementById('itemPageLabel').textContent = 'Page ' + _prfMonitor.currentItemPage;
+
+  document.getElementById('itemBtnPrev').disabled = (_prfMonitor.currentItemPage <= 1);
+  document.getElementById('itemBtnNext').disabled = (end >= total);
+
+  if (pageItems.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="12" class="erp-empty">' +
+      '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
+      'No items found.</td></tr>';
+    return;
+  }
+
+  var html = '';
+  pageItems.forEach(function(it, idx) {
+    var status = String(it.status || 'UNSERVED').toUpperCase();
+    var rowClass = '';
+    if (status === 'SERVED') rowClass = 'item-row-served';
+    else if (status === 'CANCELED') rowClass = 'item-row-canceled';
+    else if (status === 'STAGGERED') rowClass = 'item-row-staggered';
+
+    var dateStr = it._prfDate ? new Date(it._prfDate).toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric'
+    }) : '—';
+
+    var isSelected = _prfMonitor.selectedItems[it.id] === true;
+    var safePrfNo = String(it._prfNo || '').replace(/'/g, "\\'");
+
+    html += '<tr class="' + rowClass + '" data-item-id="' + it.id + '">' +
+      '<td><input type="checkbox" class="item-select-cb" data-item-id="' + it.id + '"' +
+        (isSelected ? ' checked' : '') +
+        ' onchange="toggleItemSelect(' + it.id + ', this.checked)"></td>' +
+      '<td>' + (start + idx + 1) + '</td>' +
+      '<td><span class="prf-link" onclick="viewPrfDetailsFromItem(' + it.prf_id + ')">' + erpEsc(it._prfNo) + '</span></td>' +
+      '<td>' + erpEsc(dateStr) + '</td>' +
+      '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
+      '<td title="' + erpEsc(it.description || '') + '">' + erpEsc(truncate(it.description || '—', 60)) + '</td>' +
+      '<td class="text-center">' + erpNum(it.stock_on_hand || 0) + '</td>' +
+      '<td class="text-center">' + erpNum(it.buffer_stock || 0) + '</td>' +
+      '<td class="text-center fw-bold">' + erpNum(it.qty_for_order || 0) + '</td>' +
+      '<td class="text-center">' + erpEsc(it.unit || '—') + '</td>' +
+      '<td class="text-center">' +
+        '<select class="form-select form-select-sm inline-status" onchange="updateItemStatus(' + it.id + ', this.value)">' +
+          '<option value="UNSERVED"' + (status === 'UNSERVED' ? ' selected' : '') + '>UNSERVED</option>' +
+          '<option value="STAGGERED"' + (status === 'STAGGERED' ? ' selected' : '') + '>STAGGERED</option>' +
+          '<option value="SERVED"' + (status === 'SERVED' ? ' selected' : '') + '>SERVED</option>' +
+          '<option value="CANCELED"' + (status === 'CANCELED' ? ' selected' : '') + '>CANCELED</option>' +
+        '</select>' +
+      '</td>' +
+      '<td>' + erpEsc(truncate(it.remarks || '—', 30)) + '</td>' +
+    '</tr>';
+  });
+  tbody.innerHTML = html;
+
+  // Update bulk bar visibility
+  updateBulkActionsBar();
+
+  // Update select-all checkbox state
+  updateSelectAllCheckbox();
+}
+
+function truncate(str, max) {
+  if (!str) return '';
+  if (str.length <= max) return str;
+  return str.substring(0, max) + '…';
+}
+
+// ═══════════════════════════════════════════════════════════
+// ITEM SELECTION + BULK ACTIONS
+// ═══════════════════════════════════════════════════════════
+function toggleItemSelect(itemId, checked) {
+  if (checked) {
+    _prfMonitor.selectedItems[itemId] = true;
+  } else {
+    delete _prfMonitor.selectedItems[itemId];
+  }
+  updateBulkActionsBar();
+  updateSelectAllCheckbox();
+}
+
+function toggleSelectAllItems(checked) {
+  var pageItems = _prfMonitor.filteredItems.slice(
+    (_prfMonitor.currentItemPage - 1) * _prfMonitor.itemPageSize,
+    _prfMonitor.currentItemPage * _prfMonitor.itemPageSize
+  );
+
+  pageItems.forEach(function(it) {
+    if (checked) {
+      _prfMonitor.selectedItems[it.id] = true;
+    } else {
+      delete _prfMonitor.selectedItems[it.id];
+    }
+  });
+
+  // Re-render checkboxes
+  document.querySelectorAll('.item-select-cb').forEach(function(cb) {
+    cb.checked = checked;
+  });
+
+  updateBulkActionsBar();
+}
+
+function selectAllFilteredItems() {
+  if (_prfMonitor.filteredItems.length === 0) {
+    erpShowToast('No items to select', 'warning');
+    return;
+  }
+
+  if (!confirm('Select all ' + _prfMonitor.filteredItems.length + ' filtered item(s)?')) return;
+
+  _prfMonitor.filteredItems.forEach(function(it) {
+    _prfMonitor.selectedItems[it.id] = true;
+  });
+
+  prfMonitorRenderItemTab();
+  erpShowToast('✓ Selected ' + _prfMonitor.filteredItems.length + ' item(s)', 'success');
+}
+
+function clearItemSelection() {
+  _prfMonitor.selectedItems = {};
+  prfMonitorRenderItemTab();
+}
+
+function updateBulkActionsBar() {
+  var count = Object.keys(_prfMonitor.selectedItems).length;
+  var bar = document.getElementById('bulkActionsBar');
+  var countEl = document.getElementById('bulkCount');
+
+  if (!bar || !countEl) return;
+
+  if (count > 0) {
+    bar.classList.add('active');
+    countEl.textContent = count + ' item' + (count === 1 ? '' : 's') + ' selected';
+  } else {
+    bar.classList.remove('active');
+  }
+}
+
+function updateSelectAllCheckbox() {
+  var checkbox = document.getElementById('selectAllItems');
+  if (!checkbox) return;
+
+  var pageItems = _prfMonitor.filteredItems.slice(
+    (_prfMonitor.currentItemPage - 1) * _prfMonitor.itemPageSize,
+    _prfMonitor.currentItemPage * _prfMonitor.itemPageSize
+  );
+
+  if (pageItems.length === 0) {
+    checkbox.checked = false;
+    return;
+  }
+
+  var allSelected = pageItems.every(function(it) {
+    return _prfMonitor.selectedItems[it.id] === true;
+  });
+
+  checkbox.checked = allSelected;
+}
+
+// ═══════════════════════════════════════════════════════════
+// BULK STATUS UPDATE
+// ═══════════════════════════════════════════════════════════
+async function bulkUpdateStatus(newStatus) {
+  var selectedIds = Object.keys(_prfMonitor.selectedItems).filter(function(id) {
+    return _prfMonitor.selectedItems[id] === true;
+  }).map(function(id) { return parseInt(id, 10); });
+
+  if (selectedIds.length === 0) {
+    erpShowToast('No items selected', 'warning');
+    return;
+  }
+
+  var confirmMsg = 'Mark ' + selectedIds.length + ' item(s) as ' + newStatus + '?';
+  if (!confirm(confirmMsg)) return;
+
+  try {
+    var currentUser = localStorage.getItem('ivm_userFullname') ||
+                      localStorage.getItem('ivm_username') || 'WAREHOUSE';
+
+    // Bulk PATCH using `in` operator
+    var res = await fetch(erpUrl('prf_items?id=in.(' + selectedIds.join(',') + ')'), {
+      method: 'PATCH',
+      headers: erpHeaders(),
+      body: JSON.stringify({
+        status: newStatus,
+        updated_by: currentUser,
+        updated_at: new Date().toISOString()
+      })
+    });
+
+    if (!res.ok) {
+      var errText = await res.text();
+      throw new Error('Bulk update failed: ' + res.status + ' ' + errText.substring(0, 100));
+    }
+
+    erpShowToast('✅ ' + selectedIds.length + ' item(s) marked as ' + newStatus, 'success');
+
+    // Clear selection
+    _prfMonitor.selectedItems = {};
+
+    // Reload data (to refresh KPIs + statuses)
+    await prfMonitorLoad();
+
+  } catch(err) {
+    console.error('[bulkUpdateStatus]', err);
+    erpShowToast('Failed: ' + err.message, 'danger');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// INLINE ITEM STATUS UPDATE
+// ═══════════════════════════════════════════════════════════
+async function updateItemStatus(itemId, newStatus) {
+  try {
+    var currentUser = localStorage.getItem('ivm_userFullname') ||
+                      localStorage.getItem('ivm_username') || 'WAREHOUSE';
+
+    var res = await fetch(erpUrl('prf_items?id=eq.' + itemId), {
+      method: 'PATCH',
+      headers: erpHeaders(),
+      body: JSON.stringify({
+        status: newStatus,
+        updated_by: currentUser,
+        updated_at: new Date().toISOString()
+      })
+    });
+
+    if (!res.ok) throw new Error('Update failed: ' + res.status);
+
+    erpShowToast('✓ Status updated to ' + newStatus, 'success');
+
+    // Reload data
+    await prfMonitorLoad();
+
+  } catch(err) {
+    erpShowToast('Failed: ' + err.message, 'danger');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// EXPORT SELECTED ITEMS
+// ═══════════════════════════════════════════════════════════
+function exportSelectedItems() {
+  var selectedIds = Object.keys(_prfMonitor.selectedItems).filter(function(id) {
+    return _prfMonitor.selectedItems[id] === true;
+  });
+
+  if (selectedIds.length === 0) {
+    erpShowToast('No items selected', 'warning');
+    return;
+  }
+
+  var items = _prfMonitor.allItems.filter(function(it) {
+    return _prfMonitor.selectedItems[it.id] === true;
+  });
+
+  var headers = ['PRF No.', 'Item Code', 'Description', 'Qty Order', 'Unit', 'Status', 'Remarks'];
+  var rows = items.map(function(it) {
+    return [
+      it._prfNo || '',
+      it.item_code || '',
+      it.description || '',
+      it.qty_for_order || 0,
+      it.unit || '',
+      it.status || 'UNSERVED',
+      it.remarks || ''
+    ];
+  });
+
+  var csv = headers.map(_csvEsc).join(',') + '\n';
+  rows.forEach(function(row) {
+    csv += row.map(_csvEsc).join(',') + '\n';
+  });
+
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'PRF_Selected_Items_' + new Date().toISOString().slice(0, 10) + '.csv';
+  link.click();
+
+  erpShowToast('✅ Exported ' + rows.length + ' item(s)', 'success');
+}
+
+// ═══════════════════════════════════════════════════════════
+// VIEW PRF DETAILS
 // ═══════════════════════════════════════════════════════════
 async function viewPrfDetails(prfId) {
   var prf = _prfMonitor.allPrfs.find(function(p) { return p.id === prfId; });
@@ -382,30 +774,12 @@ async function viewPrfDetails(prfId) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// UPDATE ITEM STATUS
-// ═══════════════════════════════════════════════════════════
-async function updateItemStatus(itemId, newStatus) {
-  try {
-    var currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
-
-    var res = await fetch(erpUrl('prf_items?id=eq.' + itemId), {
-      method: 'PATCH',
-      headers: erpHeaders(),
-      body: JSON.stringify({
-        status: newStatus,
-        updated_by: currentUser,
-        updated_at: new Date().toISOString()
-      })
-    });
-
-    if (!res.ok) throw new Error('Update failed: ' + res.status);
-
-    erpShowToast('✓ Status updated to ' + newStatus, 'success');
-    prfMonitorLoad();
-  } catch(err) {
-    erpShowToast('Failed: ' + err.message, 'danger');
-  }
+function viewPrfDetailsFromItem(prfId) {
+  // Switch to PRF tab first, then open modal
+  prfSwitchTab('prf');
+  setTimeout(function() {
+    viewPrfDetails(prfId);
+  }, 100);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -503,9 +877,18 @@ async function prfMonitorPopulateFilters() {
 function prfMonitorOnSearch() {
   clearTimeout(_prfMonitor.searchTimer);
   _prfMonitor.searchTimer = setTimeout(function() {
-    _prfMonitor.currentPage = 1;
-    prfMonitorRender();
+    _prfMonitor.currentPrfPage = 1;
+    _prfMonitor.currentItemPage = 1;
+    prfMonitorRenderPrfTab();
+    prfMonitorRenderItemTab();
   }, 300);
+}
+
+function prfMonitorApplyFilter() {
+  _prfMonitor.currentPrfPage = 1;
+  _prfMonitor.currentItemPage = 1;
+  prfMonitorRenderPrfTab();
+  prfMonitorRenderItemTab();
 }
 
 function prfMonitorClearFilters() {
@@ -515,24 +898,43 @@ function prfMonitorClearFilters() {
   document.getElementById('prfRequestorFilter').value = '';
   document.getElementById('prfDateFrom').value = '';
   document.getElementById('prfDateTo').value = '';
-  _prfMonitor.currentPage = 1;
+  _prfMonitor.currentPrfPage = 1;
+  _prfMonitor.currentItemPage = 1;
   prfMonitorLoad();
 }
 
 function prfMonitorPagePrev() {
-  if (_prfMonitor.currentPage > 1) {
-    _prfMonitor.currentPage--;
-    prfMonitorRender();
+  if (_prfMonitor.currentPrfPage > 1) {
+    _prfMonitor.currentPrfPage--;
+    prfMonitorRenderPrfTab();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 }
 
 function prfMonitorPageNext() {
   var total = _prfMonitor.filteredPrfs.length;
-  var maxPage = Math.ceil(total / _prfMonitor.pageSize);
-  if (_prfMonitor.currentPage < maxPage) {
-    _prfMonitor.currentPage++;
-    prfMonitorRender();
+  var maxPage = Math.ceil(total / _prfMonitor.prfPageSize);
+  if (_prfMonitor.currentPrfPage < maxPage) {
+    _prfMonitor.currentPrfPage++;
+    prfMonitorRenderPrfTab();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function itemPagePrev() {
+  if (_prfMonitor.currentItemPage > 1) {
+    _prfMonitor.currentItemPage--;
+    prfMonitorRenderItemTab();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function itemPageNext() {
+  var total = _prfMonitor.filteredItems.length;
+  var maxPage = Math.ceil(total / _prfMonitor.itemPageSize);
+  if (_prfMonitor.currentItemPage < maxPage) {
+    _prfMonitor.currentItemPage++;
+    prfMonitorRenderItemTab();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 }
@@ -570,6 +972,36 @@ function prfMonitorExport() {
   link.download = 'PRF_Export_' + new Date().toISOString().slice(0, 10) + '.csv';
   link.click();
   erpShowToast('✅ Exported ' + rows.length + ' rows', 'success');
+}
+
+function prfMonitorExportItems() {
+  if (_prfMonitor.filteredItems.length === 0) {
+    erpShowToast('No items to export', 'warning');
+    return;
+  }
+  var headers = ['PRF No.', 'Date', 'Item Code', 'Description', 'On-Hand', 'Buffer', 'Qty Order', 'Unit', 'Status', 'Remarks'];
+  var rows = _prfMonitor.filteredItems.map(function(it) {
+    return [
+      it._prfNo || '',
+      it._prfDate ? new Date(it._prfDate).toLocaleDateString() : '',
+      it.item_code || '',
+      it.description || '',
+      it.stock_on_hand || 0,
+      it.buffer_stock || 0,
+      it.qty_for_order || 0,
+      it.unit || '',
+      it.status || 'UNSERVED',
+      it.remarks || ''
+    ];
+  });
+  var csv = headers.map(_csvEsc).join(',') + '\n';
+  rows.forEach(function(row) { csv += row.map(_csvEsc).join(',') + '\n'; });
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'PRF_Items_' + new Date().toISOString().slice(0, 10) + '.csv';
+  link.click();
+  erpShowToast('✅ Exported ' + rows.length + ' items', 'success');
 }
 
 function _csvEsc(val) {
@@ -616,4 +1048,29 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
 }
 
-console.log('✅ prf-monitor.js v2 loaded (item-level KPI)');
+// Expose functions globally
+window.prfMonitorLoad = prfMonitorLoad;
+window.prfMonitorRefresh = prfMonitorRefresh;
+window.prfMonitorClearFilters = prfMonitorClearFilters;
+window.prfMonitorOnSearch = prfMonitorOnSearch;
+window.prfMonitorApplyFilter = prfMonitorApplyFilter;
+window.prfMonitorPagePrev = prfMonitorPagePrev;
+window.prfMonitorPageNext = prfMonitorPageNext;
+window.itemPagePrev = itemPagePrev;
+window.itemPageNext = itemPageNext;
+window.prfMonitorExport = prfMonitorExport;
+window.prfMonitorExportItems = prfMonitorExportItems;
+window.viewPrfDetails = viewPrfDetails;
+window.viewPrfDetailsFromItem = viewPrfDetailsFromItem;
+window.openEditPrfNo = openEditPrfNo;
+window.saveEditedPrfNo = saveEditedPrfNo;
+window.updateItemStatus = updateItemStatus;
+window.toggleItemSelect = toggleItemSelect;
+window.toggleSelectAllItems = toggleSelectAllItems;
+window.selectAllFilteredItems = selectAllFilteredItems;
+window.clearItemSelection = clearItemSelection;
+window.bulkUpdateStatus = bulkUpdateStatus;
+window.exportSelectedItems = exportSelectedItems;
+window.printCurrentPrf = printCurrentPrf;
+
+console.log('✅ prf-monitor.js v3 loaded (two tabs + bulk actions)');
