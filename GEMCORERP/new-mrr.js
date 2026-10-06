@@ -1,6 +1,8 @@
 // ============================================================
-// GEMCOR ERP — New MRR Creation
+// GEMCOR ERP — New MRR Creation (v2 FIXED)
 // Direct Supabase insert + Auto-load items from PO
+// ✅ FIX: Automatic status patch (COMPLETED/PARTIAL) after insert
+// ✅ FIX: Guaranteed trigger fire for stock ledger updates
 // ============================================================
 
 var _mrrState = {
@@ -21,41 +23,34 @@ var _mrrState = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[New MRR] Initializing...');
-  
+  console.log('[New MRR v2] Initializing...');
+
   mrrCheckHealth();
-  
-  // Set preparedBy from login
-  var userFullname = localStorage.getItem('ivm_userFullname') || 
+
+  var userFullname = localStorage.getItem('ivm_userFullname') ||
                      localStorage.getItem('ivm_username') || '';
   _mrrState.preparedBy = userFullname;
   document.getElementById('mrrPreparedBy').value = userFullname;
-  
-  // Default receiving date = today
+
   var today = new Date().toISOString().split('T')[0];
   document.getElementById('mrrReceivingDate').value = today;
   _mrrState.receivingDate = today;
-  
-  // Enter key handler sa PO input
+
   document.getElementById('mrrPoNo').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
       e.preventDefault();
       lookupPoNo();
     }
   });
-  
-  console.log('[New MRR] Ready. Prepared By:', userFullname);
+
+  console.log('[New MRR v2] Ready. Prepared By:', userFullname);
 });
 
-// ═══════════════════════════════════════════════════════════
-// HEALTH CHECK
-// ═══════════════════════════════════════════════════════════
 async function mrrCheckHealth() {
   var badge = document.getElementById('erpHealthBadge');
   if (!badge) return;
   var text = document.getElementById('erpHealthText');
   var dot = badge.querySelector('.dot');
-  
   try {
     var result = await erpHealthCheck();
     if (result.success) {
@@ -72,80 +67,73 @@ async function mrrCheckHealth() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// STEP 1: PO LOOKUP (loads items from erp_prf_po_cache)
-// ═══════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════
-// STEP 1: PO LOOKUP (loads items from erp_prf_po_cache)
+// PO LOOKUP
 // ═══════════════════════════════════════════════════════════
 async function lookupPoNo() {
   var poNo = document.getElementById('mrrPoNo').value.trim();
   var statusEl = document.getElementById('poStatus');
   var resultEl = document.getElementById('poLookupResult');
-  
+
   if (!poNo) {
     statusEl.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Please enter a PO No.</span>';
     return;
   }
-  
+
   statusEl.innerHTML = '<span class="text-muted"><i class="bi bi-hourglass-split"></i> Looking up...</span>';
   resultEl.className = 'alert alert-info mb-0 py-2';
   resultEl.innerHTML = '<span class="small">Searching...</span>';
-  
+
   try {
-    // ✅ Direct query by po_no column
     console.log('[MRR Lookup] Querying erp_prf_po_cache for po_no=' + poNo);
     var rows = await erpFetch('erp_prf_po_cache',
       'po_no=eq.' + encodeURIComponent(poNo) + '&order=item_no.asc&limit=500');
-    
+
     if (!rows || rows.length === 0) {
       statusEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> PO No. not found</span>';
       resultEl.className = 'alert alert-warning mb-0 py-2';
-      resultEl.innerHTML = '<span class="small"><i class="bi bi-exclamation-triangle me-1"></i>PO No. <strong>' + erpEsc(poNo) + '</strong> not found in PRF PO master.</span>';
+      resultEl.innerHTML = '<span class="small"><i class="bi bi-exclamation-triangle me-1"></i>PO No. <strong>' + erpEsc(poNo) + '</strong> not found.</span>';
       return;
     }
-    
+
     console.log('[MRR Lookup] Found ' + rows.length + ' rows');
-    
+
     var first = rows[0];
     _mrrState.poNo = poNo;
     _mrrState.prfNo = first.prf_no || '';
     _mrrState.client = first.client || '';
     _mrrState.vendor = first.supplier || first.client || '';
-    
-    // Auto-fill
+
     document.getElementById('mrrPrfNo').value = _mrrState.prfNo;
     document.getElementById('mrrVendor').value = _mrrState.vendor;
-    
-    // Load items
+
     _mrrState.items = rows.map(function(r, i) {
       return {
         itemCode: r.inventory_id || '',
         description: r.description || '',
         requestedQty: Number(r.qty || 0),
-        issuedQty: Number(r.qty || 0),  // default = full received
+        issuedQty: Number(r.qty || 0),
         unit: r.unit || 'PCS',
         remarks: '',
         itemNo: r.item_no || (i + 1)
       };
     });
-    
+
     renderItems();
-    
-    // Show all steps
+
     document.getElementById('step2Card').style.display = 'block';
     document.getElementById('step3Card').style.display = 'block';
     document.getElementById('step4Card').style.display = 'block';
-    
+
     statusEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> PO No. found!</span>';
     resultEl.className = 'alert alert-success mb-0 py-2';
     resultEl.innerHTML = '<span class="small"><i class="bi bi-check-circle me-1"></i>Found: <strong>' + erpEsc(_mrrState.prfNo) + '</strong> — ' + erpEsc(_mrrState.client) + ' (' + rows.length + ' items)</span>';
-    
+
     erpShowToast('PO No. found! ' + rows.length + ' items loaded.', 'success');
-    
+
     setTimeout(function() {
       document.getElementById('mrrDrNo').focus();
     }, 300);
-    
+
   } catch(err) {
     console.error('[lookupPoNo]', err);
     statusEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> Lookup failed</span>';
@@ -153,18 +141,19 @@ async function lookupPoNo() {
     resultEl.innerHTML = '<span class="small">' + erpEsc(err.message) + '</span>';
   }
 }
+
 // ═══════════════════════════════════════════════════════════
 // ITEMS RENDERING
 // ═══════════════════════════════════════════════════════════
 function renderItems() {
   var tbody = document.getElementById('itemsBody');
   if (!tbody) return;
-  
+
   if (_mrrState.items.length === 0) {
     tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No items</td></tr>';
     return;
   }
-  
+
   var html = '';
   _mrrState.items.forEach(function(it, idx) {
     html += '<tr data-idx="' + idx + '">' +
@@ -207,24 +196,22 @@ function addItemRow() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT MRR
+// SUBMIT MRR (v2 — with GUARANTEED status patch)
 // ═══════════════════════════════════════════════════════════
 async function submitMrr() {
   if (_mrrState.isSubmitting) return;
-  
-  // Double-submit protection
+
   var now = Date.now();
   if (_mrrState.lastSubmittedAt && (now - _mrrState.lastSubmittedAt) < 10000) {
     erpShowToast('Please wait a moment before submitting again', 'warning');
     return;
   }
-  
-  // Validation
+
   if (!_mrrState.poNo) {
     erpShowToast('Please lookup a PO No. first', 'warning');
     return;
   }
-  
+
   var drNo = document.getElementById('mrrDrNo').value.trim();
   if (!drNo) {
     erpShowToast('DR No. / S.I. No. is required', 'warning');
@@ -232,30 +219,29 @@ async function submitMrr() {
     return;
   }
   _mrrState.drNo = drNo;
-  
+
   var receivingDate = document.getElementById('mrrReceivingDate').value;
   if (!receivingDate) {
     erpShowToast('Receiving Date is required', 'warning');
     return;
   }
   _mrrState.receivingDate = receivingDate;
-  
+
   var receivingSite = document.getElementById('mrrReceivingSite').value.trim();
   if (!receivingSite) {
     erpShowToast('Receiving Site is required', 'warning');
     return;
   }
   _mrrState.receivingSite = receivingSite;
-  
+
   var vendor = document.getElementById('mrrVendor').value.trim();
   _mrrState.vendor = vendor;
-  
-  // Validate items
+
   if (_mrrState.items.length === 0) {
     erpShowToast('No items to submit', 'warning');
     return;
   }
-  
+
   var validItems = [];
   for (var i = 0; i < _mrrState.items.length; i++) {
     var it = _mrrState.items[i];
@@ -269,47 +255,59 @@ async function submitMrr() {
     }
     validItems.push(it);
   }
-  
+
   if (!confirm('Create MRR with ' + validItems.length + ' item(s)?')) return;
-  
+
   _mrrState.isSubmitting = true;
   _mrrState.lastSubmittedAt = now;
-  
+
   var btn = document.getElementById('btnSubmitMrr');
   var originalHtml = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
-  
+
   try {
-    // Step 1: Get next doc number via RPC
+    // ─── Step 1: RPC for doc number ───
     console.log('[Submit MRR] Calling RPC...');
     var rpcRes = await fetch(erpUrl('rpc/get_next_doc_number'), {
       method: 'POST',
       headers: erpHeaders(),
       body: JSON.stringify({ p_prefix: 'MRR' })
     });
-    
+
     if (!rpcRes.ok) throw new Error('RPC failed: ' + rpcRes.status);
-    
     var nextNum = await rpcRes.json();
     if (!nextNum || typeof nextNum !== 'number') {
       throw new Error('Invalid RPC response');
     }
-    
-    // Format: MRR + 7-digit padding (no dept suffix for MRR)
+
     var padded = String(nextNum).padStart(7, '0');
     var docNo = 'MRR' + padded;
-    
     console.log('[Submit MRR] Doc No:', docNo);
-    
-    // Step 2: Insert document
+
+    // ─── Step 2: Determine overall status UPFRONT ───
+    var allComplete = validItems.every(function(it) {
+      return it.issuedQty >= it.requestedQty && it.requestedQty > 0;
+    });
+    var anyReceived = validItems.some(function(it) {
+      return it.issuedQty > 0;
+    });
+
+    var overallStatus = (allComplete && anyReceived) ? 'COMPLETED' :
+                        (anyReceived ? 'PARTIAL' : 'PENDING');
+
+    console.log('[Submit MRR] Status will be:', overallStatus);
+
+    // ─── Step 3: Insert document WITH FINAL STATUS ───
+    // ✅ KEY FIX: Insert as COMPLETED/PARTIAL directly (not PENDING)
+    // This ensures trigger fires on INSERT
     var docRes = await fetch(erpUrl('documents'), {
       method: 'POST',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify({
         doc_no: docNo,
         doc_type: 'MRR',
-        status: 'PENDING',
+        status: overallStatus,  // ✅ Set final status immediately
         is_bal: false,
         requestor: _mrrState.preparedBy,
         department: '',
@@ -321,22 +319,26 @@ async function submitMrr() {
         receiving_site: _mrrState.receivingSite,
         receiving_date: _mrrState.receivingDate,
         prepared_by: _mrrState.preparedBy,
+        processed_by: overallStatus !== 'PENDING' ? _mrrState.preparedBy : null,
+        processed_at: overallStatus !== 'PENDING' ? new Date().toISOString() : null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
     });
-    
+
     if (!docRes.ok) {
       var errText = await docRes.text();
       throw new Error('Insert doc failed: ' + docRes.status + ' ' + errText);
     }
-    
+
     var docArr = await docRes.json();
     var doc = docArr[0];
     if (!doc || !doc.id) throw new Error('No document ID returned');
-    
-    // Step 3: Insert items
+
+    // ─── Step 4: Insert doc items ───
     var itemPayloads = validItems.map(function(it, idx) {
+      var itemStatus = it.issuedQty >= it.requestedQty ? 'COMPLETE' :
+                       (it.issuedQty > 0 ? 'PARTIAL' : 'PENDING');
       return {
         document_id: doc.id,
         doc_no: docNo,
@@ -344,51 +346,54 @@ async function submitMrr() {
         item_code: it.itemCode,
         description: it.description,
         requested_qty: it.requestedQty || it.issuedQty,
-        issued_qty: it.issuedQty,  // For MRR, this is received qty
+        issued_qty: it.issuedQty,
         unit: it.unit,
-        remarks: it.remarks || (it.issuedQty >= it.requestedQty ? 'COMPLETE' : 'PARTIAL'),
+        remarks: it.remarks || itemStatus,
         row_index: idx + 1
       };
     });
-    
+
     var itemsRes = await fetch(erpUrl('doc_items'), {
       method: 'POST',
       headers: erpHeaders(),
       body: JSON.stringify(itemPayloads)
     });
-    
+
     if (!itemsRes.ok) {
       var itemsErrText = await itemsRes.text();
       throw new Error('Insert items failed: ' + itemsRes.status + ' ' + itemsErrText);
     }
-    
-    // Step 4: Determine overall status and update
-    var allComplete = validItems.every(function(it) {
-      return it.issuedQty >= it.requestedQty;
-    });
-    var anyReceived = validItems.some(function(it) {
-      return it.issuedQty > 0;
-    });
-    
-    var overallStatus = (allComplete && anyReceived) ? 'COMPLETED' : 
-                        (anyReceived ? 'PARTIAL' : 'PENDING');
-    
-    // Update status (the trigger might have already done this, but ensure)
-    if (overallStatus !== 'PENDING') {
-      await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(docNo)), {
-        method: 'PATCH',
-        headers: erpHeaders(),
-        body: JSON.stringify({
-          status: overallStatus,
-          processed_by: _mrrState.preparedBy,
-          processed_at: new Date().toISOString()
-        })
+
+    // ─── Step 5: Verify status was set correctly ───
+    // Extra safety: patch status again if needed (idempotent)
+    try {
+      var verifyRes = await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(docNo) + '&select=status'), {
+        headers: erpHeaders()
       });
+      var verifyArr = await verifyRes.json();
+      var currentStatus = verifyArr[0] ? verifyArr[0].status : null;
+
+      if (currentStatus !== overallStatus && overallStatus !== 'PENDING') {
+        console.log('[Submit MRR] Re-patching status:', currentStatus, '→', overallStatus);
+        await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(docNo)), {
+          method: 'PATCH',
+          headers: erpHeaders(),
+          body: JSON.stringify({
+            status: overallStatus,
+            processed_by: _mrrState.preparedBy,
+            processed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+        });
+      }
+    } catch(e) {
+      console.warn('[Submit MRR] Verify patch failed:', e.message);
     }
-    
-    erpShowToast('✅ MRR created: ' + docNo, 'success');
+
+    // ─── Success ───
+    erpShowToast('✅ MRR created: ' + docNo + ' (' + overallStatus + ')', 'success');
     showSuccessModal(docNo);
-    
+
   } catch(err) {
     console.error('[submitMrr]', err);
     erpShowToast('Failed: ' + err.message, 'danger');
@@ -404,17 +409,16 @@ async function submitMrr() {
 // ═══════════════════════════════════════════════════════════
 function showSuccessModal(docNo) {
   document.getElementById('successDocNo').textContent = docNo;
-  
+
   var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
   var qrData = base + '../?doc=' + encodeURIComponent(docNo) + '&view=print';
   var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(qrData);
   document.getElementById('successQrImg').src = qrUrl;
-  
+
   var modalEl = document.getElementById('successModal');
   var modal = new bootstrap.Modal(modalEl);
   modal.show();
-  
-  // Auto-reset on close
+
   modalEl.addEventListener('hidden.bs.modal', function onHide() {
     modalEl.removeEventListener('hidden.bs.modal', onHide);
     resetFormSilent();
@@ -431,22 +435,21 @@ function resetFormSilent() {
   _mrrState.vendor = '';
   _mrrState.drNo = '';
   _mrrState.items = [];
-  
+
   document.getElementById('mrrPoNo').value = '';
   document.getElementById('mrrPrfNo').value = '';
   document.getElementById('mrrVendor').value = '';
   document.getElementById('mrrDrNo').value = '';
-  // Keep receivingDate and preparedBy
   document.getElementById('poStatus').innerHTML = '';
   document.getElementById('poLookupResult').className = 'alert alert-secondary mb-0 py-2';
   document.getElementById('poLookupResult').innerHTML = '<span class="text-muted small">Enter a PO No. above to auto-load items</span>';
-  
+
   document.getElementById('step2Card').style.display = 'none';
   document.getElementById('step3Card').style.display = 'none';
   document.getElementById('step4Card').style.display = 'none';
-  
+
   document.getElementById('itemsBody').innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Enter a PO No. above to auto-load items</td></tr>';
-  
+
   console.log('[Reset MRR] Form cleared.');
 }
 
@@ -480,4 +483,4 @@ function erpShowToast(msg, type) {
   toast.show();
 }
 
-console.log('✅ new-mrr.js loaded');
+console.log('✅ new-mrr.js v2 loaded (increment-based + guaranteed status patch)');
