@@ -1,5 +1,6 @@
 // ============================================================
 // AUTHENTICATION & ROLE MANAGEMENT
+// v2.1 — Auto-redirect to ERP on fresh login
 // ============================================================
 
 if (typeof state !== 'undefined') {
@@ -15,16 +16,19 @@ function _getAllowedRoles() {
     return Array.isArray(arr) ? arr : null;
   } catch(e) { return null; }
 }
+
 function _setAllowedRoles(roles) {
   try {
     localStorage.setItem('ivm_allowedRoles', JSON.stringify(roles || []));
     state.allowedRoles = roles || [];
   } catch(e) {}
 }
+
 function _hasBothRoles() {
   var roles = _getAllowedRoles();
   return roles && roles.indexOf('warehouse') !== -1 && roles.indexOf('production') !== -1;
 }
+
 function _hasRole(role) {
   var roles = _getAllowedRoles();
   return roles && roles.indexOf(role) !== -1;
@@ -71,10 +75,6 @@ function initRole() {
 }
 
 async function preloadWarehouseLists() {
-  // ★ Load essentials FIRST (inventory + vendors needed for new requests)
-  // Then load documents in background with delays
-  
-  // 1. Critical for opening the app
   Promise.allSettled([
     loadRequestInventory(false),
     loadVendorList(false)
@@ -82,13 +82,10 @@ async function preloadWarehouseLists() {
     console.log('[Preload] Essentials loaded');
   });
 
-  // 2. Defer IVM team (only needed for Manual MRR modal)
   setTimeout(function() {
     loadIvmTeamList(false).catch(function() {});
   }, 5000);
 
-  // 3. Defer pending docs (only needed when user navigates to module)
-  // Skip loading all 3 at once — only load current module
   setTimeout(function() {
     var prev = state.currentModule;
     state.currentModule = 'MRIF';
@@ -233,11 +230,16 @@ async function loginUser() {
       localStorage.setItem('ivm_userRole', requestedRole);
       _setAllowedRoles(roles);
 
+      // ★ Save department if available
+      if (data.department) {
+        try { localStorage.setItem('ivm_userDepartment', String(data.department).trim()); } catch(e) {}
+      }
+
       if (requestedRole === 'production') {
         localStorage.setItem('ivm_requestorName', state.currentUserFullname);
       }
 
-                 state.pendingRole = null;
+      state.pendingRole = null;
 
       var loginModalEl = document.getElementById('loginModal');
       if (loginModalEl) {
@@ -245,68 +247,12 @@ async function loginUser() {
         if (m) m.hide();
       }
 
-      // ★ Mark as fresh login for auto-redirect
-      sessionStorage.setItem('ivm_justLoggedIn', '1');
-
-      showToast('Welcome, ' + state.currentUserFullname + '!', 'success');
-      // ★ Mark as fresh login for auto-redirect
+      // ★ Mark as fresh login for auto-redirect to ERP
       sessionStorage.setItem('ivm_justLoggedIn', '1');
 
       showToast('Welcome, ' + state.currentUserFullname + '!', 'success');
 
-      // ★ Mark as fresh login para sa auto-redirect
-      sessionStorage.setItem('ivm_justLoggedIn', '1');
-
       applyRoleUI();
-
-// ★ ERP auto-return: kung galing sa ERP page, bumalik dun
-var erpReturn = sessionStorage.getItem('ivm_erpReturnUrl');
-if (erpReturn && requestedRole === 'warehouse') {
-  sessionStorage.removeItem('ivm_erpReturnUrl');
-  showToast('Welcome back! Redirecting to ERP...', 'success');
-  setTimeout(function() {
-    window.location.href = erpReturn;
-  }, 1000);
-  return;
-}
-
-      applyRoleUI();
-
-      // ★ Auto-return sa ERP kung galing dun
-      var erpReturn = sessionStorage.getItem('ivm_erpReturnUrl');
-      if (erpReturn && requestedRole === 'warehouse') {
-        sessionStorage.removeItem('ivm_erpReturnUrl');
-        showToast('Welcome back! Redirecting to ERP...', 'success');
-        setTimeout(function() {
-          window.location.href = erpReturn;
-        }, 800);
-        return;
-      }
-
-      applyRoleUI();
-
-      // ★ Auto-return sa ERP kung galing dun
-      var erpReturn = sessionStorage.getItem('ivm_erpReturnUrl');
-      if (erpReturn && requestedRole === 'warehouse') {
-        sessionStorage.removeItem('ivm_erpReturnUrl');
-        showToast('Welcome back! Redirecting to ERP...', 'success');
-        setTimeout(function() {
-          window.location.href = erpReturn;
-        }, 800);
-        return;
-      }
-
-      if (requestedRole === 'warehouse') {
-        preloadWarehouseLists();
-        if (!localStorage.getItem('sheetId_MRIF') && !localStorage.getItem('sheetId_MRR')) {
-          setTimeout(function() { if (settingsModal) settingsModal.show(); }, 500);
-        }
-        selectModule('MRIF');
-        loadWarehouseNotifications();
-        setTimeout(loadAnalytics, 500);
-      } else {
-        loadMyRequests();
-      }
 
     } catch(err) {
       _showLoginError(errorField,
@@ -372,6 +318,8 @@ function logoutUser() {
   localStorage.removeItem('ivm_allowedRoles');
   localStorage.removeItem('ivm_chatUnread');
   localStorage.removeItem('ivm_editReqCount');
+  localStorage.removeItem('ivm_userDepartment');
+  sessionStorage.clear();
   location.reload();
 }
 
@@ -435,10 +383,13 @@ function applyRoleUI() {
     if (isProduction) {
       banner.classList.remove('d-none');
       banner.innerHTML = '<i class="bi bi-person-badge"></i>' +
-        '<div class="ms-2">' +
+        '<div class="ms-2 flex-grow-1">' +
         '<strong>Production Mode</strong><br>' +
         '<small>Logged in as ' + (state.currentUserFullname || state.currentUser) + '</small>' +
-        '</div>';
+        '</div>' +
+        '<a href="GEMCORERP/my-requests.html" class="btn btn-sm btn-light ms-3">' +
+        '<i class="bi bi-arrow-right-circle me-1"></i>Go to ERP Portal' +
+        '</a>';
     } else {
       banner.classList.add('d-none');
     }
@@ -459,7 +410,8 @@ function applyRoleUI() {
   if (switchModeNavItem) {
     switchModeNavItem.style.display = (hasBoth && state.currentUser) ? 'flex' : 'none';
   }
-    // ★ I-hide yung ERP links para sa production users
+
+  // ★ I-hide yung ERP links para sa production users sa legacy WMS (kung meron man)
   document.querySelectorAll('.erp-only').forEach(function(el) {
     el.style.display = isProduction ? 'none' : 'flex';
   });
@@ -507,32 +459,52 @@ function applyRoleUI() {
     window.applySidebarRole(role);
   }
 
- navigateTo('myrequests');
+  if (isProduction) navigateTo('myrequests');
+  else navigateTo('dashboard');
+
+  if (state.currentUser && typeof initChat === 'function') {
+    setTimeout(initChat, 800);
+  }
+  if (state.currentUser && typeof initEditRequests === 'function') {
+    setTimeout(initEditRequests, 900);
+  }
 
   // ═══════════════════════════════════════════════════════════
-  // ★ AUTO-REDIRECT TO ERP (production → my-requests, warehouse → stock-monitor)
+  // ★ AUTO-REDIRECT TO ERP ON FRESH LOGIN
+  // Production → GEMCORERP/my-requests.html
+  // Warehouse + Both → GEMCORERP/stock-monitor.html
   // ═══════════════════════════════════════════════════════════
   var erpReturn = sessionStorage.getItem('ivm_erpReturnUrl');
   if (erpReturn) {
-    // May pending ERP return — don't redirect
+    console.log('[Auth] Skipping redirect — pending ERP return');
     return;
   }
 
-  // Only auto-redirect kung kaka-login lang (fresh session)
   var isFreshLogin = sessionStorage.getItem('ivm_justLoggedIn') === '1';
-  if (!isFreshLogin) return;
+  if (!isFreshLogin) {
+    console.log('[Auth] Not fresh login — skipping redirect');
+    return;
+  }
 
-  // Clear the flag para hindi mag-loop
+  // Clear flag to prevent loop
   sessionStorage.removeItem('ivm_justLoggedIn');
 
-  // Redirect based sa role
-  setTimeout(function() {
-    if (isWarehouse) {
-      window.location.href = 'GEMCORERP/stock-monitor.html';
-    } else if (isProduction) {
-      window.location.href = 'GEMCORERP/my-requests.html';
-    }
-  }, 1200);
+  var redirectTarget = '';
+  if (isWarehouse) {
+    redirectTarget = 'GEMCORERP/stock-monitor.html';
+  } else if (isProduction) {
+    redirectTarget = 'GEMCORERP/my-requests.html';
+  }
+
+  if (redirectTarget) {
+    console.log('[Auth] ✅ Auto-redirecting to: ' + redirectTarget);
+    showToast('Opening ERP Portal...', 'info');
+    setTimeout(function() {
+      window.location.href = redirectTarget;
+    }, 1200);
+  } else {
+    console.warn('[Auth] No redirect target for role:', role);
+  }
 }
 
 function switchRole() {
@@ -631,3 +603,5 @@ function saveSettings() {
 
 function checkProductionName() {}
 function saveProductionName() {}
+
+console.log('✅ auth.js v2.1 loaded (with ERP auto-redirect)');
