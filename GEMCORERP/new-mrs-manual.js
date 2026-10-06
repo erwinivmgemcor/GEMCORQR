@@ -303,9 +303,9 @@ async function submitMrs() {
       method: 'POST',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify({
-        doc_no: docNo,
+                doc_no: docNo,
         doc_type: 'MRS',
-       status: 'PENDING',
+        status: 'PENDING',
         is_bal: false,
         requestor: _mrsState.requestor,
         department: department,
@@ -313,8 +313,6 @@ async function submitMrs() {
         gem_so_no: gemSoNo,
         client_name: clientName,
         project: project,
-        processed_by: _mrsState.requestor,
-        processed_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
