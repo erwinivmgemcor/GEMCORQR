@@ -55,7 +55,6 @@ function buildPrfPrintHtml(prf, items) {
   for (var i = 0; i < Math.max(totalItems, MIN_ROWS); i++) {
     var it = items[i];
     if (it) {
-      // Compute Ave/day from ave/monthly / 30
       var aveMonthly = Number(it.average_consumption || 0);
       var avePerDay = aveMonthly / 30;
       var avePerDayDisplay = avePerDay > 0 ? avePerDay.toFixed(3) : '0.000';
@@ -67,19 +66,19 @@ function buildPrfPrintHtml(prf, items) {
         '<td class="prf-print-td-center">' + avePerDayDisplay + '</td>' +
         '<td class="prf-print-td-center">' + printNum(it.buffer_stock || 0) + '</td>' +
         '<td class="prf-print-td-center">' + printNum(it.stock_on_hand || 0) + '</td>' +
-        '<td class="prf-print-td-center qty-blank"></td>' +
+        '<td class="prf-print-td-center prf-print-qty">' + printNum(it.qty_for_order || 0) + '</td>' +   /* ← QTY NOW FILLED */
         '<td class="prf-print-td-center">' + printEsc(it.unit || 'PIECE') + '</td>' +
         '<td class="prf-print-td-remarks">' + printEsc(it.remarks || '') + '</td>' +
       '</tr>';
     } else {
-      itemsHtml += '<tr>' +
+      itemsHtml += '<tr class="prf-print-blank-row">' +
         '<td class="prf-print-td-center">' + (i + 1) + '</td>' +
         '<td class="prf-print-td-item-code"></td>' +
         '<td class="prf-print-td-desc"></td>' +
         '<td class="prf-print-td-center"></td>' +
         '<td class="prf-print-td-center"></td>' +
         '<td class="prf-print-td-center"></td>' +
-        '<td class="prf-print-td-center qty-blank"></td>' +
+        '<td class="prf-print-td-center prf-print-qty"></td>' +
         '<td class="prf-print-td-center"></td>' +
         '<td class="prf-print-td-remarks"></td>' +
       '</tr>';
@@ -131,7 +130,7 @@ function buildPrfPrintHtml(prf, items) {
           '<th style="width:8%;">AVERAGE CONSUMPTION PER DAY</th>' +
           '<th style="width:7%;">BUFFER STOCK</th>' +
           '<th style="width:7%;">STOCK ON HAND</th>' +
-          '<th style="width:8%;" class="qty-header">QTY (For Order)</th>' +
+          '<th style="width:8%;">QTY (For Order)</th>' +
           '<th style="width:6%;">UNIT</th>' +
           '<th style="width:19%;">REMARKS</th>' +
         '</tr>' +
@@ -161,10 +160,6 @@ function buildPrfPrintHtml(prf, items) {
         '</div>' +
         '<div class="prf-print-sig-caption">&nbsp;</div>' +
       '</div>' +
-    '</div>' +
-
-    '<div class="prf-print-footer">' +
-      'Printed: ' + new Date().toLocaleString('en-US') +
     '</div>' +
 
   '</div>';
@@ -258,37 +253,43 @@ function executePrintPrf() {
 // ═══════════════════════════════════════════════════════════
 function getPrintStyles() {
   return [
-    '@page { size: letter portrait; margin: 0.25in 0.3in; }',
+    '@page { size: letter portrait; margin: 0.2in 0.25in; }',
     '* { box-sizing: border-box; }',
-    'body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 8pt; color: #000; }',
-    '.prf-print-sheet { width: 100%; max-width: 8in; margin: 0 auto; background: #fff; padding: 0.1in; }',
-    '.prf-print-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; padding-bottom: 6px; }',
-    '.prf-print-logo img { height: 55px; width: auto; }',
+    'body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 7pt; color: #000; }',
+    '.prf-print-sheet { width: 100%; max-width: 8.1in; margin: 0 auto; background: #fff; padding: 0; }',
+    
+    /* Header — compact */
+    '.prf-print-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; padding-bottom: 2px; }',
+    '.prf-print-logo img { height: 42px; width: auto; }',
     '.prf-print-title-block { flex: 1; text-align: center; }',
-    '.prf-print-title { font-size: 13pt; font-weight: bold; letter-spacing: 1.5px; margin: 0; }',
-    '.prf-print-meta { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 9pt; }',
-    '.prf-print-meta td { padding: 2px 4px; vertical-align: middle; }',
-    '.prf-print-label { font-weight: bold; white-space: nowrap; width: 15%; }',
-    '.prf-print-value { border-bottom: 1px solid #000; min-width: 15%; }',
-    '.prf-print-items { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 8pt; }',
-    '.prf-print-items th, .prf-print-items td { border: 1px solid #000; padding: 3px 4px; vertical-align: middle; }',
-    '.prf-print-items th { background: #f0f0f0; font-weight: bold; text-align: center; font-size: 7.5pt; letter-spacing: 0.3px; line-height: 1.2; }',
+    '.prf-print-title { font-size: 11pt; font-weight: bold; letter-spacing: 1px; margin: 0; }',
+    
+    /* Meta — compact */
+    '.prf-print-meta { width: 100%; border-collapse: collapse; margin-bottom: 4px; font-size: 8pt; }',
+    '.prf-print-meta td { padding: 1px 3px; vertical-align: middle; line-height: 1.2; }',
+    '.prf-print-label { font-weight: bold; white-space: nowrap; }',
+    '.prf-print-value { border-bottom: 1px solid #000; }',
+    
+    /* Items table — VERY compact para 30 rows fit */
+    '.prf-print-items { width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 6.5pt; table-layout: fixed; }',
+    '.prf-print-items th, .prf-print-items td { border: 1px solid #000; padding: 1px 2px; vertical-align: middle; line-height: 1.05; overflow: hidden; }',
+    '.prf-print-items th { background: #f0f0f0; font-weight: bold; text-align: center; font-size: 5.5pt; letter-spacing: 0; line-height: 1.1; padding: 2px 1px; }',
     '.prf-print-td-center { text-align: center; }',
-    '.prf-print-td-item-code { font-family: "Courier New", monospace; font-weight: 600; }',
-    '.prf-print-td-desc { text-align: left; }',
-    '.prf-print-td-remarks { text-align: left; font-size: 7.5pt; }',
-    '.qty-blank { background: #fafafa; min-height: 16px; }',
-    '.qty-header { background: #f0f0f0 !important; }',
-    '.prf-print-signatures { display: flex; justify-content: space-between; margin-top: 30px; padding: 0 5%; }',
+    '.prf-print-td-item-code { font-family: "Courier New", monospace; font-weight: 600; font-size: 6pt; }',
+    '.prf-print-td-desc { text-align: left; font-size: 6pt; word-wrap: break-word; }',
+    '.prf-print-td-remarks { text-align: left; font-size: 5.5pt; }',
+    '.prf-print-qty { font-weight: bold; }',
+    '.prf-print-blank-row td { min-height: 12px; }',
+    
+    /* Signatures — compact */
+    '.prf-print-signatures { display: flex; justify-content: space-between; margin-top: 12px; padding: 0 3%; }',
     '.prf-print-sig-block { width: 30%; text-align: center; }',
-    '.prf-print-sig-label { font-weight: bold; font-size: 8pt; text-align: left; margin-bottom: 6px; }',
-    '.prf-print-sig-line { border-bottom: 1px solid #000; min-height: 22px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 2px; }',
-    '.prf-print-sig-name { font-weight: bold; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.3px; }',
-    '.prf-print-sig-caption { font-size: 7.5pt; margin-top: 3px; }',
-    '.prf-print-footer { text-align: center; font-size: 6.5pt; color: #666; margin-top: 12px; padding-top: 6px; border-top: 1px solid #ddd; }'
+    '.prf-print-sig-label { font-weight: bold; font-size: 7pt; text-align: left; margin-bottom: 4px; }',
+    '.prf-print-sig-line { border-bottom: 1px solid #000; min-height: 18px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 1px; }',
+    '.prf-print-sig-name { font-weight: bold; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.2px; }',
+    '.prf-print-sig-caption { font-size: 6pt; margin-top: 1px; }'
   ].join('');
 }
-
 // ═══════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════
