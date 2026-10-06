@@ -397,7 +397,7 @@ async function submitMrs() {
       body: JSON.stringify({
         doc_no: docNo,
         doc_type: 'MRS',
-        status: 'COMPLETED',
+        status: 'PENDING',
         is_bal: false,
         requestor: _mrsState.requestor,
         department: department,
