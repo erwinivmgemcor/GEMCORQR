@@ -15,7 +15,7 @@
 
 <style>
 /* ═══════════════════════════════════════════════════════════
-   PRF Monitor — Two Tabs + Bulk Actions
+   PRF Monitor — Two Tabs + Bulk Actions + PO# Display
    ═══════════════════════════════════════════════════════════ */
 
 /* Tab Navigation */
@@ -160,6 +160,21 @@
   font-size: 0.82rem;
 }
 .prf-link:hover { color: #3b82f6; text-decoration: underline; }
+
+/* PO# Badge */
+.po-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #dbeafe;
+  color: #1e40af;
+  border-radius: 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+/* Item table column widths */
+.prf-item-table th { font-size: 0.72rem !important; }
 </style>
 
 <script src="erp-guard.js"></script>
@@ -222,7 +237,7 @@
     </div>
   </div>
 
-  <!-- KPI CARDS — Item-level counting -->
+  <!-- KPI CARDS -->
   <div class="erp-kpi-row" style="grid-template-columns: repeat(5, 1fr);margin-bottom:20px;">
     <div class="erp-kpi-card kpi-blue">
       <div class="kpi-icon"><i class="bi bi-list-ol"></i></div>
@@ -271,7 +286,7 @@
     <div class="erp-filters-row">
       <div class="erp-search-wrap">
         <i class="bi bi-search"></i>
-        <input type="text" id="prfSearchInput" class="erp-search" placeholder="Search PRF No., requestor, or item code..." oninput="prfMonitorOnSearch()">
+        <input type="text" id="prfSearchInput" class="erp-search" placeholder="Search PRF No., requestor, item code, or PO#..." oninput="prfMonitorOnSearch()">
       </div>
       <select id="prfCategoryFilter" class="erp-select" onchange="prfMonitorLoad()">
         <option value="">All Categories</option>
@@ -308,9 +323,7 @@
     </button>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════ -->
   <!-- TAB 1: BY PRF -->
-  <!-- ═══════════════════════════════════════════════════════════ -->
   <div id="tabContentPrf" class="erp-card erp-table-card">
     <div class="erp-table-header">
       <div class="d-flex align-items-center gap-2">
@@ -366,9 +379,7 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════ -->
-  <!-- TAB 2: BY ITEM (Flat List + Bulk Actions) -->
-  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- TAB 2: BY ITEM -->
   <div id="tabContentItem" class="erp-card erp-table-card" style="display:none;">
 
     <!-- Bulk Actions Bar -->
@@ -408,33 +419,33 @@
       <div>
         <i class="bi bi-list-ol me-2"></i>
         <strong>All PRF Items</strong>
-        <span class="erp-table-subtitle">Flat item list with bulk status update</span>
+        <span class="erp-table-subtitle">Flat item list with PO# from procurement</span>
       </div>
       <div style="min-width: 100px;"></div>
     </div>
 
     <div class="erp-table-wrap">
-      <table class="erp-table" style="font-size:0.82rem;">
-       <thead>
-  <tr>
-    <th style="width:3%"><input type="checkbox" id="selectAllItems" onchange="toggleSelectAllItems(this.checked)"></th>
-    <th style="width:3%">#</th>
-    <th style="width:9%">PRF No.</th>
-    <th style="width:6%">Date</th>
-    <th style="width:10%">Item Code</th>
-    <th style="width:16%">Description</th>
-    <th style="width:5%" class="text-center">On-Hand</th>
-    <th style="width:5%" class="text-center">Qty Order</th>
-    <th style="width:5%" class="text-center">Unit</th>
-    <th style="width:8%" class="text-center">PO#</th>
-    <th style="width:12%">Supplier</th>
-    <th style="width:8%">Date Delivered</th>
-    <th style="width:10%" class="text-center">Status</th>
-  </tr>
-</thead>
+      <table class="erp-table prf-item-table" style="font-size:0.78rem;">
+        <thead>
+          <tr>
+            <th style="width:3%"><input type="checkbox" id="selectAllItems" onchange="toggleSelectAllItems(this.checked)"></th>
+            <th style="width:3%">#</th>
+            <th style="width:8%">PRF No.</th>
+            <th style="width:6%">Date</th>
+            <th style="width:9%">Item Code</th>
+            <th style="width:15%">Description</th>
+            <th style="width:5%" class="text-center">On-Hand</th>
+            <th style="width:6%" class="text-center">Qty Order</th>
+            <th style="width:4%" class="text-center">Unit</th>
+            <th style="width:7%" class="text-center">PO#</th>
+            <th style="width:13%">Supplier</th>
+            <th style="width:8%">Date Delivered</th>
+            <th style="width:9%" class="text-center">Status</th>
+          </tr>
+        </thead>
         <tbody id="itemTableBody">
           <tr>
-            <td colspan="12" class="erp-empty">
+            <td colspan="13" class="erp-empty">
               <div class="erp-spinner"></div>
               <div class="mt-2">Loading items...</div>
             </td>
@@ -458,14 +469,12 @@
   </div>
 
   <div class="erp-footer">
-    <div>GEMCOR ERP — PRF Monitor v3.0.0</div>
+    <div>GEMCOR ERP — PRF Monitor v3.1.0</div>
     <div>Pure Supabase • No Google Sheets • Live Data</div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════ -->
 <!-- PRF DETAILS MODAL -->
-<!-- ═══════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="prfDetailModal" tabindex="-1">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
@@ -491,9 +500,7 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════ -->
 <!-- EDIT PRF NO MODAL -->
-<!-- ═══════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="editPrfNoModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
