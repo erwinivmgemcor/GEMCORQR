@@ -11,7 +11,148 @@
 <link rel="stylesheet" href="erp-design-system.css">
 <link rel="stylesheet" href="erp-styles.css">
 <link rel="stylesheet" href="erp-nav.css">
-  <link rel="stylesheet" href="erp-notif.css">
+<link rel="stylesheet" href="erp-notif.css">
+
+<style>
+/* ═══════════════════════════════════════════════════════════
+   New PRF — Mode Tabs
+   ═══════════════════════════════════════════════════════════ */
+
+.prf-mode-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid var(--erp-border, #e5e7eb);
+}
+
+.prf-mode-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--erp-gray, #6c757d);
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: -2px;
+  font-family: inherit;
+}
+
+.prf-mode-tab:hover {
+  color: var(--erp-blue, #1e3a5f);
+  background: #f8fafc;
+}
+
+.prf-mode-tab.active {
+  color: var(--erp-blue, #1e3a5f);
+  border-bottom-color: var(--erp-blue, #1e3a5f);
+}
+
+.prf-mode-tab i {
+  font-size: 1.1rem;
+}
+
+.prf-mode-content {
+  display: none;
+}
+
+.prf-mode-content.active {
+  display: block;
+}
+
+/* Manual item row */
+.manual-item-row {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.manual-item-row:hover {
+  border-color: #cbd5e1;
+}
+
+/* Item search dropdown */
+.item-search-wrapper {
+  position: relative;
+}
+
+.item-search-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 9999;
+  margin-top: 4px;
+}
+
+.item-search-dropdown.d-none {
+  display: none;
+}
+
+.item-search-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 0.85rem;
+  transition: background 0.1s;
+}
+
+.item-search-item:hover {
+  background: #eef4fb;
+}
+
+.item-search-item:last-child {
+  border-bottom: none;
+}
+
+.item-search-item .item-code {
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  color: var(--erp-blue, #1e3a5f);
+  margin-bottom: 2px;
+}
+
+.item-search-item .item-desc {
+  color: #4b5563;
+  font-size: 0.8rem;
+}
+
+.item-search-item .item-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 3px;
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+
+.item-search-item .item-meta .badge {
+  font-size: 0.65rem;
+}
+
+/* Suggested Qty display */
+.suggested-qty-hint {
+  font-size: 0.72rem;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.suggested-qty-hint strong {
+  color: #1e3a5f;
+}
+</style>
 
 <script src="erp-guard.js"></script>
 <script src="erp-theme.js"></script>
@@ -20,7 +161,7 @@
 <script defer src="erp-supabase.js"></script>
 <script defer src="erp-nav.js"></script>
 <script defer src="new-prf.js"></script>
-  <script defer src="notifications.js"></script>
+<script defer src="notifications.js"></script>
 </head>
 <body>
 
@@ -78,7 +219,7 @@
       </div>
       <div class="col-md-6">
         <label class="form-label fw-bold">Category <span class="text-danger">*</span></label>
-        <select id="prfCategory" class="form-select" onchange="onCategoryChange()">
+        <select id="prfCategory" class="form-select">
           <option value="">-- Select Category --</option>
           <option value="COMPONENTS">COMPONENTS</option>
           <option value="CONSUMABLES">CONSUMABLES</option>
@@ -89,7 +230,7 @@
           <option value="PANEL">PANEL</option>
           <option value="UNCATEGORIZED">UNCATEGORIZED</option>
         </select>
-        <div class="form-text">Yung items sa Reorder List na nasa category na ito lang ang lalabas.</div>
+        <div class="form-text" id="categoryHint">Required — pinipili kung anong category ng PRF.</div>
       </div>
       <div class="col-md-6">
         <label class="form-label fw-bold">Prepared By</label>
@@ -114,24 +255,57 @@
     </div>
   </div>
 
-  <!-- STEP 2: ITEMS -->
+  <!-- STEP 2: MODE TABS -->
   <div class="erp-card" style="padding:24px;margin-bottom:20px;">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h5 class="mb-0">
-        <span class="badge bg-primary me-2">2</span>Items
-        <span class="text-muted ms-2" id="itemsCountLabel">(0 items)</span>
-      </h5>
-      <div class="d-flex gap-2">
-        <button class="btn btn-sm btn-outline-primary" onclick="loadReorderItems()">
-          <i class="bi bi-arrow-clockwise me-1"></i>Reload Reorder List
-        </button>
+    <h5 style="margin-bottom:16px;">
+      <span class="badge bg-primary me-2">2</span>Items
+      <span class="text-muted ms-2" id="itemsCountLabel">(0 items)</span>
+    </h5>
+
+    <div class="prf-mode-tabs">
+      <button class="prf-mode-tab active" data-mode="reorder" onclick="prfSwitchMode('reorder')">
+        <i class="bi bi-list-check"></i>
+        <span>From Reorder List</span>
+      </button>
+      <button class="prf-mode-tab" data-mode="manual" onclick="prfSwitchMode('manual')">
+        <i class="bi bi-search"></i>
+        <span>Manual Entry</span>
+      </button>
+    </div>
+
+    <!-- MODE 1: FROM REORDER LIST -->
+    <div id="modeReorder" class="prf-mode-content active">
+      <div class="alert alert-info small py-2 mb-3">
+        <i class="bi bi-info-circle me-1"></i>
+        Select a category above then click items from the reorder list.
+      </div>
+      <div id="reorderItemsContainer">
+        <div class="text-center text-muted py-4">
+          <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+          <div>Select a category above to load items from the Reorder List.</div>
+        </div>
       </div>
     </div>
 
-    <div id="itemsContainer">
-      <div class="text-center text-muted py-5" id="itemsEmptyState">
-        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-        <div>Select a category above to load items from the Reorder List.</div>
+    <!-- MODE 2: MANUAL ENTRY -->
+    <div id="modeManual" class="prf-mode-content">
+      <div class="alert alert-info small py-2 mb-3">
+        <i class="bi bi-info-circle me-1"></i>
+        Manually search and add items that are <strong>not in the reorder list</strong>. Type item code or description to search.
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <small class="text-muted" id="manualItemsCount">0 manual item(s)</small>
+        <button class="btn btn-sm btn-primary" onclick="addManualItem()">
+          <i class="bi bi-plus-lg me-1"></i>Add Item
+        </button>
+      </div>
+
+      <div id="manualItemsContainer">
+        <div class="text-center text-muted py-4" id="manualEmptyState">
+          <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+          <div>No manual items yet. Click "Add Item" to start.</div>
+        </div>
       </div>
     </div>
   </div>
@@ -155,7 +329,7 @@
   </div>
 
   <div class="erp-footer">
-    <div>GEMCOR ERP — Create PRF v1.0.0</div>
+    <div>GEMCOR ERP — Create PRF v2.0.0</div>
     <div>Pure Supabase • No Google Sheets • Live Data</div>
   </div>
 </div>
