@@ -170,9 +170,10 @@ async function preloadInventoryForSearch() {
   if (_prf.inventoryLoaded) return;
 
   try {
-    // ✅ SINGLE FETCH: Complete master from erp_items
+    // ✅ FIXED: Remove non-existent 'item_class' column
+    // Use 'category' instead (this is the actual item class in erp_items)
     var rows = await erpFetch('erp_items',
-      'select=item_code,description,base_unit,item_class,category,location,on_hand,buffer_stock,ave_monthly_consumption' +
+      'select=item_code,description,base_unit,category,location,on_hand,buffer_stock,ave_monthly_consumption' +
       '&is_active=eq.true&order=item_code.asc&limit=10000');
 
     var items = (rows || []).map(function(r) {
@@ -180,7 +181,7 @@ async function preloadInventoryForSearch() {
         code: r.item_code,
         description: r.description || '',
         unit: r.base_unit || 'PCS',
-        itemClass: r.item_class || '',
+        itemClass: r.category || '',  // Use category as item class
         category: r.category || '',
         location: r.location || ''
       };
@@ -188,7 +189,7 @@ async function preloadInventoryForSearch() {
 
     _prf.inventoryList = items;
 
-    // ✅ Also build erpItemsMap from SAME data (no duplicate fetch)
+    // Build erpItemsMap from same data
     _prf.erpItemsMap = {};
     (rows || []).forEach(function(r) {
       _prf.erpItemsMap[String(r.item_code || '').trim()] = {
