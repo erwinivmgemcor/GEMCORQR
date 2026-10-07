@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEMCOR ERP — Inventory Count</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="erp-design-system.css">
+<link rel="stylesheet" href="erp-styles.css">
+<link rel="stylesheet" href="erp-nav.css">
+<link rel="stylesheet" href="erp-notif.css">
+
+<style>
+/* ═══════════════════════════════════════════════════════════
+   Inventory Count — Custom Styles
+   ═══════════════════════════════════════════════════════════ */
+
+/* Count progress bar */
+.count-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  border: 1px solid #e5e7eb;
+}
+
+.count-progress-bar {
+  flex: 1;
+  height: 10px;
+  background: #e5e7eb;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.count-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1e3a5f, #3b82f6);
+  transition: width 0.3s ease;
+}
+
+/* Scan mode */
+.scan-container {
+  position: relative;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.scan-container video {
+  width: 100%;
+  display: block;
+}
+
+.scan-overlay-box {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 250px;
+  height: 250px;
+  border: 3px solid #10b981;
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+}
+
+.scan-line-anim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #10b981;
+  animation: scanline 2s linear infinite;
+  box-shadow: 0 0 12px #10b981;
+}
+
+@keyframes scanline {
+  0% { top: 0; }
+  100% { top: 100%; }
+}
+
+/* Qty Input Modal */
+.qty-input-big {
+  font-size: 2rem;
+  text-align: center;
+  height: 70px;
+  font-weight: 800;
+}
+
+.previous-qty-box {
+  padding: 12px 16px;
+  background: #f0f9ff;
+  border: 2px solid #bae6fd;
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.previous-qty-box .label {
+  font-size: 0.78rem;
+  color: #0369a1;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.previous-qty-box .value {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #075985;
+}
+
+/* Scan history */
+.scan-history {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.scan-history-item {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.scan-history-item:last-child {
+  border-bottom: none;
+}
+
+.scan-history-item .item-code {
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  color: #1e3a5f;
+}
+
+.scan-history-item .qty {
+  font-weight: 700;
+  color: #059669;
+}
+
+.scan-history-item .variance {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.variance-pos { background: #fee2e2; color: #991b1b; }
+.variance-neg { background: #dbeafe; color: #1e40af; }
+.variance-ok { background: #d1fae5; color: #065f46; }
+
+/* Status badges */
+.status-badge-lg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-DRAFT { background: #f3f4f6; color: #374151; }
+.status-IN_PROGRESS { background: #fef3c7; color: #92400e; }
+.status-PENDING_REVIEW { background: #dbeafe; color: #1e40af; }
+.status-APPROVED { background: #d1fae5; color: #065f46; }
+.status-REJECTED { background: #fee2e2; color: #991b1b; }
+.status-CANCELLED { background: #f3f4f6; color: #6b7280; }
+
+/* Item table in review */
+.item-row {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.item-row:hover {
+  background: #f8fafc;
+}
+
+.item-row.has-variance {
+  background: #fef7f7;
+}
+
+.item-row.counted {
+  background: #f8fdf9;
+}
+
+/* Print styles for count sheet */
+@media print {
+  body * { visibility: hidden; }
+  #countPrintArea, #countPrintArea * { visibility: visible; }
+  #countPrintArea { position: absolute; left: 0; top: 0; width: 100%; }
+  .d-print-none { display: none !important; }
+}
+</style>
+
+<script src="erp-guard.js"></script>
+<script src="erp-theme.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script defer src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script defer src="erp-config.js"></script>
+<script defer src="erp-supabase.js"></script>
+<script defer src="erp-nav.js"></script>
+<script defer src="inventory-count.js"></script>
+<script defer src="notifications.js"></script>
+</head>
+<body>
+
+<nav class="erp-topbar">
+  <div class="erp-topbar-left">
+    <img src="../gemcor-logo.png" alt="GEMCOR" class="erp-logo" onerror="this.style.display='none'">
+    <div>
+      <div class="erp-brand">GEMCOR ERP</div>
+      <div class="erp-brand-sub">Inventory Count <span class="badge-live">LIVE</span></div>
+    </div>
+  </div>
+  <div id="erpNavBar"></div>
+  <div class="erp-topbar-right">
+    <div class="erp-health" id="erpHealthBadge">
+      <button class="theme-toggle-btn" onclick="erpToggleTheme()" id="themeToggleBtn">
+        <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
+      </button>
+      <span class="dot dot-pending"></span>
+      <span id="erpHealthText">Checking...</span>
+    </div>
+    <a href="stock-monitor.html" class="erp-btn-outline">
+      <i class="bi bi-arrow-left"></i> <span>Stock Monitor</span>
+    </a>
+  </div>
+</nav>
+
+<div class="erp-container">
+
+  <!-- PAGE HEADER -->
+  <div class="erp-page-header">
+    <div>
+      <div class="erp-page-title">
+        <i class="bi bi-clipboard-check"></i>
+        <span>Inventory Count</span>
+      </div>
+      <div class="erp-breadcrumb">
+        <a href="stock-monitor.html">Home</a>
+        <i class="bi bi-chevron-right"></i>
+        <span>Inventory Count</span>
+      </div>
+    </div>
+    <div>
+      <button class="erp-btn-primary btn-lg" onclick="openNewCountModal()">
+        <i class="bi bi-plus-circle me-1"></i>New Count
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- VIEW 1: SESSION LIST -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div id="viewSessionList">
+
+    <!-- Filters -->
+    <div class="erp-card erp-filters-card" style="padding:16px 18px;margin-bottom:20px;">
+      <div class="erp-filters-row">
+        <div class="erp-search-wrap">
+          <i class="bi bi-search"></i>
+          <input type="text" id="icSearchInput" class="erp-search" placeholder="Search Count No..." oninput="icOnSearch()">
+        </div>
+        <select id="icStatusFilter" class="erp-select" onchange="icRenderSessionList()">
+          <option value="">All Status</option>
+          <option value="IN_PROGRESS">In Progress</option>
+          <option value="PENDING_REVIEW">Pending Review</option>
+          <option value="APPROVED">Approved</option>
+          <option value="REJECTED">Rejected</option>
+        </select>
+        <button class="erp-btn-clear" onclick="icClearFilters()">
+          <i class="bi bi-x-lg"></i> Clear
+        </button>
+      </div>
+    </div>
+
+    <!-- Sessions Table -->
+    <div class="erp-card erp-table-card">
+      <div class="erp-table-header">
+        <div>
+          <i class="bi bi-list-ul me-2"></i>
+          <strong>Count Sessions</strong>
+        </div>
+        <span class="erp-badge" id="icSessionCount">0 items</span>
+      </div>
+      <div class="erp-table-wrap">
+        <table class="erp-table">
+          <thead>
+            <tr>
+              <th style="width:14%">Count No.</th>
+              <th style="width:10%">Date</th>
+              <th style="width:10%" class="text-center">Type</th>
+              <th style="width:14%">Scope</th>
+              <th style="width:12%" class="text-center">Progress</th>
+              <th style="width:10%" class="text-center">Variance</th>
+              <th style="width:12%" class="text-center">Status</th>
+              <th style="width:18%" class="text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="icSessionBody">
+            <tr><td colspan="8" class="erp-empty">
+              <div class="erp-spinner"></div>
+              <div class="mt-2">Loading sessions...</div>
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- VIEW 2: COUNTING (SCAN MODE) -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div id="viewCounting" style="display:none;">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <button class="btn btn-sm btn-outline-secondary" onclick="icBackToList()">
+        <i class="bi bi-arrow-left"></i> Back to Sessions
+      </button>
+      <div id="icCountHeader" class="badge bg-primary fs-6"></div>
+    </div>
+
+    <!-- Progress -->
+    <div class="count-progress">
+      <div class="count-progress-bar">
+        <div class="count-progress-fill" id="icProgressFill" style="width: 0%"></div>
+      </div>
+      <div style="font-weight:700;font-size:0.9rem;min-width:120px;text-align:right;" id="icProgressText">
+        0 / 0 counted
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <!-- Left: Scanner + Manual -->
+      <div class="col-lg-7">
+        <!-- Scanner Card -->
+        <div class="erp-card" style="padding:20px;margin-bottom:16px;">
+          <h6 class="mb-3"><i class="bi bi-qr-code-scan me-2"></i>Scan Item</h6>
+          <div class="scan-container" id="icScannerContainer">
+            <div id="icReader" style="width:100%;"></div>
+            <div class="scan-overlay-box d-none" id="icScanBox">
+              <div class="scan-line-anim"></div>
+            </div>
+          </div>
+          <div class="d-flex gap-2 mb-3">
+            <button class="btn btn-primary flex-fill" id="btnStartScan" onclick="icToggleScanner()">
+              <i class="bi bi-camera-video me-1"></i>Start Camera
+            </button>
+          </div>
+          <div class="input-group input-group-lg">
+            <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+            <input type="text" id="icManualInput" class="form-control" 
+                   placeholder="Or type item code manually..." 
+                   autocomplete="off"
+                   onkeypress="if(event.key==='Enter')icManualVerify()">
+            <button class="btn btn-outline-primary" onclick="icManualVerify()">
+              <i class="bi bi-check-lg"></i> Verify
+            </button>
+          </div>
+          <div id="icScanStatus" class="alert alert-info py-2 small mt-2 mb-0">
+            <i class="bi bi-info-circle me-1"></i>
+            <span id="icScanStatusText">Ready to scan</span>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="erp-card" style="padding:16px;margin-bottom:16px;">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+              <div class="small text-muted">Total Scans</div>
+              <div style="font-size:1.5rem;font-weight:800;" id="icTotalScans">0</div>
+            </div>
+            <div>
+              <button class="btn btn-outline-secondary me-2" onclick="icOpenManualEntry()">
+                <i class="bi bi-pencil me-1"></i>Manual Entry
+              </button>
+              <button class="btn btn-outline-primary me-2" onclick="icPrintCountSheet()">
+                <i class="bi bi-printer me-1"></i>Print Sheet
+              </button>
+              <button class="btn btn-success" onclick="icSubmitForReview()">
+                <i class="bi bi-send-check me-1"></i>Submit for Review
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Recent Scans -->
+      <div class="col-lg-5">
+        <div class="erp-card" style="padding:20px;">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="mb-0"><i class="bi bi-clock-history me-2"></i>Recent Scans</h6>
+            <button class="btn btn-sm btn-outline-secondary" onclick="icRefreshItems()">
+              <i class="bi bi-arrow-clockwise"></i>
+            </button>
+          </div>
+          <div class="scan-history" id="icScanHistory">
+            <div class="text-center text-muted py-4 small">
+              <i class="bi bi-inbox fs-3 d-block mb-2 opacity-50"></i>
+              No scans yet
+            </div>
+          </div>
+        </div>
+
+        <!-- Variance Summary -->
+        <div class="erp-card mt-3" style="padding:16px;">
+          <h6 class="mb-3"><i class="bi bi-graph-up me-2"></i>Variance Summary</h6>
+          <div class="row g-2">
+            <div class="col-6">
+              <div class="small text-muted">Matched</div>
+              <div style="font-size:1.3rem;font-weight:800;color:#059669;" id="icMatchedCount">0</div>
+            </div>
+            <div class="col-6">
+              <div class="small text-muted">With Variance</div>
+              <div style="font-size:1.3rem;font-weight:800;color:#dc2626;" id="icVarianceCount">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- VIEW 3: REVIEW (for supervisor) -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div id="viewReview" style="display:none;">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <button class="btn btn-sm btn-outline-secondary" onclick="icBackToList()">
+        <i class="bi bi-arrow-left"></i> Back to Sessions
+      </button>
+      <div id="icReviewHeader" class="badge bg-info fs-6"></div>
+    </div>
+
+    <!-- Review Summary -->
+    <div class="erp-card mb-3" style="padding:20px;">
+      <div class="row g-3 text-center">
+        <div class="col-md-3">
+          <div class="small text-muted">Total Items</div>
+          <div style="font-size:1.8rem;font-weight:800;" id="icReviewTotal">0</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Matched</div>
+          <div style="font-size:1.8rem;font-weight:800;color:#059669;" id="icReviewMatched">0</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">With Variance</div>
+          <div style="font-size:1.8rem;font-weight:800;color:#dc2626;" id="icReviewVariance">0</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Total Qty Variance</div>
+          <div style="font-size:1.8rem;font-weight:800;" id="icReviewVarianceQty">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Items Table -->
+    <div class="erp-card erp-table-card mb-3">
+      <div class="erp-table-header">
+        <div>
+          <i class="bi bi-list-check me-2"></i>
+          <strong>Counted Items</strong>
+        </div>
+        <div class="d-flex gap-2">
+          <select id="icReviewFilter" class="form-select form-select-sm" style="width:auto;" onchange="icRenderReviewItems()">
+            <option value="all">All Items</option>
+            <option value="variance">With Variance Only</option>
+            <option value="matched">Matched Only</option>
+          </select>
+        </div>
+      </div>
+      <div class="erp-table-wrap" style="max-height:500px;">
+        <table class="erp-table" style="font-size:0.85rem;">
+          <thead>
+            <tr>
+              <th style="width:4%">#</th>
+              <th style="width:16%">Item Code</th>
+              <th style="width:26%">Description</th>
+              <th style="width:10%" class="text-center">System</th>
+              <th style="width:10%" class="text-center">Counted</th>
+              <th style="width:10%" class="text-center">Variance</th>
+              <th style="width:8%" class="text-center">Unit</th>
+              <th style="width:16%">Remarks</th>
+            </tr>
+          </thead>
+          <tbody id="icReviewBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="erp-card" style="padding:20px;">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="small text-muted">
+          <i class="bi bi-info-circle me-1"></i>
+          Reviewing as supervisor. Approve to auto-adjust stock, or reject to return for recount.
+        </div>
+        <div>
+          <button class="btn btn-outline-danger me-2" onclick="icRejectCount()">
+            <i class="bi bi-x-circle me-1"></i>Reject
+          </button>
+          <button class="btn btn-success btn-lg" onclick="icApproveCount()">
+            <i class="bi bi-check-circle me-1"></i>Approve & Adjust Stock
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="erp-footer">
+    <div>GEMCOR ERP — Inventory Count v1.0.0</div>
+    <div>Pure Supabase • SUM-based counting</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- NEW COUNT MODAL -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="newCountModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header erp-modal-header">
+        <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>New Count Session</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-bold">Count Type <span class="text-danger">*</span></label>
+          <select id="newCountType" class="form-select form-select-lg">
+            <option value="CYCLE">Cycle Count (by Category)</option>
+            <option value="SPOT">Spot Count (specific items)</option>
+            <option value="FULL">Full Count (all items)</option>
+          </select>
+        </div>
+        <div class="mb-3" id="newCountCategoryGroup">
+          <label class="form-label fw-bold">Category <span class="text-danger">*</span></label>
+          <select id="newCountCategory" class="form-select form-select-lg">
+            <option value="">-- Select Category --</option>
+            <option value="COMPONENTS">COMPONENTS</option>
+            <option value="CONSUMABLES">CONSUMABLES</option>
+            <option value="ENCLOSURE">ENCLOSURE</option>
+            <option value="EWMAT">EWMAT</option>
+            <option value="FABMAT">FABMAT</option>
+            <option value="OFABP">OFABP</option>
+            <option value="PANEL">PANEL</option>
+            <option value="UNCATEGORIZED">UNCATEGORIZED</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-bold">Notes <span class="text-muted small">(optional)</span></label>
+          <textarea id="newCountNotes" class="form-control" rows="2" placeholder="e.g., Monthly cycle count"></textarea>
+        </div>
+        <div class="alert alert-info small py-2 mb-0">
+          <i class="bi bi-info-circle me-1"></i>
+          Items will be snapshotted from <code>erp_items</code>. You can then scan or enter manually.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-lg" id="btnCreateCount" onclick="icCreateSession()">
+          <i class="bi bi-check-circle me-1"></i>Create Count
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- QTY INPUT MODAL (after scan) -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="qtyInputModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title">
+          <i class="bi bi-check-circle-fill me-2"></i>
+          <span id="qtyInputItemCode">—</span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <div class="fw-bold" id="qtyInputDesc">—</div>
+          <div class="small text-muted">
+            Unit: <span id="qtyInputUnit">—</span>
+          </div>
+        </div>
+
+        <div class="previous-qty-box" id="previousQtyBox" style="display:none;">
+          <div class="label">Previous Count (in this session)</div>
+          <div class="value" id="previousQtyValue">0</div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-bold">System Qty (Snapshot)</label>
+          <input type="text" class="form-control" id="qtyInputSystemQty" readonly>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-bold">
+            <i class="bi bi-plus-circle me-1"></i>Add Count <span class="text-danger">*</span>
+          </label>
+          <input type="number" class="form-control qty-input-big" id="qtyInputValue" 
+                 min="0" step="0.01" autocomplete="off"
+                 oninput="icUpdateQtyPreview()">
+          <div class="form-text">Ilagay ang bilang. Auto-add sa previous count.</div>
+        </div>
+
+        <div class="alert alert-info mb-3" id="qtyPreviewBox" style="display:none;">
+          <div class="d-flex justify-content-between">
+            <span>New Total:</span>
+            <strong id="qtyPreviewTotal">0</strong>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Location Note <span class="text-muted small">(optional)</span></label>
+          <input type="text" class="form-control" id="qtyInputLocation" 
+                 placeholder="e.g., Rack A, Shelf 3, Floor" maxlength="100">
+        </div>
+
+        <div class="mb-0">
+          <label class="form-label">Remarks <span class="text-muted small">(optional)</span></label>
+          <input type="text" class="form-control" id="qtyInputRemarks" 
+                 placeholder="Additional notes..." maxlength="200">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success btn-lg" onclick="icSaveCountedQty()">
+          <i class="bi bi-check-circle me-1"></i>Save & Next
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- MANUAL ENTRY MODAL (batch) -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="manualEntryModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header erp-modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Manual Entry — All Items</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div class="p-3 border-bottom bg-light">
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="text" id="manualEntrySearch" class="form-control" 
+                   placeholder="Filter items..." 
+                   oninput="icFilterManualEntry()">
+            <button class="btn btn-outline-secondary" onclick="icSaveAllManualEntry()">
+              <i class="bi bi-check-all me-1"></i>Save All
+            </button>
+          </div>
+        </div>
+        <div class="table-responsive" style="max-height:60vh;">
+          <table class="erp-table" style="font-size:0.82rem;">
+            <thead>
+              <tr>
+                <th style="width:4%">#</th>
+                <th style="width:14%">Item Code</th>
+                <th style="width:28%">Description</th>
+                <th style="width:10%" class="text-center">System</th>
+                <th style="width:12%" class="text-center">Counted</th>
+                <th style="width:8%" class="text-center">Unit</th>
+                <th style="width:14%">Remarks</th>
+              </tr>
+            </thead>
+            <tbody id="manualEntryBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-success" onclick="icSaveAllManualEntry()">
+          <i class="bi bi-check-circle me-1"></i>Save All Changes
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- PRINT AREA (hidden, shown on print) -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="countPrintArea" style="display:none;">
+  <div style="padding:20px;font-family:Arial,sans-serif;font-size:9pt;">
+    <div style="text-align:center;margin-bottom:12px;">
+      <div style="font-size:16pt;font-weight:bold;">GEMCOR INVENTORY COUNT SHEET</div>
+      <div style="font-size:10pt;" id="printCountNo">—</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:9pt;margin-bottom:8px;">
+      <div><strong>Date:</strong> <span id="printDate">—</span></div>
+      <div><strong>Scope:</strong> <span id="printScope">—</span></div>
+      <div><strong>Counted By:</strong> <span id="printCountedBy">—</span></div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:8pt;margin-top:8px;">
+      <thead>
+        <tr style="background:#f0f0f0;">
+          <th style="border:1px solid #000;padding:3px;">#</th>
+          <th style="border:1px solid #000;padding:3px;text-align:left;">ITEM CODE</th>
+          <th style="border:1px solid #000;padding:3px;text-align:left;">DESCRIPTION</th>
+          <th style="border:1px solid #000;padding:3px;">UNIT</th>
+          <th style="border:1px solid #000;padding:3px;width:80px;">COUNT</th>
+        </tr>
+      </thead>
+      <tbody id="printBody"></tbody>
+    </table>
+    <div style="margin-top:20px;display:flex;justify-content:space-between;font-size:9pt;">
+      <div>Signature: _______________________</div>
+      <div>Date: _______________________</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="erpToast" class="toast erp-toast">
+    <div class="toast-body" id="erpToastBody">Message</div>
+  </div>
+</div>
+
+</body>
+</html>
