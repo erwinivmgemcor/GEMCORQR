@@ -1,8 +1,9 @@
 // ============================================================
-// GEMCOR ERP — Create PRF (v2.1)
+// GEMCOR ERP — Create PRF (v2.2)
 // Two Modes: "From Reorder List" + "Manual Entry"
 // Auto-suggest item + suggested qty
-// ✅ FIXED: Dropdown positioning (fixed, wide, auto-flip)
+// ✅ FIXED v2.1: Dropdown positioning (fixed, wide, auto-flip)
+// ✅ FIXED v2.2: Search from erp_items (complete master, 3,196 items)
 // ============================================================
 
 var MAX_ITEMS_PER_PRF = 30;
@@ -14,7 +15,7 @@ var _prf = {
   manualItems: [],           // manually added items
   reorderList: [],
   pendingPrfItems: {},
-  inventoryList: [],         // for search (from inventory table)
+  inventoryList: [],         // search catalog (from erp_items)
   inventoryLoaded: false,
   erpItemsMap: {},           // item_code → { buffer_stock, on_hand, ... }
   isSubmitting: false
@@ -24,15 +25,15 @@ var _prf = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Create PRF v2.1] Initializing...');
+  console.log('[Create PRF v2.2] Initializing...');
 
   prfCheckHealth();
   initUserInfo();
   generatePrfNo();
   loadReorderList();
   loadPendingPrfItems();
-  preloadInventoryForSearch();
-  preloadErpItemsMap();
+  preloadInventoryForSearch();  // ← loads from erp_items (complete)
+  // Note: preloadErpItemsMap is a no-op — data built during preloadInventoryForSearch
 
   // Category change handler
   var catEl = document.getElementById('prfCategory');
@@ -162,32 +163,32 @@ async function loadPendingPrfItems() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+// LOAD SEARCH CATALOG (from erp_items — complete master)
+// ═══════════════════════════════════════════════════════════
 async function preloadInventoryForSearch() {
   if (_prf.inventoryLoaded) return;
+
   try {
-    var rows = await erpFetch('inventory',
-      'select=item_code,description,unit,item_class&order=item_code.asc&limit=10000');
-    _prf.inventoryList = (rows || []).map(function(r) {
+    // ✅ SINGLE FETCH: Complete master from erp_items
+    var rows = await erpFetch('erp_items',
+      'select=item_code,description,base_unit,item_class,category,location,on_hand,buffer_stock,ave_monthly_consumption' +
+      '&is_active=eq.true&order=item_code.asc&limit=10000');
+
+    var items = (rows || []).map(function(r) {
       return {
         code: r.item_code,
         description: r.description || '',
-        unit: r.unit || 'PCS',
-        itemClass: r.item_class || ''
+        unit: r.base_unit || 'PCS',
+        itemClass: r.item_class || '',
+        category: r.category || '',
+        location: r.location || ''
       };
     });
-    _prf.inventoryLoaded = true;
-    console.log('[PRF] Inventory loaded:', _prf.inventoryList.length);
-  } catch(err) {
-    console.warn('[PRF] Inventory load failed:', err.message);
-  }
-}
 
-async function preloadErpItemsMap() {
-  try {
-    // Fetch key fields para sa suggested qty calculation
-    var rows = await erpFetch('erp_items',
-      'select=item_code,buffer_stock,on_hand,ave_monthly_consumption,base_unit,location,category&limit=10000');
+    _prf.inventoryList = items;
 
+    // ✅ Also build erpItemsMap from SAME data (no duplicate fetch)
     _prf.erpItemsMap = {};
     (rows || []).forEach(function(r) {
       _prf.erpItemsMap[String(r.item_code || '').trim()] = {
@@ -199,10 +200,41 @@ async function preloadErpItemsMap() {
         category: r.category || ''
       };
     });
-    console.log('[PRF] ERP items map loaded:', Object.keys(_prf.erpItemsMap).length);
+
+    _prf.inventoryLoaded = true;
+    console.log('[PRF] ✅ Search catalog loaded from erp_items:', items.length, 'items');
+    console.log('[PRF] ✅ ERP items map built:', Object.keys(_prf.erpItemsMap).length, 'entries');
+
   } catch(err) {
-    console.warn('[PRF] ERP items preload failed:', err.message);
-    _prf.erpItemsMap = {};
+    console.warn('[PRF] erp_items load failed, trying fallback inventory:', err.message);
+
+    // Fallback: legacy inventory table
+    try {
+      var rows2 = await erpFetch('inventory',
+        'select=item_code,description,unit,item_class&order=item_code.asc&limit=10000');
+      _prf.inventoryList = (rows2 || []).map(function(r) {
+        return {
+          code: r.item_code,
+          description: r.description || '',
+          unit: r.unit || 'PCS',
+          itemClass: r.item_class || '',
+          category: '',
+          location: ''
+        };
+      });
+      _prf.inventoryLoaded = true;
+      console.log('[PRF] ⚠️ Fallback: loaded from inventory:', _prf.inventoryList.length);
+    } catch(err2) {
+      console.error('[PRF] ❌ Both loads failed:', err2.message);
+      _prf.inventoryList = [];
+    }
+  }
+}
+
+// No-op — done in preloadInventoryForSearch
+async function preloadErpItemsMap() {
+  if (!_prf.inventoryLoaded) {
+    await preloadInventoryForSearch();
   }
 }
 
@@ -441,7 +473,6 @@ function addManualItem() {
   renderManualItems();
   updateSubmitButton();
 
-  // Focus new input
   setTimeout(function() {
     var inputs = document.querySelectorAll('.manual-item-search-input');
     if (inputs.length > 0) inputs[inputs.length - 1].focus();
@@ -471,7 +502,6 @@ function renderManualItems() {
 
     html += '<div class="manual-item-row" data-idx="' + idx + '">' +
       '<div class="row g-2 align-items-end">' +
-        // Item Code (with search)
         '<div class="col-md-4">' +
           '<label class="form-label small fw-bold mb-1">Item Code <span class="text-danger">*</span></label>' +
           '<div class="item-search-wrapper">' +
@@ -485,7 +515,6 @@ function renderManualItems() {
             '<div class="item-search-dropdown d-none" id="manualDropdown' + idx + '"></div>' +
           '</div>' +
         '</div>' +
-        // Description
         '<div class="col-md-3">' +
           '<label class="form-label small fw-bold mb-1">Description</label>' +
           '<input type="text" class="form-control form-control-sm" ' +
@@ -493,7 +522,6 @@ function renderManualItems() {
             'value="' + erpEsc(it.description) + '" ' +
             'readonly>' +
         '</div>' +
-        // Qty
         '<div class="col-md-1">' +
           '<label class="form-label small fw-bold mb-1">Qty <span class="text-danger">*</span></label>' +
           '<input type="number" class="form-control form-control-sm text-center" ' +
@@ -503,14 +531,12 @@ function renderManualItems() {
             'oninput="onManualQtyChange(' + idx + ', this.value)">' +
           (suggestedQty > 0 ? '<div class="suggested-qty-hint">Suggested: <strong>' + suggestedQty + '</strong></div>' : '') +
         '</div>' +
-        // Unit
         '<div class="col-md-1">' +
           '<label class="form-label small fw-bold mb-1">Unit</label>' +
           '<select class="form-select form-select-sm" id="manualUnit' + idx + '" onchange="onManualUnitChange(' + idx + ', this.value)">' +
             buildUnitOptions(it.unit || 'PIECE') +
           '</select>' +
         '</div>' +
-        // Remarks
         '<div class="col-md-2">' +
           '<label class="form-label small fw-bold mb-1">Remarks</label>' +
           '<input type="text" class="form-control form-control-sm" ' +
@@ -519,7 +545,6 @@ function renderManualItems() {
             'placeholder="Optional" ' +
             'oninput="onManualRemarksChange(' + idx + ', this.value)">' +
         '</div>' +
-        // Remove button
         '<div class="col-md-1">' +
           '<button type="button" class="btn btn-sm btn-outline-danger w-100" ' +
             'onclick="removeManualItem(' + idx + ')" title="Remove">' +
@@ -537,7 +562,7 @@ function renderManualItems() {
 window.renderManualItems = renderManualItems;
 
 // ═══════════════════════════════════════════════════════════
-// MANUAL ITEM SEARCH (with FIXED dropdown positioning)
+// MANUAL ITEM SEARCH (with fixed dropdown positioning)
 // ═══════════════════════════════════════════════════════════
 function onManualItemSearch(idx, value) {
   var input = document.querySelector('.manual-item-search-input[data-idx="' + idx + '"]');
@@ -552,7 +577,7 @@ function onManualItemSearch(idx, value) {
   }
 
   if (!_prf.inventoryLoaded) {
-    dropdown.innerHTML = '<div class="item-search-item muted">Loading inventory...</div>';
+    dropdown.innerHTML = '<div class="item-search-item muted">Loading catalog...</div>';
     _positionDropdown(dropdown, input);
     dropdown.classList.remove('d-none');
     return;
@@ -597,7 +622,7 @@ function onManualItemSearch(idx, value) {
 window.onManualItemSearch = onManualItemSearch;
 
 // ═══════════════════════════════════════════════════════════
-// Position dropdown dynamically (para hindi ma-clip)
+// Position dropdown dynamically
 // ═══════════════════════════════════════════════════════════
 function _positionDropdown(dropdown, input) {
   var rect = input.getBoundingClientRect();
@@ -605,7 +630,6 @@ function _positionDropdown(dropdown, input) {
   var spaceAbove = rect.top;
   var dropdownMinHeight = 320;
 
-  // Set width — minimum 420px, maximum viewport width
   var width = Math.max(rect.width, 420);
   var maxWidth = window.innerWidth - rect.left - 20;
   if (width > maxWidth) width = maxWidth;
@@ -615,14 +639,11 @@ function _positionDropdown(dropdown, input) {
   dropdown.style.width = width + 'px';
   dropdown.style.zIndex = '99999';
 
-  // Position above or below?
   if (spaceBelow < dropdownMinHeight && spaceAbove > spaceBelow) {
-    // Show ABOVE
     dropdown.style.top = 'auto';
     dropdown.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
     dropdown.style.maxHeight = Math.min(spaceAbove - 20, 320) + 'px';
   } else {
-    // Show BELOW
     dropdown.style.bottom = 'auto';
     dropdown.style.top = (rect.bottom + 4) + 'px';
     dropdown.style.maxHeight = Math.min(spaceBelow - 20, 320) + 'px';
@@ -637,7 +658,6 @@ function selectManualItem(idx, code, description, unit) {
   item.description = description;
   item.unit = unit || 'PIECE';
 
-  // Auto-fill suggested qty kung walang laman
   if (!item.qty || item.qty === 0) {
     item.qty = getSuggestedQty(code) || 1;
   }
@@ -698,7 +718,6 @@ function updateSubmitButton() {
   var reorderCount = 0;
   var manualCount = 0;
 
-  // Reorder items count
   if (_prf.mode === 'reorder') {
     recomputeSelected();
     reorderCount = _prf.selectedItems.length;
@@ -707,14 +726,12 @@ function updateSubmitButton() {
     reorderCount = _prf.selectedItems.length;
   }
 
-  // Manual items count
   manualCount = _prf.manualItems.filter(function(it) {
     return it.inventoryId && it.inventoryId.trim() && it.qty > 0;
   }).length;
 
   var totalValid = reorderCount + manualCount;
 
-  // Category check
   var category = document.getElementById('prfCategory').value;
   if (!category) {
     btn.disabled = true;
@@ -762,7 +779,6 @@ async function submitPrf() {
   if (!prfNo) { erpShowToast('PRF No. required', 'warning'); return; }
   if (!category) { erpShowToast('Category required', 'warning'); return; }
 
-  // ─── Combine items from both modes ───
   var allItems = [];
 
   // 1. Reorder items
@@ -809,7 +825,6 @@ async function submitPrf() {
     return;
   }
 
-  // Batching
   var batches = [];
   if (allItems.length > MAX_ITEMS_PER_PRF) {
     for (var i = 0; i < allItems.length; i += MAX_ITEMS_PER_PRF) {
@@ -819,7 +834,6 @@ async function submitPrf() {
     batches.push(allItems);
   }
 
-  // Auto-unique base PRF No.
   var isAvailable = await checkPrfNoAvailable(prfNo);
   if (!isAvailable) {
     var originalPrfNo = prfNo;
@@ -828,7 +842,6 @@ async function submitPrf() {
     erpShowToast('PRF No. adjusted to ' + prfNo, 'info');
   }
 
-  // Auto-unique batch PRF Nos
   for (var bIdx = 0; bIdx < batches.length; bIdx++) {
     var batchBase = prfNo + (bIdx === 0 ? '' : '.' + (bIdx + 1));
     var batchAvailable = await checkPrfNoAvailable(batchBase);
@@ -845,7 +858,6 @@ async function submitPrf() {
     }
   }
 
-  // Confirm
   var confirmMsg = 'Create PRF with ' + allItems.length + ' item(s)?\n\n';
   if (batches.length > 1) {
     confirmMsg += 'Will be split into ' + batches.length + ' batches:\n';
@@ -1021,7 +1033,6 @@ function erpShowToast(msg, type) {
 // GLOBAL EVENT HANDLERS
 // ═══════════════════════════════════════════════════════════
 
-// Close dropdown on outside click
 document.addEventListener('click', function(e) {
   if (!e.target.closest('.item-search-wrapper') && !e.target.closest('.item-search-dropdown')) {
     document.querySelectorAll('.item-search-dropdown').forEach(function(el) {
@@ -1030,7 +1041,6 @@ document.addEventListener('click', function(e) {
   }
 });
 
-// Reposition dropdowns on scroll
 window.addEventListener('scroll', function() {
   document.querySelectorAll('.item-search-dropdown:not(.d-none)').forEach(function(el) {
     var idx = el.id.replace('manualDropdown', '');
@@ -1039,11 +1049,10 @@ window.addEventListener('scroll', function() {
   });
 }, { passive: true });
 
-// Hide dropdowns on resize
 window.addEventListener('resize', function() {
   document.querySelectorAll('.item-search-dropdown:not(.d-none)').forEach(function(el) {
     el.classList.add('d-none');
   });
 });
 
-console.log('✅ new-prf.js v2.1 loaded (two modes + auto-suggest + fixed dropdown)');
+console.log('✅ new-prf.js v2.2 loaded (erp_items search + fixed dropdown)');
