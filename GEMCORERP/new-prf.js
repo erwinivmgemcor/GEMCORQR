@@ -1,7 +1,8 @@
 // ============================================================
-// GEMCOR ERP — Create PRF (v2)
+// GEMCOR ERP — Create PRF (v2.1)
 // Two Modes: "From Reorder List" + "Manual Entry"
 // Auto-suggest item + suggested qty
+// ✅ FIXED: Dropdown positioning (fixed, wide, auto-flip)
 // ============================================================
 
 var MAX_ITEMS_PER_PRF = 30;
@@ -23,7 +24,7 @@ var _prf = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Create PRF v2] Initializing...');
+  console.log('[Create PRF v2.1] Initializing...');
 
   prfCheckHealth();
   initUserInfo();
@@ -374,6 +375,8 @@ function toggleItemSelect(idx, checked) {
   renderReorderItems();
 }
 
+window.toggleItemSelect = toggleItemSelect;
+
 function toggleSelectAll(checked) {
   _prf.items.forEach(function(it) {
     it._selected = checked;
@@ -387,6 +390,8 @@ function toggleSelectAll(checked) {
   renderReorderItems();
 }
 
+window.toggleSelectAll = toggleSelectAll;
+
 function updateQty(idx, value) {
   var item = _prf.items[idx];
   if (!item) return;
@@ -398,17 +403,23 @@ function updateQty(idx, value) {
   updateSubmitButton();
 }
 
+window.updateQty = updateQty;
+
 function updateUnit(idx, value) {
   var item = _prf.items[idx];
   if (!item) return;
   item.base_unit = value;
 }
 
+window.updateUnit = updateUnit;
+
 function updateRemarks(idx, value) {
   var item = _prf.items[idx];
   if (!item) return;
   item._remarks = String(value || '').trim();
 }
+
+window.updateRemarks = updateRemarks;
 
 function recomputeSelected() {
   _prf.selectedItems = _prf.items.filter(function(it) {
@@ -447,7 +458,7 @@ function renderManualItems() {
   if (_prf.manualItems.length === 0) {
     if (emptyState) emptyState.style.display = 'block';
     container.innerHTML = '';
-    container.appendChild(emptyState);
+    if (emptyState) container.appendChild(emptyState);
     updateManualCount();
     return;
   }
@@ -525,9 +536,13 @@ function renderManualItems() {
 
 window.renderManualItems = renderManualItems;
 
+// ═══════════════════════════════════════════════════════════
+// MANUAL ITEM SEARCH (with FIXED dropdown positioning)
+// ═══════════════════════════════════════════════════════════
 function onManualItemSearch(idx, value) {
+  var input = document.querySelector('.manual-item-search-input[data-idx="' + idx + '"]');
   var dropdown = document.getElementById('manualDropdown' + idx);
-  if (!dropdown) return;
+  if (!dropdown || !input) return;
 
   var term = String(value || '').toLowerCase().trim();
 
@@ -537,7 +552,8 @@ function onManualItemSearch(idx, value) {
   }
 
   if (!_prf.inventoryLoaded) {
-    dropdown.innerHTML = '<div class="item-search-item text-muted">Loading inventory...</div>';
+    dropdown.innerHTML = '<div class="item-search-item muted">Loading inventory...</div>';
+    _positionDropdown(dropdown, input);
     dropdown.classList.remove('d-none');
     return;
   }
@@ -546,10 +562,11 @@ function onManualItemSearch(idx, value) {
     var code = String(it.code || '').toLowerCase();
     var desc = String(it.description || '').toLowerCase();
     return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
-  }).slice(0, 20);
+  }).slice(0, 30);
 
   if (matches.length === 0) {
-    dropdown.innerHTML = '<div class="item-search-item text-muted">No matches found. You can type manually.</div>';
+    dropdown.innerHTML = '<div class="item-search-item muted">No matches found. You can type manually.</div>';
+    _positionDropdown(dropdown, input);
     dropdown.classList.remove('d-none');
     return;
   }
@@ -562,20 +579,55 @@ function onManualItemSearch(idx, value) {
     html += '<div class="item-search-item" onclick="selectManualItem(' + idx + ', \'' +
       erpJsEsc(it.code) + '\', \'' + erpJsEsc(it.description) + '\', \'' + erpJsEsc(it.unit) + '\')">' +
       '<div class="item-code">' + erpEsc(it.code) + '</div>' +
-      '<div class="item-desc">' + erpEsc(it.description.substring(0, 80)) + '</div>' +
+      '<div class="item-desc">' + erpEsc(it.description.substring(0, 100)) + '</div>' +
       '<div class="item-meta">' +
         '<span class="badge bg-light text-dark">' + erpEsc(it.unit || 'PCS') + '</span>' +
-        (erpItem.on_hand !== undefined ? '<span>On-Hand: ' + erpNum(erpItem.on_hand) + '</span>' : '') +
+        (erpItem.on_hand !== undefined ? '<span>On-Hand: <strong>' + erpNum(erpItem.on_hand) + '</strong></span>' : '') +
+        (erpItem.buffer_stock !== undefined ? '<span>Buffer: ' + erpNum(erpItem.buffer_stock) + '</span>' : '') +
         (suggested > 0 ? '<span class="text-warning">Suggested: <strong>' + suggested + '</strong></span>' : '') +
       '</div>' +
     '</div>';
   });
 
   dropdown.innerHTML = html;
+  _positionDropdown(dropdown, input);
   dropdown.classList.remove('d-none');
 }
 
 window.onManualItemSearch = onManualItemSearch;
+
+// ═══════════════════════════════════════════════════════════
+// Position dropdown dynamically (para hindi ma-clip)
+// ═══════════════════════════════════════════════════════════
+function _positionDropdown(dropdown, input) {
+  var rect = input.getBoundingClientRect();
+  var spaceBelow = window.innerHeight - rect.bottom;
+  var spaceAbove = rect.top;
+  var dropdownMinHeight = 320;
+
+  // Set width — minimum 420px, maximum viewport width
+  var width = Math.max(rect.width, 420);
+  var maxWidth = window.innerWidth - rect.left - 20;
+  if (width > maxWidth) width = maxWidth;
+
+  dropdown.style.position = 'fixed';
+  dropdown.style.left = rect.left + 'px';
+  dropdown.style.width = width + 'px';
+  dropdown.style.zIndex = '99999';
+
+  // Position above or below?
+  if (spaceBelow < dropdownMinHeight && spaceAbove > spaceBelow) {
+    // Show ABOVE
+    dropdown.style.top = 'auto';
+    dropdown.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceAbove - 20, 320) + 'px';
+  } else {
+    // Show BELOW
+    dropdown.style.bottom = 'auto';
+    dropdown.style.top = (rect.bottom + 4) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceBelow - 20, 320) + 'px';
+  }
+}
 
 function selectManualItem(idx, code, description, unit) {
   var item = _prf.manualItems[idx];
@@ -651,7 +703,6 @@ function updateSubmitButton() {
     recomputeSelected();
     reorderCount = _prf.selectedItems.length;
   } else {
-    // Count reorder as if switching back (preserved)
     recomputeSelected();
     reorderCount = _prf.selectedItems.length;
   }
@@ -966,13 +1017,33 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
 }
 
+// ═══════════════════════════════════════════════════════════
+// GLOBAL EVENT HANDLERS
+// ═══════════════════════════════════════════════════════════
+
 // Close dropdown on outside click
 document.addEventListener('click', function(e) {
-  if (!e.target.closest('.item-search-wrapper')) {
+  if (!e.target.closest('.item-search-wrapper') && !e.target.closest('.item-search-dropdown')) {
     document.querySelectorAll('.item-search-dropdown').forEach(function(el) {
       el.classList.add('d-none');
     });
   }
 });
 
-console.log('✅ new-prf.js v2 loaded (two modes + auto-suggest)');
+// Reposition dropdowns on scroll
+window.addEventListener('scroll', function() {
+  document.querySelectorAll('.item-search-dropdown:not(.d-none)').forEach(function(el) {
+    var idx = el.id.replace('manualDropdown', '');
+    var input = document.querySelector('.manual-item-search-input[data-idx="' + idx + '"]');
+    if (input) _positionDropdown(el, input);
+  });
+}, { passive: true });
+
+// Hide dropdowns on resize
+window.addEventListener('resize', function() {
+  document.querySelectorAll('.item-search-dropdown:not(.d-none)').forEach(function(el) {
+    el.classList.add('d-none');
+  });
+});
+
+console.log('✅ new-prf.js v2.1 loaded (two modes + auto-suggest + fixed dropdown)');
