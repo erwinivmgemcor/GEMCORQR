@@ -1,17 +1,21 @@
 // ============================================================
-// GEMCOR ERP — Create PRF (v3)
-// Internal: suggested qty · Print: blank qty
-// Auto-split batches of 30 · Multi-PRF awareness
-// Auto-unique PRF No. (avoids duplicates)
+// GEMCOR ERP — Create PRF (v2)
+// Two Modes: "From Reorder List" + "Manual Entry"
+// Auto-suggest item + suggested qty
 // ============================================================
 
 var MAX_ITEMS_PER_PRF = 30;
 
 var _prf = {
-  items: [],
-  selectedItems: [],
+  mode: 'reorder',           // 'reorder' | 'manual'
+  items: [],                 // reorder items (from reorder list)
+  selectedItems: [],         // selected reorder items
+  manualItems: [],           // manually added items
   reorderList: [],
   pendingPrfItems: {},
+  inventoryList: [],         // for search (from inventory table)
+  inventoryLoaded: false,
+  erpItemsMap: {},           // item_code → { buffer_stock, on_hand, ... }
   isSubmitting: false
 };
 
@@ -19,13 +23,21 @@ var _prf = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Create PRF v3] Initializing...');
+  console.log('[Create PRF v2] Initializing...');
 
   prfCheckHealth();
   initUserInfo();
   generatePrfNo();
   loadReorderList();
   loadPendingPrfItems();
+  preloadInventoryForSearch();
+  preloadErpItemsMap();
+
+  // Category change handler
+  var catEl = document.getElementById('prfCategory');
+  if (catEl) {
+    catEl.addEventListener('change', onCategoryChange);
+  }
 });
 
 async function prfCheckHealth() {
@@ -60,29 +72,58 @@ function generatePrfNo() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// UNIQUE PRF NO. CHECK
+// MODE SWITCHING
+// ═══════════════════════════════════════════════════════════
+function prfSwitchMode(mode) {
+  _prf.mode = mode;
+
+  document.querySelectorAll('.prf-mode-tab').forEach(function(el) {
+    el.classList.toggle('active', el.dataset.mode === mode);
+  });
+
+  var reorderContent = document.getElementById('modeReorder');
+  var manualContent = document.getElementById('modeManual');
+
+  if (reorderContent) reorderContent.classList.toggle('active', mode === 'reorder');
+  if (manualContent) manualContent.classList.toggle('active', mode === 'manual');
+
+  // Update category hint
+  var hint = document.getElementById('categoryHint');
+  if (hint) {
+    hint.textContent = mode === 'reorder'
+      ? 'Required — pinipili kung anong category ng PRF.'
+      : 'Required — parehong category ang gagamitin sa submission.';
+  }
+
+  updateSubmitButton();
+}
+
+window.prfSwitchMode = prfSwitchMode;
+
+// ═══════════════════════════════════════════════════════════
+// UNIQUE PRF NO CHECK
 // ═══════════════════════════════════════════════════════════
 async function checkPrfNoAvailable(prfNo) {
   try {
-    var res = await erpFetch('prf_documents', 
+    var res = await erpFetch('prf_documents',
       'prf_no=eq.' + encodeURIComponent(prfNo) + '&select=id&limit=1');
     return (!res || res.length === 0);
   } catch(e) {
     console.warn('[checkPrfNoAvailable]', e.message);
-    return true;  // Assume available on error
+    return true;
   }
 }
 
 async function generateUniquePrfNo(basePrfNo) {
   var candidate = basePrfNo;
   var suffix = 1;
-  
+
   while (!(await checkPrfNoAvailable(candidate))) {
     suffix++;
     candidate = basePrfNo + '-' + suffix;
     if (suffix > 100) throw new Error('Cannot generate unique PRF No.');
   }
-  
+
   return candidate;
 }
 
@@ -110,10 +151,8 @@ async function loadPendingPrfItems() {
       if (!_prf.pendingPrfItems[code]) _prf.pendingPrfItems[code] = [];
       _prf.pendingPrfItems[code].push({
         prf_no: r.prf_no,
-        base_prf_no: r.base_prf_no,
         status: r.status,
-        qty: Number(r.qty_for_order || 0),
-        created_at: r.created_at
+        qty: Number(r.qty_for_order || 0)
       });
     });
     console.log('[PRF] Pending items:', Object.keys(_prf.pendingPrfItems).length);
@@ -122,16 +161,73 @@ async function loadPendingPrfItems() {
   }
 }
 
+async function preloadInventoryForSearch() {
+  if (_prf.inventoryLoaded) return;
+  try {
+    var rows = await erpFetch('inventory',
+      'select=item_code,description,unit,item_class&order=item_code.asc&limit=10000');
+    _prf.inventoryList = (rows || []).map(function(r) {
+      return {
+        code: r.item_code,
+        description: r.description || '',
+        unit: r.unit || 'PCS',
+        itemClass: r.item_class || ''
+      };
+    });
+    _prf.inventoryLoaded = true;
+    console.log('[PRF] Inventory loaded:', _prf.inventoryList.length);
+  } catch(err) {
+    console.warn('[PRF] Inventory load failed:', err.message);
+  }
+}
+
+async function preloadErpItemsMap() {
+  try {
+    // Fetch key fields para sa suggested qty calculation
+    var rows = await erpFetch('erp_items',
+      'select=item_code,buffer_stock,on_hand,ave_monthly_consumption,base_unit,location,category&limit=10000');
+
+    _prf.erpItemsMap = {};
+    (rows || []).forEach(function(r) {
+      _prf.erpItemsMap[String(r.item_code || '').trim()] = {
+        buffer_stock: Number(r.buffer_stock || 0),
+        on_hand: Number(r.on_hand || 0),
+        ave_monthly_consumption: Number(r.ave_monthly_consumption || 0),
+        base_unit: r.base_unit || 'PCS',
+        location: r.location || '',
+        category: r.category || ''
+      };
+    });
+    console.log('[PRF] ERP items map loaded:', Object.keys(_prf.erpItemsMap).length);
+  } catch(err) {
+    console.warn('[PRF] ERP items preload failed:', err.message);
+    _prf.erpItemsMap = {};
+  }
+}
+
+function getSuggestedQty(itemCode) {
+  var item = _prf.erpItemsMap[String(itemCode || '').trim()];
+  if (!item) return 0;
+  var diff = item.buffer_stock - item.on_hand;
+  if (diff > 0) return Math.ceil(diff);
+  return 0;
+}
+
 // ═══════════════════════════════════════════════════════════
-// CATEGORY CHANGE
+// CATEGORY CHANGE (for Reorder mode)
 // ═══════════════════════════════════════════════════════════
 function onCategoryChange() {
+  if (_prf.mode !== 'reorder') return;
+
   var category = document.getElementById('prfCategory').value;
+  var container = document.getElementById('reorderItemsContainer');
+
   if (!category) {
-    document.getElementById('itemsContainer').innerHTML = 
-      '<div class="text-center text-muted py-5">' +
+    container.innerHTML = '<div class="text-center text-muted py-4">' +
       '<i class="bi bi-inbox fs-1 d-block mb-2"></i>' +
       '<div>Select a category above to load items.</div></div>';
+    _prf.items = [];
+    updateSubmitButton();
     return;
   }
 
@@ -140,22 +236,22 @@ function onCategoryChange() {
   });
 
   console.log('[PRF] Category:', category, 'Items:', _prf.items.length);
-  renderItems();
+  renderReorderItems();
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER ITEMS
+// RENDER REORDER ITEMS (existing logic)
 // ═══════════════════════════════════════════════════════════
-function renderItems() {
-  var container = document.getElementById('itemsContainer');
+function renderReorderItems() {
+  var container = document.getElementById('reorderItemsContainer');
   if (!container) return;
 
   if (_prf.items.length === 0) {
-    container.innerHTML = 
+    container.innerHTML =
       '<div class="alert alert-info mb-0">' +
       '<i class="bi bi-info-circle me-2"></i>' +
-      'No items found for this category.</div>';
-    document.getElementById('itemsCountLabel').textContent = '(0 items)';
+      'No items found for this category in the reorder list. ' +
+      'You can switch to <strong>Manual Entry</strong> to add items manually.</div>';
     updateSubmitButton();
     return;
   }
@@ -183,12 +279,11 @@ function renderItems() {
     var qtyOrder = it._qtyOrder !== undefined ? it._qtyOrder : 0;
     var remarks = it._remarks || '';
 
-    // Pending PRF warning
     var pendingInfo = _prf.pendingPrfItems[it.item_code] || [];
     var pendingWarning = '';
     if (pendingInfo.length > 0) {
       var pendingText = pendingInfo.map(function(p) {
-        return p.prf_no + ' (' + p.status + ' · qty ' + p.qty + ')';
+        return p.prf_no + ' (' + p.status + ')';
       }).join(', ');
       pendingWarning = ' <span class="badge bg-warning text-dark" title="Already in: ' + 
         erpEsc(pendingText) + '">⚠ PENDING</span>';
@@ -213,11 +308,11 @@ function renderItems() {
         'data-idx="' + idx + '" value="' + qtyOrder + '" min="0" step="1" ' +
         'placeholder="' + Math.ceil(suggested) + '" onchange="updateQty(' + idx + ', this.value)">' +
       '</td>' +
-     '<td class="text-center">' +
-  '<select class="form-select form-select-sm unit-select" data-idx="' + idx + '" onchange="updateUnit(' + idx + ', this.value)" style="font-size:0.75rem;padding:2px 4px;">' +
-    buildUnitOptions(it.base_unit || 'PIECE') +
-  '</select>' +
-'</td>' +
+      '<td class="text-center">' +
+        '<select class="form-select form-select-sm unit-select" data-idx="' + idx + '" onchange="updateUnit(' + idx + ', this.value)" style="font-size:0.75rem;padding:2px 4px;">' +
+          buildUnitOptions(it.base_unit || 'PIECE') +
+        '</select>' +
+      '</td>' +
       '<td>' +
         '<input type="text" class="form-control form-control-sm remarks-input" ' +
         'data-idx="' + idx + '" value="' + erpEsc(remarks) + '" placeholder="Optional" ' +
@@ -243,15 +338,15 @@ function renderItems() {
   html += '<div class="mt-3 d-flex justify-content-between align-items-center flex-wrap gap-2">';
   html += '<div class="small text-muted">' +
     '<i class="bi bi-info-circle me-1"></i>' +
-    'Suggested qty = (Buffer − On-Hand). Not printed.' +
+    'Suggested qty = (Buffer − On-Hand)' +
     batchingInfo + '</div>';
-  html += '<div><strong>Selected:</strong> ' + _prf.selectedItems.length + 
+  html += '<div><strong>Selected:</strong> ' + _prf.selectedItems.length +
     ' items · <strong>Total Qty:</strong> ' + erpNum(totalQty) + '</div>';
   html += '</div>';
 
   container.innerHTML = html;
 
-  document.getElementById('itemsCountLabel').textContent = '(' + _prf.items.length + ' items)';
+  updateItemsCount();
   updateSubmitButton();
 }
 
@@ -263,36 +358,8 @@ function computeSuggested(it) {
   return Number(it.suggested_order_qty || 0);
 }
 
-function erpNum(n) {
-  if (n === null || n === undefined || isNaN(n)) return '0';
-  return Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
-}
 // ═══════════════════════════════════════════════════════════
-// UNIT EDITABLE
-// ═══════════════════════════════════════════════════════════
-var UNIT_OPTIONS_LIST = [
-  'PIECE', 'PCS', 'PAIR', 'SET', 'BOX', 'ROLL', 'SHEET',
-  'KG', 'LITERS', 'GAL', 'METER', 'MM', 'LENGTH',
-  'ASSEMB', 'CAN', 'REAM', 'TANK', 'UNIT'
-];
-
-function buildUnitOptions(selected) {
-  var html = '';
-  UNIT_OPTIONS_LIST.forEach(function(u) {
-    var sel = (u === selected) ? ' selected' : '';
-    html += '<option value="' + u + '"' + sel + '>' + u + '</option>';
-  });
-  return html;
-}
-
-function updateUnit(idx, value) {
-  var item = _prf.items[idx];
-  if (!item) return;
-  item.base_unit = value;
-  console.log('[PRF] Unit updated:', item.item_code, '→', value);
-}
-// ═══════════════════════════════════════════════════════════
-// SELECTION
+// SELECTION (Reorder mode)
 // ═══════════════════════════════════════════════════════════
 function toggleItemSelect(idx, checked) {
   var item = _prf.items[idx];
@@ -304,7 +371,7 @@ function toggleItemSelect(idx, checked) {
     item._qtyOrder = 0;
   }
   recomputeSelected();
-  renderItems();
+  renderReorderItems();
 }
 
 function toggleSelectAll(checked) {
@@ -317,7 +384,7 @@ function toggleSelectAll(checked) {
     }
   });
   recomputeSelected();
-  renderItems();
+  renderReorderItems();
 }
 
 function updateQty(idx, value) {
@@ -329,6 +396,12 @@ function updateQty(idx, value) {
   if (qty > 0) item._selected = true;
   recomputeSelected();
   updateSubmitButton();
+}
+
+function updateUnit(idx, value) {
+  var item = _prf.items[idx];
+  if (!item) return;
+  item.base_unit = value;
 }
 
 function updateRemarks(idx, value) {
@@ -343,31 +416,286 @@ function recomputeSelected() {
   });
 }
 
-function updateSubmitButton() {
-  var btn = document.getElementById('btnSubmitPrf');
-  var summary = document.getElementById('submitSummary');
+// ═══════════════════════════════════════════════════════════
+// MANUAL ITEMS
+// ═══════════════════════════════════════════════════════════
+function addManualItem() {
+  _prf.manualItems.push({
+    inventoryId: '',
+    description: '',
+    qty: 0,
+    unit: 'PIECE',
+    remarks: ''
+  });
+  renderManualItems();
+  updateSubmitButton();
 
-  recomputeSelected();
+  // Focus new input
+  setTimeout(function() {
+    var inputs = document.querySelectorAll('.manual-item-search-input');
+    if (inputs.length > 0) inputs[inputs.length - 1].focus();
+  }, 100);
+}
 
-  var count = _prf.selectedItems.length;
-  var totalQty = _prf.selectedItems.reduce(function(s, it) { return s + (it._qtyOrder || 0); }, 0);
+window.addManualItem = addManualItem;
 
-  if (count === 0) {
-    btn.disabled = true;
-    summary.textContent = 'Select items and enter quantities.';
-  } else {
-    btn.disabled = false;
-    var batchInfo = '';
-    if (count > MAX_ITEMS_PER_PRF) {
-      var batches = Math.ceil(count / MAX_ITEMS_PER_PRF);
-      batchInfo = ' (will create ' + batches + ' PRF batches)';
-    }
-    summary.textContent = count + ' item(s) selected · Total qty: ' + erpNum(totalQty) + batchInfo;
+function renderManualItems() {
+  var container = document.getElementById('manualItemsContainer');
+  var emptyState = document.getElementById('manualEmptyState');
+  if (!container) return;
+
+  if (_prf.manualItems.length === 0) {
+    if (emptyState) emptyState.style.display = 'block';
+    container.innerHTML = '';
+    container.appendChild(emptyState);
+    updateManualCount();
+    return;
   }
+
+  if (emptyState) emptyState.style.display = 'none';
+
+  var html = '';
+  _prf.manualItems.forEach(function(it, idx) {
+    var suggestedQty = getSuggestedQty(it.inventoryId);
+
+    html += '<div class="manual-item-row" data-idx="' + idx + '">' +
+      '<div class="row g-2 align-items-end">' +
+        // Item Code (with search)
+        '<div class="col-md-4">' +
+          '<label class="form-label small fw-bold mb-1">Item Code <span class="text-danger">*</span></label>' +
+          '<div class="item-search-wrapper">' +
+            '<input type="text" class="form-control form-control-sm manual-item-search-input" ' +
+              'data-idx="' + idx + '" ' +
+              'value="' + erpEsc(it.inventoryId) + '" ' +
+              'placeholder="Search item code or description..." ' +
+              'autocomplete="off" ' +
+              'oninput="onManualItemSearch(' + idx + ', this.value)" ' +
+              'onfocus="onManualItemSearch(' + idx + ', this.value)">' +
+            '<div class="item-search-dropdown d-none" id="manualDropdown' + idx + '"></div>' +
+          '</div>' +
+        '</div>' +
+        // Description
+        '<div class="col-md-3">' +
+          '<label class="form-label small fw-bold mb-1">Description</label>' +
+          '<input type="text" class="form-control form-control-sm" ' +
+            'id="manualDesc' + idx + '" ' +
+            'value="' + erpEsc(it.description) + '" ' +
+            'readonly>' +
+        '</div>' +
+        // Qty
+        '<div class="col-md-1">' +
+          '<label class="form-label small fw-bold mb-1">Qty <span class="text-danger">*</span></label>' +
+          '<input type="number" class="form-control form-control-sm text-center" ' +
+            'id="manualQty' + idx + '" ' +
+            'value="' + (it.qty || '') + '" ' +
+            'min="1" step="1" ' +
+            'oninput="onManualQtyChange(' + idx + ', this.value)">' +
+          (suggestedQty > 0 ? '<div class="suggested-qty-hint">Suggested: <strong>' + suggestedQty + '</strong></div>' : '') +
+        '</div>' +
+        // Unit
+        '<div class="col-md-1">' +
+          '<label class="form-label small fw-bold mb-1">Unit</label>' +
+          '<select class="form-select form-select-sm" id="manualUnit' + idx + '" onchange="onManualUnitChange(' + idx + ', this.value)">' +
+            buildUnitOptions(it.unit || 'PIECE') +
+          '</select>' +
+        '</div>' +
+        // Remarks
+        '<div class="col-md-2">' +
+          '<label class="form-label small fw-bold mb-1">Remarks</label>' +
+          '<input type="text" class="form-control form-control-sm" ' +
+            'id="manualRemarks' + idx + '" ' +
+            'value="' + erpEsc(it.remarks || '') + '" ' +
+            'placeholder="Optional" ' +
+            'oninput="onManualRemarksChange(' + idx + ', this.value)">' +
+        '</div>' +
+        // Remove button
+        '<div class="col-md-1">' +
+          '<button type="button" class="btn btn-sm btn-outline-danger w-100" ' +
+            'onclick="removeManualItem(' + idx + ')" title="Remove">' +
+            '<i class="bi bi-trash"></i>' +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  });
+
+  container.innerHTML = html;
+  updateManualCount();
+}
+
+window.renderManualItems = renderManualItems;
+
+function onManualItemSearch(idx, value) {
+  var dropdown = document.getElementById('manualDropdown' + idx);
+  if (!dropdown) return;
+
+  var term = String(value || '').toLowerCase().trim();
+
+  if (!term) {
+    dropdown.classList.add('d-none');
+    return;
+  }
+
+  if (!_prf.inventoryLoaded) {
+    dropdown.innerHTML = '<div class="item-search-item text-muted">Loading inventory...</div>';
+    dropdown.classList.remove('d-none');
+    return;
+  }
+
+  var matches = _prf.inventoryList.filter(function(it) {
+    var code = String(it.code || '').toLowerCase();
+    var desc = String(it.description || '').toLowerCase();
+    return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
+  }).slice(0, 20);
+
+  if (matches.length === 0) {
+    dropdown.innerHTML = '<div class="item-search-item text-muted">No matches found. You can type manually.</div>';
+    dropdown.classList.remove('d-none');
+    return;
+  }
+
+  var html = '';
+  matches.forEach(function(it) {
+    var erpItem = _prf.erpItemsMap[it.code] || {};
+    var suggested = getSuggestedQty(it.code);
+
+    html += '<div class="item-search-item" onclick="selectManualItem(' + idx + ', \'' +
+      erpJsEsc(it.code) + '\', \'' + erpJsEsc(it.description) + '\', \'' + erpJsEsc(it.unit) + '\')">' +
+      '<div class="item-code">' + erpEsc(it.code) + '</div>' +
+      '<div class="item-desc">' + erpEsc(it.description.substring(0, 80)) + '</div>' +
+      '<div class="item-meta">' +
+        '<span class="badge bg-light text-dark">' + erpEsc(it.unit || 'PCS') + '</span>' +
+        (erpItem.on_hand !== undefined ? '<span>On-Hand: ' + erpNum(erpItem.on_hand) + '</span>' : '') +
+        (suggested > 0 ? '<span class="text-warning">Suggested: <strong>' + suggested + '</strong></span>' : '') +
+      '</div>' +
+    '</div>';
+  });
+
+  dropdown.innerHTML = html;
+  dropdown.classList.remove('d-none');
+}
+
+window.onManualItemSearch = onManualItemSearch;
+
+function selectManualItem(idx, code, description, unit) {
+  var item = _prf.manualItems[idx];
+  if (!item) return;
+
+  item.inventoryId = code;
+  item.description = description;
+  item.unit = unit || 'PIECE';
+
+  // Auto-fill suggested qty kung walang laman
+  if (!item.qty || item.qty === 0) {
+    item.qty = getSuggestedQty(code) || 1;
+  }
+
+  renderManualItems();
+  updateSubmitButton();
+}
+
+window.selectManualItem = selectManualItem;
+
+function onManualQtyChange(idx, value) {
+  var item = _prf.manualItems[idx];
+  if (!item) return;
+  item.qty = parseFloat(value) || 0;
+  updateSubmitButton();
+}
+
+window.onManualQtyChange = onManualQtyChange;
+
+function onManualUnitChange(idx, value) {
+  var item = _prf.manualItems[idx];
+  if (!item) return;
+  item.unit = value;
+}
+
+window.onManualUnitChange = onManualUnitChange;
+
+function onManualRemarksChange(idx, value) {
+  var item = _prf.manualItems[idx];
+  if (!item) return;
+  item.remarks = String(value || '').trim();
+}
+
+window.onManualRemarksChange = onManualRemarksChange;
+
+function removeManualItem(idx) {
+  if (!confirm('Remove this item?')) return;
+  _prf.manualItems.splice(idx, 1);
+  renderManualItems();
+  updateSubmitButton();
+}
+
+window.removeManualItem = removeManualItem;
+
+function updateManualCount() {
+  var el = document.getElementById('manualItemsCount');
+  if (el) el.textContent = _prf.manualItems.length + ' manual item(s)';
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT (with auto-unique + batching)
+// SUBMIT BUTTON STATE
+// ═══════════════════════════════════════════════════════════
+function updateSubmitButton() {
+  var btn = document.getElementById('btnSubmitPrf');
+  var summary = document.getElementById('submitSummary');
+  if (!btn) return;
+
+  var reorderCount = 0;
+  var manualCount = 0;
+
+  // Reorder items count
+  if (_prf.mode === 'reorder') {
+    recomputeSelected();
+    reorderCount = _prf.selectedItems.length;
+  } else {
+    // Count reorder as if switching back (preserved)
+    recomputeSelected();
+    reorderCount = _prf.selectedItems.length;
+  }
+
+  // Manual items count
+  manualCount = _prf.manualItems.filter(function(it) {
+    return it.inventoryId && it.inventoryId.trim() && it.qty > 0;
+  }).length;
+
+  var totalValid = reorderCount + manualCount;
+
+  // Category check
+  var category = document.getElementById('prfCategory').value;
+  if (!category) {
+    btn.disabled = true;
+    summary.textContent = 'Please select a category first.';
+    return;
+  }
+
+  if (totalValid === 0) {
+    btn.disabled = true;
+    summary.textContent = 'Select items from reorder list OR add manual items.';
+    return;
+  }
+
+  btn.disabled = false;
+
+  var summaryParts = [];
+  if (reorderCount > 0) summaryParts.push(reorderCount + ' reorder item(s)');
+  if (manualCount > 0) summaryParts.push(manualCount + ' manual item(s)');
+  summary.textContent = summaryParts.join(' + ') + ' ready to submit.';
+}
+
+function updateItemsCount() {
+  var el = document.getElementById('itemsCountLabel');
+  if (!el) return;
+  var reorderCount = _prf.selectedItems.length;
+  var manualCount = _prf.manualItems.length;
+  var total = reorderCount + manualCount;
+  el.textContent = '(' + total + ' items)';
+}
+
+// ═══════════════════════════════════════════════════════════
+// SUBMIT PRF (UNIFIED)
 // ═══════════════════════════════════════════════════════════
 async function submitPrf() {
   if (_prf.isSubmitting) return;
@@ -383,32 +711,73 @@ async function submitPrf() {
   if (!prfNo) { erpShowToast('PRF No. required', 'warning'); return; }
   if (!category) { erpShowToast('Category required', 'warning'); return; }
 
+  // ─── Combine items from both modes ───
+  var allItems = [];
+
+  // 1. Reorder items
   recomputeSelected();
-  if (_prf.selectedItems.length === 0) {
+  _prf.selectedItems.forEach(function(it) {
+    allItems.push({
+      item_code: it.item_code,
+      description: it.description || '',
+      category: it.category || category,
+      location: it.location || '',
+      average_consumption: Number(it.ave_monthly_consumption || 0),
+      buffer_stock: Number(it.buffer_stock || 0),
+      stock_on_hand: Number(it.on_hand || 0),
+      qty_for_order: Number(it._qtyOrder || 0),
+      unit: it.base_unit || 'PIECE',
+      remarks: it._remarks || '',
+      source: 'reorder'
+    });
+  });
+
+  // 2. Manual items
+  _prf.manualItems.forEach(function(it) {
+    if (!it.inventoryId || !it.inventoryId.trim()) return;
+    if (!it.qty || it.qty <= 0) return;
+
+    var erpItem = _prf.erpItemsMap[it.inventoryId] || {};
+    allItems.push({
+      item_code: it.inventoryId,
+      description: it.description || '',
+      category: category,
+      location: erpItem.location || '',
+      average_consumption: Number(erpItem.ave_monthly_consumption || 0),
+      buffer_stock: Number(erpItem.buffer_stock || 0),
+      stock_on_hand: Number(erpItem.on_hand || 0),
+      qty_for_order: Number(it.qty),
+      unit: it.unit || 'PIECE',
+      remarks: it.remarks || '',
+      source: 'manual'
+    });
+  });
+
+  if (allItems.length === 0) {
     erpShowToast('Select at least one item with qty > 0', 'warning');
     return;
   }
 
-  var items = _prf.selectedItems;
+  // Batching
   var batches = [];
-  if (items.length > MAX_ITEMS_PER_PRF) {
-    for (var i = 0; i < items.length; i += MAX_ITEMS_PER_PRF) {
-      batches.push(items.slice(i, i + MAX_ITEMS_PER_PRF));
+  if (allItems.length > MAX_ITEMS_PER_PRF) {
+    for (var i = 0; i < allItems.length; i += MAX_ITEMS_PER_PRF) {
+      batches.push(allItems.slice(i, i + MAX_ITEMS_PER_PRF));
     }
   } else {
-    batches.push(items);
+    batches.push(allItems);
   }
 
-  // ═══ Auto-unique PRF No. check (base) ═══
+  // Auto-unique base PRF No.
   var isAvailable = await checkPrfNoAvailable(prfNo);
   if (!isAvailable) {
     var originalPrfNo = prfNo;
     prfNo = await generateUniquePrfNo(prfNo);
-    console.log('[PRF] Auto-unique base:', originalPrfNo, '→', prfNo);
+    console.log('[PRF] Auto-unique:', originalPrfNo, '→', prfNo);
     erpShowToast('PRF No. adjusted to ' + prfNo, 'info');
   }
 
-  // ═══ Auto-unique batch PRF Nos ═══
+  // Auto-unique batch PRF Nos
   for (var bIdx = 0; bIdx < batches.length; bIdx++) {
     var batchBase = prfNo + (bIdx === 0 ? '' : '.' + (bIdx + 1));
     var batchAvailable = await checkPrfNoAvailable(batchBase);
@@ -426,16 +795,16 @@ async function submitPrf() {
   }
 
   // Confirm
-  var confirmMsg = 'Create PRF with ' + items.length + ' item(s)?\n\n';
+  var confirmMsg = 'Create PRF with ' + allItems.length + ' item(s)?\n\n';
   if (batches.length > 1) {
     confirmMsg += 'Will be split into ' + batches.length + ' batches:\n';
-    batches.forEach(function(b, idx) {
+    batches.forEach(function(b) {
       confirmMsg += '  • ' + b._prfNo + ' (' + b.length + ' items)\n';
     });
     confirmMsg += '\n';
   }
   confirmMsg += 'Base PRF No.: ' + prfNo;
-  confirmMsg += '\nTotal qty: ' + items.reduce(function(s, it) { return s + (it._qtyOrder || 0); }, 0);
+  confirmMsg += '\nTotal qty: ' + allItems.reduce(function(s, it) { return s + (it.qty_for_order || 0); }, 0);
 
   if (!confirm(confirmMsg)) return;
 
@@ -451,12 +820,15 @@ async function submitPrf() {
     for (var bIdx2 = 0; bIdx2 < batches.length; bIdx2++) {
       var batch = batches[bIdx2];
       var batchPrfNo = batch._prfNo;
-      var result = await createSinglePrf(batchPrfNo, prfNo, bIdx2 + 1, batch, category, preparedBy, department, notedBy, approvedBy, notes);
+      var result = await createSinglePrf(
+        batchPrfNo, prfNo, bIdx2 + 1, batch,
+        category, preparedBy, department, notedBy, approvedBy, notes
+      );
       createdPrfs.push(result);
     }
 
     document.getElementById('successPrfNo').textContent = createdPrfs.map(function(p) { return p.prf_no; }).join(', ');
-    document.getElementById('successItemCount').textContent = items.length;
+    document.getElementById('successItemCount').textContent = allItems.length;
     document.getElementById('successCategory').textContent = category;
 
     new bootstrap.Modal(document.getElementById('successModal')).show();
@@ -471,8 +843,10 @@ async function submitPrf() {
   }
 }
 
+window.submitPrf = submitPrf;
+
 async function createSinglePrf(prfNo, basePrfNo, batchNumber, items, category, preparedBy, department, notedBy, approvedBy, notes) {
-  var totalQty = items.reduce(function(s, it) { return s + (it._qtyOrder || 0); }, 0);
+  var totalQty = items.reduce(function(s, it) { return s + (it.qty_for_order || 0); }, 0);
 
   var docRes = await fetch(erpUrl('prf_documents'), {
     method: 'POST',
@@ -514,13 +888,13 @@ async function createSinglePrf(prfNo, basePrfNo, batchNumber, items, category, p
       description: it.description || '',
       category: it.category || category,
       location: it.location || '',
-      average_consumption: Number(it.ave_monthly_consumption || 0),
+      average_consumption: Number(it.average_consumption || 0),
       buffer_stock: Number(it.buffer_stock || 0),
-      stock_on_hand: Number(it.on_hand || 0),
-      qty_for_order: Number(it._qtyOrder || 0),
-            unit: it.base_unit || 'PIECE',
+      stock_on_hand: Number(it.stock_on_hand || 0),
+      qty_for_order: Number(it.qty_for_order || 0),
+      unit: it.unit || 'PIECE',
       status: 'UNSERVED',
-      remarks: it._remarks || ''
+      remarks: it.remarks || ''
     };
   });
 
@@ -546,17 +920,43 @@ function closeSuccessAndReset() {
   }, 300);
 }
 
+window.closeSuccessAndReset = closeSuccessAndReset;
+
 function cancelCreate() {
   if (!confirm('Cancel? Unsaved data will be lost.')) return;
   window.location.href = 'prf-monitor.html';
 }
 
+window.cancelCreate = cancelCreate;
+
 // ═══════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════
+function buildUnitOptions(selected) {
+  var units = ['PIECE', 'PCS', 'PAIR', 'SET', 'BOX', 'ROLL', 'SHEET',
+    'KG', 'LITERS', 'GAL', 'METER', 'MM', 'LENGTH',
+    'ASSEMB', 'CAN', 'REAM', 'TANK', 'UNIT'];
+  var html = '';
+  units.forEach(function(u) {
+    var sel = (u === selected) ? ' selected' : '';
+    html += '<option value="' + u + '"' + sel + '>' + u + '</option>';
+  });
+  return html;
+}
+
+function erpNum(n) {
+  if (n === null || n === undefined || isNaN(n)) return '0';
+  return Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
 function erpEsc(s) {
   if (s === null || s === undefined) return '';
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function erpJsEsc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
 }
 
 function erpShowToast(msg, type) {
@@ -566,4 +966,13 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
 }
 
-console.log('✅ new-prf.js v3 loaded (auto-unique + batching)');
+// Close dropdown on outside click
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.item-search-wrapper')) {
+    document.querySelectorAll('.item-search-dropdown').forEach(function(el) {
+      el.classList.add('d-none');
+    });
+  }
+});
+
+console.log('✅ new-prf.js v2 loaded (two modes + auto-suggest)');
