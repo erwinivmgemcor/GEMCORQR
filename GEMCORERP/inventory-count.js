@@ -1,41 +1,33 @@
 // ============================================================
-// GEMCOR ERP — Inventory Count (v1.0)
-// SUM-based counting: scan → auto-add → variance
+// GEMCOR ERP — Inventory Count (v1.1)
+// ✅ NEW: Auto-suggest for manual input field
+// ✅ SUM-based counting + keyboard navigation
 // ============================================================
 
 var _ic = {
-  // Sessions
   sessions: [],
   filteredSessions: [],
-
-  // Current session
   currentSession: null,
   currentItems: [],
   filteredItems: [],
-
-  // Scanner
   scanner: null,
   scannerActive: false,
   currentQtyItem: null,
-
-  // Search
   searchTimer: null,
-
-  // State
+  dropdownTimer: null,
   isSubmitting: false,
-  view: 'list'   // 'list' | 'counting' | 'review'
+  view: 'list'
 };
 
 // ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Inventory Count v1.0] Initializing...');
+  console.log('[Inventory Count v1.1] Initializing...');
 
   icCheckHealth();
   icLoadSessions();
 
-  // Enter key on manual input
   var manualInput = document.getElementById('icManualInput');
   if (manualInput) {
     manualInput.addEventListener('keypress', function(e) {
@@ -46,7 +38,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Enter key on qty input
   var qtyInput = document.getElementById('qtyInputValue');
   if (qtyInput) {
     qtyInput.addEventListener('keypress', function(e) {
@@ -56,6 +47,9 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
+
+  // Global keyboard handler for dropdown navigation
+  document.addEventListener('keydown', icHandleDropdownKeydown);
 });
 
 async function icCheckHealth() {
@@ -91,7 +85,6 @@ async function icLoadSessions() {
 
     _ic.sessions = rows || [];
     console.log('[IC] Loaded', _ic.sessions.length, 'sessions');
-
     icRenderSessionList();
   } catch(err) {
     console.error('[icLoadSessions]', err);
@@ -137,15 +130,9 @@ function icRenderSessionList() {
     var totalItems = s.total_items || 0;
     var countedItems = s.counted_items || 0;
     var progressPct = totalItems > 0 ? Math.round((countedItems / totalItems) * 100) : 0;
-
     var varianceCount = s.variance_count || 0;
-    var varianceQty = Number(s.variance_total_qty || 0);
-    var varianceDisplay = varianceQty === 0 ? '0' : (varianceQty > 0 ? '+' + icNum(varianceQty) : icNum(varianceQty));
-
     var statusClass = 'status-' + (s.status || 'DRAFT');
     var scope = s.scope_category || (s.count_type === 'FULL' ? 'All Items' : 'N/A');
-
-    var safeId = s.id;
 
     html += '<tr>' +
       '<td><code>' + icEsc(s.count_no) + '</code></td>' +
@@ -164,10 +151,10 @@ function icRenderSessionList() {
       '</td>' +
       '<td class="text-center"><span class="status-badge-lg ' + statusClass + '">' + icEsc(s.status) + '</span></td>' +
       '<td class="text-center">' +
-        '<button class="erp-action-btn primary" onclick="icOpenSession(' + safeId + ')" title="Open">' +
+        '<button class="erp-action-btn primary" onclick="icOpenSession(' + s.id + ')" title="Open">' +
           '<i class="bi bi-play-circle"></i>' +
         '</button>' +
-        '<button class="erp-action-btn" onclick="icViewSessionDetails(' + safeId + ')" title="View Details">' +
+        '<button class="erp-action-btn" onclick="icViewSessionDetails(' + s.id + ')" title="View Details">' +
           '<i class="bi bi-eye"></i>' +
         '</button>' +
       '</td>' +
@@ -194,22 +181,10 @@ window.openNewCountModal = openNewCountModal;
 function icOnCountTypeChange() {
   var type = document.getElementById('newCountType').value;
   var catGroup = document.getElementById('newCountCategoryGroup');
-
-  if (type === 'CYCLE') {
-    catGroup.style.display = 'block';
-  } else {
-    catGroup.style.display = 'none';
-  }
+  if (catGroup) catGroup.style.display = (type === 'CYCLE') ? 'block' : 'none';
 }
 
 window.icOnCountTypeChange = icOnCountTypeChange;
-
-// Add listener on modal load
-document.addEventListener('change', function(e) {
-  if (e.target && e.target.id === 'newCountType') {
-    icOnCountTypeChange();
-  }
-});
 
 async function icCreateSession() {
   if (_ic.isSubmitting) return;
@@ -234,34 +209,30 @@ async function icCreateSession() {
   }
 
   try {
-    // Generate count_no
     var now = new Date();
     var yy = now.getFullYear();
     var mm = String(now.getMonth() + 1).padStart(2, '0');
 
-    // Get next sequence for this month
     var existingRows = await erpFetch('erp_inventory_counts',
       'select=count_no&count_no=like.IC-' + yy + '-' + mm + '-*&order=count_no.desc&limit=1');
 
     var nextNum = 1;
     if (existingRows && existingRows.length > 0) {
-      var lastNo = existingRows[0].count_no;
-      var parts = lastNo.split('-');
+      var parts = existingRows[0].count_no.split('-');
       var lastSeq = parseInt(parts[parts.length - 1]) || 0;
       nextNum = lastSeq + 1;
     }
 
     var countNo = 'IC-' + yy + '-' + mm + '-' + String(nextNum).padStart(3, '0');
 
-    // Fetch items to snapshot
+    // Fetch items
     var itemsQuery = 'select=item_code,description,category,base_unit,on_hand' +
-                     '&is_active=eq.true&order=item_code.asc&limit=10000';
+                     '&is_active=eq.true&order=item_code.asc';
 
     if (type === 'CYCLE' && category) {
       itemsQuery += '&category=eq.' + encodeURIComponent(category);
     }
 
-    // Paginated fetch
     var allItems = [];
     var pageSize = 1000;
     var offset = 0;
@@ -283,13 +254,10 @@ async function icCreateSession() {
       if (hasMore) await new Promise(function(r) { setTimeout(r, 100); });
     }
 
-    if (allItems.length === 0) {
-      throw new Error('No items found for the selected scope');
-    }
+    if (allItems.length === 0) throw new Error('No items found for the selected scope');
 
     console.log('[IC] Snapshot items:', allItems.length);
 
-    // Create session
     var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
 
     var sessionRes = await fetch(erpUrl('erp_inventory_counts'), {
@@ -313,17 +281,12 @@ async function icCreateSession() {
       })
     });
 
-    if (!sessionRes.ok) {
-      throw new Error('Failed to create session');
-    }
+    if (!sessionRes.ok) throw new Error('Failed to create session');
 
     var sessionArr = await sessionRes.json();
     var session = sessionArr[0];
     if (!session || !session.id) throw new Error('No session ID');
 
-    console.log('[IC] Session created:', session.id);
-
-    // Create count items in batches
     var itemPayloads = allItems.map(function(it, idx) {
       return {
         count_id: session.id,
@@ -343,7 +306,6 @@ async function icCreateSession() {
       };
     });
 
-    // Insert in batches of 500
     var batchSize = 500;
     for (var i = 0; i < itemPayloads.length; i += batchSize) {
       var batch = itemPayloads.slice(i, i + batchSize);
@@ -352,24 +314,17 @@ async function icCreateSession() {
         headers: erpHeaders(),
         body: JSON.stringify(batch)
       });
-
-      if (!batchRes.ok) {
-        throw new Error('Failed to insert items batch ' + (i / batchSize));
-      }
-
+      if (!batchRes.ok) throw new Error('Failed to insert items batch ' + (i / batchSize));
       console.log('[IC] Inserted batch:', i + batch.length, '/', itemPayloads.length);
     }
 
     icShowToast('✅ Count created: ' + countNo + ' (' + allItems.length + ' items)', 'success');
 
-    // Close modal
     var modal = bootstrap.Modal.getInstance(document.getElementById('newCountModal'));
     if (modal) modal.hide();
 
-    // Reload sessions
     await icLoadSessions();
 
-    // Open the new session
     setTimeout(function() {
       icOpenSession(session.id);
     }, 500);
@@ -403,7 +358,6 @@ async function icOpenSession(sessionId) {
 
     _ic.currentSession = sessionRes[0];
 
-    // Fetch items (paginated)
     var allItems = [];
     var pageSize = 1000;
     var offset = 0;
@@ -428,14 +382,11 @@ async function icOpenSession(sessionId) {
     _ic.currentItems = allItems;
     console.log('[IC] Session loaded:', _ic.currentSession.count_no, '| Items:', allItems.length);
 
-    // Route based on status
     var status = _ic.currentSession.status;
-    if (status === 'PENDING_REVIEW') {
+    if (status === 'PENDING_REVIEW' || status === 'APPROVED' || status === 'REJECTED' || status === 'CANCELLED') {
       icShowReviewView();
-    } else if (status === 'IN_PROGRESS' || status === 'DRAFT') {
+    } else {
       icShowCountingView();
-    } else if (status === 'APPROVED' || status === 'REJECTED' || status === 'CANCELLED') {
-      icShowReviewView();  // read-only
     }
 
   } catch(err) {
@@ -481,10 +432,7 @@ function icBackToList() {
   document.getElementById('viewCounting').style.display = 'none';
   document.getElementById('viewReview').style.display = 'none';
 
-  // Stop scanner if active
   icStopScanner();
-
-  // Reload sessions
   icLoadSessions();
 }
 
@@ -494,28 +442,21 @@ window.icBackToList = icBackToList;
 // SCANNER
 // ═══════════════════════════════════════════════════════════
 function icToggleScanner() {
-  if (_ic.scannerActive) {
-    icStopScanner();
-  } else {
-    icStartScanner();
-  }
+  if (_ic.scannerActive) icStopScanner();
+  else icStartScanner();
 }
 
 window.icToggleScanner = icToggleScanner;
 
 function icStartScanner() {
   if (_ic.scanner) return;
-
   var readerEl = document.getElementById('icReader');
   if (!readerEl) return;
 
   _ic.scanner = new Html5Qrcode('icReader');
 
   Html5Qrcode.getCameras().then(function(cameras) {
-    if (cameras.length === 0) {
-      icShowToast('No camera found', 'warning');
-      return;
-    }
+    if (cameras.length === 0) { icShowToast('No camera found', 'warning'); return; }
 
     var camId = cameras.find(function(c) {
       return c.label.toLowerCase().indexOf('back') !== -1;
@@ -532,7 +473,7 @@ function icStartScanner() {
     }).catch(function(err) {
       icShowToast('Camera error: ' + err, 'danger');
     });
-  }).catch(function(err) {
+  }).catch(function() {
     icShowToast('Camera access denied', 'danger');
   });
 }
@@ -552,28 +493,21 @@ function icStopScanner() {
 
 function icOnScanSuccess(decodedText) {
   console.log('[IC Scan]', decodedText);
-
   var itemCode = icExtractItemCode(decodedText);
   if (!itemCode) {
     icUpdateScanStatus('Invalid QR code', 'danger');
     icPlayErrorBuzz();
     return;
   }
-
   icProcessScannedItem(itemCode);
 }
 
 function icExtractItemCode(text) {
   if (!text) return '';
   var raw = String(text).trim().replace(/^["'\s]+|["'\s]+$/g, '');
-
-  // Handle URL format
   var urlMatch = raw.match(/[?&](?:code|item|id|inventory)=([^&\s]+)/i);
   if (urlMatch) return decodeURIComponent(urlMatch[1]).trim();
-
-  // Skip document QR
   if (/[?&]doc=/i.test(raw)) return '';
-
   return raw;
 }
 
@@ -591,8 +525,6 @@ function icProcessScannedItem(itemCode) {
 
   icUpdateScanStatus('Scanned: ' + itemCode, 'success');
   icPlaySuccessBeep();
-
-  // Open qty input modal
   icOpenQtyInputModal(item);
 }
 
@@ -602,6 +534,7 @@ function icManualVerify() {
   var code = input.value.trim();
   if (!code) return;
   input.value = '';
+  icHideManualDropdown();
   icProcessScannedItem(code);
 }
 
@@ -614,6 +547,199 @@ function icUpdateScanStatus(msg, type) {
   el.className = 'alert alert-' + type + ' py-2 small mt-2 mb-0';
   if (textEl) textEl.textContent = msg;
 }
+
+// ═══════════════════════════════════════════════════════════
+// MANUAL INPUT AUTO-SUGGEST
+// ═══════════════════════════════════════════════════════════
+function icOnManualInput(value) {
+  var term = String(value || '').toLowerCase().trim();
+  var dropdown = document.getElementById('icManualDropdown');
+  var input = document.getElementById('icManualInput');
+
+  if (!dropdown || !input) return;
+
+  if (!term || term.length < 2) {
+    icHideManualDropdown();
+    return;
+  }
+
+  if (_ic.dropdownTimer) clearTimeout(_ic.dropdownTimer);
+  _ic.dropdownTimer = setTimeout(function() {
+    icBuildManualSuggestions(term, dropdown, input);
+  }, 150);
+}
+
+window.icOnManualInput = icOnManualInput;
+
+function icBuildManualSuggestions(term, dropdown, input) {
+  if (!_ic.currentItems || _ic.currentItems.length === 0) {
+    dropdown.innerHTML = '<div class="item-search-item muted">No count session loaded</div>';
+    icPositionManualDropdown(dropdown, input);
+    dropdown.classList.remove('d-none');
+    return;
+  }
+
+  // ✅ Search sa session items only
+  var matches = _ic.currentItems.filter(function(it) {
+    var code = String(it.item_code || '').toLowerCase();
+    var desc = String(it.description || '').toLowerCase();
+    return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
+  });
+
+  // Sort: exact match > starts-with > contains
+  matches.sort(function(a, b) {
+    var aCode = String(a.item_code || '').toLowerCase();
+    var bCode = String(b.item_code || '').toLowerCase();
+    var aExact = aCode === term ? 0 : 1;
+    var bExact = bCode === term ? 0 : 1;
+    if (aExact !== bExact) return aExact - bExact;
+    var aStart = aCode.indexOf(term) === 0 ? 0 : 1;
+    var bStart = bCode.indexOf(term) === 0 ? 0 : 1;
+    if (aStart !== bStart) return aStart - bStart;
+    return aCode.localeCompare(bCode);
+  });
+
+  matches = matches.slice(0, 30);
+
+  if (matches.length === 0) {
+    dropdown.innerHTML = '<div class="item-search-item muted">No matches in this session</div>';
+    icPositionManualDropdown(dropdown, input);
+    dropdown.classList.remove('d-none');
+    return;
+  }
+
+  var html = '';
+  matches.forEach(function(it) {
+    var code = String(it.item_code || '');
+    var desc = String(it.description || '');
+    var unit = String(it.unit || 'PCS');
+    var systemQty = Number(it.system_qty || 0);
+    var countedQty = Number(it.counted_qty || 0);
+    var scanCount = it.scan_count || 0;
+
+    var statusBadge = '';
+    if (scanCount > 0) {
+      statusBadge = '<span class="badge bg-success">Counted: ' + icNum(countedQty) + '</span>';
+    } else {
+      statusBadge = '<span class="badge bg-secondary">Not counted</span>';
+    }
+
+    var safeCode = code.replace(/'/g, "\\'");
+
+    html += '<div class="item-search-item" data-code="' + icEsc(code) + '" onclick="icSelectManualSuggestion(\'' + safeCode + '\')">' +
+      '<div class="item-code">' + icEsc(code) + '</div>' +
+      '<div class="item-desc">' + icEsc(desc.substring(0, 100)) + '</div>' +
+      '<div class="item-meta">' +
+        '<span class="badge bg-light text-dark">' + icEsc(unit) + '</span>' +
+        '<span>System: <strong>' + icNum(systemQty) + '</strong></span>' +
+        statusBadge +
+      '</div>' +
+    '</div>';
+  });
+
+  dropdown.innerHTML = html;
+  icPositionManualDropdown(dropdown, input);
+  dropdown.classList.remove('d-none');
+}
+
+function icPositionManualDropdown(dropdown, input) {
+  var rect = input.getBoundingClientRect();
+  var spaceBelow = window.innerHeight - rect.bottom;
+  var spaceAbove = rect.top;
+  var dropdownMinHeight = 320;
+
+  var width = Math.max(rect.width, 420);
+  var maxWidth = window.innerWidth - rect.left - 20;
+  if (width > maxWidth) width = maxWidth;
+
+  dropdown.style.position = 'fixed';
+  dropdown.style.left = rect.left + 'px';
+  dropdown.style.width = width + 'px';
+  dropdown.style.zIndex = '99999';
+
+  if (spaceBelow < dropdownMinHeight && spaceAbove > spaceBelow) {
+    dropdown.style.top = 'auto';
+    dropdown.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceAbove - 20, 320) + 'px';
+  } else {
+    dropdown.style.bottom = 'auto';
+    dropdown.style.top = (rect.bottom + 4) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceBelow - 20, 320) + 'px';
+  }
+}
+
+function icHideManualDropdown() {
+  var dropdown = document.getElementById('icManualDropdown');
+  if (dropdown) dropdown.classList.add('d-none');
+}
+
+function icSelectManualSuggestion(itemCode) {
+  var input = document.getElementById('icManualInput');
+  if (input) input.value = itemCode;
+  icHideManualDropdown();
+
+  // ✅ Auto-verify on select
+  icProcessScannedItem(itemCode);
+
+  if (input) input.value = '';
+}
+
+window.icSelectManualSuggestion = icSelectManualSuggestion;
+
+// ─── Keyboard Navigation ───
+function icHandleDropdownKeydown(e) {
+  var dropdown = document.getElementById('icManualDropdown');
+  if (!dropdown || dropdown.classList.contains('d-none')) return;
+
+  var items = dropdown.querySelectorAll('.item-search-item:not(.muted)');
+  if (items.length === 0) return;
+
+  var current = dropdown.querySelector('.item-search-item.highlighted');
+  var idx = current ? Array.prototype.indexOf.call(items, current) : -1;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (current) current.classList.remove('highlighted');
+    idx = (idx + 1) % items.length;
+    items[idx].classList.add('highlighted');
+    items[idx].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (current) current.classList.remove('highlighted');
+    idx = idx <= 0 ? items.length - 1 : idx - 1;
+    items[idx].classList.add('highlighted');
+    items[idx].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') {
+    if (current) {
+      e.preventDefault();
+      var code = current.getAttribute('data-code');
+      if (code) icSelectManualSuggestion(code);
+    }
+  } else if (e.key === 'Escape') {
+    icHideManualDropdown();
+  }
+}
+
+// ─── Outside click ───
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#icManualInput') && !e.target.closest('#icManualDropdown')) {
+    icHideManualDropdown();
+  }
+});
+
+// ─── Reposition on scroll ───
+window.addEventListener('scroll', function() {
+  var dropdown = document.getElementById('icManualDropdown');
+  var input = document.getElementById('icManualInput');
+  if (dropdown && !dropdown.classList.contains('d-none') && input) {
+    icPositionManualDropdown(dropdown, input);
+  }
+}, { passive: true });
+
+// ─── Hide on resize ───
+window.addEventListener('resize', function() {
+  icHideManualDropdown();
+});
 
 // ═══════════════════════════════════════════════════════════
 // QTY INPUT MODAL
@@ -674,11 +800,7 @@ async function icSaveCountedQty() {
   var remarksInput = document.getElementById('qtyInputRemarks');
 
   var addQty = parseFloat(input.value) || 0;
-  if (addQty < 0) {
-    icShowToast('Quantity must be ≥ 0', 'warning');
-    return;
-  }
-
+  if (addQty < 0) { icShowToast('Quantity must be ≥ 0', 'warning'); return; }
   if (addQty === 0 && !confirm('Add 0 quantity?')) return;
 
   var location = locationInput ? locationInput.value.trim() : '';
@@ -689,19 +811,13 @@ async function icSaveCountedQty() {
   var newQty = oldQty + addQty;
   var variance = newQty - Number(item.system_qty || 0);
 
-  // Combine remarks
   var finalRemarks = item.remarks || '';
-  if (location) {
-    finalRemarks = finalRemarks ? finalRemarks + ', ' + location : location;
-  }
-  if (remarks) {
-    finalRemarks = finalRemarks ? finalRemarks + ' | ' + remarks : remarks;
-  }
+  if (location) finalRemarks = finalRemarks ? finalRemarks + ', ' + location : location;
+  if (remarks) finalRemarks = finalRemarks ? finalRemarks + ' | ' + remarks : remarks;
 
   try {
     var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
 
-    // Update item
     var itemRes = await fetch(erpUrl('erp_inventory_count_items?id=eq.' + item.id), {
       method: 'PATCH',
       headers: erpHeaders(),
@@ -718,7 +834,6 @@ async function icSaveCountedQty() {
 
     if (!itemRes.ok) throw new Error('Failed to save item');
 
-    // Log scan
     await fetch(erpUrl('erp_inventory_count_logs'), {
       method: 'POST',
       headers: erpHeaders(),
@@ -737,7 +852,6 @@ async function icSaveCountedQty() {
       }])
     });
 
-    // Update local state
     item.counted_qty = newQty;
     item.variance = variance;
     item.scan_count = (item.scan_count || 0) + 1;
@@ -745,10 +859,8 @@ async function icSaveCountedQty() {
     item.counted_at = new Date().toISOString();
     item.counted_by = currentUser;
 
-    // Close modal
     bootstrap.Modal.getInstance(document.getElementById('qtyInputModal')).hide();
 
-    // Update UI
     await icUpdateSessionStats();
     icUpdateProgress();
     icUpdateRecentScans();
@@ -756,12 +868,10 @@ async function icSaveCountedQty() {
 
     icShowToast('✓ ' + item.item_code + ' saved (+' + icNum(addQty) + ')', 'success');
 
-    // Clear scan status
     setTimeout(function() {
       icUpdateScanStatus('Ready to scan', 'info');
     }, 500);
 
-    // Focus manual input if camera not active
     if (!_ic.scannerActive) {
       setTimeout(function() {
         var input = document.getElementById('icManualInput');
@@ -778,7 +888,7 @@ async function icSaveCountedQty() {
 window.icSaveCountedQty = icSaveCountedQty;
 
 // ═══════════════════════════════════════════════════════════
-// UPDATE SESSION STATS
+// SESSION STATS
 // ═══════════════════════════════════════════════════════════
 async function icUpdateSessionStats() {
   var countedItems = _ic.currentItems.filter(function(it) {
@@ -798,7 +908,6 @@ async function icUpdateSessionStats() {
   _ic.currentSession.variance_count = varianceCount;
   _ic.currentSession.variance_total_qty = varianceTotalQty;
 
-  // Update DB
   await fetch(erpUrl('erp_inventory_counts?id=eq.' + _ic.currentSession.id), {
     method: 'PATCH',
     headers: erpHeaders(),
@@ -835,7 +944,6 @@ function icUpdateRecentScans() {
   var container = document.getElementById('icScanHistory');
   if (!container) return;
 
-  // Show items with count > 0, sorted by counted_at DESC
   var scanned = _ic.currentItems.filter(function(it) {
     return Number(it.counted_qty || 0) > 0;
   }).sort(function(a, b) {
@@ -890,15 +998,13 @@ function icUpdateVarianceSummary() {
 }
 
 function icRefreshItems() {
-  if (_ic.currentSession) {
-    icOpenSession(_ic.currentSession.id);
-  }
+  if (_ic.currentSession) icOpenSession(_ic.currentSession.id);
 }
 
 window.icRefreshItems = icRefreshItems;
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT FOR REVIEW
+// SUBMIT / APPROVE / REJECT
 // ═══════════════════════════════════════════════════════════
 async function icSubmitForReview() {
   if (!_ic.currentSession) return;
@@ -912,9 +1018,7 @@ async function icSubmitForReview() {
 
   var msg = 'Submit for review?\n\n';
   msg += 'Counted: ' + counted + ' / ' + total + ' items\n';
-  if (uncounted > 0) {
-    msg += 'Uncounted: ' + uncounted + ' items (will be treated as 0)\n';
-  }
+  if (uncounted > 0) msg += 'Uncounted: ' + uncounted + ' items (will be treated as 0)\n';
   msg += '\nContinue?';
 
   if (!confirm(msg)) return;
@@ -935,7 +1039,6 @@ async function icSubmitForReview() {
     _ic.currentSession.status = 'PENDING_REVIEW';
     icShowToast('✅ Submitted for review', 'success');
 
-    // Update to review view
     setTimeout(function() {
       icShowReviewView();
     }, 500);
@@ -947,9 +1050,6 @@ async function icSubmitForReview() {
 
 window.icSubmitForReview = icSubmitForReview;
 
-// ═══════════════════════════════════════════════════════════
-// REVIEW VIEW
-// ═══════════════════════════════════════════════════════════
 function icRenderReviewView() {
   var total = _ic.currentItems.length;
   var matched = 0;
@@ -979,7 +1079,6 @@ function icRenderReviewItems() {
   var items = _ic.currentItems.filter(function(it) {
     var v = Number(it.variance || 0);
     var hasVariance = Math.abs(v) > 0.0001;
-
     if (filter === 'variance' && !hasVariance) return false;
     if (filter === 'matched' && hasVariance) return false;
     return true;
@@ -997,7 +1096,6 @@ function icRenderReviewItems() {
 
     var varDisplay = !hasVariance ? '0' : (variance > 0 ? '+' + icNum(variance) : icNum(variance));
     var varClass = !hasVariance ? '' : (variance > 0 ? 'text-danger' : 'text-primary');
-
     var rowClass = hasVariance ? 'has-variance' : '';
 
     html += '<tr class="' + rowClass + '">' +
@@ -1016,9 +1114,6 @@ function icRenderReviewItems() {
 
 window.icRenderReviewItems = icRenderReviewItems;
 
-// ═══════════════════════════════════════════════════════════
-// APPROVE COUNT (auto-adjust stock)
-// ═══════════════════════════════════════════════════════════
 async function icApproveCount() {
   if (!_ic.currentSession) return;
 
@@ -1029,36 +1124,26 @@ async function icApproveCount() {
 
   var msg = 'Approve this count and adjust stock?\n\n';
   msg += 'Count No.: ' + countNo + '\n';
-  msg += 'Items to adjust: ' + varianceItems.length + '\n';
-  msg += '\nThis will:\n';
-  msg += '• Update on_hand values in erp_items\n';
-  msg += '• Create stock ledger entries\n';
-  msg += '• Log all changes to audit trail\n';
-  msg += '\nContinue?';
+  msg += 'Items to adjust: ' + varianceItems.length + '\n\n';
+  msg += 'This will:\n• Update on_hand values in erp_items\n• Create stock ledger entries\n• Log all changes to audit trail\n\nContinue?';
 
   if (!confirm(msg)) return;
 
   var btn = document.querySelector('button[onclick="icApproveCount()"]');
   var originalHtml = btn ? btn.innerHTML : '';
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Approving...';
-  }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Approving...'; }
 
   try {
     var currentUser = localStorage.getItem('ivm_userFullname') || 'SUPERVISOR';
-
     var adjustCount = 0;
 
-    // Process each variance item
     for (var i = 0; i < varianceItems.length; i++) {
       var item = varianceItems[i];
       var newOnHand = Number(item.counted_qty || 0);
       var oldOnHand = Number(item.system_qty || 0);
       var variance = Number(item.variance || 0);
 
-      // 1. Update erp_items.on_hand
-      var updateRes = await fetch(erpUrl('erp_items?item_code=eq.' + encodeURIComponent(item.item_code)), {
+      await fetch(erpUrl('erp_items?item_code=eq.' + encodeURIComponent(item.item_code)), {
         method: 'PATCH',
         headers: erpHeaders(),
         body: JSON.stringify({
@@ -1068,11 +1153,6 @@ async function icApproveCount() {
         })
       });
 
-      if (!updateRes.ok) {
-        console.warn('[Approve] Failed to update erp_items:', item.item_code);
-      }
-
-      // 2. Insert stock ledger entry
       await fetch(erpUrl('erp_stock_ledger'), {
         method: 'POST',
         headers: erpHeaders(),
@@ -1089,7 +1169,6 @@ async function icApproveCount() {
         }])
       });
 
-      // 3. Insert stock adjustment log
       await fetch(erpUrl('erp_stock_adjustments'), {
         method: 'POST',
         headers: erpHeaders(),
@@ -1107,10 +1186,8 @@ async function icApproveCount() {
       });
 
       adjustCount++;
-      console.log('[Approve] Adjusted:', item.item_code, 'from', oldOnHand, 'to', newOnHand);
     }
 
-    // 4. Update session status
     await fetch(erpUrl('erp_inventory_counts?id=eq.' + _ic.currentSession.id), {
       method: 'PATCH',
       headers: erpHeaders(),
@@ -1123,39 +1200,27 @@ async function icApproveCount() {
     });
 
     _ic.currentSession.status = 'APPROVED';
-
     icShowToast('✅ Approved! Adjusted ' + adjustCount + ' items', 'success');
 
-    setTimeout(function() {
-      icBackToList();
-    }, 1500);
+    setTimeout(function() { icBackToList(); }, 1500);
 
   } catch(err) {
     console.error('[icApproveCount]', err);
     icShowToast('Failed: ' + err.message, 'danger');
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = originalHtml;
-    }
+    if (btn) { btn.disabled = false; btn.innerHTML = originalHtml; }
   }
 }
 
 window.icApproveCount = icApproveCount;
 
-// ═══════════════════════════════════════════════════════════
-// REJECT COUNT
-// ═══════════════════════════════════════════════════════════
 async function icRejectCount() {
   if (!_ic.currentSession) return;
 
   var reason = prompt('Rejection reason (required):', '');
   if (reason === null) return;
   reason = String(reason).trim();
-  if (!reason) {
-    icShowToast('Rejection reason is required', 'warning');
-    return;
-  }
+  if (!reason) { icShowToast('Rejection reason is required', 'warning'); return; }
 
   try {
     var currentUser = localStorage.getItem('ivm_userFullname') || 'SUPERVISOR';
@@ -1173,11 +1238,7 @@ async function icRejectCount() {
     });
 
     icShowToast('Count rejected', 'info');
-
-    setTimeout(function() {
-      icBackToList();
-    }, 1000);
-
+    setTimeout(function() { icBackToList(); }, 1000);
   } catch(err) {
     icShowToast('Failed: ' + err.message, 'danger');
   }
@@ -1200,7 +1261,8 @@ function icRenderManualEntry() {
   var tbody = document.getElementById('manualEntryBody');
   if (!tbody) return;
 
-  var search = (document.getElementById('manualEntrySearch')?.value || '').toLowerCase();
+  var searchInput = document.getElementById('manualEntrySearch');
+  var search = (searchInput ? searchInput.value : '').toLowerCase();
 
   var items = _ic.currentItems.filter(function(it) {
     if (!search) return true;
@@ -1251,7 +1313,6 @@ async function icSaveAllManualEntry() {
 
     var remarksInput = document.querySelector('.manual-remarks-input[data-item-id="' + itemId + '"]');
     var remarks = remarksInput ? remarksInput.value.trim() : '';
-
     var variance = newCount - Number(item.system_qty || 0);
 
     await fetch(erpUrl('erp_inventory_count_items?id=eq.' + itemId), {
@@ -1266,7 +1327,6 @@ async function icSaveAllManualEntry() {
       })
     });
 
-    // Log
     var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
     await fetch(erpUrl('erp_inventory_count_logs'), {
       method: 'POST',
@@ -1292,11 +1352,8 @@ async function icSaveAllManualEntry() {
     changed++;
   }
 
-  if (changed === 0) {
-    icShowToast('No changes to save', 'info');
-  } else {
-    icShowToast('✅ Saved ' + changed + ' item(s)', 'success');
-  }
+  if (changed === 0) icShowToast('No changes to save', 'info');
+  else icShowToast('✅ Saved ' + changed + ' item(s)', 'success');
 
   await icUpdateSessionStats();
   icUpdateProgress();
@@ -1309,7 +1366,7 @@ async function icSaveAllManualEntry() {
 window.icSaveAllManualEntry = icSaveAllManualEntry;
 
 // ═══════════════════════════════════════════════════════════
-// PRINT COUNT SHEET
+// PRINT
 // ═══════════════════════════════════════════════════════════
 function icPrintCountSheet() {
   if (!_ic.currentSession) return;
@@ -1338,16 +1395,14 @@ function icPrintCountSheet() {
 
   setTimeout(function() {
     window.print();
-    setTimeout(function() {
-      printArea.style.display = 'none';
-    }, 500);
+    setTimeout(function() { printArea.style.display = 'none'; }, 500);
   }, 200);
 }
 
 window.icPrintCountSheet = icPrintCountSheet;
 
 // ═══════════════════════════════════════════════════════════
-// VIEW SESSION DETAILS (read-only)
+// VIEW DETAILS
 // ═══════════════════════════════════════════════════════════
 function icViewSessionDetails(sessionId) {
   icOpenSession(sessionId);
@@ -1360,9 +1415,7 @@ window.icViewSessionDetails = icViewSessionDetails;
 // ═══════════════════════════════════════════════════════════
 function icOnSearch() {
   clearTimeout(_ic.searchTimer);
-  _ic.searchTimer = setTimeout(function() {
-    icRenderSessionList();
-  }, 300);
+  _ic.searchTimer = setTimeout(function() { icRenderSessionList(); }, 300);
 }
 
 window.icOnSearch = icOnSearch;
@@ -1445,7 +1498,7 @@ function icShowToast(msg, type) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// EXPOSE GLOBALS
+// GLOBAL EXPORTS
 // ═══════════════════════════════════════════════════════════
 window.icLoadSessions = icLoadSessions;
 window.icRenderSessionList = icRenderSessionList;
@@ -1458,4 +1511,4 @@ window.icSubmitForReview = icSubmitForReview;
 window.icApproveCount = icApproveCount;
 window.icRejectCount = icRejectCount;
 
-console.log('✅ inventory-count.js v1.0 loaded');
+console.log('✅ inventory-count.js v1.1 loaded (auto-suggest enabled)');
