@@ -175,18 +175,21 @@
   <!-- STOCK TABLE -->
   <!-- ═══════════════════════════════════════════════════════════ -->
   <div class="erp-card erp-table-card">
-    <div class="erp-table-header">
-      <div>
-        <i class="bi bi-table me-2"></i>
-        <strong>Inventory Master</strong>
-      </div>
-      <div class="d-flex align-items-center gap-2">
-        <button class="erp-btn-primary" onclick="erpOpenAddItemModal()" title="Add a new item to inventory">
-          <i class="bi bi-plus-lg"></i> Add New Item
-        </button>
-        <span class="erp-badge" id="erpTableCount">0 items</span>
-      </div>
-    </div>
+<div class="erp-table-header">
+  <div>
+    <i class="bi bi-table me-2"></i>
+    <strong>Inventory Master</strong>
+  </div>
+  <div class="d-flex align-items-center gap-2">
+    <button class="erp-btn-outline-dark" onclick="window.location.href='inventory-count.html'" title="Go to Inventory Count">
+      <i class="bi bi-clipboard-check me-1"></i>Inventory Count
+    </button>
+    <button class="erp-btn-primary" onclick="erpOpenAddItemModal()" title="Add a new item to inventory">
+      <i class="bi bi-plus-lg"></i> Add New Item
+    </button>
+    <span class="erp-badge" id="erpTableCount">0 items</span>
+  </div>
+</div>
 
     <div class="erp-table-wrap">
       <table class="erp-table">
