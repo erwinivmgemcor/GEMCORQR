@@ -159,24 +159,54 @@ async function loadPendingPrfItems() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// LOAD SEARCH CATALOG (from erp_items — with CORRECT columns)
-// ✅ v2.3 FIX: Use 'category' instead of non-existent 'item_class'
+// LOAD SEARCH CATALOG (from erp_items — with PAGINATION)
+// ✅ v2.4 FIX: Paginated fetch to bypass 1,000 row limit
 // ═══════════════════════════════════════════════════════════
 async function preloadInventoryForSearch() {
   if (_prf.inventoryLoaded) return;
 
   try {
-    // ✅ FIXED: Removed 'item_class', use 'category'
-    var rows = await erpFetch('erp_items',
-      'select=item_code,description,base_unit,category,location,on_hand,buffer_stock,ave_monthly_consumption' +
-      '&is_active=eq.true&order=item_code.asc&limit=10000');
+    console.log('[PRF] Loading search catalog from erp_items (paginated)...');
 
-    var items = (rows || []).map(function(r) {
+    var allRows = [];
+    var pageSize = 1000;
+    var offset = 0;
+    var hasMore = true;
+    var pageNum = 1;
+
+    // ✅ PAGINATED FETCH — bypass PostgREST 1,000 row limit
+    while (hasMore) {
+      var rows = await erpFetch('erp_items',
+        'select=item_code,description,base_unit,category,location,on_hand,buffer_stock,ave_monthly_consumption' +
+        '&is_active=eq.true&order=item_code.asc&limit=' + pageSize + '&offset=' + offset);
+
+      if (!rows || rows.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      allRows = allRows.concat(rows);
+      offset += rows.length;
+
+      console.log('[PRF] Page ' + pageNum + ': fetched ' + rows.length + ' items (total: ' + allRows.length + ')');
+      pageNum++;
+
+      if (rows.length < pageSize) {
+        hasMore = false;
+      }
+
+      // Small delay to prevent rate limiting
+      if (hasMore) await new Promise(function(r) { setTimeout(r, 100); });
+    }
+
+    console.log('[PRF] ✅ Total items fetched:', allRows.length);
+
+    var items = allRows.map(function(r) {
       return {
         code: r.item_code,
         description: r.description || '',
         unit: r.base_unit || 'PCS',
-        itemClass: r.category || '',   // category = item class equivalent
+        itemClass: r.category || '',
         category: r.category || '',
         location: r.location || ''
       };
@@ -185,7 +215,7 @@ async function preloadInventoryForSearch() {
     _prf.inventoryList = items;
 
     _prf.erpItemsMap = {};
-    (rows || []).forEach(function(r) {
+    allRows.forEach(function(r) {
       _prf.erpItemsMap[String(r.item_code || '').trim()] = {
         buffer_stock: Number(r.buffer_stock || 0),
         on_hand: Number(r.on_hand || 0),
@@ -197,7 +227,7 @@ async function preloadInventoryForSearch() {
     });
 
     _prf.inventoryLoaded = true;
-    console.log('[PRF] ✅ Search catalog loaded from erp_items:', items.length, 'items');
+    console.log('[PRF] ✅ Search catalog loaded:', items.length, 'items');
     console.log('[PRF] ✅ ERP items map built:', Object.keys(_prf.erpItemsMap).length, 'entries');
 
   } catch(err) {
