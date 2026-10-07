@@ -177,7 +177,7 @@
 .status-REJECTED { background: #fee2e2; color: #991b1b; }
 .status-CANCELLED { background: #f3f4f6; color: #6b7280; }
 
-/* Item table in review */
+/* Item row */
 .item-row {
   cursor: pointer;
   transition: background 0.1s;
@@ -195,7 +195,9 @@
   background: #f8fdf9;
 }
 
-/* Auto-suggest dropdown */
+/* ═══════════════════════════════════════════════════════════
+   AUTO-SUGGEST DROPDOWN (NEW)
+   ═══════════════════════════════════════════════════════════ */
 .item-search-dropdown {
   position: fixed;
   background: #fff;
@@ -232,7 +234,7 @@
 .item-search-item .item-code {
   font-family: 'Courier New', monospace;
   font-weight: 700;
-  color: var(--erp-blue, #1e3a5f);
+  color: #1e3a5f;
   margin-bottom: 3px;
   font-size: 0.92rem;
 }
@@ -250,6 +252,7 @@
   font-size: 0.74rem;
   color: #6b7280;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .item-search-item .item-meta .badge {
@@ -267,7 +270,7 @@
   background: transparent;
 }
 
-/* Print styles for count sheet */
+/* Print styles */
 @media print {
   body * { visibility: hidden; }
   #countPrintArea, #countPrintArea * { visibility: visible; }
@@ -333,12 +336,8 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════ -->
   <!-- VIEW 1: SESSION LIST -->
-  <!-- ═══════════════════════════════════════════════════════════ -->
   <div id="viewSessionList">
-
-    <!-- Filters -->
     <div class="erp-card erp-filters-card" style="padding:16px 18px;margin-bottom:20px;">
       <div class="erp-filters-row">
         <div class="erp-search-wrap">
@@ -358,7 +357,6 @@
       </div>
     </div>
 
-    <!-- Sessions Table -->
     <div class="erp-card erp-table-card">
       <div class="erp-table-header">
         <div>
@@ -392,9 +390,7 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════ -->
-  <!-- VIEW 2: COUNTING (SCAN MODE) -->
-  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- VIEW 2: COUNTING -->
   <div id="viewCounting" style="display:none;">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <button class="btn btn-sm btn-outline-secondary" onclick="icBackToList()">
@@ -403,7 +399,6 @@
       <div id="icCountHeader" class="badge bg-primary fs-6"></div>
     </div>
 
-    <!-- Progress -->
     <div class="count-progress">
       <div class="count-progress-bar">
         <div class="count-progress-fill" id="icProgressFill" style="width: 0%"></div>
@@ -414,9 +409,7 @@
     </div>
 
     <div class="row g-3">
-      <!-- Left: Scanner + Manual -->
       <div class="col-lg-7">
-        <!-- Scanner Card -->
         <div class="erp-card" style="padding:20px;margin-bottom:16px;">
           <h6 class="mb-3"><i class="bi bi-qr-code-scan me-2"></i>Scan Item</h6>
           <div class="scan-container" id="icScannerContainer">
@@ -430,28 +423,30 @@
               <i class="bi bi-camera-video me-1"></i>Start Camera
             </button>
           </div>
-         <div style="position:relative;">
-  <div class="input-group input-group-lg">
-    <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
-    <input type="text" id="icManualInput" class="form-control" 
-           placeholder="Type item code or description..." 
-           autocomplete="off"
-           oninput="icOnManualInput(this.value)"
-           onfocus="icOnManualInput(this.value)"
-           onkeypress="if(event.key==='Enter')icManualVerify()">
-    <button class="btn btn-outline-primary" onclick="icManualVerify()">
-      <i class="bi bi-check-lg"></i> Verify
-    </button>
-  </div>
-  <div id="icManualDropdown" class="item-search-dropdown d-none"></div>
-</div>
+
+          <!-- ✅ AUTO-SUGGEST MANUAL INPUT -->
+          <div style="position:relative;">
+            <div class="input-group input-group-lg">
+              <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+              <input type="text" id="icManualInput" class="form-control" 
+                     placeholder="Type item code or description..." 
+                     autocomplete="off"
+                     oninput="icOnManualInput(this.value)"
+                     onfocus="icOnManualInput(this.value)"
+                     onkeypress="if(event.key==='Enter')icManualVerify()">
+              <button class="btn btn-outline-primary" onclick="icManualVerify()">
+                <i class="bi bi-check-lg"></i> Verify
+              </button>
+            </div>
+            <div id="icManualDropdown" class="item-search-dropdown d-none"></div>
+          </div>
+
           <div id="icScanStatus" class="alert alert-info py-2 small mt-2 mb-0">
             <i class="bi bi-info-circle me-1"></i>
             <span id="icScanStatusText">Ready to scan</span>
           </div>
         </div>
 
-        <!-- Actions -->
         <div class="erp-card" style="padding:16px;margin-bottom:16px;">
           <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
@@ -473,7 +468,6 @@
         </div>
       </div>
 
-      <!-- Right: Recent Scans -->
       <div class="col-lg-5">
         <div class="erp-card" style="padding:20px;">
           <div class="d-flex justify-content-between align-items-center mb-3">
@@ -490,7 +484,6 @@
           </div>
         </div>
 
-        <!-- Variance Summary -->
         <div class="erp-card mt-3" style="padding:16px;">
           <h6 class="mb-3"><i class="bi bi-graph-up me-2"></i>Variance Summary</h6>
           <div class="row g-2">
@@ -508,9 +501,7 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════ -->
-  <!-- VIEW 3: REVIEW (for supervisor) -->
-  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- VIEW 3: REVIEW -->
   <div id="viewReview" style="display:none;">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <button class="btn btn-sm btn-outline-secondary" onclick="icBackToList()">
@@ -519,7 +510,6 @@
       <div id="icReviewHeader" class="badge bg-info fs-6"></div>
     </div>
 
-    <!-- Review Summary -->
     <div class="erp-card mb-3" style="padding:20px;">
       <div class="row g-3 text-center">
         <div class="col-md-3">
@@ -541,7 +531,6 @@
       </div>
     </div>
 
-    <!-- Items Table -->
     <div class="erp-card erp-table-card mb-3">
       <div class="erp-table-header">
         <div>
@@ -575,7 +564,6 @@
       </div>
     </div>
 
-    <!-- Action Buttons -->
     <div class="erp-card" style="padding:20px;">
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="small text-muted">
@@ -595,14 +583,12 @@
   </div>
 
   <div class="erp-footer">
-    <div>GEMCOR ERP — Inventory Count v1.0.0</div>
-    <div>Pure Supabase • SUM-based counting</div>
+    <div>GEMCOR ERP — Inventory Count v1.1.0</div>
+    <div>Pure Supabase • SUM-based counting • Auto-suggest</div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════ -->
 <!-- NEW COUNT MODAL -->
-<!-- ═══════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="newCountModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -613,7 +599,7 @@
       <div class="modal-body">
         <div class="mb-3">
           <label class="form-label fw-bold">Count Type <span class="text-danger">*</span></label>
-          <select id="newCountType" class="form-select form-select-lg">
+          <select id="newCountType" class="form-select form-select-lg" onchange="icOnCountTypeChange()">
             <option value="CYCLE">Cycle Count (by Category)</option>
             <option value="SPOT">Spot Count (specific items)</option>
             <option value="FULL">Full Count (all items)</option>
@@ -652,9 +638,7 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- QTY INPUT MODAL (after scan) -->
-<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- QTY INPUT MODAL -->
 <div class="modal fade" id="qtyInputModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -722,9 +706,7 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- MANUAL ENTRY MODAL (batch) -->
-<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- MANUAL ENTRY MODAL -->
 <div class="modal fade" id="manualEntryModal" tabindex="-1">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
@@ -771,9 +753,7 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- PRINT AREA (hidden, shown on print) -->
-<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- PRINT AREA -->
 <div id="countPrintArea" style="display:none;">
   <div style="padding:20px;font-family:Arial,sans-serif;font-size:9pt;">
     <div style="text-align:center;margin-bottom:12px;">
