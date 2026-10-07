@@ -1,23 +1,21 @@
 // ============================================================
-// GEMCOR ERP — Create PRF (v2.2)
+// GEMCOR ERP — Create PRF (v2.3)
 // Two Modes: "From Reorder List" + "Manual Entry"
-// Auto-suggest item + suggested qty
-// ✅ FIXED v2.1: Dropdown positioning (fixed, wide, auto-flip)
-// ✅ FIXED v2.2: Search from erp_items (complete master, 3,196 items)
+// ✅ FIXED: erp_items search uses correct columns (category, not item_class)
 // ============================================================
 
 var MAX_ITEMS_PER_PRF = 30;
 
 var _prf = {
-  mode: 'reorder',           // 'reorder' | 'manual'
-  items: [],                 // reorder items (from reorder list)
-  selectedItems: [],         // selected reorder items
-  manualItems: [],           // manually added items
+  mode: 'reorder',
+  items: [],
+  selectedItems: [],
+  manualItems: [],
   reorderList: [],
   pendingPrfItems: {},
-  inventoryList: [],         // search catalog (from erp_items)
+  inventoryList: [],
   inventoryLoaded: false,
-  erpItemsMap: {},           // item_code → { buffer_stock, on_hand, ... }
+  erpItemsMap: {},
   isSubmitting: false
 };
 
@@ -25,17 +23,15 @@ var _prf = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Create PRF v2.2] Initializing...');
+  console.log('[Create PRF v2.3] Initializing...');
 
   prfCheckHealth();
   initUserInfo();
   generatePrfNo();
   loadReorderList();
   loadPendingPrfItems();
-  preloadInventoryForSearch();  // ← loads from erp_items (complete)
-  // Note: preloadErpItemsMap is a no-op — data built during preloadInventoryForSearch
+  preloadInventoryForSearch();
 
-  // Category change handler
   var catEl = document.getElementById('prfCategory');
   if (catEl) {
     catEl.addEventListener('change', onCategoryChange);
@@ -89,7 +85,6 @@ function prfSwitchMode(mode) {
   if (reorderContent) reorderContent.classList.toggle('active', mode === 'reorder');
   if (manualContent) manualContent.classList.toggle('active', mode === 'manual');
 
-  // Update category hint
   var hint = document.getElementById('categoryHint');
   if (hint) {
     hint.textContent = mode === 'reorder'
@@ -164,14 +159,14 @@ async function loadPendingPrfItems() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// LOAD SEARCH CATALOG (from erp_items — complete master)
+// LOAD SEARCH CATALOG (from erp_items — with CORRECT columns)
+// ✅ v2.3 FIX: Use 'category' instead of non-existent 'item_class'
 // ═══════════════════════════════════════════════════════════
 async function preloadInventoryForSearch() {
   if (_prf.inventoryLoaded) return;
 
   try {
-    // ✅ FIXED: Remove non-existent 'item_class' column
-    // Use 'category' instead (this is the actual item class in erp_items)
+    // ✅ FIXED: Removed 'item_class', use 'category'
     var rows = await erpFetch('erp_items',
       'select=item_code,description,base_unit,category,location,on_hand,buffer_stock,ave_monthly_consumption' +
       '&is_active=eq.true&order=item_code.asc&limit=10000');
@@ -181,7 +176,7 @@ async function preloadInventoryForSearch() {
         code: r.item_code,
         description: r.description || '',
         unit: r.base_unit || 'PCS',
-        itemClass: r.category || '',  // Use category as item class
+        itemClass: r.category || '',   // category = item class equivalent
         category: r.category || '',
         location: r.location || ''
       };
@@ -189,7 +184,6 @@ async function preloadInventoryForSearch() {
 
     _prf.inventoryList = items;
 
-    // Build erpItemsMap from same data
     _prf.erpItemsMap = {};
     (rows || []).forEach(function(r) {
       _prf.erpItemsMap[String(r.item_code || '').trim()] = {
@@ -209,7 +203,6 @@ async function preloadInventoryForSearch() {
   } catch(err) {
     console.warn('[PRF] erp_items load failed, trying fallback inventory:', err.message);
 
-    // Fallback: legacy inventory table
     try {
       var rows2 = await erpFetch('inventory',
         'select=item_code,description,unit,item_class&order=item_code.asc&limit=10000');
@@ -232,7 +225,6 @@ async function preloadInventoryForSearch() {
   }
 }
 
-// No-op — done in preloadInventoryForSearch
 async function preloadErpItemsMap() {
   if (!_prf.inventoryLoaded) {
     await preloadInventoryForSearch();
@@ -248,7 +240,7 @@ function getSuggestedQty(itemCode) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// CATEGORY CHANGE (for Reorder mode)
+// CATEGORY CHANGE (Reorder mode)
 // ═══════════════════════════════════════════════════════════
 function onCategoryChange() {
   if (_prf.mode !== 'reorder') return;
@@ -274,7 +266,7 @@ function onCategoryChange() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER REORDER ITEMS (existing logic)
+// RENDER REORDER ITEMS
 // ═══════════════════════════════════════════════════════════
 function renderReorderItems() {
   var container = document.getElementById('reorderItemsContainer');
@@ -393,7 +385,7 @@ function computeSuggested(it) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SELECTION (Reorder mode)
+// SELECTION
 // ═══════════════════════════════════════════════════════════
 function toggleItemSelect(idx, checked) {
   var item = _prf.items[idx];
@@ -562,9 +554,6 @@ function renderManualItems() {
 
 window.renderManualItems = renderManualItems;
 
-// ═══════════════════════════════════════════════════════════
-// MANUAL ITEM SEARCH (with fixed dropdown positioning)
-// ═══════════════════════════════════════════════════════════
 function onManualItemSearch(idx, value) {
   var input = document.querySelector('.manual-item-search-input[data-idx="' + idx + '"]');
   var dropdown = document.getElementById('manualDropdown' + idx);
@@ -622,9 +611,6 @@ function onManualItemSearch(idx, value) {
 
 window.onManualItemSearch = onManualItemSearch;
 
-// ═══════════════════════════════════════════════════════════
-// Position dropdown dynamically
-// ═══════════════════════════════════════════════════════════
 function _positionDropdown(dropdown, input) {
   var rect = input.getBoundingClientRect();
   var spaceBelow = window.innerHeight - rect.bottom;
@@ -764,7 +750,7 @@ function updateItemsCount() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT PRF (UNIFIED)
+// SUBMIT PRF
 // ═══════════════════════════════════════════════════════════
 async function submitPrf() {
   if (_prf.isSubmitting) return;
@@ -782,7 +768,6 @@ async function submitPrf() {
 
   var allItems = [];
 
-  // 1. Reorder items
   recomputeSelected();
   _prf.selectedItems.forEach(function(it) {
     allItems.push({
@@ -800,7 +785,6 @@ async function submitPrf() {
     });
   });
 
-  // 2. Manual items
   _prf.manualItems.forEach(function(it) {
     if (!it.inventoryId || !it.inventoryId.trim()) return;
     if (!it.qty || it.qty <= 0) return;
@@ -1030,10 +1014,6 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
 }
 
-// ═══════════════════════════════════════════════════════════
-// GLOBAL EVENT HANDLERS
-// ═══════════════════════════════════════════════════════════
-
 document.addEventListener('click', function(e) {
   if (!e.target.closest('.item-search-wrapper') && !e.target.closest('.item-search-dropdown')) {
     document.querySelectorAll('.item-search-dropdown').forEach(function(el) {
@@ -1056,4 +1036,4 @@ window.addEventListener('resize', function() {
   });
 });
 
-console.log('✅ new-prf.js v2.2 loaded (erp_items search + fixed dropdown)');
+console.log('✅ new-prf.js v2.3 loaded (category column fix)');
