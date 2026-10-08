@@ -113,33 +113,65 @@
         }
       ]
     },
+   {
+  id: 'production',
+  label: 'Production',
+  items: [
     {
-      id: 'production',
-      label: 'Production',
+      id: 'my-requests',
+      label: 'My Requests',
+      icon: 'bi-list-check',
+      href: 'my-requests.html',
+      roles: ['production']
+    },
+    {
+      id: 'new-mrif-group',
+      label: 'New MRIF',
+      icon: 'bi-box-arrow-up-right',
+      roles: ['production'],
+      type: 'submenu',
       items: [
         {
-          id: 'my-requests',
-          label: 'My Requests',
-          icon: 'bi-list-check',
-          href: 'my-requests.html',
-          roles: ['production']
-        },
-        {
           id: 'new-mrif',
-          label: 'New MRIF',
-          icon: 'bi-plus-circle',
+          label: 'With JO',
+          icon: 'bi-hash',
           href: 'new-mrif.html',
           roles: ['production']
         },
         {
+          id: 'new-mrif-manual',
+          label: 'Manual (No JO)',
+          icon: 'bi-pencil-square',
+          href: 'new-mrif-manual.html',
+          roles: ['production']
+        }
+      ]
+    },
+    {
+      id: 'new-mrs-group',
+      label: 'New MRS',
+      icon: 'bi-arrow-counterclockwise',
+      roles: ['production'],
+      type: 'submenu',
+      items: [
+        {
           id: 'new-mrs',
-          label: 'New MRS',
-          icon: 'bi-plus-circle',
+          label: 'With JO',
+          icon: 'bi-hash',
           href: 'new-mrs.html',
+          roles: ['production']
+        },
+        {
+          id: 'new-mrs-manual',
+          label: 'Manual (No JO)',
+          icon: 'bi-pencil-square',
+          href: 'new-mrs-manual.html',
           roles: ['production']
         }
       ]
     }
+  ]
+}
   ];
 
   // Page title mapping
@@ -339,23 +371,77 @@
         nav.appendChild(label);
       }
 
-      // Items
-      allowedItems.forEach(function(item) {
-        var isActive = (item.id === currentPage);
-
-        var link = document.createElement('a');
-        link.href = item.href;
-        link.className = 'erp-sidebar-item' + (isActive ? ' active' : '');
-        link.title = item.label;
-        link.setAttribute('data-nav-id', item.id);
-
-        link.innerHTML =
-          '<i class="bi ' + item.icon + '"></i>' +
-          '<span class="erp-sidebar-item-label">' + _escapeHtml(item.label) + '</span>';
-
-        nav.appendChild(link);
-      });
+     // Items
+allowedItems.forEach(function(item) {
+  // ─── Submenu (nested items) ───
+  if (item.type === 'submenu' && item.items && item.items.length > 0) {
+    var allowedSubItems = item.items.filter(function(sub) {
+      return _isAllowed(sub, userRole);
     });
+    if (allowedSubItems.length === 0) return;
+
+    var subActive = allowedSubItems.some(function(sub) {
+      return sub.id === currentPage;
+    });
+
+    var subContainer = document.createElement('div');
+    subContainer.className = 'erp-sidebar-submenu' + (subActive ? ' has-active' : '');
+
+    // Parent
+    var parent = document.createElement('div');
+    parent.className = 'erp-sidebar-item erp-sidebar-submenu-parent' + (subActive ? ' active' : '');
+    parent.title = item.label;
+    parent.setAttribute('data-nav-id', item.id);
+    parent.innerHTML =
+      '<i class="bi ' + item.icon + '"></i>' +
+      '<span class="erp-sidebar-item-label">' + _escapeHtml(item.label) + '</span>' +
+      '<i class="bi bi-chevron-down erp-sidebar-submenu-caret"></i>';
+
+    // Submenu list
+    var subList = document.createElement('div');
+    subList.className = 'erp-sidebar-submenu-list';
+
+    allowedSubItems.forEach(function(sub) {
+      var subIsActive = (sub.id === currentPage);
+      var subLink = document.createElement('a');
+      subLink.href = sub.href;
+      subLink.className = 'erp-sidebar-subitem' + (subIsActive ? ' active' : '');
+      subLink.title = sub.label;
+      subLink.setAttribute('data-nav-id', sub.id);
+      subLink.innerHTML =
+        '<i class="bi ' + sub.icon + '"></i>' +
+        '<span>' + _escapeHtml(sub.label) + '</span>';
+      subList.appendChild(subLink);
+    });
+
+    // Toggle on parent click
+    parent.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      subContainer.classList.toggle('open');
+    });
+
+    subContainer.appendChild(parent);
+    subContainer.appendChild(subList);
+    nav.appendChild(subContainer);
+
+  } else {
+    // ─── Regular item ───
+    var isActive = (item.id === currentPage);
+
+    var link = document.createElement('a');
+    link.href = item.href;
+    link.className = 'erp-sidebar-item' + (isActive ? ' active' : '');
+    link.title = item.label;
+    link.setAttribute('data-nav-id', item.id);
+
+    link.innerHTML =
+      '<i class="bi ' + item.icon + '"></i>' +
+      '<span class="erp-sidebar-item-label">' + _escapeHtml(item.label) + '</span>';
+
+    nav.appendChild(link);
+  }
+});
 
     sidebar.appendChild(nav);
 
