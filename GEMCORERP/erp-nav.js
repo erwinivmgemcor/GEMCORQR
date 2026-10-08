@@ -1,6 +1,6 @@
 // ============================================================
-// GEMCOR ERP — Navigation System v5.0
-// Sidebar Fixed Layout (auto-inject, walang overlap)
+// GEMCOR ERP — Navigation System v6.0
+// Stripe + GitHub Hybrid Design
 // ============================================================
 
 (function() {
@@ -14,50 +14,68 @@
       id: 'main',
       label: '',
       items: [
-        { id: 'management-dashboard', label: 'Dashboard', icon: 'bi-graph-up-arrow', href: 'management-dashboard.html', roles: ['warehouse'] },
-        { id: 'stock-monitor', label: 'Stock Monitor', icon: 'bi-speedometer2', href: 'stock-monitor.html', roles: ['warehouse'] }
+        { id: 'management-dashboard', label: 'Dashboard', icon: 'bi-grid-1x2-fill', href: 'management-dashboard.html', roles: ['warehouse'] },
+        { id: 'stock-monitor', label: 'Stock Monitor', icon: 'bi-box-seam-fill', href: 'stock-monitor.html', roles: ['warehouse'] }
       ]
     },
     {
       id: 'inventory',
-      label: 'INVENTORY',
+      label: 'Inventory',
       items: [
-        { id: 'inventory-count', label: 'Inventory Count', icon: 'bi-clipboard-check', href: 'inventory-count.html', roles: ['warehouse'] }
+        { id: 'inventory-count', label: 'Inventory Count', icon: 'bi-clipboard-check-fill', href: 'inventory-count.html', roles: ['warehouse'] }
       ]
     },
     {
       id: 'documents',
-      label: 'DOCUMENTS',
+      label: 'Documents',
       items: [
         { id: 'all-requests', label: 'All Requests', icon: 'bi-inbox-fill', href: 'all-requests.html', roles: ['warehouse'] },
-        { id: 'mrif-list', label: 'MRIF — Issuance', icon: 'bi-box-arrow-up', href: 'mrif-list.html', roles: ['warehouse'] },
-        { id: 'mrr-list', label: 'MRR — Receiving', icon: 'bi-box-arrow-down', href: 'mrr-list.html', roles: ['warehouse'] },
+        { id: 'mrif-list', label: 'MRIF — Issuance', icon: 'bi-box-arrow-up-right', href: 'mrif-list.html', roles: ['warehouse'] },
+        { id: 'mrr-list', label: 'MRR — Receiving', icon: 'bi-box-arrow-in-down', href: 'mrr-list.html', roles: ['warehouse'] },
         { id: 'mrs-list', label: 'MRS — Returns', icon: 'bi-arrow-counterclockwise', href: 'mrs-list.html', roles: ['warehouse'] },
-        { id: 'prf-monitor', label: 'PRF Monitor', icon: 'bi-file-earmark-ruled', href: 'prf-monitor.html', roles: ['warehouse'] }
+        { id: 'prf-monitor', label: 'PRF Monitor', icon: 'bi-file-earmark-text-fill', href: 'prf-monitor.html', roles: ['warehouse'] }
       ]
     },
     {
       id: 'reports',
-      label: 'REPORTS',
+      label: 'Reports',
       items: [
-        { id: 'weekly-monitor', label: 'Weekly Monitoring', icon: 'bi-calendar-week', href: 'weekly-monitor.html', roles: ['warehouse'] },
-        { id: 'usage-trend', label: 'Usage Trend', icon: 'bi-graph-up', href: 'usage-trend.html', roles: ['warehouse'] },
+        { id: 'weekly-monitor', label: 'Weekly Monitoring', icon: 'bi-calendar-week-fill', href: 'weekly-monitor.html', roles: ['warehouse'] },
+        { id: 'usage-trend', label: 'Usage Trend', icon: 'bi-graph-up-arrow', href: 'usage-trend.html', roles: ['warehouse'] },
         { id: 'process-history', label: 'Process History', icon: 'bi-clock-history', href: 'process-history.html', roles: ['warehouse'] }
       ]
     },
     {
       id: 'production',
-      label: 'PRODUCTION',
+      label: 'Production',
       items: [
         { id: 'my-requests', label: 'My Requests', icon: 'bi-list-check', href: 'my-requests.html', roles: ['production'] },
-        { id: 'new-mrif', label: 'New MRIF', icon: 'bi-plus-circle', href: 'new-mrif.html', roles: ['production'] },
-        { id: 'new-mrs', label: 'New MRS', icon: 'bi-plus-circle', href: 'new-mrs.html', roles: ['production'] }
+        { id: 'new-mrif', label: 'New MRIF', icon: 'bi-plus-circle-fill', href: 'new-mrif.html', roles: ['production'] },
+        { id: 'new-mrs', label: 'New MRS', icon: 'bi-plus-circle-fill', href: 'new-mrs.html', roles: ['production'] }
       ]
     }
   ];
 
-  var SIDEBAR_WIDTH = 240;
-  var SIDEBAR_WIDTH_COLLAPSED = 64;
+  // Page title map
+  var PAGE_TITLES = {
+    'management-dashboard': 'Management Dashboard',
+    'stock-monitor': 'Stock Monitor',
+    'inventory-count': 'Inventory Count',
+    'all-requests': 'All Requests',
+    'mrif-list': 'MRIF List',
+    'mrr-list': 'MRR List',
+    'mrs-list': 'MRS List',
+    'prf-monitor': 'PRF Monitor',
+    'weekly-monitor': 'Weekly Monitoring',
+    'usage-trend': 'Usage Trend',
+    'usage-entry': 'Usage Entry',
+    'process-history': 'Process History',
+    'my-requests': 'My Requests',
+    'new-mrif': 'New MRIF',
+    'new-mrr': 'New MRR',
+    'new-mrs': 'New MRS'
+  };
+
   var SIDEBAR_STATE_KEY = 'erp_sidebar_collapsed';
 
   // ═══════════════════════════════════════════════════════════
@@ -69,13 +87,7 @@
 
   function _getCurrentPage() {
     var path = window.location.pathname;
-    var pages = [
-      'management-dashboard', 'weekly-monitor', 'stock-monitor', 'usage-trend', 'usage-entry',
-      'all-requests', 'prf-monitor', 'new-prf', 'process-history', 'my-requests',
-      'new-mrif-manual', 'new-mrr-manual', 'new-mrs-manual',
-      'new-mrif', 'new-mrr', 'new-mrs',
-      'mrif-list', 'mrr-list', 'mrs-list', 'inventory-count'
-    ];
+    var pages = Object.keys(PAGE_TITLES);
     for (var i = 0; i < pages.length; i++) {
       if (path.indexOf(pages[i]) !== -1) return pages[i];
     }
@@ -117,29 +129,22 @@
     catch(e) {}
   }
 
+  function _getTheme() {
+    try { return localStorage.getItem('erp_theme') || 'light'; }
+    catch(e) { return 'light'; }
+  }
+
   // ═══════════════════════════════════════════════════════════
-  // REMOVE OLD NAVBAR
+  // REMOVE OLD NAV
   // ═══════════════════════════════════════════════════════════
   function _removeOldNav() {
-    // Remove existing topbar
-    var oldTopbar = document.querySelector('nav.erp-topbar');
-    if (oldTopbar) oldTopbar.remove();
-
-    // Remove existing navbar container
-    var oldNavBar = document.getElementById('erpNavBar');
-    if (oldNavBar) oldNavBar.remove();
-
-    // Remove old sidebar (if re-rendering)
-    var oldSidebar = document.getElementById('erpSidebar');
-    if (oldSidebar) oldSidebar.remove();
-
-    // Remove old topbar (thin version)
-    var oldThinTopbar = document.getElementById('erpThinTopbar');
-    if (oldThinTopbar) oldThinTopbar.remove();
-
-    // Remove old nav backdrop
-    var oldBackdrop = document.getElementById('erpSidebarBackdrop');
-    if (oldBackdrop) oldBackdrop.remove();
+    ['nav.erp-topbar', '.erp-topbar', '#erpNavBar', '#erpSidebar', '#erpThinTopbar', '#erpSidebarBackdrop', '.erp-mobile-menu-btn'].forEach(function(sel) {
+      document.querySelectorAll(sel).forEach(function(el) {
+        if (el.tagName !== 'NAV' || !el.classList.contains('erp-topbar')) {
+          el.remove();
+        }
+      });
+    });
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -150,46 +155,34 @@
     sidebar.id = 'erpSidebar';
     sidebar.className = 'erp-sidebar' + (_isCollapsed() ? ' collapsed' : '');
 
-    // ─── Logo section ───
+    // Brand
     var brand = document.createElement('div');
     brand.className = 'erp-sidebar-brand';
+    brand.innerHTML =
+      '<img src="../gemcor-logo.png" alt="GEMCOR" class="erp-sidebar-logo" onerror="this.style.display=\'none\'">' +
+      '<div class="erp-sidebar-brand-text">' +
+        '<div class="erp-sidebar-brand-main">GEMCOR ERP</div>' +
+        '<div class="erp-sidebar-brand-sub">Inventory System</div>' +
+      '</div>' +
+      '<button class="erp-sidebar-toggle" title="Toggle sidebar"><i class="bi bi-layout-sidebar-inset"></i></button>';
 
-    var logo = document.createElement('img');
-    logo.src = '../gemcor-logo.png';
-    logo.alt = 'GEMCOR';
-    logo.className = 'erp-sidebar-logo';
-    logo.onerror = function() { this.style.display = 'none'; };
-
-    var brandText = document.createElement('div');
-    brandText.className = 'erp-sidebar-brand-text';
-    brandText.innerHTML = '<div class="erp-sidebar-brand-main">GEMCOR</div><div class="erp-sidebar-brand-sub">ERP System</div>';
-
-    var toggle = document.createElement('button');
-    toggle.className = 'erp-sidebar-toggle';
-    toggle.title = 'Toggle sidebar';
-    toggle.innerHTML = '<i class="bi bi-list"></i>';
-    toggle.onclick = function() {
+    brand.querySelector('.erp-sidebar-toggle').onclick = function() {
       var isCollapsed = sidebar.classList.toggle('collapsed');
       _setCollapsed(isCollapsed);
       document.body.classList.toggle('erp-sidebar-collapsed', isCollapsed);
     };
-
-    brand.appendChild(logo);
-    brand.appendChild(brandText);
-    brand.appendChild(toggle);
     sidebar.appendChild(brand);
 
-    // ─── Nav items ───
+    // Nav
     var nav = document.createElement('nav');
     nav.className = 'erp-sidebar-nav';
 
     NAV_GROUPS.forEach(function(group) {
-      var allowedItems = group.items.filter(function(item) {
+      var allowed = group.items.filter(function(item) {
         return _isAllowed(item, userRole);
       });
-      if (allowedItems.length === 0) return;
+      if (allowed.length === 0) return;
 
-      // Group label
       if (group.label) {
         var lbl = document.createElement('div');
         lbl.className = 'erp-sidebar-group-label';
@@ -197,30 +190,22 @@
         nav.appendChild(lbl);
       }
 
-      // Items
-      allowedItems.forEach(function(item) {
+      allowed.forEach(function(item) {
         var isActive = (item.id === currentPage);
         var a = document.createElement('a');
         a.href = item.href;
         a.className = 'erp-sidebar-item' + (isActive ? ' active' : '');
         a.title = item.label;
-
-        var icon = document.createElement('i');
-        icon.className = 'bi ' + item.icon;
-
-        var label = document.createElement('span');
-        label.className = 'erp-sidebar-item-label';
-        label.textContent = item.label;
-
-        a.appendChild(icon);
-        a.appendChild(label);
+        a.innerHTML =
+          '<i class="bi ' + item.icon + '"></i>' +
+          '<span class="erp-sidebar-item-label">' + item.label + '</span>';
         nav.appendChild(a);
       });
     });
 
     sidebar.appendChild(nav);
 
-    // ─── Footer ───
+    // Footer
     var footer = document.createElement('div');
     footer.className = 'erp-sidebar-footer';
     footer.innerHTML = '<span class="erp-sidebar-version">v1.0.0</span>';
@@ -237,47 +222,56 @@
     topbar.id = 'erpThinTopbar';
     topbar.className = 'erp-thin-topbar';
 
-    // Left: page title
+    var pageTitle = PAGE_TITLES[currentPage] || 'GEMCOR ERP';
+
+    // Left: Title + Search
     var left = document.createElement('div');
     left.className = 'erp-thin-topbar-left';
-
-    var titleMap = {
-      'management-dashboard': 'Management Dashboard',
-      'stock-monitor': 'Stock Monitor',
-      'inventory-count': 'Inventory Count',
-      'all-requests': 'All Requests',
-      'mrif-list': 'MRIF List',
-      'mrr-list': 'MRR List',
-      'mrs-list': 'MRS List',
-      'prf-monitor': 'PRF Monitor',
-      'weekly-monitor': 'Weekly Monitoring',
-      'usage-trend': 'Usage Trend',
-      'process-history': 'Process History',
-      'my-requests': 'My Requests',
-      'new-mrif': 'New MRIF',
-      'new-mrr': 'New MRR',
-      'new-mrs': 'New MRS'
-    };
-
-    var pageTitle = titleMap[currentPage] || 'GEMCOR ERP';
-
     left.innerHTML =
-      '<h1 class="erp-thin-page-title">' + pageTitle + '</h1>';
+      '<h1 class="erp-thin-page-title">' + pageTitle + '</h1>' +
+      '<div class="erp-search-bar" onclick="if(window.erpOpenSearch)erpOpenSearch()">' +
+        '<i class="bi bi-search"></i>' +
+        '<span>Search...</span>' +
+        '<kbd class="erp-search-kbd">⌘K</kbd>' +
+      '</div>';
     topbar.appendChild(left);
 
-    // Right: Bell + User menu
+    // Right: Health + Theme + Bell + Settings + User
     var right = document.createElement('div');
     right.className = 'erp-thin-topbar-right';
+
+    // Health dot
+    var healthDot = document.createElement('div');
+    healthDot.className = 'erp-health-dot';
+    healthDot.id = 'erpHealthDot';
+    healthDot.title = 'Checking connection...';
+    healthDot.innerHTML = '<span class="erp-health-text" id="erpHealthText">Checking...</span>';
+    right.appendChild(healthDot);
+
+    // Theme toggle
+    var themeBtn = document.createElement('button');
+    themeBtn.className = 'erp-icon-btn';
+    themeBtn.title = 'Toggle theme';
+    themeBtn.id = 'erpThemeToggleBtn';
+    themeBtn.innerHTML = '<i class="bi bi-moon-stars" id="erpThemeIcon"></i>';
+    themeBtn.onclick = function() {
+      if (typeof erpToggleTheme === 'function') erpToggleTheme();
+      setTimeout(_updateThemeIcon, 100);
+    };
+    right.appendChild(themeBtn);
 
     // Bell container
     var bellContainer = document.createElement('div');
     bellContainer.id = 'erpBellContainer';
     right.appendChild(bellContainer);
 
-    // Notification dropdown container (appended to body)
-    var notifDD = document.createElement('div');
-    notifDD.id = 'erpNotifContainer';
-    document.body.appendChild(notifDD);
+    // Settings
+    var settingsBtn = document.createElement('button');
+    settingsBtn.className = 'erp-icon-btn';
+    settingsBtn.title = 'Settings';
+    settingsBtn.innerHTML = '<i class="bi bi-gear"></i>';
+    settingsBtn.onclick = function() { window.erpUserSettings(); };
+    right.appendChild(settingsBtn);
 
     // User menu
     var userMenu = document.createElement('div');
@@ -320,23 +314,86 @@
     };
 
     right.appendChild(userMenu);
-    topbar.appendChild(right);
 
+    // Notification dropdown container
+    var notifDD = document.createElement('div');
+    notifDD.id = 'erpNotifContainer';
+    document.body.appendChild(notifDD);
+
+    topbar.appendChild(right);
     return topbar;
   }
 
   // ═══════════════════════════════════════════════════════════
-  // BUILD BACKDROP (for mobile)
+  // THEME ICON UPDATE
+  // ═══════════════════════════════════════════════════════════
+  function _updateThemeIcon() {
+    var icon = document.getElementById('erpThemeIcon');
+    if (!icon) return;
+    var effective = document.documentElement.getAttribute('data-theme') || 'light';
+    icon.className = effective === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // HEALTH CHECK
+  // ═══════════════════════════════════════════════════════════
+  async function _checkHealth() {
+    var dot = document.getElementById('erpHealthDot');
+    var text = document.getElementById('erpHealthText');
+    if (!dot) return;
+
+    try {
+      if (typeof erpHealthCheck === 'function') {
+        var result = await erpHealthCheck();
+        if (result.success) {
+          dot.className = 'erp-health-dot';
+          dot.title = 'Connected (' + result.latency + 'ms)';
+          if (text) text.textContent = 'Connected';
+        } else {
+          dot.className = 'erp-health-dot offline';
+          dot.title = 'Offline';
+          if (text) text.textContent = 'Offline';
+        }
+      } else {
+        dot.className = 'erp-health-dot pending';
+        dot.title = 'Checking...';
+      }
+    } catch(err) {
+      dot.className = 'erp-health-dot offline';
+      dot.title = 'Error';
+      if (text) text.textContent = 'Error';
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // BACKDROP
   // ═══════════════════════════════════════════════════════════
   function _buildBackdrop() {
     var backdrop = document.createElement('div');
     backdrop.id = 'erpSidebarBackdrop';
     backdrop.className = 'erp-sidebar-backdrop';
     backdrop.onclick = function() {
-      document.getElementById('erpSidebar').classList.remove('mobile-open');
+      var sb = document.getElementById('erpSidebar');
+      if (sb) sb.classList.remove('mobile-open');
       backdrop.classList.remove('show');
     };
     return backdrop;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // MOBILE MENU BUTTON
+  // ═══════════════════════════════════════════════════════════
+  function _buildMobileBtn() {
+    var btn = document.createElement('button');
+    btn.className = 'erp-mobile-menu-btn';
+    btn.innerHTML = '<i class="bi bi-list"></i>';
+    btn.onclick = function() {
+      var sb = document.getElementById('erpSidebar');
+      var bd = document.getElementById('erpSidebarBackdrop');
+      if (sb) sb.classList.add('mobile-open');
+      if (bd) bd.classList.add('show');
+    };
+    return btn;
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -347,43 +404,35 @@
     var userRole = _getUserRole();
     var userInfo = _getUserInfo();
 
-    // Remove old elements
     _removeOldNav();
 
-    // Build new elements
     var sidebar = _buildSidebar(userRole, current);
     var topbar = _buildTopbar(userInfo, current);
     var backdrop = _buildBackdrop();
+    var mobileBtn = _buildMobileBtn();
 
-    // Insert into body (FIRST child)
     document.body.insertBefore(backdrop, document.body.firstChild);
+    document.body.insertBefore(mobileBtn, document.body.firstChild);
     document.body.insertBefore(topbar, document.body.firstChild);
     document.body.insertBefore(sidebar, document.body.firstChild);
 
-        // Mobile menu button
-    var mobileBtn = document.createElement('button');
-    mobileBtn.className = 'erp-mobile-menu-btn';
-    mobileBtn.innerHTML = '<i class="bi bi-list"></i>';
-    mobileBtn.onclick = function() {
-      var sb = document.getElementById('erpSidebar');
-      var bd = document.getElementById('erpSidebarBackdrop');
-      if (sb) sb.classList.add('mobile-open');
-      if (bd) bd.classList.add('show');
-    };
-    document.body.appendChild(mobileBtn);
-
-    // Set body class for layout
     document.body.classList.add('erp-has-sidebar');
     if (_isCollapsed()) {
       document.body.classList.add('erp-sidebar-collapsed');
     }
+
+    // Update theme icon
+    _updateThemeIcon();
+
+    // Health check
+    setTimeout(_checkHealth, 300);
 
     // Init notifications
     if (typeof initNotifications === 'function') {
       setTimeout(initNotifications, 100);
     }
 
-    console.log('[Nav] Sidebar rendered. Current page:', current);
+    console.log('[Nav v6.0] Rendered. Page:', current, '| Role:', userRole);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -403,23 +452,23 @@
       if (sidebar) sidebar.classList.remove('mobile-open');
       if (backdrop) backdrop.classList.remove('show');
     }
+    // Cmd/Ctrl + K search
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault();
+      if (window.erpOpenSearch) window.erpOpenSearch();
+    }
   });
 
   // ═══════════════════════════════════════════════════════════
-  // USER MENU ACTIONS
+  // USER ACTIONS
   // ═══════════════════════════════════════════════════════════
   window.erpUserLogout = function() {
     var userInfo = _getUserInfo();
     if (!confirm('Logout ' + (userInfo.fullname || 'user') + '?')) return;
     try {
-      localStorage.removeItem('ivm_username');
-      localStorage.removeItem('ivm_userFullname');
-      localStorage.removeItem('ivm_userRole');
-      localStorage.removeItem('ivm_allowedRoles');
-      localStorage.removeItem('ivm_requestorName');
-      localStorage.removeItem('ivm_userDepartment');
-      localStorage.removeItem('ivm_chatUnread');
-      localStorage.removeItem('ivm_editReqCount');
+      ['ivm_username', 'ivm_userFullname', 'ivm_userRole', 'ivm_allowedRoles', 'ivm_requestorName', 'ivm_userDepartment', 'ivm_chatUnread', 'ivm_editReqCount'].forEach(function(k) {
+        localStorage.removeItem(k);
+      });
       sessionStorage.clear();
     } catch(e) {}
     window.location.href = '../index.html';
@@ -432,13 +481,12 @@
 
   window.erpUserSettings = function() {
     if (typeof erpShowToast === 'function') {
-      erpShowToast('Settings page — coming soon', 'info');
+      erpShowToast('Settings — coming soon', 'info');
     } else {
       alert('Settings — coming soon');
     }
   };
 
-  // Expose for debugging
   window.erpRenderNav = renderNav;
 
   // ═══════════════════════════════════════════════════════════
@@ -450,5 +498,8 @@
     renderNav();
   }
 
-  console.log('✅ erp-nav.js loaded (v5.0 — fixed sidebar)');
+  // Re-apply theme on toggles
+  window.addEventListener('erp-theme-changed', _updateThemeIcon);
+
+  console.log('✅ erp-nav.js loaded (v6.0 — Stripe + GitHub hybrid)');
 })();
