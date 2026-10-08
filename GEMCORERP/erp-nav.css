@@ -1,58 +1,172 @@
 /* ============================================================
-   GEMCOR ERP — Navigation System v4.0
-   Sidebar + Thin Topbar
+   GEMCOR ERP — Navigation System v5.0
+   Sidebar Fixed Layout
    ============================================================ */
 
-/* ─── Layout Wrapper ─── */
-.erp-layout {
-  display: flex;
+:root {
+  --erp-sidebar-w: 240px;
+  --erp-sidebar-w-collapsed: 64px;
+  --erp-topbar-h: 64px;
+  --erp-navy: #0a1628;
+  --erp-navy-light: #1e3a5f;
+  --erp-gold: #f59e0b;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BODY LAYOUT ADJUSTMENT
+   ═══════════════════════════════════════════════════════════ */
+body.erp-has-sidebar {
+  padding-left: var(--erp-sidebar-w);
+  padding-top: var(--erp-topbar-h);
+  transition: padding-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   min-height: 100vh;
-  background: #f0f2f5;
+}
+
+body.erp-has-sidebar.erp-sidebar-collapsed {
+  padding-left: var(--erp-sidebar-w-collapsed);
+}
+
+/* Adjust existing containers */
+body.erp-has-sidebar .erp-container {
+  margin-left: 0 !important;
+  padding: 24px 24px 40px !important;
+  max-width: 100% !important;
+  transition: none;
+}
+
+body.erp-has-sidebar .erp-container .erp-page-header,
+body.erp-has-sidebar .erp-container .mdash-hero {
+  margin-top: 0;
+}
+
+/* Hide existing topbar */
+body.erp-has-sidebar nav.erp-topbar,
+body.erp-has-sidebar .erp-topbar {
+  display: none !important;
+}
+
+/* Hide old nav container */
+body.erp-has-sidebar #erpNavBar {
+  display: none !important;
 }
 
 /* ═══════════════════════════════════════════════════════════
    SIDEBAR
    ═══════════════════════════════════════════════════════════ */
 .erp-sidebar {
-  width: 240px;
-  background: linear-gradient(180deg, #0a1628 0%, #1e3a5f 100%);
-  color: #fff;
-  display: flex;
-  flex-direction: column;
   position: fixed;
   top: 0;
   left: 0;
   bottom: 0;
-  z-index: 100;
+  width: var(--erp-sidebar-w);
+  background: linear-gradient(180deg, #0a1628 0%, #162a47 100%);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
   transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 4px 0 16px rgba(0,0,0,0.08);
+  box-shadow: 2px 0 12px rgba(0,0,0,0.08);
   overflow: hidden;
 }
 
 .erp-sidebar.collapsed {
-  width: 64px;
+  width: var(--erp-sidebar-w-collapsed);
 }
 
-/* ─── Toggle Button ─── */
+/* ─── Brand ─── */
+.erp-sidebar-brand {
+  height: var(--erp-topbar-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.erp-sidebar-logo {
+  height: 36px;
+  width: auto;
+  background: #fff;
+  padding: 3px 6px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  transition: opacity 0.2s;
+}
+
+.erp-sidebar-brand-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  transition: opacity 0.15s, width 0.15s;
+}
+
+.erp-sidebar-brand-main {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.erp-sidebar-brand-sub {
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.5);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
 .erp-sidebar-toggle {
-  background: transparent;
+  background: rgba(255,255,255,0.08);
   border: none;
   color: rgba(255,255,255,0.7);
-  width: 100%;
-  height: 56px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
   cursor: pointer;
   transition: all 0.15s;
   flex-shrink: 0;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  font-size: 1rem;
 }
 
 .erp-sidebar-toggle:hover {
-  background: rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.15);
   color: #fff;
+}
+
+/* Collapsed state: hide brand text */
+.erp-sidebar.collapsed .erp-sidebar-brand {
+  justify-content: center;
+  padding: 0 8px;
+}
+
+.erp-sidebar.collapsed .erp-sidebar-logo {
+  height: 28px;
+  padding: 2px 4px;
+}
+
+.erp-sidebar.collapsed .erp-sidebar-brand-text {
+  display: none;
+}
+
+.erp-sidebar.collapsed .erp-sidebar-toggle {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 28px;
+  height: 28px;
+  opacity: 0;
+}
+
+.erp-sidebar.collapsed .erp-sidebar-brand:hover .erp-sidebar-toggle {
+  opacity: 1;
 }
 
 /* ─── Nav ─── */
@@ -62,7 +176,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.2) transparent;
+  scrollbar-color: rgba(255,255,255,0.15) transparent;
 }
 
 .erp-sidebar-nav::-webkit-scrollbar {
@@ -70,20 +184,20 @@
 }
 
 .erp-sidebar-nav::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.15);
   border-radius: 2px;
 }
 
 /* ─── Group Label ─── */
 .erp-sidebar-group-label {
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   font-weight: 800;
-  letter-spacing: 0.1em;
-  color: rgba(255,255,255,0.4);
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.35);
   padding: 16px 12px 6px;
   text-transform: uppercase;
   white-space: nowrap;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, height 0.15s, padding 0.15s;
 }
 
 .erp-sidebar.collapsed .erp-sidebar-group-label {
@@ -100,9 +214,9 @@
   gap: 12px;
   padding: 10px 12px;
   border-radius: 8px;
-  color: rgba(255,255,255,0.75);
+  color: rgba(255,255,255,0.72);
   text-decoration: none;
-  font-size: 0.88rem;
+  font-size: 0.87rem;
   font-weight: 500;
   transition: all 0.15s;
   white-space: nowrap;
@@ -117,14 +231,25 @@
 }
 
 .erp-sidebar-item.active {
-  background: rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.14);
   color: #fff;
   font-weight: 700;
-  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.erp-sidebar-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--erp-gold);
+  border-radius: 0 3px 3px 0;
 }
 
 .erp-sidebar-item i {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   width: 20px;
   text-align: center;
   flex-shrink: 0;
@@ -137,6 +262,7 @@
   transition: opacity 0.15s;
 }
 
+/* Collapsed state */
 .erp-sidebar.collapsed .erp-sidebar-item-label {
   opacity: 0;
   width: 0;
@@ -146,13 +272,14 @@
 .erp-sidebar.collapsed .erp-sidebar-item {
   justify-content: center;
   padding: 10px;
+  gap: 0;
 }
 
 /* Tooltip on collapsed */
 .erp-sidebar.collapsed .erp-sidebar-item::after {
   content: attr(title);
   position: absolute;
-  left: 100%;
+  left: calc(100% + 8px);
   top: 50%;
   transform: translateY(-50%);
   background: #1e293b;
@@ -165,32 +292,36 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s, transform 0.15s;
-  margin-left: 8px;
-  z-index: 1000;
+  z-index: 2000;
   box-shadow: 0 4px 16px rgba(0,0,0,0.3);
 }
 
 .erp-sidebar.collapsed .erp-sidebar-item:hover::after {
   opacity: 1;
-  transform: translateY(-50%) translateX(4px);
 }
 
 /* ─── Footer ─── */
 .erp-sidebar-footer {
-  padding: 12px;
+  padding: 12px 16px;
   border-top: 1px solid rgba(255,255,255,0.08);
   text-align: center;
   flex-shrink: 0;
+  transition: padding 0.15s;
 }
 
 .erp-sidebar-version {
-  font-size: 0.7rem;
-  color: rgba(255,255,255,0.4);
+  font-size: 0.68rem;
+  color: rgba(255,255,255,0.35);
   font-weight: 600;
+  transition: opacity 0.15s;
+}
+
+.erp-sidebar.collapsed .erp-sidebar-footer {
+  padding: 12px 8px;
 }
 
 .erp-sidebar.collapsed .erp-sidebar-version {
-  display: none;
+  font-size: 0.6rem;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -199,88 +330,50 @@
 .erp-thin-topbar {
   position: fixed;
   top: 0;
-  left: 240px;
+  left: var(--erp-sidebar-w);
   right: 0;
-  height: 56px;
+  height: var(--erp-topbar-h);
   background: #fff;
   border-bottom: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  z-index: 99;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  z-index: 999;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
   transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-body:has(.erp-sidebar.collapsed) .erp-thin-topbar {
-  left: 64px;
-}
-
-/* Fallback for browsers without :has() */
-.erp-sidebar.collapsed ~ .erp-thin-topbar,
-.erp-sidebar.collapsed + .erp-thin-topbar {
-  left: 64px;
+body.erp-sidebar-collapsed .erp-thin-topbar {
+  left: var(--erp-sidebar-w-collapsed);
 }
 
 .erp-thin-topbar-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
+  min-width: 0;
 }
 
-.erp-thin-logo {
-  height: 32px;
-  width: auto;
-}
-
-.erp-thin-brand-main {
-  font-size: 0.95rem;
+.erp-thin-page-title {
+  font-size: 1.15rem;
   font-weight: 800;
   color: #0f172a;
-  line-height: 1.1;
-}
-
-.erp-thin-brand-sub {
-  font-size: 0.7rem;
-  color: #64748b;
-  font-weight: 500;
+  letter-spacing: -0.02em;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .erp-thin-topbar-right {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   CONTENT AREA ADJUSTMENT
-   ═══════════════════════════════════════════════════════════ */
-body:has(.erp-sidebar.collapsed) .erp-container {
-  margin-left: 64px;
-}
-
-body:not(:has(.erp-sidebar.collapsed)) .erp-container {
-  margin-left: 240px;
-}
-
-/* Fallback */
-.erp-layout + .erp-container {
-  margin-left: 240px;
-  padding-top: 76px; /* topbar height + spacing */
-  transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Handle erp-container direct in body */
-body > .erp-container {
-  margin-left: 240px !important;
-  padding-top: 76px !important;
-  transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* ═══════════════════════════════════════════════════════════
-   USER MENU (reused from before, with adjustments)
-   ═══════════════════════════════════════════════════════════ */
+/* ─── User Menu ─── */
 .erp-user-menu {
   position: relative;
 }
@@ -289,7 +382,7 @@ body > .erp-container {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 12px;
+  padding: 6px 12px 6px 6px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 24px;
@@ -315,7 +408,7 @@ body > .erp-container {
   justify-content: center;
   color: #fff;
   font-weight: 700;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   flex-shrink: 0;
 }
 
@@ -365,13 +458,13 @@ body > .erp-container {
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.12);
   padding: 6px;
   opacity: 0;
   visibility: hidden;
   transform: translateY(-8px);
   transition: all 0.2s;
-  z-index: 1000;
+  z-index: 1001;
 }
 
 .erp-user-menu.open .erp-user-dropdown {
@@ -442,7 +535,6 @@ body > .erp-container {
 
 .erp-user-dropdown-item.danger:hover {
   background: #fef2f2;
-  color: #dc2626;
 }
 
 .erp-user-dropdown-item.danger i {
@@ -456,12 +548,38 @@ body > .erp-container {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   BACKDROP (for mobile)
+   ═══════════════════════════════════════════════════════════ */
+.erp-sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 998;
+  backdrop-filter: blur(2px);
+}
+
+.erp-sidebar-backdrop.show {
+  display: block;
+}
+
+/* ═══════════════════════════════════════════════════════════
    MOBILE RESPONSIVE
    ═══════════════════════════════════════════════════════════ */
-@media (max-width: 992px) {
+@media (max-width: 768px) {
+  body.erp-has-sidebar {
+    padding-left: 0;
+    padding-top: 64px;
+  }
+
+  body.erp-has-sidebar.erp-sidebar-collapsed {
+    padding-left: 0;
+  }
+
   .erp-sidebar {
     transform: translateX(-100%);
-    width: 240px;
+    width: var(--erp-sidebar-w);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .erp-sidebar.mobile-open {
@@ -470,41 +588,29 @@ body > .erp-container {
 
   .erp-sidebar.collapsed {
     transform: translateX(-100%);
+    width: var(--erp-sidebar-w);
   }
 
   .erp-sidebar.collapsed.mobile-open {
     transform: translateX(0);
-    width: 240px;
   }
 
-  .erp-thin-topbar {
-    left: 0 !important;
-    padding-left: 64px;
+  .erp-thin-topbar,
+  body.erp-sidebar-collapsed .erp-thin-topbar {
+    left: 0;
+    padding-left: 70px;
+    padding-right: 16px;
   }
 
-  .erp-container {
-    margin-left: 0 !important;
+  /* Mobile menu button */
+  .erp-mobile-menu-btn {
+    display: flex;
   }
 
-  .erp-sidebar-toggle {
-    position: fixed;
-    left: 12px;
-    top: 12px;
-    width: 40px;
-    height: 40px;
-    background: #1e3a5f;
-    border-radius: 8px;
-    z-index: 101;
-    border: none;
+  .erp-thin-page-title {
+    font-size: 1rem;
   }
 
-  .erp-sidebar.mobile-open .erp-sidebar-toggle {
-    left: 252px;
-    background: transparent;
-  }
-}
-
-@media (max-width: 480px) {
   .erp-user-info {
     display: none;
   }
@@ -513,18 +619,40 @@ body > .erp-container {
     padding: 6px;
   }
 
-  .erp-thin-brand-sub {
-    display: none;
+  body.erp-has-sidebar .erp-container {
+    padding: 16px !important;
+  }
+}
+
+/* Mobile menu button (hidden on desktop) */
+.erp-mobile-menu-btn {
+  display: none;
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  width: 40px;
+  height: 40px;
+  background: var(--erp-navy-light);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  z-index: 997;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+@media (max-width: 768px) {
+  .erp-mobile-menu-btn {
+    display: flex;
   }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   OVERRIDE OLD STYLES
+   HIDE OLD STYLES FROM PREVIOUS VERSIONS
    ═══════════════════════════════════════════════════════════ */
-.erp-topbar {
-  display: none !important;
-}
-
-#erpNavBar {
+.erp-layout {
   display: none !important;
 }
