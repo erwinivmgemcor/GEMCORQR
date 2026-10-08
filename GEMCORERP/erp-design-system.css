@@ -1556,3 +1556,18 @@ body.erp-has-sidebar .erp-container {
 /* ═══════════════════════════════════════════════════════════
    END LIGHT MODE PREMIUM ENHANCEMENT
    ═══════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════
+   NEUTRALIZE — v8.0 Sidebar uses its own styles
+   ═══════════════════════════════════════════════════════════ */
+
+/* Disable any sidebar rules from this file when new nav is active */
+body.erp-has-sidebar .erp-sidebar {
+  all: unset;
+  /* Styles come from erp-nav.css instead */
+}
+
+/* Keep erp-design-system.css sidebar visible if erp-nav.js not loaded */
+body:not(.erp-has-sidebar) .erp-sidebar {
+  /* Original styles work here */
+}
