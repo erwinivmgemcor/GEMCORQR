@@ -15,6 +15,8 @@
     'my-requests.html',
     'new-mrif.html',
     'new-mrs.html'
+    'new-mrif-manual.html'
+    'new-mrs-manual.html'
   ];
 
   function _redirectToLogin(reason) {
