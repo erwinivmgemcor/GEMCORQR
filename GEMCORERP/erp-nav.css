@@ -1081,3 +1081,305 @@ body.erp-has-sidebar [class*="amount"] {
   font-variant-numeric: tabular-nums !important;
   letter-spacing: -0.01em !important;
 }
+/* ═══════════════════════════════════════════════════════════
+   v8.1 FINAL OVERRIDES
+   - Navy blue sidebar (GEMCOR brand)
+   - Light mode only
+   - Notification bell visible
+   ═══════════════════════════════════════════════════════════ */
+
+/* ─── FORCE LIGHT MODE (regardless of data-theme) ─── */
+html,
+html[data-theme="dark"],
+html[data-theme="light"] {
+  --bg-page: #F8FAFC !important;
+  --bg-surface: #FFFFFF !important;
+  --bg-elevated: #FFFFFF !important;
+  --bg-hover: #F1F5F9 !important;
+  --bg-subtle: #F1F5F9 !important;
+
+  --fg: #0F172A !important;
+  --fg-muted: #64748B !important;
+  --fg-subtle: #94A3B8 !important;
+
+  --bd: #E2E8F0 !important;
+  --bd-strong: #CBD5E1 !important;
+
+  --accent-soft: #EEF2FF !important;
+  --success-soft: #ECFDF5 !important;
+  --success-border: #A7F3D0 !important;
+  --warning-soft: #FFFBEB !important;
+  --warning-border: #FDE68A !important;
+  --danger-soft: #FEF2F2 !important;
+  --danger-border: #FECACA !important;
+  --info-soft: #EFF6FF !important;
+  --info-border: #BFDBFE !important;
+}
+
+/* ─── NAVY BLUE SIDEBAR (GEMCOR Brand) ─── */
+:root {
+  --side-bg: #1E3A5F !important;         /* Navy blue — GEMCOR brand */
+  --side-bg-hover: rgba(255, 255, 255, 0.08) !important;
+  --side-bg-active: rgba(255, 255, 255, 0.12) !important;
+  --side-fg: rgba(255, 255, 255, 0.75) !important;
+  --side-fg-strong: #FFFFFF !important;
+  --side-fg-muted: rgba(255, 255, 255, 0.45) !important;
+  --side-border: rgba(255, 255, 255, 0.08) !important;
+  --side-accent: #10B981 !important;     /* Green accent (GEMCOR brand) */
+}
+
+/* Sidebar background */
+body.erp-has-sidebar .erp-sidebar,
+.erp-sidebar {
+  background: linear-gradient(180deg, #1E3A5F 0%, #152A47 100%) !important;
+  color: rgba(255, 255, 255, 0.75) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+body.erp-has-sidebar .erp-sidebar.collapsed,
+.erp-sidebar.collapsed {
+  background: linear-gradient(180deg, #1E3A5F 0%, #152A47 100%) !important;
+}
+
+/* Brand */
+.erp-sidebar-brand {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: transparent !important;
+}
+
+.erp-sidebar-brand-main {
+  color: #FFFFFF !important;
+}
+
+.erp-sidebar-brand-sub {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.erp-sidebar-logo {
+  background: #FFFFFF !important;
+  padding: 3px 6px !important;
+  border-radius: 6px !important;
+}
+
+/* Toggle button */
+.erp-sidebar-toggle {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: #FFFFFF !important;
+}
+
+.erp-sidebar-toggle:hover {
+  background: #10B981 !important;
+  border-color: #10B981 !important;
+  color: #FFFFFF !important;
+}
+
+/* Group labels */
+.erp-sidebar-group-label {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Nav items */
+.erp-sidebar-item {
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+.erp-sidebar-item i {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.erp-sidebar-item:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #FFFFFF !important;
+  transform: none !important;
+}
+
+.erp-sidebar-item:hover i {
+  color: #FFFFFF !important;
+  transform: none !important;
+}
+
+.erp-sidebar-item.active {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #FFFFFF !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+
+.erp-sidebar-item.active i {
+  color: #10B981 !important;
+}
+
+.erp-sidebar-item.active::before {
+  content: '' !important;
+  position: absolute !important;
+  left: 0 !important;
+  top: 20% !important;
+  bottom: 20% !important;
+  width: 3px !important;
+  height: auto !important;
+  background: #10B981 !important;
+  border-radius: 0 3px 3px 0 !important;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5) !important;
+}
+
+/* Footer */
+.erp-sidebar-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: transparent !important;
+}
+
+.erp-sidebar-version {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+
+/* Sidebar scrollbar */
+.erp-sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
+.erp-sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* Tooltip */
+.erp-sidebar.collapsed .erp-sidebar-item::after {
+  background: #0F172A !important;
+  color: #FFFFFF !important;
+  border: 1px solid #1E3A5F !important;
+}
+
+/* ─── HIDE THEME TOGGLE (light mode only) ─── */
+#erpThemeToggleBtn,
+.erp-theme-toggle-btn,
+.theme-toggle-btn {
+  display: none !important;
+}
+
+/* ─── NOTIFICATION BELL — Always Visible ─── */
+#erpBellContainer {
+  display: inline-flex !important;
+  align-items: center !important;
+  position: relative !important;
+}
+
+#erpBellContainer .erp-icon-btn,
+#erpBellContainer button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 36px !important;
+  height: 36px !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 8px !important;
+  color: #64748B !important;
+  font-size: 1.1rem !important;
+  cursor: pointer !important;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative !important;
+  padding: 0 !important;
+}
+
+#erpBellContainer .erp-icon-btn:hover,
+#erpBellContainer button:hover {
+  background: #F1F5F9 !important;
+  color: #0F172A !important;
+}
+
+/* Bell badge */
+#erpBellContainer .badge-dot {
+  position: absolute !important;
+  top: 2px !important;
+  right: 2px !important;
+  min-width: 18px !important;
+  height: 18px !important;
+  padding: 0 5px !important;
+  background: #EF4444 !important;
+  color: #FFFFFF !important;
+  font-size: 0.65rem !important;
+  font-weight: 700 !important;
+  border-radius: 999px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: 2px solid #FFFFFF !important;
+  line-height: 1 !important;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3) !important;
+}
+
+/* ─── TOPBAR — Clean light mode ─── */
+.erp-thin-topbar {
+  background: #FFFFFF !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03) !important;
+}
+
+.erp-thin-page-title {
+  color: #0F172A !important;
+}
+
+.erp-search-bar {
+  background: #F1F5F9 !important;
+  border: 1px solid transparent !important;
+}
+
+.erp-search-bar:hover {
+  background: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+}
+
+.erp-search-bar i,
+.erp-search-bar span {
+  color: #64748B !important;
+}
+
+.erp-search-kbd {
+  background: #FFFFFF !important;
+  border: 1px solid #E2E8F0 !important;
+  color: #64748B !important;
+}
+
+/* Health indicator */
+.erp-health-dot {
+  background: #ECFDF5 !important;
+  border: 1px solid #A7F3D0 !important;
+  color: #047857 !important;
+}
+
+/* Icon buttons */
+.erp-icon-btn {
+  color: #64748B !important;
+}
+
+.erp-icon-btn:hover {
+  background: #F1F5F9 !important;
+  color: #0F172A !important;
+}
+
+/* User avatar */
+.erp-user-avatar {
+  background: linear-gradient(135deg, #1E3A5F 0%, #2A4A73 100%) !important;
+}
+
+.erp-user-name {
+  color: #0F172A !important;
+}
+
+.erp-user-role {
+  color: #94A3B8 !important;
+}
+
+.erp-user-toggle:hover {
+  background: #F1F5F9 !important;
+}
+
+/* ─── CONTENT — Force light ─── */
+body.erp-has-sidebar {
+  background: #F8FAFC !important;
+  color: #0F172A !important;
+}
+
+body.erp-has-sidebar .erp-container {
+  background: transparent !important;
+}
