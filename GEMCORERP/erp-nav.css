@@ -1383,3 +1383,148 @@ body.erp-has-sidebar {
 body.erp-has-sidebar .erp-container {
   background: transparent !important;
 }
+/* ═══════════════════════════════════════════════════════════
+   SIDEBAR SUBMENU — Nested Navigation
+   ═══════════════════════════════════════════════════════════ */
+
+.erp-sidebar-submenu {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1px;
+}
+
+.erp-sidebar-submenu-parent {
+  cursor: pointer;
+  user-select: none;
+}
+
+.erp-sidebar-submenu-parent .erp-sidebar-submenu-caret {
+  font-size: 0.7rem;
+  margin-left: auto;
+  opacity: 0.5;
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.erp-sidebar-submenu.open .erp-sidebar-submenu-parent .erp-sidebar-submenu-caret {
+  transform: rotate(180deg);
+  opacity: 0.8;
+}
+
+/* Parent active state */
+.erp-sidebar-submenu.has-active .erp-sidebar-submenu-parent {
+  color: #FFFFFF !important;
+  font-weight: 600;
+}
+
+.erp-sidebar-submenu.has-active .erp-sidebar-submenu-parent i:first-child {
+  color: #10B981 !important;
+}
+
+/* Submenu list — hidden by default */
+.erp-sidebar-submenu-list {
+  display: none;
+  flex-direction: column;
+  padding: 2px 0;
+  margin-left: 12px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.erp-sidebar-submenu.open .erp-sidebar-submenu-list {
+  display: flex;
+  animation: submenuFadeIn 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.erp-sidebar-submenu.has-active .erp-sidebar-submenu-list {
+  display: flex;
+}
+
+@keyframes submenuFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Submenu child items */
+.erp-sidebar-subitem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 12px;
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.65);
+  text-decoration: none;
+  font-size: 0.78rem;
+  font-weight: 500;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  margin-bottom: 1px;
+  cursor: pointer;
+}
+
+.erp-sidebar-subitem i {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.5);
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+  transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.erp-sidebar-subitem:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #FFFFFF;
+}
+
+.erp-sidebar-subitem:hover i {
+  color: #FFFFFF;
+}
+
+.erp-sidebar-subitem.active {
+  background: rgba(16, 185, 129, 0.15);
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.erp-sidebar-subitem.active i {
+  color: #10B981;
+}
+
+/* Collapsed sidebar — hide submenu items */
+.erp-sidebar.collapsed .erp-sidebar-submenu-list {
+  display: none !important;
+}
+
+.erp-sidebar.collapsed .erp-sidebar-submenu-parent {
+  justify-content: center;
+  padding: 10px 0;
+}
+
+.erp-sidebar.collapsed .erp-sidebar-submenu-parent .erp-sidebar-submenu-caret {
+  display: none;
+}
+
+/* Tooltip for collapsed submenu parent */
+.erp-sidebar.collapsed .erp-sidebar-submenu-parent::after {
+  content: attr(title);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: #0F172A;
+  color: #FFFFFF;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms;
+  z-index: 2000;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  border: 1px solid #1E3A5F;
+}
+
+.erp-sidebar.collapsed .erp-sidebar-submenu-parent:hover::after {
+  opacity: 1;
+}
