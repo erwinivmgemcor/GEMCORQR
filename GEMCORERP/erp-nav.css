@@ -946,3 +946,115 @@ body.erp-has-sidebar .erp-breadcrumb a {
 body.erp-has-sidebar .erp-breadcrumb a:hover {
   color: var(--accent) !important;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   FIX v7.1 — Sidebar Toggle Always Visible
+   ═══════════════════════════════════════════════════════════ */
+
+/* Collapsed state: show toggle button prominently */
+.erp-sidebar.collapsed .erp-sidebar-toggle {
+  display: flex !important;
+  position: absolute !important;
+  top: 0 !important;
+  right: -12px !important;
+  width: 32px !important;
+  height: 32px !important;
+  background: var(--accent) !important;
+  color: #FFFFFF !important;
+  border: 2px solid var(--sidebar-bg) !important;
+  border-radius: 50% !important;
+  z-index: 10 !important;
+  font-size: 0.85rem !important;
+  box-shadow: 0 2px 8px rgba(99, 91, 255, 0.4) !important;
+}
+
+.erp-sidebar.collapsed .erp-sidebar-toggle:hover {
+  background: var(--accent-hover) !important;
+  transform: scale(1.1) !important;
+}
+
+/* Adjust collapsed brand */
+.erp-sidebar.collapsed .erp-sidebar-brand {
+  justify-content: center !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  position: relative !important;
+}
+
+/* Logo only in collapsed */
+.erp-sidebar.collapsed .erp-sidebar-logo {
+  display: block !important;
+  height: 28px !important;
+  max-width: 32px !important;
+  padding: 2px 4px !important;
+}
+
+.erp-sidebar.collapsed .erp-sidebar-brand-text {
+  display: none !important;
+}
+
+/* Ensure toggle inside brand is visible when collapsed */
+.erp-sidebar.collapsed .erp-sidebar-brand .erp-sidebar-toggle {
+  display: flex !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FIX: Force override erp-design-system.css conflicts
+   ═══════════════════════════════════════════════════════════ */
+
+/* Override any existing sidebar rules */
+body.erp-has-sidebar .erp-sidebar,
+.erp-sidebar {
+  width: 240px !important;
+  background: #0F1419 !important;
+  color: #8B94A7 !important;
+}
+
+body.erp-has-sidebar.erp-sidebar-collapsed .erp-sidebar,
+.erp-sidebar.collapsed {
+  width: 64px !important;
+}
+
+body.erp-has-sidebar .erp-sidebar-item,
+.erp-sidebar-item {
+  color: #8B94A7 !important;
+}
+
+body.erp-has-sidebar .erp-sidebar-item:hover,
+.erp-sidebar-item:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #FFFFFF !important;
+}
+
+body.erp-has-sidebar .erp-sidebar-item.active,
+.erp-sidebar-item.active {
+  background: rgba(99, 91, 255, 0.15) !important;
+  color: #FFFFFF !important;
+}
+
+body.erp-has-sidebar .erp-sidebar-brand-main,
+.erp-sidebar-brand-main {
+  color: #FFFFFF !important;
+}
+
+body.erp-has-sidebar .erp-sidebar-group-label,
+.erp-sidebar-group-label {
+  color: rgba(139, 148, 167, 0.6) !important;
+}
+
+body.erp-has-sidebar .erp-sidebar-version,
+.erp-sidebar-version {
+  color: #8B94A7 !important;
+}
+
+body.erp-has-sidebar .erp-thin-topbar,
+.erp-thin-topbar {
+  background: #FFFFFF !important;
+  border-bottom-color: #E5E7EB !important;
+}
+
+[data-theme="dark"] body.erp-has-sidebar .erp-thin-topbar,
+[data-theme="dark"] .erp-thin-topbar {
+  background: #141920 !important;
+  border-bottom-color: #232A35 !important;
+}
