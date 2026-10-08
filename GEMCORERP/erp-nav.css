@@ -1,17 +1,23 @@
 /* ============================================================
-   GEMCOR ERP — Navigation Bar Styles
+   GEMCOR ERP — Navigation Bar v3.0
+   Grouped dropdowns — compact & scalable
    ============================================================ */
-/* ─── Dropdown styles ─── */
-.erp-nav-dropdown {
-  position: relative;
-  display: inline-block;
-}
 
-.erp-nav-dropdown-toggle {
-  background: transparent;
-  border: 1.5px solid transparent;
-  cursor: pointer;
-  font-family: inherit;
+/* ─── Navbar Container ─── */
+.erp-navbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  margin-left: 24px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.erp-navbar::-webkit-scrollbar { display: none; }
+
+/* ─── Single Link ─── */
+.erp-nav-item {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -20,8 +26,48 @@
   font-size: 0.85rem;
   font-weight: 600;
   color: rgba(255,255,255,0.7);
-  transition: all 0.15s;
+  text-decoration: none;
   white-space: nowrap;
+  transition: all 0.15s;
+  border: 1.5px solid transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.erp-nav-item i { font-size: 1rem; }
+
+.erp-nav-item:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.1);
+}
+
+.erp-nav-item.active {
+  color: #fff;
+  background: rgba(255,255,255,0.18);
+  border-color: rgba(255,255,255,0.3);
+}
+
+/* ─── Dropdown Group ─── */
+.erp-nav-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.erp-nav-dropdown-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.7);
+  background: transparent;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  font-family: inherit;
 }
 
 .erp-nav-dropdown-toggle:hover {
@@ -40,24 +86,27 @@
   font-size: 0.7rem;
   margin-left: 2px;
   transition: transform 0.2s;
+  opacity: 0.7;
 }
 
 .erp-nav-dropdown.open .erp-dropdown-caret {
   transform: rotate(180deg);
 }
 
+/* ─── Dropdown Menu ─── */
 .erp-nav-dropdown-menu {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
   background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-  min-width: 200px;
-  padding: 6px 0;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.18);
+  min-width: 230px;
+  padding: 8px;
   z-index: 9999;
   display: none;
   overflow: hidden;
+  border: 1px solid #e2e8f0;
 }
 
 .erp-nav-dropdown.open .erp-nav-dropdown-menu {
@@ -66,7 +115,7 @@
 }
 
 @keyframes dropdownFadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
+  from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -74,22 +123,23 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 16px;
-  color: #1f2937;
+  padding: 10px 14px;
+  color: #1e293b;
   text-decoration: none;
   font-size: 0.85rem;
   font-weight: 500;
-  transition: background 0.12s;
+  border-radius: 6px;
+  transition: all 0.12s;
   white-space: nowrap;
 }
 
 .erp-nav-dropdown-item:hover {
-  background: #f0f4f8;
+  background: #f1f5f9;
   color: #1e3a5f;
 }
 
 .erp-nav-dropdown-item.active {
-  background: #e8f0fe;
+  background: #e0e7f0;
   color: #1e3a5f;
   font-weight: 700;
 }
@@ -98,7 +148,8 @@
   font-size: 1rem;
   width: 18px;
   text-align: center;
-  color: #6b7280;
+  color: #64748b;
+  flex-shrink: 0;
 }
 
 .erp-nav-dropdown-item.active i,
@@ -106,8 +157,25 @@
   color: #1e3a5f;
 }
 
-/* Mobile adjustments */
+/* ─── Mobile Responsive ─── */
 @media (max-width: 768px) {
+  .erp-navbar {
+    margin-left: 12px;
+    gap: 2px;
+  }
+
+  .erp-nav-item,
+  .erp-nav-dropdown-toggle {
+    padding: 6px 10px;
+    font-size: 0.78rem;
+  }
+
+  .erp-nav-item i,
+  .erp-nav-dropdown-toggle i {
+    font-size: 0.95rem;
+  }
+
+  /* Mobile dropdown: bottom sheet style */
   .erp-nav-dropdown-menu {
     position: fixed;
     top: auto;
@@ -117,72 +185,34 @@
     min-width: auto;
     max-height: 60vh;
     overflow-y: auto;
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.25);
   }
-}
-.erp-navbar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-  margin-left: 24px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.erp-navbar::-webkit-scrollbar { display: none; }
 
-.erp-nav-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: rgba(255,255,255,0.7);
-  text-decoration: none;
-  white-space: nowrap;
-  transition: all 0.15s;
-  border: 1.5px solid transparent;
-}
-
-.erp-nav-item i {
-  font-size: 1rem;
-}
-
-.erp-nav-item:hover {
-  color: #fff;
-  background: rgba(255,255,255,0.1);
-}
-
-.erp-nav-item.active {
-  color: #fff;
-  background: rgba(255,255,255,0.18);
-  border-color: rgba(255,255,255,0.3);
-}
-
-/* Mobile adjustments */
-@media (max-width: 768px) {
-  .erp-navbar {
-    margin-left: 12px;
-    gap: 2px;
-  }
-  .erp-nav-item {
-    padding: 6px 10px;
-    font-size: 0.78rem;
-  }
-  .erp-nav-item i {
-    font-size: 0.95rem;
+  .erp-nav-dropdown-item {
+    padding: 14px 16px;
+    font-size: 0.9rem;
   }
 }
 
 @media (max-width: 480px) {
-  .erp-nav-item span {
+  .erp-nav-item span,
+  .erp-nav-dropdown-toggle span {
     display: none;
   }
-  .erp-nav-item {
+
+  .erp-nav-item,
+  .erp-nav-dropdown-toggle {
     padding: 8px 12px;
   }
-  .erp-nav-item i {
-    font-size: 1.1rem;
+
+  .erp-nav-item i,
+  .erp-nav-dropdown-toggle i {
+    font-size: 1.05rem;
+  }
+
+  .erp-dropdown-caret {
+    display: none;
   }
 }
