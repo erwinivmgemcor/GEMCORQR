@@ -1,48 +1,51 @@
 /* ============================================================
-   GEMCOR ERP — Navigation & Layout System v7.0
-   Clean & Minimal — Notion/Vercel/Linear inspired
-   Light mode default + Dark sidebar (always)
+   GEMCOR ERP — Navigation & Layout System v8.0
+   Professional Enterprise Design
+   - Self-contained, no conflicts with existing CSS
+   - Notion-inspired dark sidebar
+   - Stripe-inspired light content
    ============================================================ */
 
 /* ═══════════════════════════════════════════════════════════
-   DESIGN TOKENS
+   DESIGN TOKENS — Single Source of Truth
    ═══════════════════════════════════════════════════════════ */
 :root {
   /* Layout */
-  --sidebar-w: 240px;
-  --sidebar-w-collapsed: 64px;
-  --topbar-h: 60px;
+  --side-w: 248px;
+  --side-w-sm: 68px;
+  --top-h: 60px;
 
-  /* Light mode — App */
-  --bg-app: #FAFBFC;
-  --bg-card: #FFFFFF;
-  --bg-hover: #F4F6F8;
-  --bg-subtle: #F0F2F5;
+  /* Light theme (default) */
+  --bg-page: #F8FAFC;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #FFFFFF;
+  --bg-hover: #F1F5F9;
+  --bg-subtle: #F1F5F9;
 
-  /* Sidebar — Always dark */
-  --sidebar-bg: #0F1419;
-  --sidebar-bg-elev: #1A1F2E;
-  --sidebar-hover: rgba(255, 255, 255, 0.06);
-  --sidebar-text: #8B94A7;
-  --sidebar-text-active: #FFFFFF;
-  --sidebar-border: rgba(255, 255, 255, 0.06);
+  /* Sidebar (always dark, Notion-style) */
+  --side-bg: #0B0E14;
+  --side-bg-hover: #1A1F2B;
+  --side-bg-active: #1E2433;
+  --side-fg: #A8B2C1;
+  --side-fg-strong: #FFFFFF;
+  --side-fg-muted: #5E6779;
+  --side-border: #1A1F2B;
+  --side-accent: #6366F1;
 
   /* Text */
-  --text-primary: #0F1419;
-  --text-secondary: #4B5563;
-  --text-muted: #9CA3AF;
-  --text-tertiary: #6B7280;
+  --fg: #0F172A;
+  --fg-muted: #64748B;
+  --fg-subtle: #94A3B8;
+  --fg-inverse: #FFFFFF;
 
-  /* Border */
-  --border: #E5E7EB;
-  --border-strong: #D1D5DB;
-  --border-subtle: #F3F4F6;
+  /* Borders */
+  --bd: #E2E8F0;
+  --bd-strong: #CBD5E1;
 
   /* Accent */
-  --accent: #635BFF;
-  --accent-hover: #7C75FF;
-  --accent-soft: #F0EEFF;
-  --accent-glow: rgba(99, 91, 255, 0.15);
+  --accent: #6366F1;
+  --accent-hover: #4F46E5;
+  --accent-soft: #EEF2FF;
 
   /* Semantic */
   --success: #10B981;
@@ -59,766 +62,897 @@
   --info-border: #BFDBFE;
 
   /* Shadows */
-  --shadow-xs: 0 1px 2px rgba(15, 20, 25, 0.04);
-  --shadow-sm: 0 1px 3px rgba(15, 20, 25, 0.06), 0 1px 2px rgba(15, 20, 25, 0.04);
-  --shadow-md: 0 4px 12px rgba(15, 20, 25, 0.06), 0 2px 4px rgba(15, 20, 25, 0.04);
-  --shadow-lg: 0 12px 32px rgba(15, 20, 25, 0.08), 0 4px 8px rgba(15, 20, 25, 0.04);
-  --shadow-xl: 0 24px 48px rgba(15, 20, 25, 0.12), 0 8px 16px rgba(15, 20, 25, 0.06);
+  --sh-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+  --sh-md: 0 4px 6px -1px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+  --sh-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+  --sh-xl: 0 20px 25px -5px rgba(15, 23, 42, 0.10), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
 
   /* Radius */
   --r-sm: 6px;
   --r-md: 8px;
-  --r-lg: 12px;
-  --r-xl: 16px;
-  --r-full: 9999px;
+  --r-lg: 10px;
+  --r-xl: 14px;
 
-  /* Transition */
-  --t-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  --t-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* Transitions */
+  --t: 160ms cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* Typography */
+  /* Fonts */
   --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Courier New', monospace;
+  --font-num: 'Inter', 'SF Mono', monospace;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   DARK MODE OVERRIDES
-   ═══════════════════════════════════════════════════════════ */
+/* Dark mode */
 [data-theme="dark"] {
-  --bg-app: #0B0F14;
-  --bg-card: #141920;
-  --bg-hover: #1A1F2E;
-  --bg-subtle: #0F1419;
+  --bg-page: #070A0F;
+  --bg-surface: #0F141C;
+  --bg-elevated: #141B25;
+  --bg-hover: #1A2230;
+  --bg-subtle: #0F141C;
 
-  --text-primary: #F0F4F8;
-  --text-secondary: #B4BCC8;
-  --text-muted: #6B7280;
-  --text-tertiary: #8B94A7;
+  --fg: #F1F5F9;
+  --fg-muted: #94A3B8;
+  --fg-subtle: #64748B;
 
-  --border: #232A35;
-  --border-strong: #2E3744;
-  --border-subtle: #1A1F2E;
+  --bd: #1F2937;
+  --bd-strong: #334155;
 
-  --accent-soft: rgba(99, 91, 255, 0.12);
-
+  --accent-soft: rgba(99, 102, 241, 0.12);
   --success-soft: rgba(16, 185, 129, 0.12);
-  --success-border: rgba(16, 185, 129, 0.3);
   --warning-soft: rgba(245, 158, 11, 0.12);
-  --warning-border: rgba(245, 158, 11, 0.3);
   --danger-soft: rgba(239, 68, 68, 0.12);
-  --danger-border: rgba(239, 68, 68, 0.3);
   --info-soft: rgba(59, 130, 246, 0.12);
-  --info-border: rgba(59, 130, 246, 0.3);
-
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4);
 }
 
 /* ═══════════════════════════════════════════════════════════
-   BASE
+   GLOBAL RESET — Only applies when sidebar is active
    ═══════════════════════════════════════════════════════════ */
-* {
-  box-sizing: border-box;
-}
-
-html, body {
-  margin: 0;
-  padding: 0;
-  font-family: var(--font-ui);
-  background: var(--bg-app);
-  color: var(--text-primary);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  transition: background-color var(--t-base), color var(--t-base);
-}
-
 body.erp-has-sidebar {
-  padding-left: var(--sidebar-w);
-  padding-top: var(--topbar-h);
-  min-height: 100vh;
-  transition: padding-left var(--t-base);
+  margin: 0 !important;
+  padding: 0 !important;
+  padding-left: var(--side-w) !important;
+  padding-top: var(--top-h) !important;
+  background: var(--bg-page) !important;
+  font-family: var(--font-ui) !important;
+  color: var(--fg) !important;
+  min-height: 100vh !important;
+  box-sizing: border-box !important;
+  transition: padding-left var(--t) !important;
 }
 
 body.erp-has-sidebar.erp-sidebar-collapsed {
-  padding-left: var(--sidebar-w-collapsed);
+  padding-left: var(--side-w-sm) !important;
+}
+
+body.erp-has-sidebar *,
+body.erp-has-sidebar *::before,
+body.erp-has-sidebar *::after {
+  box-sizing: border-box !important;
+}
+
+/* Hide ALL old topbars */
+body.erp-has-sidebar nav.erp-topbar,
+body.erp-has-sidebar .erp-topbar,
+body.erp-has-sidebar #erpNavBar,
+body.erp-has-sidebar .erp-layout {
+  display: none !important;
 }
 
 /* ═══════════════════════════════════════════════════════════
-   SIDEBAR (Always dark)
+   SIDEBAR — Dark, Notion-style
    ═══════════════════════════════════════════════════════════ */
+body.erp-has-sidebar .erp-sidebar,
 .erp-sidebar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: var(--sidebar-w);
-  background: var(--sidebar-bg);
-  color: var(--sidebar-text);
-  display: flex;
-  flex-direction: column;
-  z-index: 1000;
-  transition: width var(--t-base);
-  overflow: hidden;
-  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  width: var(--side-w) !important;
+  height: 100vh !important;
+  background: var(--side-bg) !important;
+  color: var(--side-fg) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  z-index: 1000 !important;
+  transition: width var(--t) !important;
+  overflow: visible !important;
+  border: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-family: var(--font-ui) !important;
+  font-size: 0.875rem !important;
+  line-height: 1.5 !important;
 }
 
+body.erp-has-sidebar .erp-sidebar.collapsed,
 .erp-sidebar.collapsed {
-  width: var(--sidebar-w-collapsed);
+  width: var(--side-w-sm) !important;
 }
 
-/* ─── Brand ─── */
+/* ─── Sidebar Brand ─── */
 .erp-sidebar-brand {
-  height: var(--topbar-h);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--sidebar-border);
-  flex-shrink: 0;
-  position: relative;
+  height: var(--top-h) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 0 14px !important;
+  border-bottom: 1px solid var(--side-border) !important;
+  flex-shrink: 0 !important;
+  position: relative !important;
+  margin: 0 !important;
+  background: transparent !important;
 }
 
 .erp-sidebar-logo {
-  height: 28px;
-  width: auto;
-  max-width: 90px;
-  object-fit: contain;
-  flex-shrink: 0;
-  background: #fff;
-  padding: 3px 6px;
-  border-radius: 6px;
+  height: 26px !important;
+  width: auto !important;
+  max-width: 90px !important;
+  object-fit: contain !important;
+  flex-shrink: 0 !important;
+  background: #FFFFFF !important;
+  padding: 2px 6px !important;
+  border-radius: 5px !important;
+  display: block !important;
 }
 
 .erp-sidebar-brand-text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  transition: opacity var(--t-fast);
+  flex: 1 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  transition: opacity var(--t) !important;
 }
 
 .erp-sidebar-brand-main {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: #FFFFFF;
-  line-height: 1.15;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
+  font-size: 0.8rem !important;
+  font-weight: 700 !important;
+  color: var(--side-fg-strong) !important;
+  line-height: 1.1 !important;
+  letter-spacing: -0.01em !important;
+  white-space: nowrap !important;
+  margin: 0 !important;
 }
 
 .erp-sidebar-brand-sub {
-  font-size: 0.68rem;
-  color: var(--sidebar-text);
-  font-weight: 500;
-  margin-top: 1px;
-  white-space: nowrap;
+  font-size: 0.68rem !important;
+  color: var(--side-fg-muted) !important;
+  font-weight: 500 !important;
+  margin-top: 1px !important;
+  white-space: nowrap !important;
+  letter-spacing: 0 !important;
 }
 
+/* Toggle button — always visible */
 .erp-sidebar-toggle {
-  background: transparent;
-  border: none;
-  color: var(--sidebar-text);
-  width: 28px;
-  height: 28px;
-  border-radius: var(--r-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all var(--t-fast);
-  flex-shrink: 0;
-  font-size: 0.9rem;
+  position: absolute !important;
+  right: -12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 24px !important;
+  height: 24px !important;
+  background: var(--side-bg-active) !important;
+  border: 1px solid var(--side-border) !important;
+  color: var(--side-fg) !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  font-size: 0.7rem !important;
+  padding: 0 !important;
+  z-index: 10 !important;
+  transition: all var(--t) !important;
+  opacity: 0 !important;
+  box-shadow: var(--sh-md) !important;
+}
+
+.erp-sidebar:hover .erp-sidebar-toggle,
+.erp-sidebar.collapsed .erp-sidebar-toggle {
+  opacity: 1 !important;
 }
 
 .erp-sidebar-toggle:hover {
-  background: var(--sidebar-hover);
-  color: #FFFFFF;
+  background: var(--accent) !important;
+  color: #FFFFFF !important;
+  border-color: var(--accent) !important;
+  transform: translateY(-50%) scale(1.1) !important;
 }
 
+/* Collapsed brand */
 .erp-sidebar.collapsed .erp-sidebar-brand {
-  justify-content: center;
-  padding: 0 8px;
-  gap: 0;
+  padding: 0 !important;
+  justify-content: center !important;
+  gap: 0 !important;
 }
 
 .erp-sidebar.collapsed .erp-sidebar-logo {
-  max-width: 32px;
-  height: 32px;
+  max-width: 36px !important;
+  height: 30px !important;
+  padding: 3px 5px !important;
 }
 
 .erp-sidebar.collapsed .erp-sidebar-brand-text {
-  display: none;
+  display: none !important;
 }
 
-.erp-sidebar.collapsed .erp-sidebar-toggle {
-  display: none;
-}
-
-/* ─── Nav ─── */
+/* ─── Sidebar Nav ─── */
 .erp-sidebar-nav {
-  flex: 1;
-  padding: 12px 8px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  flex: 1 !important;
+  padding: 10px 8px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  margin: 0 !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--side-bg-hover) transparent !important;
 }
 
 .erp-sidebar-nav::-webkit-scrollbar {
-  width: 4px;
+  width: 4px !important;
 }
 
 .erp-sidebar-nav::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
+  background: var(--side-bg-hover) !important;
+  border-radius: 2px !important;
 }
 
-/* ─── Group Label ─── */
+/* Group label */
 .erp-sidebar-group-label {
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: rgba(139, 148, 167, 0.6);
-  padding: 16px 12px 6px;
-  text-transform: uppercase;
-  white-space: nowrap;
-  transition: opacity var(--t-fast);
+  font-size: 0.65rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.08em !important;
+  color: var(--side-fg-muted) !important;
+  padding: 14px 12px 4px !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+  transition: opacity var(--t) !important;
 }
 
 .erp-sidebar-group-label:first-child {
-  padding-top: 4px;
+  padding-top: 4px !important;
 }
 
 .erp-sidebar.collapsed .erp-sidebar-group-label {
-  opacity: 0;
-  height: 8px;
-  padding: 4px 0;
-  overflow: hidden;
+  opacity: 0 !important;
+  height: 4px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
 }
 
-/* ─── Nav Item ─── */
+/* Nav item */
 .erp-sidebar-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: var(--r-sm);
-  color: var(--sidebar-text);
-  text-decoration: none;
-  font-size: 0.85rem;
-  font-weight: 500;
-  transition: all var(--t-fast);
-  white-space: nowrap;
-  position: relative;
-  margin-bottom: 1px;
-  cursor: pointer;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 7px 10px !important;
+  border-radius: var(--r-sm) !important;
+  color: var(--side-fg) !important;
+  text-decoration: none !important;
+  font-size: 0.83rem !important;
+  font-weight: 500 !important;
+  transition: all var(--t) !important;
+  white-space: nowrap !important;
+  position: relative !important;
+  margin: 0 0 1px 0 !important;
+  cursor: pointer !important;
+  line-height: 1.4 !important;
+  border: none !important;
 }
 
 .erp-sidebar-item:hover {
-  background: var(--sidebar-hover);
-  color: #FFFFFF;
+  background: var(--side-bg-hover) !important;
+  color: var(--side-fg-strong) !important;
+  text-decoration: none !important;
 }
 
 .erp-sidebar-item.active {
-  background: rgba(99, 91, 255, 0.15);
-  color: #FFFFFF;
-  font-weight: 600;
+  background: var(--side-bg-active) !important;
+  color: var(--side-fg-strong) !important;
+  font-weight: 600 !important;
 }
 
 .erp-sidebar-item.active::before {
-  content: '';
-  position: absolute;
-  left: -8px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 18px;
-  background: var(--accent);
-  border-radius: 0 3px 3px 0;
+  content: '' !important;
+  position: absolute !important;
+  left: 0 !important;
+  top: 20% !important;
+  bottom: 20% !important;
+  width: 2px !important;
+  background: var(--side-accent) !important;
+  border-radius: 0 2px 2px 0 !important;
 }
 
 .erp-sidebar-item i {
-  font-size: 1.05rem;
-  width: 20px;
-  text-align: center;
-  flex-shrink: 0;
-  color: inherit;
+  font-size: 1rem !important;
+  width: 18px !important;
+  text-align: center !important;
+  flex-shrink: 0 !important;
+  color: inherit !important;
+  line-height: 1 !important;
 }
 
 .erp-sidebar-item-label {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: opacity var(--t-fast);
+  flex: 1 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  transition: opacity var(--t) !important;
+  white-space: nowrap !important;
 }
 
 .erp-sidebar.collapsed .erp-sidebar-item-label {
-  opacity: 0;
-  width: 0;
+  opacity: 0 !important;
+  width: 0 !important;
 }
 
 .erp-sidebar.collapsed .erp-sidebar-item {
-  justify-content: center;
-  padding: 10px;
-  gap: 0;
+  justify-content: center !important;
+  padding: 9px 0 !important;
+  gap: 0 !important;
 }
 
-/* Tooltips for collapsed */
+/* Tooltip for collapsed */
 .erp-sidebar.collapsed .erp-sidebar-item::after {
-  content: attr(title);
-  position: absolute;
-  left: calc(100% + 8px);
-  top: 50%;
-  transform: translateY(-50%);
-  background: #1A1F2E;
-  color: #FFFFFF;
-  padding: 6px 10px;
-  border-radius: var(--r-sm);
-  font-size: 0.78rem;
-  font-weight: 500;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--t-fast);
-  z-index: 2000;
-  box-shadow: var(--shadow-lg);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  content: attr(title) !important;
+  position: absolute !important;
+  left: calc(100% + 12px) !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  background: #1A1F2B !important;
+  color: #FFFFFF !important;
+  padding: 5px 10px !important;
+  border-radius: var(--r-sm) !important;
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  white-space: nowrap !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity var(--t) !important;
+  z-index: 2000 !important;
+  box-shadow: var(--sh-lg) !important;
+  border: 1px solid #2D3546 !important;
 }
 
 .erp-sidebar.collapsed .erp-sidebar-item:hover::after {
-  opacity: 1;
+  opacity: 1 !important;
 }
 
-/* ─── Footer ─── */
+/* ─── Sidebar Footer ─── */
 .erp-sidebar-footer {
-  padding: 14px 16px;
-  border-top: 1px solid var(--sidebar-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  padding: 12px 14px !important;
+  border-top: 1px solid var(--side-border) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  margin: 0 !important;
 }
 
 .erp-sidebar-version {
-  font-size: 0.68rem;
-  color: var(--sidebar-text);
-  font-family: var(--font-mono);
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  opacity: 0.6;
+  font-size: 0.68rem !important;
+  color: var(--side-fg-muted) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.02em !important;
+  font-variant-numeric: tabular-nums !important;
+  transition: opacity var(--t) !important;
+}
+
+.erp-sidebar.collapsed .erp-sidebar-version {
+  font-size: 0.6rem !important;
 }
 
 /* ═══════════════════════════════════════════════════════════
    TOPBAR
    ═══════════════════════════════════════════════════════════ */
 .erp-thin-topbar {
-  position: fixed;
-  top: 0;
-  left: var(--sidebar-w);
-  right: 0;
-  height: var(--topbar-h);
-  background: var(--bg-card);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  z-index: 999;
-  transition: left var(--t-base), background-color var(--t-base);
+  position: fixed !important;
+  top: 0 !important;
+  left: var(--side-w) !important;
+  right: 0 !important;
+  height: var(--top-h) !important;
+  background: var(--bg-surface) !important;
+  border-bottom: 1px solid var(--bd) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 0 20px !important;
+  z-index: 900 !important;
+  transition: left var(--t), background var(--t), border var(--t) !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
 }
 
 body.erp-sidebar-collapsed .erp-thin-topbar {
-  left: var(--sidebar-w-collapsed);
+  left: var(--side-w-sm) !important;
 }
 
 .erp-thin-topbar-left {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  min-width: 0;
-  flex: 1;
-  max-width: 60%;
+  display: flex !important;
+  align-items: center !important;
+  gap: 20px !important;
+  min-width: 0 !important;
+  flex: 1 !important;
+  max-width: 55% !important;
 }
 
 .erp-thin-page-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  letter-spacing: -0.01em;
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex-shrink: 0;
+  font-size: 0.9rem !important;
+  font-weight: 600 !important;
+  color: var(--fg) !important;
+  letter-spacing: -0.01em !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  flex-shrink: 0 !important;
+  line-height: 1.4 !important;
 }
 
-/* ─── Search Bar ─── */
+/* Search */
 .erp-search-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  background: var(--bg-subtle);
-  border: 1px solid transparent;
-  border-radius: var(--r-md);
-  min-width: 200px;
-  max-width: 360px;
-  flex: 1;
-  cursor: pointer;
-  transition: all var(--t-fast);
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 6px 10px !important;
+  background: var(--bg-subtle) !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--r-md) !important;
+  min-width: 200px !important;
+  max-width: 320px !important;
+  flex: 1 !important;
+  cursor: pointer !important;
+  transition: all var(--t) !important;
 }
 
 .erp-search-bar:hover {
-  background: var(--bg-card);
-  border-color: var(--border);
+  background: var(--bg-surface) !important;
+  border-color: var(--bd) !important;
 }
 
 .erp-search-bar i {
-  color: var(--text-muted);
-  font-size: 0.9rem;
+  color: var(--fg-subtle) !important;
+  font-size: 0.85rem !important;
 }
 
 .erp-search-bar span {
-  flex: 1;
-  font-size: 0.82rem;
-  color: var(--text-muted);
+  flex: 1 !important;
+  font-size: 0.8rem !important;
+  color: var(--fg-subtle) !important;
 }
 
 .erp-search-kbd {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 6px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  line-height: 1;
+  display: inline-flex !important;
+  align-items: center !important;
+  padding: 2px 5px !important;
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--bd) !important;
+  border-radius: 4px !important;
+  font-size: 0.65rem !important;
+  font-weight: 600 !important;
+  color: var(--fg-muted) !important;
+  font-family: var(--font-ui) !important;
+  line-height: 1 !important;
 }
 
 @media (max-width: 1200px) {
-  .erp-search-bar { display: none; }
+  .erp-search-bar { display: none !important; }
 }
 
-/* ─── Right side ─── */
+/* Right side */
 .erp-thin-topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  flex-shrink: 0 !important;
 }
 
-/* ─── Icon Button ─── */
+/* Icon button */
 .erp-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  background: transparent;
-  border: none;
-  border-radius: var(--r-md);
-  color: var(--text-secondary);
-  font-size: 1rem;
-  cursor: pointer;
-  transition: all var(--t-fast);
-  position: relative;
-  font-family: inherit;
-  padding: 0;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 34px !important;
+  height: 34px !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: var(--r-md) !important;
+  color: var(--fg-muted) !important;
+  font-size: 1rem !important;
+  cursor: pointer !important;
+  transition: all var(--t) !important;
+  padding: 0 !important;
+  font-family: inherit !important;
+  line-height: 1 !important;
 }
 
 .erp-icon-btn:hover {
-  background: var(--bg-subtle);
-  color: var(--text-primary);
+  background: var(--bg-hover) !important;
+  color: var(--fg) !important;
 }
 
-/* ─── Health Dot ─── */
+/* Health dot */
 .erp-health-dot {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px 5px 10px;
-  background: var(--success-soft);
-  border: 1px solid var(--success-border);
-  border-radius: var(--r-full);
-  color: var(--success);
-  font-size: 0.72rem;
-  font-weight: 600;
-  transition: all var(--t-fast);
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 5px 10px 5px 8px !important;
+  background: var(--success-soft) !important;
+  border: 1px solid var(--success-border) !important;
+  border-radius: 999px !important;
+  color: #047857 !important;
+  font-size: 0.7rem !important;
+  font-weight: 600 !important;
+  transition: all var(--t) !important;
+  margin-right: 4px !important;
 }
 
 .erp-health-dot::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--success);
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
-  animation: pulse-dot 2s ease-in-out infinite;
-  flex-shrink: 0;
+  content: '' !important;
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 50% !important;
+  background: var(--success) !important;
+  flex-shrink: 0 !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15) !important;
+  animation: erp-pulse 2s ease-in-out infinite !important;
 }
 
-.erp-health-dot.offline {
-  background: var(--danger-soft);
-  border-color: var(--danger-border);
-  color: var(--danger);
-}
-
-.erp-health-dot.offline::before {
-  background: var(--danger);
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
-  animation: none;
-}
-
-.erp-health-dot.pending {
-  background: var(--warning-soft);
-  border-color: var(--warning-border);
-  color: var(--warning);
-}
-
-.erp-health-dot.pending::before {
-  background: var(--warning);
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
-}
-
-@keyframes pulse-dot {
+@keyframes erp-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
 
-.erp-health-text {
-  display: inline;
+.erp-health-dot.offline {
+  background: var(--danger-soft) !important;
+  border-color: var(--danger-border) !important;
+  color: var(--danger) !important;
+}
+
+.erp-health-dot.offline::before {
+  background: var(--danger) !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15) !important;
+  animation: none !important;
+}
+
+.erp-health-dot.pending {
+  background: var(--warning-soft) !important;
+  border-color: var(--warning-border) !important;
+  color: #B45309 !important;
+}
+
+.erp-health-dot.pending::before {
+  background: var(--warning) !important;
 }
 
 @media (max-width: 900px) {
-  .erp-health-text { display: none; }
-  .erp-health-dot { padding: 6px; }
-  .erp-health-dot::before { margin: 0; }
+  .erp-health-text { display: none !important; }
+  .erp-health-dot { padding: 5px !important; }
 }
 
-/* ─── User Menu ─── */
+/* User menu */
 .erp-user-menu {
-  position: relative;
+  position: relative !important;
 }
 
 .erp-user-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px 4px 4px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--r-full);
-  cursor: pointer;
-  transition: all var(--t-fast);
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: 0.85rem;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 3px 10px 3px 3px !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: 999px !important;
+  cursor: pointer !important;
+  transition: all var(--t) !important;
+  color: var(--fg) !important;
+  font-family: inherit !important;
+  font-size: 0.83rem !important;
+  line-height: 1 !important;
 }
 
 .erp-user-toggle:hover {
-  background: var(--bg-subtle);
+  background: var(--bg-hover) !important;
 }
 
 .erp-user-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #635BFF 0%, #8B5CF6 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #FFFFFF;
-  font-weight: 700;
-  font-size: 0.72rem;
-  flex-shrink: 0;
-  letter-spacing: 0.02em;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 50% !important;
+  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+  font-size: 0.7rem !important;
+  flex-shrink: 0 !important;
+  letter-spacing: 0.02em !important;
 }
 
 .erp-user-info {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0;
-  text-align: left;
-  min-width: 0;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 0 !important;
+  text-align: left !important;
+  min-width: 0 !important;
 }
 
 .erp-user-name {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.15;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 130px;
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  color: var(--fg) !important;
+  line-height: 1.15 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 130px !important;
 }
 
 .erp-user-role {
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: 600;
+  font-size: 0.63rem !important;
+  color: var(--fg-subtle) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  font-weight: 600 !important;
 }
 
 .erp-user-caret {
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  transition: transform var(--t-fast);
+  font-size: 0.65rem !important;
+  color: var(--fg-subtle) !important;
+  transition: transform var(--t) !important;
 }
 
 .erp-user-menu.open .erp-user-caret {
-  transform: rotate(180deg);
+  transform: rotate(180deg) !important;
 }
 
 @media (max-width: 768px) {
-  .erp-user-info { display: none; }
-  .erp-user-toggle { padding: 4px; }
+  .erp-user-info { display: none !important; }
+  .erp-user-toggle { padding: 3px !important; }
 }
 
-/* ─── User Dropdown ─── */
+/* User dropdown */
 .erp-user-dropdown {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  min-width: 260px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-lg);
-  padding: 6px;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-8px);
-  transition: all var(--t-fast);
-  z-index: 1001;
+  position: absolute !important;
+  top: calc(100% + 8px) !important;
+  right: 0 !important;
+  min-width: 260px !important;
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--bd) !important;
+  border-radius: var(--r-lg) !important;
+  box-shadow: var(--sh-xl) !important;
+  padding: 5px !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transform: translateY(-4px) !important;
+  transition: all var(--t) !important;
+  z-index: 1001 !important;
 }
 
 .erp-user-menu.open .erp-user-dropdown {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: translateY(0) !important;
 }
 
 .erp-user-dropdown-header {
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 6px;
+  padding: 10px 12px !important;
+  border-bottom: 1px solid var(--bd) !important;
+  margin-bottom: 4px !important;
 }
 
 .erp-user-dropdown-header .fullname {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-  letter-spacing: -0.01em;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  color: var(--fg) !important;
+  margin-bottom: 3px !important;
+  letter-spacing: -0.01em !important;
 }
 
 .erp-user-dropdown-header .meta {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  font-size: 0.72rem !important;
+  color: var(--fg-muted) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
 }
 
 .erp-user-dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  color: var(--text-primary);
-  text-decoration: none;
-  font-size: 0.85rem;
-  font-weight: 500;
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  transition: all var(--t-fast);
-  border: none;
-  background: transparent;
-  width: 100%;
-  text-align: left;
-  font-family: inherit;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 7px 10px !important;
+  color: var(--fg) !important;
+  text-decoration: none !important;
+  font-size: 0.83rem !important;
+  font-weight: 500 !important;
+  border-radius: var(--r-sm) !important;
+  cursor: pointer !important;
+  transition: all var(--t) !important;
+  border: none !important;
+  background: transparent !important;
+  width: 100% !important;
+  text-align: left !important;
+  font-family: inherit !important;
+  line-height: 1.4 !important;
 }
 
 .erp-user-dropdown-item i {
-  font-size: 0.95rem;
-  color: var(--text-muted);
-  width: 18px;
-  text-align: center;
+  font-size: 0.9rem !important;
+  color: var(--fg-subtle) !important;
+  width: 16px !important;
+  text-align: center !important;
 }
 
 .erp-user-dropdown-item:hover {
-  background: var(--bg-subtle);
-  color: var(--accent);
+  background: var(--bg-hover) !important;
+  color: var(--accent) !important;
 }
 
 .erp-user-dropdown-item:hover i {
-  color: var(--accent);
+  color: var(--accent) !important;
 }
 
 .erp-user-dropdown-item.danger {
-  color: var(--danger);
+  color: var(--danger) !important;
 }
 
 .erp-user-dropdown-item.danger:hover {
-  background: var(--danger-soft);
+  background: var(--danger-soft) !important;
 }
 
 .erp-user-dropdown-item.danger i {
-  color: var(--danger);
+  color: var(--danger) !important;
 }
 
 .erp-user-dropdown-divider {
-  height: 1px;
-  background: var(--border);
-  margin: 6px 0;
+  height: 1px !important;
+  background: var(--bd) !important;
+  margin: 4px 0 !important;
 }
 
 /* ═══════════════════════════════════════════════════════════
-   BACKDROP (Mobile)
+   CONTENT CONTAINER — Fix overlap & spacing
+   ═══════════════════════════════════════════════════════════ */
+body.erp-has-sidebar .erp-container,
+body.erp-has-sidebar .mdash-container,
+body.erp-has-sidebar main.erp-container {
+  margin: 0 !important;
+  margin-left: 0 !important;
+  padding: 24px 28px 48px 28px !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+  background: transparent !important;
+}
+
+@media (max-width: 900px) {
+  body.erp-has-sidebar .erp-container,
+  body.erp-has-sidebar .mdash-container {
+    padding: 16px 16px 40px 16px !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   HERO — Fix dashboard title "R" overlap
+   ═══════════════════════════════════════════════════════════ */
+body.erp-has-sidebar .mdash-hero {
+  position: relative !important;
+  z-index: 1 !important;
+  margin-top: 0 !important;
+  margin-bottom: 20px !important;
+  border-radius: var(--r-xl) !important;
+  padding: 24px 28px !important;
+  background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%) !important;
+  color: #FFFFFF !important;
+  box-shadow: var(--sh-lg) !important;
+  overflow: hidden !important;
+}
+
+body.erp-has-sidebar .mdash-hero::before {
+  content: '' !important;
+  position: absolute !important;
+  top: -40% !important;
+  right: -10% !important;
+  width: 400px !important;
+  height: 400px !important;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%) !important;
+  pointer-events: none !important;
+}
+
+body.erp-has-sidebar .mdash-hero * {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+body.erp-has-sidebar .mdash-hero-title {
+  font-size: 1.5rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.02em !important;
+  margin: 0 !important;
+  line-height: 1.2 !important;
+  color: #FFFFFF !important;
+}
+
+body.erp-has-sidebar .mdash-hero-sub {
+  font-size: 0.85rem !important;
+  opacity: 0.8 !important;
+  font-weight: 500 !important;
+  margin-top: 4px !important;
+}
+
+body.erp-has-sidebar .mdash-asof-label {
+  font-size: 0.7rem !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+  opacity: 0.7 !important;
+  color: #FFFFFF !important;
+}
+
+body.erp-has-sidebar .mdash-asof-date {
+  font-size: 1.2rem !important;
+  font-weight: 700 !important;
+  color: #FBBF24 !important;
+  font-variant-numeric: tabular-nums !important;
+  letter-spacing: 0 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   KPI CARDS — Fix number spacing
+   ═══════════════════════════════════════════════════════════ */
+body.erp-has-sidebar .mdash-kpi-value {
+  font-family: var(--font-ui) !important;
+  font-size: 1.6rem !important;
+  font-weight: 700 !important;
+  color: var(--fg) !important;
+  letter-spacing: -0.02em !important;
+  font-feature-settings: 'tnum' 0 !important;
+  font-variant-numeric: tabular-nums !important;
+  line-height: 1.1 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+body.erp-has-sidebar .mdash-kpi-value.kpi-value-sm {
+  font-size: 1.35rem !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE BACKDROP
    ═══════════════════════════════════════════════════════════ */
 .erp-sidebar-backdrop {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 20, 25, 0.5);
-  z-index: 998;
-  backdrop-filter: blur(4px);
+  display: none !important;
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(11, 14, 20, 0.6) !important;
+  z-index: 998 !important;
+  backdrop-filter: blur(4px) !important;
 }
 
 .erp-sidebar-backdrop.show {
-  display: block;
+  display: block !important;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   MOBILE MENU BUTTON
-   ═══════════════════════════════════════════════════════════ */
+/* Mobile menu button */
 .erp-mobile-menu-btn {
-  display: none;
-  position: fixed;
-  top: 13px;
-  left: 16px;
-  width: 34px;
-  height: 34px;
-  background: var(--bg-card);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  cursor: pointer;
-  z-index: 997;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-  transition: all var(--t-fast);
-}
-
-.erp-mobile-menu-btn:hover {
-  background: var(--bg-subtle);
+  display: none !important;
+  position: fixed !important;
+  top: 13px !important;
+  left: 14px !important;
+  width: 34px !important;
+  height: 34px !important;
+  background: var(--bg-surface) !important;
+  color: var(--fg) !important;
+  border: 1px solid var(--bd) !important;
+  border-radius: var(--r-md) !important;
+  cursor: pointer !important;
+  z-index: 997 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 1rem !important;
+  padding: 0 !important;
+  transition: all var(--t) !important;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -826,121 +960,96 @@ body.erp-sidebar-collapsed .erp-thin-topbar {
    ═══════════════════════════════════════════════════════════ */
 @media (max-width: 900px) {
   body.erp-has-sidebar {
-    padding-left: 0;
-    padding-top: var(--topbar-h);
+    padding-left: 0 !important;
+    padding-top: var(--top-h) !important;
   }
 
   body.erp-has-sidebar.erp-sidebar-collapsed {
-    padding-left: 0;
+    padding-left: 0 !important;
   }
 
   .erp-sidebar {
-    transform: translateX(-100%);
-    width: var(--sidebar-w);
-    box-shadow: var(--shadow-xl);
-    transition: transform var(--t-base);
+    transform: translateX(-100%) !important;
+    width: var(--side-w) !important;
+    box-shadow: var(--sh-xl) !important;
+    transition: transform var(--t) !important;
   }
 
   .erp-sidebar.mobile-open {
-    transform: translateX(0);
+    transform: translateX(0) !important;
   }
 
   .erp-sidebar.collapsed {
-    transform: translateX(-100%);
-    width: var(--sidebar-w);
+    transform: translateX(-100%) !important;
+    width: var(--side-w) !important;
   }
 
   .erp-sidebar.collapsed.mobile-open {
-    transform: translateX(0);
+    transform: translateX(0) !important;
   }
 
   .erp-thin-topbar,
   body.erp-sidebar-collapsed .erp-thin-topbar {
-    left: 0;
-    padding-left: 60px;
-    padding-right: 16px;
+    left: 0 !important;
+    padding-left: 60px !important;
+    padding-right: 12px !important;
   }
 
   .erp-thin-page-title {
-    font-size: 0.88rem;
-    max-width: 150px;
+    font-size: 0.85rem !important;
+    max-width: 140px !important;
   }
 
   .erp-mobile-menu-btn {
-    display: flex;
-  }
-
-  .erp-health-dot {
-    padding: 5px;
-  }
-
-  .erp-health-text {
-    display: none;
+    display: flex !important;
   }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   CONTENT CONTAINER — Override existing
+   PAGE HEADER (Inventory Count, etc.) — Fix overlap
    ═══════════════════════════════════════════════════════════ */
-body.erp-has-sidebar .erp-container {
-  margin-left: 0 !important;
-  padding: 28px 32px 48px !important;
-  max-width: 100% !important;
-  background: transparent !important;
-}
-
-@media (max-width: 900px) {
-  body.erp-has-sidebar .erp-container {
-    padding: 20px 16px 40px !important;
-  }
-}
-
-/* Hide old topbar */
-body.erp-has-sidebar nav.erp-topbar,
-body.erp-has-sidebar .erp-topbar,
-body.erp-has-sidebar #erpNavBar {
-  display: none !important;
-}
-
-.erp-layout {
-  display: none !important;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   PAGE HEADER (Premium)
-   ═══════════════════════════════════════════════════════════ */
-body.erp-has-sidebar .erp-page-header,
-body.erp-has-sidebar .erp-page-title {
-  background: transparent !important;
-  padding: 0 !important;
+body.erp-has-sidebar .erp-page-header {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
   margin-bottom: 24px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  flex-wrap: wrap !important;
 }
 
 body.erp-has-sidebar .erp-page-title {
-  font-size: 1.5rem !important;
+  font-size: 1.25rem !important;
   font-weight: 700 !important;
-  color: var(--text-primary) !important;
+  color: var(--fg) !important;
   letter-spacing: -0.02em !important;
   display: flex !important;
   align-items: center !important;
   gap: 10px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 1.3 !important;
 }
 
 body.erp-has-sidebar .erp-page-title i {
   color: var(--accent) !important;
-  font-size: 1.4rem !important;
+  font-size: 1.2rem !important;
 }
 
 body.erp-has-sidebar .erp-breadcrumb {
-  color: var(--text-muted) !important;
-  font-size: 0.82rem !important;
+  color: var(--fg-subtle) !important;
+  font-size: 0.78rem !important;
   margin-top: 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
 }
 
 body.erp-has-sidebar .erp-breadcrumb a {
-  color: var(--text-secondary) !important;
+  color: var(--fg-muted) !important;
   text-decoration: none !important;
-  transition: color var(--t-fast) !important;
+  transition: color var(--t) !important;
 }
 
 body.erp-has-sidebar .erp-breadcrumb a:hover {
@@ -948,165 +1057,27 @@ body.erp-has-sidebar .erp-breadcrumb a:hover {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   FIX v7.1 — Sidebar Toggle Always Visible
+   UTILITY — Fix weird spacing
    ═══════════════════════════════════════════════════════════ */
-
-/* Collapsed state: show toggle button prominently */
-.erp-sidebar.collapsed .erp-sidebar-toggle {
-  display: flex !important;
-  position: absolute !important;
-  top: 0 !important;
-  right: -12px !important;
-  width: 32px !important;
-  height: 32px !important;
-  background: var(--accent) !important;
-  color: #FFFFFF !important;
-  border: 2px solid var(--sidebar-bg) !important;
-  border-radius: 50% !important;
-  z-index: 10 !important;
-  font-size: 0.85rem !important;
-  box-shadow: 0 2px 8px rgba(99, 91, 255, 0.4) !important;
+body.erp-has-sidebar h1,
+body.erp-has-sidebar h2,
+body.erp-has-sidebar h3,
+body.erp-has-sidebar h4,
+body.erp-has-sidebar h5,
+body.erp-has-sidebar h6,
+body.erp-has-sidebar p {
+  margin-top: 0 !important;
 }
 
-.erp-sidebar.collapsed .erp-sidebar-toggle:hover {
-  background: var(--accent-hover) !important;
-  transform: scale(1.1) !important;
+body.erp-has-sidebar button {
+  font-family: inherit !important;
 }
 
-/* Adjust collapsed brand */
-.erp-sidebar.collapsed .erp-sidebar-brand {
-  justify-content: center !important;
-  padding: 0 !important;
-  gap: 0 !important;
-  position: relative !important;
-}
-
-/* Logo only in collapsed */
-.erp-sidebar.collapsed .erp-sidebar-logo {
-  display: block !important;
-  height: 28px !important;
-  max-width: 32px !important;
-  padding: 2px 4px !important;
-}
-
-.erp-sidebar.collapsed .erp-sidebar-brand-text {
-  display: none !important;
-}
-
-/* Ensure toggle inside brand is visible when collapsed */
-.erp-sidebar.collapsed .erp-sidebar-brand .erp-sidebar-toggle {
-  display: flex !important;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   FIX: Force override erp-design-system.css conflicts
-   ═══════════════════════════════════════════════════════════ */
-
-/* Override any existing sidebar rules */
-body.erp-has-sidebar .erp-sidebar,
-.erp-sidebar {
-  width: 240px !important;
-  background: #0F1419 !important;
-  color: #8B94A7 !important;
-}
-
-body.erp-has-sidebar.erp-sidebar-collapsed .erp-sidebar,
-.erp-sidebar.collapsed {
-  width: 64px !important;
-}
-
-body.erp-has-sidebar .erp-sidebar-item,
-.erp-sidebar-item {
-  color: #8B94A7 !important;
-}
-
-body.erp-has-sidebar .erp-sidebar-item:hover,
-.erp-sidebar-item:hover {
-  background: rgba(255, 255, 255, 0.06) !important;
-  color: #FFFFFF !important;
-}
-
-body.erp-has-sidebar .erp-sidebar-item.active,
-.erp-sidebar-item.active {
-  background: rgba(99, 91, 255, 0.15) !important;
-  color: #FFFFFF !important;
-}
-
-body.erp-has-sidebar .erp-sidebar-brand-main,
-.erp-sidebar-brand-main {
-  color: #FFFFFF !important;
-}
-
-body.erp-has-sidebar .erp-sidebar-group-label,
-.erp-sidebar-group-label {
-  color: rgba(139, 148, 167, 0.6) !important;
-}
-
-body.erp-has-sidebar .erp-sidebar-version,
-.erp-sidebar-version {
-  color: #8B94A7 !important;
-}
-
-body.erp-has-sidebar .erp-thin-topbar,
-.erp-thin-topbar {
-  background: #FFFFFF !important;
-  border-bottom-color: #E5E7EB !important;
-}
-
-[data-theme="dark"] body.erp-has-sidebar .erp-thin-topbar,
-[data-theme="dark"] .erp-thin-topbar {
-  background: #141920 !important;
-  border-bottom-color: #232A35 !important;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   NEUTRALIZE erp-design-system.css sidebar conflicts
-   ═══════════════════════════════════════════════════════════ */
-
-/* If erp-design-system.css has these classes, override them */
-body.erp-has-sidebar .sidebar,
-body.erp-has-sidebar .erp-sidebar-nav .nav-item,
-body.erp-has-sidebar .erp-sidebar-nav .nav-link {
-  all: unset !important;
-  display: none !important;
-}
-
-/* Remove any pseudo-elements from old CSS */
-body.erp-has-sidebar .erp-sidebar::before,
-body.erp-has-sidebar .erp-sidebar::after {
-  content: none !important;
-  display: none !important;
-}
-
-/* Ensure our styles win */
-.erp-sidebar {
-  box-sizing: border-box !important;
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  bottom: 0 !important;
-  z-index: 1000 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  transition: width 200ms cubic-bezier(0.4, 0, 0.2, 1) !important;
-}
-
-.erp-sidebar * {
-  box-sizing: border-box !important;
-}
-
-.erp-sidebar-nav {
-  padding: 12px 8px !important;
-  flex: 1 !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-}
-
-.erp-sidebar-footer {
-  padding: 14px 16px !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  flex-shrink: 0 !important;
+/* Force no weird spacing on numbers */
+body.erp-has-sidebar [class*="value"],
+body.erp-has-sidebar [class*="number"],
+body.erp-has-sidebar [class*="amount"] {
+  font-feature-settings: 'tnum' 0 !important;
+  font-variant-numeric: tabular-nums !important;
+  letter-spacing: -0.01em !important;
 }
