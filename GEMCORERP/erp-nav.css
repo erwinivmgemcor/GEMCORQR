@@ -821,3 +821,390 @@ body.erp-sidebar-collapsed .erp-thin-topbar {
 .erp-layout {
   display: none !important;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   FIXES v6.1 — Address Layout Issues
+   ============================================================ */
+
+/* ─── FIX 1: Sidebar Brand — Proper Layout ─── */
+.erp-sidebar-brand {
+  height: 64px !important;
+  padding: 0 12px 0 16px !important;
+  gap: 12px !important;
+}
+
+.erp-sidebar-logo {
+  height: 28px !important;
+  width: auto !important;
+  max-width: 100px !important;
+  object-fit: contain !important;
+}
+
+.erp-sidebar-brand-main {
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+}
+
+.erp-sidebar-brand-sub {
+  font-size: 0.65rem !important;
+  color: var(--erp-text-subtle) !important;
+  margin-top: 1px !important;
+}
+
+.erp-sidebar-toggle {
+  width: 26px !important;
+  height: 26px !important;
+  font-size: 0.8rem !important;
+  flex-shrink: 0 !important;
+}
+
+/* ─── FIX 2: Topbar — Prevent Overlap ─── */
+.erp-thin-topbar {
+  padding: 0 20px !important;
+  gap: 16px !important;
+}
+
+.erp-thin-topbar-left {
+  gap: 20px !important;
+  min-width: 0 !important;
+  flex: 1 !important;
+  max-width: 60% !important;
+}
+
+.erp-thin-page-title {
+  font-size: 0.9rem !important;
+  font-weight: 600 !important;
+  flex-shrink: 0 !important;
+}
+
+.erp-search-bar {
+  min-width: 200px !important;
+  max-width: 320px !important;
+  flex: 1 !important;
+}
+
+/* Hide search on smaller screens */
+@media (max-width: 1200px) {
+  .erp-search-bar {
+    display: none !important;
+  }
+}
+
+/* ─── FIX 3: Group Labels — Tighter Spacing ─── */
+.erp-sidebar-group-label {
+  padding: 12px 12px 4px !important;
+  font-size: 0.65rem !important;
+}
+
+/* ─── FIX 4: Health Dot — With Text ─── */
+.erp-health-dot {
+  padding: 5px 10px !important;
+  font-size: 0.72rem !important;
+  background: var(--erp-bg) !important;
+  border: 1px solid var(--erp-border) !important;
+  border-radius: 20px !important;
+}
+
+.erp-health-text {
+  display: inline !important;
+  font-size: 0.72rem !important;
+  font-weight: 500 !important;
+}
+
+/* ─── FIX 5: Remove Redundant Settings Icon ─── */
+/* Keep only one settings — the one in user menu */
+.erp-thin-topbar-right .erp-icon-btn[title="Settings"] {
+  display: none !important;
+}
+
+/* ─── FIX 6: Dark Mode Sidebar ─── */
+[data-theme="dark"] .erp-sidebar {
+  background: #0A1628 !important;
+  border-right-color: #1E2D4A !important;
+}
+
+[data-theme="dark"] .erp-sidebar-brand {
+  border-bottom-color: #1E2D4A !important;
+}
+
+[data-theme="dark"] .erp-sidebar-brand-main {
+  color: #F0F4F8 !important;
+}
+
+[data-theme="dark"] .erp-sidebar-brand-sub {
+  color: #64748B !important;
+}
+
+[data-theme="dark"] .erp-sidebar-logo {
+  background: #fff !important;
+  padding: 3px 5px !important;
+  border-radius: 6px !important;
+}
+
+[data-theme="dark"] .erp-sidebar-toggle {
+  border-color: #2A3D5F !important;
+  color: #94A3B8 !important;
+}
+
+[data-theme="dark"] .erp-sidebar-toggle:hover {
+  background: #1E2D4A !important;
+  color: #635BFF !important;
+  border-color: #635BFF !important;
+}
+
+[data-theme="dark"] .erp-sidebar-item {
+  color: #94A3B8 !important;
+}
+
+[data-theme="dark"] .erp-sidebar-item i {
+  color: #64748B !important;
+}
+
+[data-theme="dark"] .erp-sidebar-item:hover {
+  background: #1E2D4A !important;
+  color: #F0F4F8 !important;
+}
+
+[data-theme="dark"] .erp-sidebar-item:hover i {
+  color: #F0F4F8 !important;
+}
+
+[data-theme="dark"] .erp-sidebar-item.active {
+  background: rgba(99, 91, 255, 0.15) !important;
+  color: #A5A0FF !important;
+}
+
+[data-theme="dark"] .erp-sidebar-item.active i {
+  color: #A5A0FF !important;
+}
+
+[data-theme="dark"] .erp-sidebar-group-label {
+  color: #475569 !important;
+}
+
+[data-theme="dark"] .erp-sidebar-footer {
+  border-top-color: #1E2D4A !important;
+}
+
+[data-theme="dark"] .erp-sidebar-version {
+  color: #475569 !important;
+}
+
+[data-theme="dark"] .erp-thin-topbar {
+  background: #0F1E35 !important;
+  border-bottom-color: #1E2D4A !important;
+}
+
+[data-theme="dark"] .erp-thin-page-title {
+  color: #F0F4F8 !important;
+}
+
+[data-theme="dark"] .erp-search-bar {
+  background: #0A1628 !important;
+  border-color: #1E2D4A !important;
+}
+
+[data-theme="dark"] .erp-search-bar:hover {
+  background: #0F1E35 !important;
+  border-color: #2A3D5F !important;
+}
+
+[data-theme="dark"] .erp-search-kbd {
+  background: #1E2D4A !important;
+  border-color: #2A3D5F !important;
+  color: #94A3B8 !important;
+}
+
+[data-theme="dark"] .erp-icon-btn {
+  color: #94A3B8 !important;
+}
+
+[data-theme="dark"] .erp-icon-btn:hover {
+  background: #1E2D4A !important;
+  color: #F0F4F8 !important;
+}
+
+[data-theme="dark"] .erp-health-dot {
+  background: #0A1628 !important;
+  border-color: #1E2D4A !important;
+  color: #94A3B8 !important;
+}
+
+[data-theme="dark"] .erp-user-toggle:hover {
+  background: #1E2D4A !important;
+  border-color: #2A3D5F !important;
+}
+
+[data-theme="dark"] .erp-user-name {
+  color: #F0F4F8 !important;
+}
+
+[data-theme="dark"] .erp-user-role {
+  color: #64748B !important;
+}
+
+[data-theme="dark"] .erp-user-dropdown {
+  background: #0F1E35 !important;
+  border-color: #1E2D4A !important;
+}
+
+[data-theme="dark"] .erp-user-dropdown-header {
+  border-bottom-color: #1E2D4A !important;
+}
+
+[data-theme="dark"] .erp-user-dropdown-header .fullname {
+  color: #F0F4F8 !important;
+}
+
+[data-theme="dark"] .erp-user-dropdown-header .meta {
+  color: #94A3B8 !important;
+}
+
+[data-theme="dark"] .erp-user-dropdown-item {
+  color: #CBD5E1 !important;
+}
+
+[data-theme="dark"] .erp-user-dropdown-item:hover {
+  background: #1E2D4A !important;
+  color: #A5A0FF !important;
+}
+
+[data-theme="dark"] .erp-user-dropdown-divider {
+  background: #1E2D4A !important;
+}
+
+/* ─── FIX 7: Version Footer ─── */
+.erp-sidebar-footer {
+  padding: 10px 16px !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+
+.erp-sidebar-version {
+  font-size: 0.68rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+}
+
+/* ─── FIX 8: Better Toggle Icon ─── */
+/* Already handled in JS — use bi-layout-sidebar-inset */
+
+/* ─── FIX 9: User Avatar — Perfect Circle ─── */
+.erp-user-avatar {
+  width: 30px !important;
+  height: 30px !important;
+  min-width: 30px !important;
+  min-height: 30px !important;
+  aspect-ratio: 1 / 1 !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 0.7rem !important;
+}
+
+/* ─── FIX 10: Hero Card Padding ─── */
+body.erp-has-sidebar .erp-container .mdash-hero {
+  padding: 20px 24px !important;
+}
+
+/* ─── FIX 11: Consistent Icons — Make All Outline ─── */
+/* Override to use regular (outline) versions */
+.erp-sidebar-item i.bi-grid-1x2-fill::before {
+  content: "\f3d5" !important; /* bi-grid-1x2 */
+  font-family: "bootstrap-icons" !important;
+}
+.erp-sidebar-item i.bi-box-seam-fill::before {
+  content: "\f3d9" !important; /* bi-box-seam */
+  font-family: "bootstrap-icons" !important;
+}
+.erp-sidebar-item i.bi-inbox-fill::before {
+  content: "\f3db" !important; /* bi-inbox */
+  font-family: "bootstrap-icons" !important;
+}
+.erp-sidebar-item i.bi-clipboard-check-fill::before {
+  content: "\f2a4" !important; /* bi-clipboard-check */
+  font-family: "bootstrap-icons" !important;
+}
+.erp-sidebar-item i.bi-file-earmark-text-fill::before {
+  content: "\f3d0" !important; /* bi-file-earmark-text */
+  font-family: "bootstrap-icons" !important;
+}
+.erp-sidebar-item i.bi-calendar-week-fill::before {
+  content: "\f1f4" !important; /* bi-calendar-week */
+  font-family: "bootstrap-icons" !important;
+}
+.erp-sidebar-item i.bi-plus-circle-fill::before {
+  content: "\f3d4" !important; /* bi-plus-circle */
+  font-family: "bootstrap-icons" !important;
+}
+
+/* ─── FIX 12: Chart Height Consistency ─── */
+.mdash-chart-body {
+  height: 320px !important;
+}
+
+/* ─── FIX 13: Standard Border Radius ─── */
+.mdash-kpi,
+.mdash-chart-card,
+.mdash-table-card,
+.erp-card,
+.erp-kpi-card {
+  border-radius: 12px !important;
+}
+
+.erp-search-bar,
+.erp-thin-topbar,
+.erp-user-toggle,
+.erp-icon-btn {
+  border-radius: 8px !important;
+}
+
+.erp-user-toggle {
+  border-radius: 20px !important;
+}
+
+/* ─── FIX 14: Sidebar Collapse — Better UX ─── */
+.erp-sidebar.collapsed .erp-sidebar-brand {
+  justify-content: center !important;
+  padding: 0 !important;
+}
+
+.erp-sidebar.collapsed .erp-sidebar-logo {
+  display: block !important;
+  height: 26px !important;
+  max-width: 40px !important;
+}
+
+.erp-sidebar.collapsed .erp-sidebar-brand-text {
+  display: none !important;
+}
+
+.erp-sidebar.collapsed .erp-sidebar-toggle {
+  position: absolute !important;
+  bottom: 60px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: 32px !important;
+  height: 32px !important;
+}
+
+/* ─── FIX 15: Topbar Overlap Prevention ─── */
+.erp-thin-topbar-left {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.erp-thin-page-title {
+  max-width: 250px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+@media (max-width: 1100px) {
+  .erp-thin-page-title {
+    max-width: 180px !important;
+  }
+}
