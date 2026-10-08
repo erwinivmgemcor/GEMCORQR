@@ -442,7 +442,7 @@ allowedItems.forEach(function(item) {
     nav.appendChild(link);
   }
 });
-
+});
     sidebar.appendChild(nav);
 
     // ─── Footer ───
