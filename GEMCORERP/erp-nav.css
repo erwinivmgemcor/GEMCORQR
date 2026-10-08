@@ -1058,3 +1058,55 @@ body.erp-has-sidebar .erp-thin-topbar,
   background: #141920 !important;
   border-bottom-color: #232A35 !important;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   NEUTRALIZE erp-design-system.css sidebar conflicts
+   ═══════════════════════════════════════════════════════════ */
+
+/* If erp-design-system.css has these classes, override them */
+body.erp-has-sidebar .sidebar,
+body.erp-has-sidebar .erp-sidebar-nav .nav-item,
+body.erp-has-sidebar .erp-sidebar-nav .nav-link {
+  all: unset !important;
+  display: none !important;
+}
+
+/* Remove any pseudo-elements from old CSS */
+body.erp-has-sidebar .erp-sidebar::before,
+body.erp-has-sidebar .erp-sidebar::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* Ensure our styles win */
+.erp-sidebar {
+  box-sizing: border-box !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  z-index: 1000 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  transition: width 200ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.erp-sidebar * {
+  box-sizing: border-box !important;
+}
+
+.erp-sidebar-nav {
+  padding: 12px 8px !important;
+  flex: 1 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.erp-sidebar-footer {
+  padding: 14px 16px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+}
