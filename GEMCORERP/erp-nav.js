@@ -360,6 +360,18 @@
     document.body.insertBefore(topbar, document.body.firstChild);
     document.body.insertBefore(sidebar, document.body.firstChild);
 
+        // Mobile menu button
+    var mobileBtn = document.createElement('button');
+    mobileBtn.className = 'erp-mobile-menu-btn';
+    mobileBtn.innerHTML = '<i class="bi bi-list"></i>';
+    mobileBtn.onclick = function() {
+      var sb = document.getElementById('erpSidebar');
+      var bd = document.getElementById('erpSidebarBackdrop');
+      if (sb) sb.classList.add('mobile-open');
+      if (bd) bd.classList.add('show');
+    };
+    document.body.appendChild(mobileBtn);
+
     // Set body class for layout
     document.body.classList.add('erp-has-sidebar');
     if (_isCollapsed()) {
