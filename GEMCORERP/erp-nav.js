@@ -392,9 +392,6 @@
         '<div class="erp-health-dot" id="erpHealthDot" title="Checking...">' +
           '<span class="erp-health-text" id="erpHealthText">Checking...</span>' +
         '</div>' +
-        '<button class="erp-icon-btn" id="erpThemeToggleBtn" type="button" title="Toggle theme" aria-label="Toggle theme">' +
-          '<i class="bi bi-moon-stars" id="erpThemeIcon"></i>' +
-        '</button>' +
         '<div id="erpBellContainer"></div>' +
         '<div class="erp-user-menu" id="erpUserMenu">' +
           '<button class="erp-user-toggle" type="button" aria-label="User menu">' +
@@ -426,26 +423,6 @@
           '</div>' +
         '</div>' +
       '</div>';
-
-    // Attach theme toggle
-    var themeBtn = topbar.querySelector('#erpThemeToggleBtn');
-    if (themeBtn) {
-      themeBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (typeof erpToggleTheme === 'function') {
-          erpToggleTheme();
-        } else {
-          // Fallback inline toggle
-          var current = document.documentElement.getAttribute('data-theme') || 'light';
-          var next = current === 'dark' ? 'light' : 'dark';
-          document.documentElement.setAttribute('data-theme', next);
-          try { localStorage.setItem(STORAGE_KEYS.theme, next); } catch(e2) {}
-        }
-        setTimeout(_updateThemeIcon, 50);
-      });
-    }
 
     // Attach user menu toggle
     var userMenu = topbar.querySelector('#erpUserMenu');
@@ -482,18 +459,6 @@
     container.id = 'erpNotifContainer';
     document.body.appendChild(container);
     return container;
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // THEME ICON
-  // ═══════════════════════════════════════════════════════════
-
-  function _updateThemeIcon() {
-    var icon = document.getElementById('erpThemeIcon');
-    if (!icon) return;
-
-    var effective = document.documentElement.getAttribute('data-theme') || 'light';
-    icon.className = effective === 'dark' ? 'bi bi-sun' : 'bi bi-moon-stars';
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -612,10 +577,6 @@
         }
       }, 100);
     }
-
-    // Listen for theme changes from external sources
-    document.addEventListener('erp-theme-changed', _updateThemeIcon);
-    document.addEventListener('erpThemeChanged', _updateThemeIcon);
 
     console.log('[Nav v8.0] Rendered. Page:', current, '| Role:', userRole, '| Collapsed:', _isCollapsed());
   }
