@@ -8,6 +8,7 @@
 
   var NAV_ITEMS = [
     // WAREHOUSE
+    { id: 'management-dashboard', label: 'Management Dashboard', icon: 'bi-graph-up-arrow', href: 'management-dashboard.html', roles: ['warehouse'] },
     { id: 'stock-monitor', label: 'Stock Monitor', icon: 'bi-speedometer2', href: 'stock-monitor.html', roles: ['warehouse'] },
     { id: 'process-history', label: 'Process History', icon: 'bi-clock-history', href: 'process-history.html', roles: ['warehouse'] },
     { id: 'all-requests', label: 'All Requests', icon: 'bi-inbox-fill', href: 'all-requests.html', roles: ['warehouse'] },
