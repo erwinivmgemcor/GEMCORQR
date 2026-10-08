@@ -1208,3 +1208,718 @@ body.erp-has-sidebar .erp-container .mdash-hero {
     max-width: 180px !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   LIGHT MODE PREMIUM ENHANCEMENT v6.2
+   Stripe + Linear inspired — with depth & detail
+   ═══════════════════════════════════════════════════════════ */
+
+/* ─── 1. Body Background — Subtle Gradient ─── */
+body.erp-has-sidebar {
+  background: linear-gradient(180deg, #F7FAFC 0%, #F0F4F8 100%) !important;
+  background-attachment: fixed !important;
+}
+
+/* ─── 2. Sidebar — Off-White with Shadow ─── */
+.erp-sidebar {
+  background: linear-gradient(180deg, #FFFFFF 0%, #FAFBFC 100%) !important;
+  border-right: 1px solid #E3E8EE !important;
+  box-shadow: 
+    1px 0 0 rgba(10, 37, 64, 0.02),
+    4px 0 16px rgba(10, 37, 64, 0.03) !important;
+}
+
+/* ─── 3. Sidebar Brand — Bigger Logo, Better Spacing ─── */
+.erp-sidebar-brand {
+  height: 72px !important;
+  padding: 0 16px !important;
+  border-bottom: 1px solid #E3E8EE !important;
+  background: #FFFFFF !important;
+}
+
+.erp-sidebar-logo {
+  height: 36px !important;
+  width: auto !important;
+  max-width: 120px !important;
+  border-radius: 6px !important;
+}
+
+.erp-sidebar-brand-main {
+  font-size: 0.9rem !important;
+  font-weight: 800 !important;
+  color: #0A2540 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.erp-sidebar-brand-sub {
+  font-size: 0.7rem !important;
+  color: #697386 !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+}
+
+.erp-sidebar-toggle {
+  width: 28px !important;
+  height: 28px !important;
+  border: 1px solid #E3E8EE !important;
+  background: #FFFFFF !important;
+  color: #697386 !important;
+  border-radius: 6px !important;
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.erp-sidebar-toggle:hover {
+  background: #F6F9FC !important;
+  border-color: #635BFF !important;
+  color: #635BFF !important;
+}
+
+/* ─── 4. Sidebar Nav — Better Spacing ─── */
+.erp-sidebar-nav {
+  padding: 16px 12px !important;
+}
+
+.erp-sidebar-group-label {
+  font-size: 0.68rem !important;
+  font-weight: 700 !important;
+  color: #8898AA !important;
+  letter-spacing: 0.08em !important;
+  padding: 16px 12px 6px !important;
+}
+
+.erp-sidebar-group-label:first-child {
+  padding-top: 4px !important;
+}
+
+/* ─── 5. Sidebar Items — Premium Hover ─── */
+.erp-sidebar-item {
+  padding: 9px 12px !important;
+  border-radius: 8px !important;
+  font-size: 0.86rem !important;
+  font-weight: 500 !important;
+  color: #425466 !important;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+  margin-bottom: 1px !important;
+}
+
+.erp-sidebar-item i {
+  font-size: 1.05rem !important;
+  color: #697386 !important;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.erp-sidebar-item:hover {
+  background: #F6F9FC !important;
+  color: #0A2540 !important;
+  transform: translateX(2px) !important;
+}
+
+.erp-sidebar-item:hover i {
+  color: #0A2540 !important;
+  transform: scale(1.05) !important;
+}
+
+.erp-sidebar-item.active {
+  background: linear-gradient(90deg, #F0EEFF 0%, #FAFAFF 100%) !important;
+  color: #635BFF !important;
+  font-weight: 600 !important;
+  box-shadow: 
+    inset 0 0 0 1px rgba(99, 91, 255, 0.1),
+    0 1px 2px rgba(99, 91, 255, 0.08) !important;
+}
+
+.erp-sidebar-item.active i {
+  color: #635BFF !important;
+}
+
+.erp-sidebar-item.active::before {
+  width: 3px !important;
+  background: linear-gradient(180deg, #635BFF 0%, #7A73FF 100%) !important;
+  border-radius: 0 3px 3px 0 !important;
+  box-shadow: 0 0 8px rgba(99, 91, 255, 0.4) !important;
+}
+
+/* ─── 6. Sidebar Footer ─── */
+.erp-sidebar-footer {
+  padding: 12px 16px !important;
+  background: #FAFBFC !important;
+  border-top: 1px solid #E3E8EE !important;
+}
+
+.erp-sidebar-version {
+  font-size: 0.68rem !important;
+  color: #8898AA !important;
+  font-family: 'JetBrains Mono', 'Courier New', monospace !important;
+  font-weight: 500 !important;
+}
+
+/* ─── 7. Topbar — Premium Depth ─── */
+.erp-thin-topbar {
+  height: 60px !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(12px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(180%) !important;
+  border-bottom: 1px solid #E3E8EE !important;
+  box-shadow: 
+    0 1px 0 rgba(10, 37, 64, 0.02),
+    0 1px 3px rgba(10, 37, 64, 0.04) !important;
+  padding: 0 24px !important;
+}
+
+body.erp-has-sidebar {
+  padding-top: 60px !important;
+}
+
+/* ─── 8. Page Title — Better Typography ─── */
+.erp-thin-page-title {
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  color: #0A2540 !important;
+  letter-spacing: -0.02em !important;
+}
+
+/* ─── 9. Search Bar — Refined ─── */
+.erp-search-bar {
+  padding: 7px 12px !important;
+  background: #F6F9FC !important;
+  border: 1px solid #E3E8EE !important;
+  border-radius: 8px !important;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.erp-search-bar:hover {
+  background: #FFFFFF !important;
+  border-color: #635BFF !important;
+  box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.08) !important;
+}
+
+.erp-search-bar i {
+  color: #8898AA !important;
+}
+
+.erp-search-bar span {
+  color: #697386 !important;
+  font-size: 0.82rem !important;
+}
+
+.erp-search-kbd {
+  padding: 2px 6px !important;
+  background: #FFFFFF !important;
+  border: 1px solid #E3E8EE !important;
+  border-radius: 4px !important;
+  font-size: 0.68rem !important;
+  font-weight: 600 !important;
+  color: #697386 !important;
+  box-shadow: 0 1px 0 #E3E8EE !important;
+}
+
+/* ─── 10. Health Dot — Premium Pill ─── */
+.erp-health-dot {
+  padding: 5px 12px 5px 10px !important;
+  background: linear-gradient(135deg, #ECFDF5 0%, #F0FDF4 100%) !important;
+  border: 1px solid #A7F3D0 !important;
+  border-radius: 20px !important;
+  color: #065F46 !important;
+  font-size: 0.72rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  box-shadow: 0 1px 2px rgba(16, 185, 129, 0.1) !important;
+}
+
+.erp-health-dot::before {
+  background: #10B981 !important;
+  box-shadow: 
+    0 0 0 2px rgba(16, 185, 129, 0.2),
+    0 0 8px rgba(16, 185, 129, 0.4) !important;
+}
+
+.erp-health-dot.offline {
+  background: linear-gradient(135deg, #FEF2F2 0%, #FFF1F2 100%) !important;
+  border-color: #FECACA !important;
+  color: #991B1B !important;
+}
+
+.erp-health-dot.offline::before {
+  background: #EF4444 !important;
+}
+
+/* ─── 11. Icon Buttons — Refined ─── */
+.erp-icon-btn {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 8px !important;
+  color: #697386 !important;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.erp-icon-btn:hover {
+  background: #F6F9FC !important;
+  color: #0A2540 !important;
+  transform: translateY(-1px) !important;
+}
+
+/* ─── 12. User Toggle — Premium ─── */
+.erp-user-toggle {
+  padding: 4px 12px 4px 4px !important;
+  border: 1px solid transparent !important;
+  border-radius: 24px !important;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.erp-user-toggle:hover {
+  background: #F6F9FC !important;
+  border-color: #E3E8EE !important;
+}
+
+.erp-user-avatar {
+  width: 32px !important;
+  height: 32px !important;
+  background: linear-gradient(135deg, #635BFF 0%, #8B5CF6 100%) !important;
+  box-shadow: 
+    0 2px 6px rgba(99, 91, 255, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+}
+
+.erp-user-name {
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  color: #0A2540 !important;
+  letter-spacing: -0.01em !important;
+}
+
+.erp-user-role {
+  font-size: 0.65rem !important;
+  color: #8898AA !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+}
+
+/* ─── 13. Content Area — Premium Spacing ─── */
+body.erp-has-sidebar .erp-container {
+  padding: 24px 28px 48px !important;
+}
+
+/* ─── 14. Hero Card — Premium Gradient + Pattern ─── */
+.mdash-hero {
+  background: 
+    radial-gradient(circle at 100% 0%, rgba(99, 91, 255, 0.15) 0%, transparent 50%),
+    linear-gradient(135deg, #0A2540 0%, #1E3A5F 100%) !important;
+  border-radius: 16px !important;
+  padding: 32px 36px !important;
+  box-shadow: 
+    0 4px 12px rgba(10, 37, 64, 0.08),
+    0 12px 32px rgba(10, 37, 64, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.mdash-hero::before {
+  content: '' !important;
+  position: absolute !important;
+  top: -50% !important;
+  right: -20% !important;
+  width: 500px !important;
+  height: 500px !important;
+  background: radial-gradient(circle, rgba(99, 91, 255, 0.2) 0%, transparent 70%) !important;
+  pointer-events: none !important;
+}
+
+.mdash-hero-title {
+  font-size: 1.9rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.03em !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15) !important;
+}
+
+.mdash-hero-sub {
+  font-size: 0.9rem !important;
+  opacity: 0.85 !important;
+  font-weight: 500 !important;
+}
+
+.mdash-asof-date {
+  font-family: 'JetBrains Mono', 'Courier New', monospace !important;
+  font-size: 1.4rem !important;
+  color: #FBBF24 !important;
+  font-weight: 700 !important;
+  text-shadow: 0 2px 4px rgba(251, 191, 36, 0.3) !important;
+}
+
+/* ─── 15. Filter Bar — Elevated Card ─── */
+.mdash-filters,
+.erp-filters-card {
+  background: #FFFFFF !important;
+  border: 1px solid #E3E8EE !important;
+  border-radius: 12px !important;
+  box-shadow: 
+    0 1px 2px rgba(10, 37, 64, 0.04),
+    0 4px 12px rgba(10, 37, 64, 0.04) !important;
+  padding: 16px 20px !important;
+}
+
+.mdash-filter-select,
+.erp-select {
+  background: #FFFFFF !important;
+  border: 1px solid #E3E8EE !important;
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  font-weight: 500 !important;
+  color: #0A2540 !important;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: 0 1px 2px rgba(10, 37, 64, 0.02) !important;
+}
+
+.mdash-filter-select:hover,
+.erp-select:hover {
+  border-color: #CBD5E1 !important;
+}
+
+.mdash-filter-select:focus,
+.erp-select:focus {
+  border-color: #635BFF !important;
+  box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.1) !important;
+  outline: none !important;
+}
+
+/* ─── 16. Buttons — Premium ─── */
+.mdash-refresh-btn,
+.mdash-print-btn,
+.erp-btn-outline-dark {
+  background: #FFFFFF !important;
+  border: 1px solid #E3E8EE !important;
+  color: #425466 !important;
+  padding: 8px 14px !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  font-size: 0.82rem !important;
+  box-shadow: 0 1px 2px rgba(10, 37, 64, 0.04) !important;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.mdash-refresh-btn:hover,
+.mdash-print-btn:hover,
+.erp-btn-outline-dark:hover {
+  background: #F6F9FC !important;
+  border-color: #CBD5E1 !important;
+  color: #0A2540 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 8px rgba(10, 37, 64, 0.08) !important;
+}
+
+.mdash-export-btn,
+.erp-btn-primary {
+  background: linear-gradient(135deg, #635BFF 0%, #7A73FF 100%) !important;
+  border: none !important;
+  color: #FFFFFF !important;
+  padding: 8px 16px !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  font-size: 0.82rem !important;
+  box-shadow: 
+    0 1px 2px rgba(99, 91, 255, 0.2),
+    0 4px 12px rgba(99, 91, 255, 0.15) !important;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.mdash-export-btn:hover,
+.erp-btn-primary:hover {
+  background: linear-gradient(135deg, #7A73FF 0%, #8B85FF 100%) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 
+    0 2px 4px rgba(99, 91, 255, 0.3),
+    0 8px 20px rgba(99, 91, 255, 0.25) !important;
+}
+
+/* ─── 17. KPI Cards — Premium Depth ─── */
+.mdash-kpi {
+  background: #FFFFFF !important;
+  border: 1px solid #E3E8EE !important;
+  border-radius: 14px !important;
+  padding: 22px 22px 20px !important;
+  box-shadow: 
+    0 1px 2px rgba(10, 37, 64, 0.04),
+    0 4px 12px rgba(10, 37, 64, 0.04) !important;
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.mdash-kpi:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 
+    0 2px 4px rgba(10, 37, 64, 0.06),
+    0 12px 32px rgba(10, 37, 64, 0.10) !important;
+  border-color: #CBD5E1 !important;
+}
+
+.mdash-kpi::before {
+  height: 3px !important;
+  border-radius: 14px 14px 0 0 !important;
+  background: linear-gradient(90deg, #635BFF 0%, #8B5CF6 100%) !important;
+}
+
+.mdash-kpi.kpi-green::before {
+  background: linear-gradient(90deg, #10B981 0%, #34D399 100%) !important;
+}
+
+.mdash-kpi.kpi-amber::before {
+  background: linear-gradient(90deg, #F59E0B 0%, #FBBF24 100%) !important;
+}
+
+.mdash-kpi.kpi-red::before {
+  background: linear-gradient(90deg, #EF4444 0%, #F87171 100%) !important;
+}
+
+.mdash-kpi.kpi-blue::before {
+  background: linear-gradient(90deg, #3B82F6 0%, #60A5FA 100%) !important;
+}
+
+.mdash-kpi.kpi-navy::before {
+  background: linear-gradient(90deg, #0A2540 0%, #1E3A5F 100%) !important;
+}
+
+.mdash-kpi-label {
+  font-size: 0.7rem !important;
+  font-weight: 700 !important;
+  color: #8898AA !important;
+  letter-spacing: 0.06em !important;
+}
+
+.mdash-kpi-value {
+  font-family: 'JetBrains Mono', 'Courier New', monospace !important;
+  font-size: 1.75rem !important;
+  font-weight: 700 !important;
+  color: #0A2540 !important;
+  letter-spacing: -0.02em !important;
+  font-feature-settings: 'tnum' !important;
+  margin-top: 4px !important;
+}
+
+.mdash-kpi-value.kpi-value-sm {
+  font-size: 1.5rem !important;
+}
+
+.mdash-kpi-sub {
+  font-size: 0.75rem !important;
+  color: #697386 !important;
+  font-weight: 500 !important;
+  margin-top: 4px !important;
+}
+
+/* ─── 18. Chart Cards — Premium ─── */
+.mdash-chart-card {
+  background: #FFFFFF !important;
+  border: 1px solid #E3E8EE !important;
+  border-radius: 14px !important;
+  box-shadow: 
+    0 1px 2px rgba(10, 37, 64, 0.04),
+    0 4px 12px rgba(10, 37, 64, 0.04) !important;
+  overflow: hidden !important;
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.mdash-chart-card:hover {
+  box-shadow: 
+    0 2px 4px rgba(10, 37, 64, 0.06),
+    0 12px 32px rgba(10, 37, 64, 0.08) !important;
+}
+
+.mdash-chart-header {
+  padding: 16px 20px !important;
+  border-bottom: 1px solid #F0F4F8 !important;
+  background: linear-gradient(180deg, #FFFFFF 0%, #FAFBFC 100%) !important;
+  font-weight: 700 !important;
+  font-size: 0.88rem !important;
+  color: #0A2540 !important;
+  letter-spacing: -0.01em !important;
+}
+
+.mdash-chart-header i {
+  color: #635BFF !important;
+  font-size: 1rem !important;
+}
+
+/* ─── 19. Table — Premium ─── */
+.mdash-table-card {
+  background: #FFFFFF !important;
+  border: 1px solid #E3E8EE !important;
+  border-radius: 14px !important;
+  box-shadow: 
+    0 1px 2px rgba(10, 37, 64, 0.04),
+    0 4px 12px rgba(10, 37, 64, 0.04) !important;
+  overflow: hidden !important;
+}
+
+.mdash-table-header {
+  padding: 18px 24px !important;
+  background: linear-gradient(180deg, #FFFFFF 0%, #FAFBFC 100%) !important;
+  border-bottom: 1px solid #F0F4F8 !important;
+}
+
+.mdash-table-title {
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  color: #0A2540 !important;
+  letter-spacing: -0.01em !important;
+}
+
+.mdash-table thead th {
+  background: #FAFBFC !important;
+  color: #697386 !important;
+  font-size: 0.68rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+  padding: 12px 14px !important;
+  border-bottom: 1px solid #E3E8EE !important;
+}
+
+.mdash-table tbody td {
+  padding: 12px 14px !important;
+  border-bottom: 1px solid #F0F4F8 !important;
+  font-size: 0.82rem !important;
+  color: #425466 !important;
+}
+
+.mdash-table tbody tr {
+  transition: background 100ms ease !important;
+}
+
+.mdash-table tbody tr:hover {
+  background: #F6F9FC !important;
+}
+
+.mdash-table code {
+  background: #F0F4F8 !important;
+  color: #0A2540 !important;
+  padding: 2px 8px !important;
+  border-radius: 6px !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  border: 1px solid #E3E8EE !important;
+}
+
+.mdash-table .qty-cell {
+  font-family: 'JetBrains Mono', 'Courier New', monospace !important;
+  font-weight: 600 !important;
+  font-size: 0.8rem !important;
+}
+
+.mdash-table .value-cell {
+  font-family: 'JetBrains Mono', 'Courier New', monospace !important;
+  font-weight: 700 !important;
+  color: #0A2540 !important;
+  font-size: 0.8rem !important;
+}
+
+/* ─── 20. Badges — Refined ─── */
+.mdash-badge {
+  padding: 3px 9px !important;
+  border-radius: 6px !important;
+  font-size: 0.66rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em !important;
+  border: 1px solid transparent !important;
+}
+
+.mdash-badge.abc-A {
+  background: #FEF2F2 !important;
+  color: #991B1B !important;
+  border-color: #FECACA !important;
+}
+
+.mdash-badge.abc-B {
+  background: #FFFBEB !important;
+  color: #92400E !important;
+  border-color: #FDE68A !important;
+}
+
+.mdash-badge.abc-C {
+  background: #F1F5F9 !important;
+  color: #475569 !important;
+  border-color: #CBD5E1 !important;
+}
+
+.mdash-badge.mov-fast {
+  background: #ECFDF5 !important;
+  color: #065F46 !important;
+  border-color: #A7F3D0 !important;
+}
+
+.mdash-badge.mov-mod {
+  background: #EFF6FF !important;
+  color: #1E40AF !important;
+  border-color: #BFDBFE !important;
+}
+
+.mdash-badge.mov-slow {
+  background: #FFFBEB !important;
+  color: #92400E !important;
+  border-color: #FDE68A !important;
+}
+
+.mdash-badge.mov-none {
+  background: #F1F5F9 !important;
+  color: #64748B !important;
+  border-color: #E2E8F0 !important;
+}
+
+/* ─── 21. Toast — Premium ─── */
+.erp-toast {
+  background: linear-gradient(135deg, #0A2540 0%, #1E3A5F 100%) !important;
+  color: #FFFFFF !important;
+  border-radius: 12px !important;
+  box-shadow: 0 12px 32px rgba(10, 37, 64, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* ─── 22. Custom Scrollbar ─── */
+.erp-sidebar-nav::-webkit-scrollbar {
+  width: 6px !important;
+}
+
+.erp-sidebar-nav::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.erp-sidebar-nav::-webkit-scrollbar-thumb {
+  background: #E3E8EE !important;
+  border-radius: 3px !important;
+}
+
+.erp-sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: #CBD5E1 !important;
+}
+
+/* ─── 23. Number Typography — Tabular ─── */
+.erp-thin-page-title,
+.erp-user-name,
+.erp-sidebar-brand-main {
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+}
+
+/* ─── 24. Smooth Animations ─── */
+.mdash-kpi,
+.mdash-chart-card,
+.erp-sidebar-item,
+.erp-icon-btn,
+.mdash-export-btn,
+.mdash-refresh-btn {
+  will-change: transform, box-shadow !important;
+}
+
+/* ─── 25. Mono font for numbers ─── */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/jetbrainsmono/v18/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjPVmUsaaDhw.woff2) format('woff2');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   END LIGHT MODE PREMIUM ENHANCEMENT
+   ═══════════════════════════════════════════════════════════ */
