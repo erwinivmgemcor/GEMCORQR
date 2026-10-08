@@ -1,3 +1,7 @@
+// Force light mode
+document.documentElement.setAttribute('data-theme', 'light');
+try { localStorage.setItem('erp_theme', 'light'); } catch(e) {}
+
 // ============================================================
 // GEMCOR ERP — Configuration
 // Pure Supabase, no GAS
