@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEMCOR ERP — Management Dashboard</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="erp-design-system.css">
+<link rel="stylesheet" href="erp-styles.css">
+<link rel="stylesheet" href="erp-nav.css">
+<link rel="stylesheet" href="erp-notif.css">
+
+<style>
+/* ═══════════════════════════════════════════════════════════
+   MANAGEMENT DASHBOARD — Custom Styles
+   Hybrid: Navy header (manager template) + Light ERP body
+   ═══════════════════════════════════════════════════════════ */
+
+/* Dashboard-specific colors */
+:root {
+  --mdash-navy: #0a1628;
+  --mdash-navy-light: #1e3a5f;
+  --mdash-gold: #f59e0b;
+  --mdash-green: #10b981;
+  --mdash-red: #ef4444;
+  --mdash-blue: #3b82f6;
+  --mdash-card-bg: #ffffff;
+  --mdash-kpi-bg: #f8fafc;
+  --mdash-shadow: 0 4px 16px rgba(10, 22, 40, 0.08);
+}
+
+/* Hero header */
+.mdash-hero {
+  background: linear-gradient(135deg, var(--mdash-navy) 0%, var(--mdash-navy-light) 100%);
+  border-radius: 16px;
+  padding: 28px 32px;
+  margin-bottom: 24px;
+  color: #fff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  box-shadow: var(--mdash-shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.mdash-hero::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -10%;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.mdash-hero-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.mdash-hero-logo {
+  height: 60px;
+  width: auto;
+  background: #fff;
+  padding: 8px 12px;
+  border-radius: 10px;
+}
+
+.mdash-hero-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.mdash-hero-sub {
+  font-size: 0.9rem;
+  opacity: 0.85;
+  margin-top: 4px;
+}
+
+.mdash-hero-right {
+  text-align: right;
+  position: relative;
+  z-index: 1;
+}
+
+.mdash-asof-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+}
+
+.mdash-asof-date {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--mdash-gold);
+}
+
+/* Filter bar */
+.mdash-filters {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  box-shadow: var(--mdash-shadow);
+  border: 1px solid #e2e8f0;
+}
+
+.mdash-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
+.mdash-filter-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.mdash-filter-select {
+  padding: 8px 12px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: #fff;
+  color: #0f172a;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mdash-filter-select:focus {
+  outline: none;
+  border-color: var(--mdash-navy-light);
+  box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
+}
+
+.mdash-filter-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding-bottom: 1px;
+}
+
+.mdash-refresh-btn,
+.mdash-export-btn,
+.mdash-print-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.5px solid;
+}
+
+.mdash-refresh-btn {
+  background: #fff;
+  border-color: #e2e8f0;
+  color: #475569;
+}
+
+.mdash-refresh-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: var(--mdash-navy-light);
+}
+
+.mdash-export-btn {
+  background: var(--mdash-navy-light);
+  border-color: var(--mdash-navy-light);
+  color: #fff;
+}
+
+.mdash-export-btn:hover {
+  background: var(--mdash-navy);
+  border-color: var(--mdash-navy);
+}
+
+.mdash-print-btn {
+  background: #fff;
+  border-color: #e2e8f0;
+  color: #475569;
+}
+
+.mdash-print-btn:hover {
+  background: #f1f5f9;
+  color: var(--mdash-navy-light);
+}
+
+/* KPI Grid */
+.mdash-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 1200px) {
+  .mdash-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 576px) {
+  .mdash-kpi-grid { grid-template-columns: 1fr; }
+}
+
+.mdash-kpi {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: var(--mdash-shadow);
+  border: 1px solid #e2e8f0;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s;
+}
+
+.mdash-kpi:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(10, 22, 40, 0.12);
+}
+
+.mdash-kpi::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--mdash-navy-light);
+}
+
+.mdash-kpi.kpi-green::before { background: var(--mdash-green); }
+.mdash-kpi.kpi-amber::before { background: var(--mdash-gold); }
+.mdash-kpi.kpi-red::before { background: var(--mdash-red); }
+.mdash-kpi.kpi-blue::before { background: var(--mdash-blue); }
+.mdash-kpi.kpi-navy::before { background: var(--mdash-navy-light); }
+
+.mdash-kpi-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.mdash-kpi-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  line-height: 1.3;
+  max-width: 75%;
+}
+
+.mdash-kpi-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.mdash-kpi-icon.icon-blue { background: #dbeafe; color: #1e40af; }
+.mdash-kpi-icon.icon-green { background: #d1fae5; color: #065f46; }
+.mdash-kpi-icon.icon-amber { background: #fef3c7; color: #92400e; }
+.mdash-kpi-icon.icon-red { background: #fee2e2; color: #991b1b; }
+.mdash-kpi-icon.icon-navy { background: #e0e7f0; color: var(--mdash-navy-light); }
+
+.mdash-kpi-value {
+  font-size: 1.85rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-feature-settings: 'tnum';
+}
+
+.mdash-kpi-value.kpi-value-sm {
+  font-size: 1.55rem;
+}
+
+.mdash-kpi-value.kpi-value-na {
+  color: #94a3b8;
+  font-style: italic;
+  font-weight: 700;
+}
+
+.mdash-kpi-sub {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+.mdash-kpi-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  margin-top: 6px;
+}
+
+.mdash-kpi-delta.up { background: #d1fae5; color: #065f46; }
+.mdash-kpi-delta.down { background: #fee2e2; color: #991b1b; }
+
+/* Charts Grid */
+.mdash-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 992px) {
+  .mdash-charts-grid { grid-template-columns: 1fr; }
+}
+
+.mdash-chart-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: var(--mdash-shadow);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+.mdash-chart-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #0f172a;
+  background: #f8fafc;
+}
+
+.mdash-chart-header i {
+  color: var(--mdash-navy-light);
+  margin-right: 6px;
+}
+
+.mdash-chart-body {
+  padding: 16px;
+  position: relative;
+  height: 300px;
+}
+
+.mdash-chart-body canvas {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Data Table */
+.mdash-table-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: var(--mdash-shadow);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+.mdash-table-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.mdash-table-title {
+  font-weight: 800;
+  font-size: 1rem;
+  color: #0f172a;
+}
+
+.mdash-table-search {
+  padding: 8px 12px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  min-width: 240px;
+}
+
+.mdash-table-search:focus {
+  outline: none;
+  border-color: var(--mdash-navy-light);
+  box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
+}
+
+.mdash-table-wrap {
+  max-height: 500px;
+  overflow: auto;
+}
+
+.mdash-table {
+  width: 100%;
+  font-size: 0.82rem;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.mdash-table thead th {
+  background: #f8fafc;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 10px 12px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  border-bottom: 2px solid #e2e8f0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.mdash-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+  color: #334155;
+}
+
+.mdash-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.mdash-table code {
+  font-family: 'Courier New', monospace;
+  background: #eef2f7;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--mdash-navy-light);
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+.mdash-table .qty-cell {
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  text-align: right;
+}
+
+.mdash-table .value-cell {
+  font-weight: 700;
+  text-align: right;
+  color: #0f172a;
+}
+
+.mdash-table .qty-zero { color: #dc2626; }
+.mdash-table .qty-low { color: #f59e0b; }
+.mdash-table .qty-ok { color: #059669; }
+
+.mdash-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.mdash-badge.abc-A { background: #fee2e2; color: #991b1b; }
+.mdash-badge.abc-B { background: #fef3c7; color: #92400e; }
+.mdash-badge.abc-C { background: #f1f5f9; color: #475569; }
+
+.mdash-badge.mov-fast { background: #d1fae5; color: #065f46; }
+.mdash-badge.mov-mod { background: #dbeafe; color: #1e40af; }
+.mdash-badge.mov-slow { background: #fef3c7; color: #92400e; }
+.mdash-badge.mov-none { background: #f1f5f9; color: #64748b; }
+
+.mdash-empty {
+  text-align: center;
+  padding: 40px;
+  color: #94a3b8;
+}
+
+.mdash-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e2e8f0;
+  border-top-color: var(--mdash-navy-light);
+  border-radius: 50%;
+  animation: mdashSpin 0.7s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes mdashSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Loading skeleton */
+.mdash-skeleton {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: mdashShimmer 1.5s infinite;
+  border-radius: 6px;
+}
+
+@keyframes mdashShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Print styles */
+@media print {
+  .erp-topbar,
+  .mdash-filters,
+  .mdash-filter-actions,
+  .mdash-table-search,
+  .erp-footer,
+  .toast-container { display: none !important; }
+
+  .mdash-hero {
+    background: #fff !important;
+    color: #000 !important;
+    box-shadow: none;
+    border: 2px solid #000;
+  }
+
+  .mdash-hero-title,
+  .mdash-hero-sub,
+  .mdash-asof-date {
+    color: #000 !important;
+  }
+
+  .mdash-kpi,
+  .mdash-chart-card,
+  .mdash-table-card {
+    break-inside: avoid;
+    box-shadow: none;
+    border: 1px solid #ccc;
+  }
+
+  .mdash-chart-body { height: 250px; }
+  .mdash-table-wrap { max-height: none; }
+
+  body { background: #fff; }
+  .erp-container { padding: 0; max-width: 100%; }
+}
+
+/* Toast */
+.toast-container { z-index: 9999; }
+.erp-toast { background: var(--mdash-navy-light); color: #fff; }
+</style>
+
+<script src="erp-guard.js"></script>
+<script src="erp-theme.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script defer src="erp-config.js"></script>
+<script defer src="erp-supabase.js"></script>
+<script defer src="erp-dashboard-api.js"></script>
+<script defer src="erp-nav.js"></script>
+<script defer src="management-dashboard.js"></script>
+<script defer src="notifications.js"></script>
+</head>
+<body>
+
+<nav class="erp-topbar">
+  <div class="erp-topbar-left">
+    <img src="../gemcor-logo.png" alt="GEMCOR" class="erp-logo" onerror="this.style.display='none'">
+    <div>
+      <div class="erp-brand">GEMCOR ERP</div>
+      <div class="erp-brand-sub">Management Dashboard <span class="badge-live">LIVE</span></div>
+    </div>
+  </div>
+  <div id="erpNavBar"></div>
+  <div class="erp-topbar-right">
+    <div class="erp-health" id="erpHealthBadge">
+      <button class="theme-toggle-btn" onclick="erpToggleTheme()" id="themeToggleBtn" title="Toggle theme">
+        <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
+      </button>
+      <span class="dot dot-pending"></span>
+      <span id="erpHealthText">Checking...</span>
+    </div>
+    <a href="stock-monitor.html" class="erp-btn-outline">
+      <i class="bi bi-arrow-left"></i> <span>Stock Monitor</span>
+    </a>
+  </div>
+</nav>
+
+<div class="erp-container">
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- HERO HEADER -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="mdash-hero">
+    <div class="mdash-hero-left">
+      <img src="../gemcor-logo.png" alt="GEMCOR" class="mdash-hero-logo" onerror="this.style.display='none'">
+      <div>
+        <h1 class="mdash-hero-title">INVENTORY DASHBOARD</h1>
+        <div class="mdash-hero-sub">
+          <i class="bi bi-graph-up-arrow me-1"></i>
+          Real-time inventory analytics & KPIs
+        </div>
+      </div>
+    </div>
+    <div class="mdash-hero-right">
+      <div class="mdash-asof-label">AS OF</div>
+      <div class="mdash-asof-date" id="mdashAsOfDate">—</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- FILTERS -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="mdash-filters">
+    <div class="mdash-filter-group">
+      <label class="mdash-filter-label">Month</label>
+      <select id="mdashFilterMonth" class="mdash-filter-select">
+        <option value="all" selected>All Time</option>
+        <option value="2026-01">January 2026</option>
+        <option value="2026-02">February 2026</option>
+        <option value="2026-03">March 2026</option>
+        <option value="2026-04">April 2026</option>
+        <option value="2026-05">May 2026</option>
+        <option value="2026-06">June 2026</option>
+        <option value="2026-07">July 2026</option>
+        <option value="2026-08">August 2026</option>
+        <option value="2026-09">September 2026</option>
+        <option value="2026-10">October 2026</option>
+      </select>
+    </div>
+
+    <div class="mdash-filter-group">
+      <label class="mdash-filter-label">Category</label>
+      <select id="mdashFilterCategory" class="mdash-filter-select">
+        <option value="">All Categories</option>
+      </select>
+    </div>
+
+    <div class="mdash-filter-group">
+      <label class="mdash-filter-label">Stock Class</label>
+      <select id="mdashFilterStockClass" class="mdash-filter-select">
+        <option value="">All Classes</option>
+      </select>
+    </div>
+
+    <div class="mdash-filter-group">
+      <label class="mdash-filter-label">Location</label>
+      <select id="mdashFilterLocation" class="mdash-filter-select">
+        <option value="">All Locations</option>
+      </select>
+    </div>
+
+    <div class="mdash-filter-actions">
+      <button class="mdash-refresh-btn" onclick="mdashRefresh()" title="Refresh data">
+        <i class="bi bi-arrow-clockwise"></i> Refresh
+      </button>
+      <button class="mdash-export-btn" onclick="mdashExportCSV()" title="Export to CSV">
+        <i class="bi bi-file-earmark-excel"></i> Export
+      </button>
+      <button class="mdash-print-btn" onclick="window.print()" title="Print dashboard">
+        <i class="bi bi-printer"></i> Print
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- KPI CARDS (8) -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="mdash-kpi-grid">
+
+    <!-- KPI 1: Total Inventory Items -->
+    <div class="mdash-kpi kpi-navy">
+      <div class="mdash-kpi-header">
+        <div class="mdash-kpi-label">Total Inventory Items</div>
+        <div class="mdash-kpi-icon icon-navy"><i class="bi bi-box-seam-fill"></i></div>
+      </div>
+      <div class="mdash-kpi-value" id="mdashKpiTotalItems">—</div>
+      <div class="mdash-kpi-sub" id="mdashKpiTotalItemsSub">Active SKUs</div>
+    </div>
+
+    <!-- KPI 2: Inventory Value -->
+    <div class="mdash-kpi kpi-green">
+      <div class="mdash-kpi-header">
+        <div class="mdash-kpi-label">Inventory Value</div>
+        <div class="mdash-kpi-icon icon-green"><i class="bi bi-cash-stack"></i></div>
+      </div>
+      <div class="mdash-kpi-value" id="mdashKpiValue">—</div>
+      <div class="mdash-kpi-sub">Total on-hand value</div>
+    </div>
+
+    <!-- KPI 3: Inventory Accuracy -->
+    <div class="mdash-kpi kpi-blue">
+      <div class="mdash-kpi-header">
+        <div class="mdash-kpi-label">Inventory Accuracy</div>
+        <div class="mdash-kpi-icon icon-blue"><i class="bi bi-shield-check"></i></div>
+      </div>
+      <div class="mdash-kpi-value kpi-value-sm" id="mdashKpiAccuracy">—</div>
+      <div class="mdash-kpi-sub" id="mdashKpiAccuracySub">Last count verification</div>
+    </div>
+
+    <!-- KPI 4: Turnover Ratio -->
+    <div class="mdash-kpi kpi-amber">
+      <div class="mdash-kpi-header">
+        <div class="mdash-kpi-label">Turnover Ratio</div>
+        <div class="mdash-kpi-icon icon-amber"><i class="bi bi-arrow-repeat"></i></div>
+      </div>
+      <div class="mdash-kpi-value kpi-value-sm" id="mdashKpiTurnover">—</div>
+      <div class="mdash-kpi-sub" id="mdashKpiTurnoverSub">Annualized</div>
+    </div>
+
+    <!-- KPI 5: MRR -->
+    <div class="mdash-kpi kpi-green">
+      <div class="mdash-kpi-header">
+        <div class="mdash-kpi-label">MRR (Receiving)</div>
+        <div class="mdash-kpi-icon icon-green"><i class="bi bi-box-arrow-in-down"></i></div>
+      </div>
+      <div class="mdash-kpi-value kpi-value-sm" id="mdashKpiMrr">—</div>
+      <div class="mdash-kpi-sub" id="mdashKpiMrrSub">Total received value</div>
+    </div>
+
+    <!-- KPI 6: MRIF -->
+    <div class="mdash-kpi kpi-red">
+      <div class="mdash-kpi-header">
+        <div class="mdash-kpi-label">MRIF (Issuance)</div>
+        <div class="mdash-kpi-icon icon-red"><i class="bi bi-box-arrow-up"></i></div>
+      </div>
+      <div class="mdash-kpi-value kpi-value-sm" id="mdashKpiMrif">—</div>
+      <div class="mdash-kpi-sub" id="mdashKpiMrifSub">Total issued value</div>
+    </div>
+
+    <!-- KPI 7: For Replenishment -->
+    <div class="mdash-kpi kpi-amber">
+      <div class="mdash-kpi-header">
+        <div class="mdash-kpi-label">For Replenishment</div>
+        <div class="mdash-kpi-icon icon-amber"><i class="bi bi-exclamation-triangle-fill"></i></div>
+      </div>
+      <div class="mdash-kpi-value kpi-value-sm" id="mdashKpiReplenish">—</div>
+      <div class="mdash-kpi-sub" id="mdashKpiReplenishSub">Value to reorder</div>
+    </div>
+
+    <!-- KPI 8: Out of Stock -->
+    <div class="mdash-kpi kpi-red">
+      <div class="mdash-kpi-header">
+        <div class="mdash-kpi-label">Out of Stock</div>
+        <div class="mdash-kpi-icon icon-red"><i class="bi bi-x-circle-fill"></i></div>
+      </div>
+      <div class="mdash-kpi-value kpi-value-sm" id="mdashKpiOutOfStock">—</div>
+      <div class="mdash-kpi-sub">Zero on-hand items</div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- CHARTS (4) -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="mdash-charts-grid">
+
+    <!-- Chart 1: Category Value -->
+    <div class="mdash-chart-card">
+      <div class="mdash-chart-header">
+        <div><i class="bi bi-pie-chart-fill"></i> Stock Value by Category</div>
+      </div>
+      <div class="mdash-chart-body">
+        <canvas id="mdashChartCategory"></canvas>
+      </div>
+    </div>
+
+    <!-- Chart 2: ABC Classification -->
+    <div class="mdash-chart-card">
+      <div class="mdash-chart-header">
+        <div><i class="bi bi-bar-chart-fill"></i> ABC Classification</div>
+      </div>
+      <div class="mdash-chart-body">
+        <canvas id="mdashChartABC"></canvas>
+      </div>
+    </div>
+
+    <!-- Chart 3: Movement Classification -->
+    <div class="mdash-chart-card">
+      <div class="mdash-chart-header">
+        <div><i class="bi bi-activity"></i> Movement Classification</div>
+      </div>
+      <div class="mdash-chart-body">
+        <canvas id="mdashChartMovement"></canvas>
+      </div>
+    </div>
+
+    <!-- Chart 4: Top 10 Items by Value -->
+    <div class="mdash-chart-card">
+      <div class="mdash-chart-header">
+        <div><i class="bi bi-trophy-fill"></i> Top 10 Items by Value</div>
+      </div>
+      <div class="mdash-chart-body">
+        <canvas id="mdashChartTopValue"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- DETAILED TABLE -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="mdash-table-card">
+    <div class="mdash-table-header">
+      <div>
+        <div class="mdash-table-title">
+          <i class="bi bi-table me-2"></i>Inventory Master
+        </div>
+        <div style="font-size:0.8rem;color:#64748b;" id="mdashTableCount">Loading...</div>
+      </div>
+      <input type="text" id="mdashTableSearch" class="mdash-table-search" placeholder="Search item code or description...">
+    </div>
+
+    <div class="mdash-table-wrap">
+      <table class="mdash-table">
+        <thead>
+          <tr>
+            <th style="width:3%">#</th>
+            <th style="width:11%">Item Code</th>
+            <th style="width:22%">Description</th>
+            <th style="width:8%">Category</th>
+            <th style="width:6%">Location</th>
+            <th style="width:7%;text-align:right;">On-Hand</th>
+            <th style="width:5%">Unit</th>
+            <th style="width:8%;text-align:right;">Unit Cost</th>
+            <th style="width:10%;text-align:right;">On-Hand Cost</th>
+            <th style="width:6%;text-align:center;">ABC</th>
+            <th style="width:8%;text-align:center;">Movement</th>
+            <th style="width:6%;text-align:center;">Status</th>
+          </tr>
+        </thead>
+        <tbody id="mdashTableBody">
+          <tr>
+            <td colspan="12" class="mdash-empty">
+              <div class="mdash-spinner"></div>
+              <div class="mt-2">Loading items...</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="erp-footer">
+    <div>GEMCOR ERP — Management Dashboard v1.0.0</div>
+    <div>Pure Supabase • Live Data • Auto-refresh 5min</div>
+  </div>
+
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="erpToast" class="toast erp-toast">
+    <div class="toast-body" id="erpToastBody">Message</div>
+  </div>
+</div>
+
+</body>
+</html>
