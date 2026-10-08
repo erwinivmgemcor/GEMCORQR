@@ -156,11 +156,14 @@
         '<div class="erp-sidebar-brand-sub">Inventory System</div>' +
       '</div>' +
       '<button class="erp-sidebar-toggle" title="Toggle sidebar"><i class="bi bi-layout-sidebar-inset"></i></button>';
-    brand.querySelector('.erp-sidebar-toggle').onclick = function() {
-      var isCollapsed = sidebar.classList.toggle('collapsed');
-      _setCollapsed(isCollapsed);
-      document.body.classList.toggle('erp-sidebar-collapsed', isCollapsed);
-    };
+  brand.querySelector('.erp-sidebar-toggle').onclick = function(e) {
+  e.stopPropagation();
+  var isCollapsed = !sidebar.classList.contains('collapsed');
+  sidebar.classList.toggle('collapsed', isCollapsed);
+  document.body.classList.toggle('erp-sidebar-collapsed', isCollapsed);
+  _setCollapsed(isCollapsed);
+  console.log('[Nav] Sidebar collapsed:', isCollapsed);
+};
     sidebar.appendChild(brand);
 
     // Nav
