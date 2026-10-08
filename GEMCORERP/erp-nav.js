@@ -1,6 +1,6 @@
 // ============================================================
-// GEMCOR ERP — Navigation System v4.0
-// Sidebar + Thin Topbar (Collapsible)
+// GEMCOR ERP — Navigation System v5.0
+// Sidebar Fixed Layout (auto-inject, walang overlap)
 // ============================================================
 
 (function() {
@@ -22,8 +22,7 @@
       id: 'inventory',
       label: 'INVENTORY',
       items: [
-        { id: 'inventory-count', label: 'Inventory Count', icon: 'bi-clipboard-check', href: 'inventory-count.html', roles: ['warehouse'] },
-        { id: 'reorder-list', label: 'Reorder List', icon: 'bi-exclamation-triangle', href: 'stock-monitor.html#reorder', roles: ['warehouse'] }
+        { id: 'inventory-count', label: 'Inventory Count', icon: 'bi-clipboard-check', href: 'inventory-count.html', roles: ['warehouse'] }
       ]
     },
     {
@@ -34,10 +33,7 @@
         { id: 'mrif-list', label: 'MRIF — Issuance', icon: 'bi-box-arrow-up', href: 'mrif-list.html', roles: ['warehouse'] },
         { id: 'mrr-list', label: 'MRR — Receiving', icon: 'bi-box-arrow-down', href: 'mrr-list.html', roles: ['warehouse'] },
         { id: 'mrs-list', label: 'MRS — Returns', icon: 'bi-arrow-counterclockwise', href: 'mrs-list.html', roles: ['warehouse'] },
-        { id: 'prf-monitor', label: 'PRF Monitor', icon: 'bi-file-earmark-ruled', href: 'prf-monitor.html', roles: ['warehouse'] },
-        { id: 'my-requests', label: 'My Requests', icon: 'bi-list-check', href: 'my-requests.html', roles: ['production'] },
-        { id: 'new-mrif', label: 'New MRIF', icon: 'bi-plus-circle', href: 'new-mrif.html', roles: ['production'] },
-        { id: 'new-mrs', label: 'New MRS', icon: 'bi-plus-circle', href: 'new-mrs.html', roles: ['production'] }
+        { id: 'prf-monitor', label: 'PRF Monitor', icon: 'bi-file-earmark-ruled', href: 'prf-monitor.html', roles: ['warehouse'] }
       ]
     },
     {
@@ -48,9 +44,20 @@
         { id: 'usage-trend', label: 'Usage Trend', icon: 'bi-graph-up', href: 'usage-trend.html', roles: ['warehouse'] },
         { id: 'process-history', label: 'Process History', icon: 'bi-clock-history', href: 'process-history.html', roles: ['warehouse'] }
       ]
+    },
+    {
+      id: 'production',
+      label: 'PRODUCTION',
+      items: [
+        { id: 'my-requests', label: 'My Requests', icon: 'bi-list-check', href: 'my-requests.html', roles: ['production'] },
+        { id: 'new-mrif', label: 'New MRIF', icon: 'bi-plus-circle', href: 'new-mrif.html', roles: ['production'] },
+        { id: 'new-mrs', label: 'New MRS', icon: 'bi-plus-circle', href: 'new-mrs.html', roles: ['production'] }
+      ]
     }
   ];
 
+  var SIDEBAR_WIDTH = 240;
+  var SIDEBAR_WIDTH_COLLAPSED = 64;
   var SIDEBAR_STATE_KEY = 'erp_sidebar_collapsed';
 
   // ═══════════════════════════════════════════════════════════
@@ -111,6 +118,31 @@
   }
 
   // ═══════════════════════════════════════════════════════════
+  // REMOVE OLD NAVBAR
+  // ═══════════════════════════════════════════════════════════
+  function _removeOldNav() {
+    // Remove existing topbar
+    var oldTopbar = document.querySelector('nav.erp-topbar');
+    if (oldTopbar) oldTopbar.remove();
+
+    // Remove existing navbar container
+    var oldNavBar = document.getElementById('erpNavBar');
+    if (oldNavBar) oldNavBar.remove();
+
+    // Remove old sidebar (if re-rendering)
+    var oldSidebar = document.getElementById('erpSidebar');
+    if (oldSidebar) oldSidebar.remove();
+
+    // Remove old topbar (thin version)
+    var oldThinTopbar = document.getElementById('erpThinTopbar');
+    if (oldThinTopbar) oldThinTopbar.remove();
+
+    // Remove old nav backdrop
+    var oldBackdrop = document.getElementById('erpSidebarBackdrop');
+    if (oldBackdrop) oldBackdrop.remove();
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // BUILD SIDEBAR
   // ═══════════════════════════════════════════════════════════
   function _buildSidebar(userRole, currentPage) {
@@ -118,7 +150,20 @@
     sidebar.id = 'erpSidebar';
     sidebar.className = 'erp-sidebar' + (_isCollapsed() ? ' collapsed' : '');
 
-    // ─── Toggle button ───
+    // ─── Logo section ───
+    var brand = document.createElement('div');
+    brand.className = 'erp-sidebar-brand';
+
+    var logo = document.createElement('img');
+    logo.src = '../gemcor-logo.png';
+    logo.alt = 'GEMCOR';
+    logo.className = 'erp-sidebar-logo';
+    logo.onerror = function() { this.style.display = 'none'; };
+
+    var brandText = document.createElement('div');
+    brandText.className = 'erp-sidebar-brand-text';
+    brandText.innerHTML = '<div class="erp-sidebar-brand-main">GEMCOR</div><div class="erp-sidebar-brand-sub">ERP System</div>';
+
     var toggle = document.createElement('button');
     toggle.className = 'erp-sidebar-toggle';
     toggle.title = 'Toggle sidebar';
@@ -126,8 +171,13 @@
     toggle.onclick = function() {
       var isCollapsed = sidebar.classList.toggle('collapsed');
       _setCollapsed(isCollapsed);
+      document.body.classList.toggle('erp-sidebar-collapsed', isCollapsed);
     };
-    sidebar.appendChild(toggle);
+
+    brand.appendChild(logo);
+    brand.appendChild(brandText);
+    brand.appendChild(toggle);
+    sidebar.appendChild(brand);
 
     // ─── Nav items ───
     var nav = document.createElement('nav');
@@ -180,31 +230,51 @@
   }
 
   // ═══════════════════════════════════════════════════════════
-  // BUILD TOPBAR (thin)
+  // BUILD TOPBAR
   // ═══════════════════════════════════════════════════════════
-  function _buildTopbar(userInfo) {
+  function _buildTopbar(userInfo, currentPage) {
     var topbar = document.createElement('div');
+    topbar.id = 'erpThinTopbar';
     topbar.className = 'erp-thin-topbar';
 
-    // Left: Logo + brand
+    // Left: page title
     var left = document.createElement('div');
     left.className = 'erp-thin-topbar-left';
+
+    var titleMap = {
+      'management-dashboard': 'Management Dashboard',
+      'stock-monitor': 'Stock Monitor',
+      'inventory-count': 'Inventory Count',
+      'all-requests': 'All Requests',
+      'mrif-list': 'MRIF List',
+      'mrr-list': 'MRR List',
+      'mrs-list': 'MRS List',
+      'prf-monitor': 'PRF Monitor',
+      'weekly-monitor': 'Weekly Monitoring',
+      'usage-trend': 'Usage Trend',
+      'process-history': 'Process History',
+      'my-requests': 'My Requests',
+      'new-mrif': 'New MRIF',
+      'new-mrr': 'New MRR',
+      'new-mrs': 'New MRS'
+    };
+
+    var pageTitle = titleMap[currentPage] || 'GEMCOR ERP';
+
     left.innerHTML =
-      '<img src="../gemcor-logo.png" alt="GEMCOR" class="erp-thin-logo" onerror="this.style.display=\'none\'">' +
-      '<div class="erp-thin-brand">' +
-        '<div class="erp-thin-brand-main">GEMCOR ERP</div>' +
-        '<div class="erp-thin-brand-sub">Management System</div>' +
-      '</div>';
+      '<h1 class="erp-thin-page-title">' + pageTitle + '</h1>';
     topbar.appendChild(left);
 
-    // Right: Notifications + User menu
+    // Right: Bell + User menu
     var right = document.createElement('div');
     right.className = 'erp-thin-topbar-right';
 
+    // Bell container
     var bellContainer = document.createElement('div');
     bellContainer.id = 'erpBellContainer';
     right.appendChild(bellContainer);
 
+    // Notification dropdown container (appended to body)
     var notifDD = document.createElement('div');
     notifDD.id = 'erpNotifContainer';
     document.body.appendChild(notifDD);
@@ -256,47 +326,56 @@
   }
 
   // ═══════════════════════════════════════════════════════════
-  // RENDER
+  // BUILD BACKDROP (for mobile)
+  // ═══════════════════════════════════════════════════════════
+  function _buildBackdrop() {
+    var backdrop = document.createElement('div');
+    backdrop.id = 'erpSidebarBackdrop';
+    backdrop.className = 'erp-sidebar-backdrop';
+    backdrop.onclick = function() {
+      document.getElementById('erpSidebar').classList.remove('mobile-open');
+      backdrop.classList.remove('show');
+    };
+    return backdrop;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // MAIN RENDER
   // ═══════════════════════════════════════════════════════════
   function renderNav() {
     var current = _getCurrentPage();
     var userRole = _getUserRole();
     var userInfo = _getUserInfo();
 
-    // Remove old navbar container if any
-    var oldNav = document.getElementById('erpNavBar');
-    if (oldNav) oldNav.remove();
+    // Remove old elements
+    _removeOldNav();
 
-    // Remove old topbar if it exists (for legacy compatibility)
-    var oldTopbar = document.querySelector('nav.erp-topbar');
-    if (oldTopbar) oldTopbar.remove();
-
-    // Build new layout
-    var wrapper = document.createElement('div');
-    wrapper.className = 'erp-layout';
-
+    // Build new elements
     var sidebar = _buildSidebar(userRole, current);
-    var topbar = _buildTopbar(userInfo);
+    var topbar = _buildTopbar(userInfo, current);
+    var backdrop = _buildBackdrop();
 
-    wrapper.appendChild(sidebar);
-    wrapper.appendChild(topbar);
+    // Insert into body (FIRST child)
+    document.body.insertBefore(backdrop, document.body.firstChild);
+    document.body.insertBefore(topbar, document.body.firstChild);
+    document.body.insertBefore(sidebar, document.body.firstChild);
 
-    // Find where to insert
-    var container = document.querySelector('.erp-container');
-    if (container && container.parentNode) {
-      container.parentNode.insertBefore(wrapper, container);
-    } else {
-      document.body.insertBefore(wrapper, document.body.firstChild);
+    // Set body class for layout
+    document.body.classList.add('erp-has-sidebar');
+    if (_isCollapsed()) {
+      document.body.classList.add('erp-sidebar-collapsed');
     }
 
     // Init notifications
     if (typeof initNotifications === 'function') {
       setTimeout(initNotifications, 100);
     }
+
+    console.log('[Nav] Sidebar rendered. Current page:', current);
   }
 
   // ═══════════════════════════════════════════════════════════
-  // GLOBAL CLICK — Close dropdowns
+  // GLOBAL EVENTS
   // ═══════════════════════════════════════════════════════════
   document.addEventListener('click', function() {
     document.querySelectorAll('.erp-user-menu.open').forEach(function(m) { m.classList.remove('open'); });
@@ -307,11 +386,15 @@
     if (e.key === 'Escape') {
       document.querySelectorAll('.erp-user-menu.open').forEach(function(m) { m.classList.remove('open'); });
       document.querySelectorAll('#erpNotifContainer.open').forEach(function(c) { c.classList.remove('open'); });
+      var sidebar = document.getElementById('erpSidebar');
+      var backdrop = document.getElementById('erpSidebarBackdrop');
+      if (sidebar) sidebar.classList.remove('mobile-open');
+      if (backdrop) backdrop.classList.remove('show');
     }
   });
 
   // ═══════════════════════════════════════════════════════════
-  // USER ACTIONS
+  // USER MENU ACTIONS
   // ═══════════════════════════════════════════════════════════
   window.erpUserLogout = function() {
     var userInfo = _getUserInfo();
@@ -343,6 +426,9 @@
     }
   };
 
+  // Expose for debugging
+  window.erpRenderNav = renderNav;
+
   // ═══════════════════════════════════════════════════════════
   // BOOT
   // ═══════════════════════════════════════════════════════════
@@ -352,5 +438,5 @@
     renderNav();
   }
 
-  console.log('✅ erp-nav.js loaded (v4.0 — sidebar mode)');
+  console.log('✅ erp-nav.js loaded (v5.0 — fixed sidebar)');
 })();
