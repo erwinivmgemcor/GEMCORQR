@@ -2155,3 +2155,144 @@ html {
   color: #0f172a;
   border-color: #fbbf24;
 }
+/* ═══════════════════════════════════════════════════════════
+   INLINE EDIT STYLES — Phase 4
+   ═══════════════════════════════════════════════════════════ */
+
+/* Editable cells */
+.editable-cell {
+  cursor: pointer;
+  position: relative;
+  transition: all 150ms ease;
+}
+
+.editable-cell:hover {
+  background: #e0f2fe !important;
+  position: relative;
+}
+
+.editable-cell:hover::after {
+  content: '\F4CA'; /* bi-pencil */
+  font-family: 'bootstrap-icons';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #0284c7;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.editable-cell:active {
+  background: #bae6fd !important;
+}
+
+/* Locked values (buffer stock when locked) */
+.locked-value {
+  position: relative;
+  display: inline-block;
+}
+
+.locked-value::before {
+  content: '\F47B'; /* bi-lock-fill */
+  font-family: 'bootstrap-icons';
+  color: #dc2626;
+  font-size: 0.7rem;
+  margin-right: 4px;
+}
+
+/* Lock toggle button */
+.lock-toggle-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 150ms;
+  font-size: 1rem;
+}
+
+.lock-toggle-btn:hover {
+  background: #f1f5f9;
+  color: #0284c7;
+}
+
+.lock-toggle-btn.locked {
+  color: #dc2626;
+}
+
+.lock-toggle-btn.unlocked {
+  color: #94a3b8;
+}
+
+/* Recently edited highlight */
+.recently-edited {
+  animation: highlightEdit 3s ease-out;
+}
+
+@keyframes highlightEdit {
+  0% {
+    background: #fef3c7 !important;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3);
+  }
+  100% {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+/* CSV Preview table */
+#csvPreviewBody tr.invalid {
+  background: #fef2f2;
+}
+
+#csvPreviewBody tr.valid {
+  background: #ecfdf5;
+}
+
+#csvPreviewBody td {
+  font-size: 0.85rem;
+  padding: 6px 8px;
+}
+
+/* Edit modal */
+#editCellModal .modal-body {
+  padding: 20px 24px;
+}
+
+#editCellModal .form-control {
+  font-size: 0.9rem;
+}
+
+#editCellModal #editCellCurrentValue {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: #64748b;
+}
+
+#editCellModal #editCellNewValue {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 1.2rem;
+}
+
+/* Tooltips */
+.editable-cell-tooltip {
+  position: absolute;
+  background: #1e293b;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  z-index: 10000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 150ms;
+}
+
+.editable-cell:hover .editable-cell-tooltip {
+  opacity: 1;
+}
