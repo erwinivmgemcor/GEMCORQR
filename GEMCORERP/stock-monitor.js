@@ -302,7 +302,9 @@ function erpRenderTable() {
     
     var safeCode = String(it.item_code || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     
-    html += '<tr data-item-code="' + erpEsc(it.item_code) + '">' +
+   html += '<tr data-item-code="' + erpEsc(it.item_code) + '" ' +
+  'onclick="erpRowClick(event, \'' + safeCode + '\')" ' +
+  'style="cursor:pointer;">' +
       '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
       '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
       '<td>' + erpEsc(it.category || '—') + '</td>' +
@@ -824,11 +826,15 @@ async function erpLoadFilterOptions() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ITEM DETAILS MODAL
+// ITEM DETAILS MODAL (with movements)
 // ═══════════════════════════════════════════════════════════
+
 async function erpShowItemDetails(itemCode) {
   var modalEl = document.getElementById('erpItemModal');
-  if (!modalEl) return;
+  if (!modalEl) {
+    console.warn('[erpShowItemDetails] Modal not found');
+    return;
+  }
   
   document.getElementById('erpModalTitle').textContent = itemCode;
   var body = document.getElementById('erpModalBody');
@@ -851,6 +857,7 @@ async function erpShowItemDetails(itemCode) {
     
     var html = '';
     
+    // Basic info grid
     html += '<div class="erp-item-detail">';
     html += '<div class="detail-row"><span class="detail-label">Item Code</span><span class="detail-value"><code>' + erpEsc(item.item_code) + '</code></span></div>';
     html += '<div class="detail-row"><span class="detail-label">Category</span><span class="detail-value">' + erpEsc(item.category || '—') + '</span></div>';
@@ -866,13 +873,22 @@ async function erpShowItemDetails(itemCode) {
     html += '<div class="detail-row"><span class="detail-label">Stock Class</span><span class="detail-value">' + erpEsc(item.stock_classification || '—') + '</span></div>';
     html += '</div>';
     
+    // Description
     html += '<div class="erp-section-title">Description</div>';
     html += '<div style="padding:12px;background:#f8fafc;border-radius:8px;font-size:0.9rem;">' + erpEsc(item.description || '—') + '</div>';
     
+    // Movement history (In/Out)
     if (movements.length > 0) {
       html += '<div class="erp-section-title">Recent Movements (' + movements.length + ')</div>';
       html += '<div class="table-responsive"><table class="table table-sm" style="font-size:0.82rem;">';
-      html += '<thead><tr><th>Date</th><th>Type</th><th>Reference</th><th class="text-end">In</th><th class="text-end">Out</th><th class="text-end">Balance</th></tr></thead>';
+      html += '<thead><tr>' +
+        '<th>Date</th>' +
+        '<th>Type</th>' +
+        '<th>Reference</th>' +
+        '<th class="text-end" style="color:#10b981;">In</th>' +
+        '<th class="text-end" style="color:#dc2626;">Out</th>' +
+        '<th class="text-end">Balance</th>' +
+        '</tr></thead>';
       html += '<tbody>';
       movements.forEach(function(m) {
         var date = m.transaction_date ? new Date(m.transaction_date).toLocaleDateString() : '—';
@@ -880,8 +896,8 @@ async function erpShowItemDetails(itemCode) {
           '<td>' + erpEsc(date) + '</td>' +
           '<td><span class="badge bg-secondary">' + erpEsc(m.transaction_type) + '</span></td>' +
           '<td><code style="font-size:0.72rem;">' + erpEsc(m.reference_doc || '—') + '</code></td>' +
-          '<td class="text-end text-success">' + (Number(m.qty_in) > 0 ? '+' + erpNum(m.qty_in) : '—') + '</td>' +
-          '<td class="text-end text-danger">' + (Number(m.qty_out) > 0 ? '−' + erpNum(m.qty_out) : '—') + '</td>' +
+          '<td class="text-end text-success fw-bold">' + (Number(m.qty_in) > 0 ? '+' + erpNum(m.qty_in) : '—') + '</td>' +
+          '<td class="text-end text-danger fw-bold">' + (Number(m.qty_out) > 0 ? '−' + erpNum(m.qty_out) : '—') + '</td>' +
           '<td class="text-end"><strong>' + erpNum(m.balance_after) + '</strong></td>' +
           '</tr>';
       });
@@ -898,7 +914,6 @@ async function erpShowItemDetails(itemCode) {
     body.innerHTML = '<div class="text-danger">Failed to load: ' + erpEsc(err.message) + '</div>';
   }
 }
-
 // ═══════════════════════════════════════════════════════════
 // REORDER MODAL
 // ═══════════════════════════════════════════════════════════
@@ -1473,5 +1488,37 @@ async function erpConfirmDeactivateItem() {
     btn.innerHTML = originalHtml;
   }
 }
+// ═══════════════════════════════════════════════════════════
+// ROW CLICK HANDLER
+// Opens item details, but ignores clicks on editable cells/buttons
+// ═══════════════════════════════════════════════════════════
+
+window.erpRowClick = function(event, itemCode) {
+  // Check if click was on editable cell or button
+  var target = event.target;
+  
+  // Ignore if clicked on editable cell (bubbles to row)
+  if (target.closest('.editable-cell')) {
+    return; // Editable cell has its own handler
+  }
+  
+  // Ignore if clicked on lock button
+  if (target.closest('.lock-toggle-btn')) {
+    return; // Lock button has its own handler
+  }
+  
+  // Ignore if clicked on checkbox or button
+  if (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.tagName === 'A') {
+    return;
+  }
+  
+  // Ignore if inside an action cell (last column)
+  if (target.closest('td:last-child')) {
+    return;
+  }
+  
+  // Open item details
+  erpShowItemDetails(itemCode);
+};
 
 console.log('✅ stock-monitor.js v3 loaded — Phase 4 (Inline Edit + Lock + CSV)');
