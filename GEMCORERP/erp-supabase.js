@@ -1,6 +1,7 @@
 // ============================================================
-// GEMCOR ERP — Supabase API Layer (v2)
+// GEMCOR ERP — Supabase API Layer (v3)
 // All reads/writes to erp_* tables
+// FIXED: Added is_deprecated_2026 + is_active filters
 // ============================================================
 
 // ═══════════════════════════════════════════════════════════
@@ -31,7 +32,7 @@ async function erpFetch(table, query, opts) {
 // STOCK SUMMARY
 // ═══════════════════════════════════════════════════════════
 async function erpGetStockSummary(force) {
-  var cacheKey = 'stock_summary';
+  var cacheKey = 'stock_summary_v2';  // ★ Bumped version
   if (!force) {
     var cached = erpGetCache(cacheKey);
     if (cached) return { success: true, summary: cached, _cached: true };
@@ -50,6 +51,7 @@ async function erpGetStockSummary(force) {
 
 // ═══════════════════════════════════════════════════════════
 // ALL ITEMS
+// ★ FIXED: Added is_active, is_deleted, is_deprecated_2026 filters
 // ═══════════════════════════════════════════════════════════
 async function erpGetAllItems(filters) {
   filters = filters || {};
@@ -57,11 +59,15 @@ async function erpGetAllItems(filters) {
   var limit = filters.limit || 5000;
   query += '&limit=' + limit;
   
+  // ═══ ALWAYS FILTER: Active + Not Deleted + Not Deprecated ═══
+  query += '&is_active=eq.true';
+  query += '&is_deleted=eq.false';
+  query += '&is_deprecated_2026=eq.false';
+  
   if (filters.category) query += '&category=eq.' + encodeURIComponent(filters.category);
   if (filters.location) query += '&location=eq.' + encodeURIComponent(filters.location);
   if (filters.movement) query += '&inventory_movement=eq.' + encodeURIComponent(filters.movement);
   if (filters.abc) query += '&abc_classification=eq.' + encodeURIComponent(filters.abc);
-  if (filters.isActive !== undefined) query += '&is_active=eq.' + filters.isActive;
   if (filters.search) {
     query += '&or=(item_code.ilike.*' + encodeURIComponent(filters.search) + '*,description.ilike.*' + encodeURIComponent(filters.search) + '*)';
   }
@@ -77,11 +83,17 @@ async function erpGetAllItems(filters) {
 
 // ═══════════════════════════════════════════════════════════
 // ITEM DETAILS
+// ★ FIXED: Added filters para hindi malabas ang inactive items
 // ═══════════════════════════════════════════════════════════
 async function erpGetItemDetails(itemCode) {
   try {
-    var rows = await erpFetch('erp_items', 'item_code=eq.' + encodeURIComponent(itemCode) + '&limit=1');
-    if (!rows || rows.length === 0) return { success: false, error: 'Item not found' };
+    var rows = await erpFetch('erp_items',
+      'item_code=eq.' + encodeURIComponent(itemCode) +
+      '&is_active=eq.true' +
+      '&is_deleted=eq.false' +
+      '&is_deprecated_2026=eq.false' +
+      '&limit=1');
+    if (!rows || rows.length === 0) return { success: false, error: 'Item not found or inactive' };
     return { success: true, item: rows[0] };
   } catch(err) {
     return { success: false, error: err.message };
@@ -107,7 +119,7 @@ async function erpGetItemMovements(itemCode, limit) {
 // REORDER LIST
 // ═══════════════════════════════════════════════════════════
 async function erpGetReorderList(force) {
-  var cacheKey = 'reorder_list';
+  var cacheKey = 'reorder_list_v2';
   if (!force) {
     var cached = erpGetCache(cacheKey);
     if (cached) return { success: true, items: cached, _cached: true };
@@ -127,7 +139,7 @@ async function erpGetReorderList(force) {
 // WEEKLY MOVEMENT (view-based)
 // ═══════════════════════════════════════════════════════════
 async function erpGetWeeklyMovement(force) {
-  var cacheKey = 'weekly_movement';
+  var cacheKey = 'weekly_movement_v2';
   if (!force) {
     var cached = erpGetCache(cacheKey);
     if (cached) return { success: true, items: cached, _cached: true };
@@ -144,14 +156,18 @@ async function erpGetWeeklyMovement(force) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ★ NEW: WEEKLY DATA FOR SPECIFIC WEEK (Mon-Sun)
-// Aggregates from erp_stock_ledger + erp_items
+// WEEKLY DATA FOR SPECIFIC WEEK (Mon-Sun)
+// ★ FIXED: Added is_deprecated_2026 filter
 // ═══════════════════════════════════════════════════════════
 async function erpGetWeeklyData(weekStartISO, weekEndISO) {
   try {
-    // 1. Fetch all items (for metadata: desc, category, location, unit)
+    // 1. Fetch all active items
     var items = await erpFetch('erp_items',
-      'select=item_code,description,category,location,base_unit,on_hand,unit_cost,abc_classification,inventory_movement&is_active=eq.true&limit=10000');
+      'select=item_code,description,category,location,base_unit,on_hand,unit_cost,abc_classification,inventory_movement' +
+      '&is_active=eq.true' +
+      '&is_deleted=eq.false' +
+      '&is_deprecated_2026=eq.false' +
+      '&limit=10000');
     
     // 2. Fetch all ledger entries within the week
     var ledger = await erpFetch('erp_stock_ledger',
@@ -218,7 +234,7 @@ async function erpGetWeeklyData(weekStartISO, weekEndISO) {
 // ALERTS
 // ═══════════════════════════════════════════════════════════
 async function erpGetActiveAlerts(force) {
-  var cacheKey = 'active_alerts';
+  var cacheKey = 'active_alerts_v2';
   if (!force) {
     var cached = erpGetCache(cacheKey);
     if (cached) return { success: true, alerts: cached, _cached: true };
@@ -237,11 +253,16 @@ async function erpGetActiveAlerts(force) {
 
 // ═══════════════════════════════════════════════════════════
 // CATEGORY STATS
+// ★ FIXED: Added filters para hindi kasama deprecated items
 // ═══════════════════════════════════════════════════════════
 async function erpGetCategoryStats() {
   try {
     var rows = await erpFetch('erp_items',
-      'select=category,on_hand,unit_cost,abc_classification,inventory_movement');
+      'select=category,on_hand,unit_cost,abc_classification,inventory_movement' +
+      '&is_active=eq.true' +
+      '&is_deleted=eq.false' +
+      '&is_deprecated_2026=eq.false' +
+      '&limit=10000');
     
     var byCategory = {};
     var byABC = { A: 0, B: 0, C: 0, 'N/A': 0 };
@@ -299,15 +320,9 @@ async function erpGetPrfPoByPo(poNo) {
 
 // ═══════════════════════════════════════════════════════════
 // DISTINCT VALUES
-// ═══════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════
-// DISTINCT VALUES — Fetch from appropriate table
+// ★ FIXED: Added is_active/is_deleted/is_deprecated_2026 filter for erp_items
 // ═══════════════════════════════════════════════════════════
 async function erpGetDistinctValues(column) {
-  // Determine which table to query based on column
-  // requestor / department / status / doc_type → erp_documents
-  // category / location / movement / abc → erp_items
-  
   var docColumns = ['requestor', 'department', 'status', 'doc_type', 'jo_no', 'gem_so_no', 'client_name', 'project', 'po_no', 'vendor', 'dr_no', 'prepared_by'];
   var itemColumns = ['category', 'location', 'inventory_movement', 'abc_classification', 'stock_classification', 'base_unit'];
   
@@ -320,8 +335,14 @@ async function erpGetDistinctValues(column) {
   }
   
   try {
-    var rows = await erpFetch(table,
-      'select=' + column + '&' + column + '=not.is.null&order=' + column + '.asc&limit=5000');
+    var query = 'select=' + column + '&' + column + '=not.is.null&order=' + column + '.asc&limit=5000';
+    
+    // ★ Add filter only for erp_items queries
+    if (table === 'erp_items') {
+      query += '&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false';
+    }
+    
+    var rows = await erpFetch(table, query);
     
     var seen = {};
     var values = [];
@@ -339,6 +360,7 @@ async function erpGetDistinctValues(column) {
     return { success: false, error: err.message, values: [] };
   }
 }
+
 // ═══════════════════════════════════════════════════════════
 // HEALTH CHECK
 // ═══════════════════════════════════════════════════════════
@@ -354,4 +376,4 @@ async function erpHealthCheck() {
   }
 }
 
-console.log('✅ erp-supabase.js loaded — v2');
+console.log('✅ erp-supabase.js loaded — v3 (with deprecated filters)');
