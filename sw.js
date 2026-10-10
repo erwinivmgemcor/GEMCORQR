@@ -5,7 +5,7 @@
 //  - Cache cleared when CACHE_NAME changes
 // ============================================================
 
-const CACHE_NAME = 'gemcor-wms-v4.0.273';
+const CACHE_NAME = 'gemcor-wms-v4.0.241';
 const RUNTIME_CACHE = 'gemcor-runtime-v4.0.0';
 
 const STATIC_ASSETS = [
@@ -42,12 +42,11 @@ function _shouldNeverCache(url) {
   if (url.indexOf('/exec') !== -1) return true;
   if (url.indexOf('config.js') !== -1) return true;
   
-  // ═══ NEVER cache Supabase API ═══
+  // ═══ ADD: Supabase endpoints ═══
   if (url.indexOf('supabase.co') !== -1) return true;
   if (url.indexOf('/rest/v1/') !== -1) return true;
   if (url.indexOf('/rpc/') !== -1) return true;
   if (url.indexOf('/auth/v1/') !== -1) return true;
-  if (url.indexOf('/storage/v1/') !== -1) return true;
   
   return false;
 }
@@ -85,7 +84,14 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
 
   // Never intercept GAS/exec/config.js
-  if (_shouldNeverCache(url)) return;
+ // Never intercept GAS/exec/config.js
+if (_shouldNeverCache(url)) return;
+
+// ═══ NEVER cache Supabase API calls ═══
+if (url.indexOf('supabase.co') !== -1) {
+  console.log('[SW] Bypassing Supabase:', url);
+  return;  // Let browser handle it directly
+}
 
   // Only handle same-origin GEMCORQR requests
   if (url.indexOf('/GEMCORQR/') === -1) return;
