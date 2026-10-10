@@ -649,12 +649,6 @@ allowedItems.forEach(function(item) {
       document.body.classList.add('erp-sidebar-collapsed');
     }
 
-    // Update theme icon
-    _updateThemeIcon();
-
-    // Health check (delayed to let other scripts load)
-    setTimeout(_checkHealth, 300);
-
     // Initialize notifications if available
     if (typeof initNotifications === 'function') {
       setTimeout(function() {
