@@ -2159,18 +2159,29 @@ html {
    INLINE EDIT STYLES — Phase 4
    ═══════════════════════════════════════════════════════════ */
 
-/* Editable cells */
+/* ═══════════════════════════════════════════════════════════
+   EDITABLE CELLS — v2 IMPROVED
+   ═══════════════════════════════════════════════════════════ */
+
 .editable-cell {
   cursor: pointer;
   position: relative;
-  transition: all 150ms ease;
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 4px;
 }
 
+/* Hover state — clear visual feedback */
 .editable-cell:hover {
-  background: #e0f2fe !important;
-  position: relative;
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%) !important;
+  box-shadow: 
+    inset 0 0 0 2px #3b82f6,
+    0 2px 8px rgba(59, 130, 246, 0.2) !important;
+  transform: scale(1.02);
+  z-index: 5;
+  padding-right: 28px !important;
 }
 
+/* Pencil icon on hover — bigger and clearer */
 .editable-cell:hover::after {
   content: '\F4CA'; /* bi-pencil */
   font-family: 'bootstrap-icons';
@@ -2178,15 +2189,76 @@ html {
   right: 8px;
   top: 50%;
   transform: translateY(-50%);
-  color: #0284c7;
-  font-size: 0.75rem;
-  opacity: 0.7;
+  color: #1e40af;
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: #fff;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(30, 64, 175, 0.3);
+  animation: pencilPopIn 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+@keyframes pencilPopIn {
+  0% { transform: translateY(-50%) scale(0.5); opacity: 0; }
+  100% { transform: translateY(-50%) scale(1); opacity: 1; }
+}
+
+/* Active state */
 .editable-cell:active {
-  background: #bae6fd !important;
+  background: #93c5fd !important;
+  transform: scale(0.98);
 }
 
+/* Cursor indicator */
+.editable-cell {
+  cursor: pointer !important;
+}
+
+/* Buffer cell specific */
+.buffer-cell.editable-cell:hover {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%) !important;
+  box-shadow: 
+    inset 0 0 0 2px #f59e0b,
+    0 2px 8px rgba(245, 158, 11, 0.2) !important;
+}
+
+.buffer-cell.editable-cell:hover::after {
+  color: #92400e;
+  box-shadow: 0 2px 6px rgba(146, 64, 14, 0.3);
+}
+
+/* On-hand cell specific */
+.on-hand-cell.editable-cell:hover {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%) !important;
+  box-shadow: 
+    inset 0 0 0 2px #10b981,
+    0 2px 8px rgba(16, 185, 129, 0.2) !important;
+}
+
+.on-hand-cell.editable-cell:hover::after {
+  color: #065f46;
+  box-shadow: 0 2px 6px rgba(6, 95, 70, 0.3);
+}
+
+/* Row click cursor (para sa buong row) */
+.erp-table tbody tr {
+  cursor: pointer;
+}
+
+.erp-table tbody tr:hover {
+  background: #f8fafc !important;
+}
+
+/* Prevent row click when clicking editable cells */
+.erp-table tbody tr td.editable-cell,
+.erp-table tbody tr td.editable-cell * {
+  cursor: pointer;
+}
 /* Locked values (buffer stock when locked) */
 .locked-value {
   position: relative;
