@@ -35,13 +35,20 @@ const STATIC_ASSETS = [
   '/GEMCORQR/js/prewarm.js'
 ];
 
-// ─── NEVER cache these ───
 function _shouldNeverCache(url) {
   if (!url) return true;
   if (url.indexOf('script.google.com') !== -1) return true;
   if (url.indexOf('macros/s/') !== -1) return true;
   if (url.indexOf('/exec') !== -1) return true;
   if (url.indexOf('config.js') !== -1) return true;
+  
+  // ═══ NEVER cache Supabase API ═══
+  if (url.indexOf('supabase.co') !== -1) return true;
+  if (url.indexOf('/rest/v1/') !== -1) return true;
+  if (url.indexOf('/rpc/') !== -1) return true;
+  if (url.indexOf('/auth/v1/') !== -1) return true;
+  if (url.indexOf('/storage/v1/') !== -1) return true;
+  
   return false;
 }
 
