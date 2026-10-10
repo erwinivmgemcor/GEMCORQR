@@ -98,7 +98,7 @@ document.getElementById('kpiZeroStock').textContent = erpNum(s.zero_stock_items)
   var subEl = document.getElementById('kpiTotalItemsSub');
   if (subEl) {
     var withStock = s.active_items || 0;
-    subEl.textContent = withStock + ' with stock';
+    subEl.textContent = s.active_items + ' with stock';
   }
 }
 
