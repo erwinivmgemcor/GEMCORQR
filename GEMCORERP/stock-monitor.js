@@ -50,8 +50,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function erpCheckHealth() {
   var badge = document.getElementById('erpHealthBadge');
+  if (!badge) {
+    console.log('[Stock Monitor] Health badge not found, skipping');
+    return;
+  }
+  
   var text = document.getElementById('erpHealthText');
   var dot = badge.querySelector('.dot');
+  if (!dot) return;
   
   try {
     var result = await erpHealthCheck();
