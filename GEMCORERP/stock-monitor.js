@@ -1,35 +1,6 @@
-// Add sa simula ng stock-monitor.js
-var ERP_VALID_CATEGORIES = [
-  'COMPONENTS',
-  'CONSUMABLES',
-  'ENCLOSURE',
-  'EWMAT',
-  'FABMAT',
-  'OFABP',
-  'PANEL',
-  'UNCATEGORIZED'  // para sa mga NULL items
-];
-
-async function erpLoadFilterOptions() {
-  // ... existing code ...
-  
-  if (results[0].success) {
-    var sel = document.getElementById('erpCategoryFilter');
-    // Filter to valid categories only
-    var validValues = results[0].values.filter(function(v) {
-      return ERP_VALID_CATEGORIES.indexOf(String(v).toUpperCase()) !== -1;
-    });
-    validValues.sort().forEach(function(v) {
-      var opt = document.createElement('option');
-      opt.value = v;
-      opt.textContent = v;
-      sel.appendChild(opt);
-    });
-  }
-  // ...
-}
 // ============================================================
-// GEMCOR ERP — Stock Monitor Logic
+// GEMCOR ERP — Stock Monitor Logic (v2)
+// FIXED: Uses updated API with deprecated filters
 // ============================================================
 
 var _erpAllItems = [];
@@ -75,7 +46,6 @@ async function erpCheckHealth() {
 }
 
 async function erpLoadDashboard() {
-  // Load all sections in parallel
   await Promise.all([
     erpLoadSummary(),
     erpLoadCharts(),
@@ -95,16 +65,16 @@ async function erpLoadSummary() {
   }
   
   var s = result.summary || {};
- document.getElementById('kpiTotalItems').textContent = erpNum(s.total_items);
-document.getElementById('kpiStockValue').textContent = erpPeso(s.total_stock_value);
-document.getElementById('kpiBelowReorder').textContent = erpNum(s.below_reorder);
-document.getElementById('kpiNewBelowBuffer').textContent = erpNum(s.new_below_buffer || 0);  // ★ BAGONG LINE
-document.getElementById('kpiZeroStock').textContent = erpNum(s.zero_stock_items);
+  document.getElementById('kpiTotalItems').textContent = erpNum(s.total_items);
+  document.getElementById('kpiStockValue').textContent = erpPeso(s.total_stock_value);
+  document.getElementById('kpiBelowReorder').textContent = erpNum(s.below_reorder);
+  document.getElementById('kpiNewBelowBuffer').textContent = erpNum(s.new_below_buffer || 0);
+  document.getElementById('kpiZeroStock').textContent = erpNum(s.zero_stock_items);
   
   var subEl = document.getElementById('kpiTotalItemsSub');
   if (subEl) {
     var withStock = s.active_items || 0;
-    subEl.textContent = s.active_items + ' with stock';
+    subEl.textContent = withStock + ' with stock';
   }
 }
 
@@ -125,7 +95,6 @@ function erpRenderCategoryChart(byCategory) {
   if (!canvas) return;
   if (_erpCharts.category) { _erpCharts.category.destroy(); }
   
-  // Sort by value, take top 8
   var entries = Object.keys(byCategory)
     .map(function(k) { return { label: k, value: byCategory[k].value, count: byCategory[k].count }; })
     .sort(function(a, b) { return b.value - a.value; });
@@ -275,7 +244,7 @@ async function erpLoadItems() {
   var tbody = document.getElementById('erpTableBody');
   if (!tbody) return;
   
-  tbody.innerHTML = '<tr><td colspan="10" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading inventory...</div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="13" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading inventory...</div></td></tr>';
   
   var filters = {
     category: document.getElementById('erpCategoryFilter').value,
@@ -289,7 +258,7 @@ async function erpLoadItems() {
   var result = await erpGetAllItems(filters);
   
   if (!result.success) {
-    tbody.innerHTML = '<tr><td colspan="10" class="erp-empty text-danger">' +
+    tbody.innerHTML = '<tr><td colspan="13" class="erp-empty text-danger">' +
       '<i class="bi bi-exclamation-triangle-fill"></i> ' + erpEsc(result.error) + '</td></tr>';
     return;
   }
@@ -317,13 +286,13 @@ function erpRenderTable() {
   document.getElementById('erpBtnNext').disabled = (end >= total);
   
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="13" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No items match your filters.</td></tr>';
     return;
   }
   
-    var html = '';
+  var html = '';
   pageItems.forEach(function(it) {
     var onHand = Number(it.on_hand || 0);
     var buffer = Number(it.buffer_stock || 0);
@@ -334,8 +303,6 @@ function erpRenderTable() {
     var qtyClass = 'qty-ok';
     if (onHand === 0) qtyClass = 'qty-zero';
     else if (onHand <= buffer) qtyClass = 'qty-low';
-    
-    var value = onHand * Number(it.unit_cost || 0);
     
     var abcBadge = '';
     if (it.abc_classification) {
@@ -353,13 +320,13 @@ function erpRenderTable() {
       movBadge = '<span class="mov-badge ' + mClass + '">' + erpEsc(shortLabel) + '</span>';
     }
     
-    // ★ Reorder Status (based on STANDARD STOCK + buffer)
+    // Reorder Status
     var reorderStatus = '';
-    if (activeMo >= 4 && buffer > 0 && onHand <= buffer) {
+    if (buffer > 0 && onHand <= buffer) {
       reorderStatus = '<span class="reorder-badge reorder-critical">FOR REPLENISHMENT</span>';
-    } else if (activeMo >= 4 && buffer > 0 && onHand <= buffer * 1.25) {
+    } else if (buffer > 0 && onHand <= buffer * 1.25) {
       reorderStatus = '<span class="reorder-badge reorder-low">LOW STOCK</span>';
-    } else if (activeMo >= 4 && buffer > 0) {
+    } else if (buffer > 0) {
       reorderStatus = '<span class="reorder-badge reorder-ok">OK</span>';
     } else if (activeMo >= 1) {
       reorderStatus = '<span class="reorder-badge reorder-new">NEW</span>';
@@ -424,28 +391,12 @@ function erpClearFilters() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// FILTER OPTIONS (populate dropdowns)
+// FILTER OPTIONS
 // ═══════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════
-// FILTER OPTIONS — Custom order for categories
-// ═══════════════════════════════════════════════════════════
-
-// ★ Custom order: COMPONENTS first, then alphabetical
 var ERP_CATEGORY_ORDER = [
-  'COMPONENTS',
-  'CONSUMABLES',
-  'ENCLOSURE',
-  'EWMAT',
-  'FABMAT',
-  'OFABP',
-  'PANEL',
-  'COGSLAB',
-  'COGSMAT',
-  'COGSOH',
-  'FIXEDASSET',
-  'OPEX',
-  'OFFICE SUPPLIES',
-  'UNCATEGORIZED'
+  'COMPONENTS', 'CONSUMABLES', 'ENCLOSURE', 'EWMAT', 'FABMAT',
+  'OFABP', 'PANEL', 'COGSLAB', 'COGSMAT', 'COGSOH',
+  'FIXEDASSET', 'OPEX', 'OFFICE SUPPLIES', 'UNCATEGORIZED'
 ];
 
 async function erpLoadFilterOptions() {
@@ -457,32 +408,23 @@ async function erpLoadFilterOptions() {
     
     if (results[0].success) {
       var sel = document.getElementById('erpCategoryFilter');
-      
-      // Get DB values
       var dbValues = results[0].values || [];
       var dbSet = {};
       dbValues.forEach(function(v) {
         if (v) dbSet[String(v).toUpperCase()] = v;
       });
       
-      // Build final list: custom order + any extra from DB
       var finalCategories = [];
       var seen = {};
       
-      // 1. Add in custom order first
       ERP_CATEGORY_ORDER.forEach(function(cat) {
         var key = cat.toUpperCase();
         if (dbSet[key]) {
           finalCategories.push(dbSet[key]);
           seen[key] = true;
-        } else {
-          // Add anyway if it's a valid category even if no items yet
-          finalCategories.push(cat);
-          seen[key] = true;
         }
       });
       
-      // 2. Add any extra categories from DB not in our custom list
       dbValues.forEach(function(v) {
         if (!v) return;
         var key = String(v).toUpperCase();
@@ -492,7 +434,6 @@ async function erpLoadFilterOptions() {
         }
       });
       
-      // Render options
       finalCategories.forEach(function(v) {
         var opt = document.createElement('option');
         opt.value = v;
@@ -545,7 +486,6 @@ async function erpShowItemDetails(itemCode) {
     
     var html = '';
     
-    // Basic info grid
     html += '<div class="erp-item-detail">';
     html += '<div class="detail-row"><span class="detail-label">Item Code</span><span class="detail-value"><code>' + erpEsc(item.item_code) + '</code></span></div>';
     html += '<div class="detail-row"><span class="detail-label">Category</span><span class="detail-value">' + erpEsc(item.category || '—') + '</span></div>';
@@ -561,11 +501,9 @@ async function erpShowItemDetails(itemCode) {
     html += '<div class="detail-row"><span class="detail-label">Stock Class</span><span class="detail-value">' + erpEsc(item.stock_classification || '—') + '</span></div>';
     html += '</div>';
     
-    // Description
     html += '<div class="erp-section-title">Description</div>';
     html += '<div style="padding:12px;background:#f8fafc;border-radius:8px;font-size:0.9rem;">' + erpEsc(item.description || '—') + '</div>';
     
-    // Movement history
     if (movements.length > 0) {
       html += '<div class="erp-section-title">Recent Movements (' + movements.length + ')</div>';
       html += '<div class="table-responsive"><table class="table table-sm" style="font-size:0.82rem;">';
@@ -587,10 +525,9 @@ async function erpShowItemDetails(itemCode) {
       html += '<div class="erp-section-title">Movements</div>';
       html += '<div class="erp-empty">No movement history yet.</div>';
     }
-        // ★ Save current item for Edit button
+    
     window._currentItemDetails = item;
     
-    body.innerHTML = html;
     body.innerHTML = html;
   } catch(err) {
     console.error('[erpShowItemDetails]', err);
@@ -644,7 +581,7 @@ async function erpShowReorderModal() {
       '<td class="text-end text-danger"><strong>' + erpNum(it.on_hand) + '</strong></td>' +
       '<td class="text-end">' + erpNum(it.buffer_stock) + '</td>' +
       '<td class="text-end">' + erpNum(it.reorder_point) + '</td>' +
-      '<td class="text-center"><strong>' + erpNum(it.suggested_order_qty) + '</strong></td>' +
+      '<td class="text-center"><strong>' + erpNum(it.qty_needed) + '</strong></td>' +
       '<td class="text-center"><span class="urgency-' + erpEsc(it.urgency) + '">' + erpEsc(it.urgency) + '</span></td>' +
       '</tr>';
   });
@@ -657,7 +594,7 @@ async function erpShowReorderModal() {
 // REFRESH ALL
 // ═══════════════════════════════════════════════════════════
 async function erpRefreshAll() {
-  erpClearCache();
+  if (typeof erpClearCache === 'function') erpClearCache();
   erpShowToast('Refreshing all data...');
   await erpLoadDashboard();
   erpCheckHealth();
@@ -695,7 +632,11 @@ async function erpShowOutOfStockModal() {
     // Fetch items with on_hand = 0
     var rows = await erpFetch('erp_items',
       'select=item_code,description,category,location,on_hand,buffer_stock,ave_monthly_consumption,active_consumption_months,stock_classification,abc_classification,inventory_movement' +
-      '&is_active=eq.true&on_hand=eq.0&order=item_code.asc&limit=5000');
+      '&is_active=eq.true' +
+      '&is_deleted=eq.false' +
+      '&is_deprecated_2026=eq.false' +
+      '&on_hand=eq.0' +
+      '&order=item_code.asc&limit=5000');
     
     _outOfStockAll = rows || [];
     
@@ -717,11 +658,9 @@ function erpFilterOutOfStock() {
   _outOfStockFiltered = _outOfStockAll.filter(function(it) {
     var activeMo = Number(it.active_consumption_months || 0);
     
-    // Filter by type
     if (filter === 'standard' && activeMo < 4) return false;
     if (filter === 'no-usage' && activeMo > 0) return false;
     
-    // Search
     if (search) {
       var code = String(it.item_code || '').toLowerCase();
       var desc = String(it.description || '').toLowerCase();
@@ -754,10 +693,8 @@ function erpRenderOutOfStock() {
     var aveMo = Number(it.ave_monthly_consumption || 0);
     
     var statusBadge = '';
-    if (activeMo >= 4 && buffer > 0) {
-      statusBadge = '<span class="reorder-badge reorder-critical">CRITICAL</span>';
-    } else if (activeMo >= 4) {
-      statusBadge = '<span class="reorder-badge reorder-critical">STANDARD</span>';
+    if (buffer > 0) {
+      statusBadge = '<span class="reorder-badge reorder-critical">FOR REPLENISHMENT</span>';
     } else if (activeMo >= 1) {
       statusBadge = '<span class="reorder-badge reorder-new">NEW</span>';
     } else {
@@ -787,17 +724,17 @@ function erpExportOutOfStock() {
   
   var headers = ['Item Code', 'Description', 'Category', 'Location', 'On-Hand', 'Buffer Stock', 'Ave Monthly', 'Active Months', 'Status'];
   var rows = _outOfStockFiltered.map(function(it) {
-    var activeMo = Number(it.active_consumption_months || 0);
-    var status = activeMo >= 4 ? 'STANDARD' : (activeMo >= 1 ? 'NEW' : 'NO USAGE');
+    var buffer = Number(it.buffer_stock || 0);
+    var status = buffer > 0 ? 'FOR REPLENISHMENT' : 'NO USAGE';
     return [
       it.item_code || '',
       it.description || '',
       it.category || '',
       it.location || '',
       0,
-      Number(it.buffer_stock || 0),
+      buffer,
       Number(it.ave_monthly_consumption || 0),
-      activeMo,
+      Number(it.active_consumption_months || 0),
       status
     ];
   });
@@ -846,7 +783,6 @@ function erpOpenAddItemModal() {
     _addItemModal = new bootstrap.Modal(modalEl);
   }
   
-  // Reset form
   document.getElementById('addItemCode').value = '';
   document.getElementById('addItemDesc').value = '';
   document.getElementById('addItemCategory').value = '';
@@ -860,7 +796,6 @@ function erpOpenAddItemModal() {
   
   _addItemModal.show();
   
-  // Auto-focus sa Item Code
   setTimeout(function() {
     var el = document.getElementById('addItemCode');
     if (el) el.focus();
@@ -881,7 +816,6 @@ function erpCheckAddItemCode() {
   statusEl.innerHTML = '<span class="text-muted"><i class="bi bi-hourglass-split me-1"></i>Checking...</span>';
   
   _addItemCheckTimer = setTimeout(async function() {
-    // Skip if same code na-check na
     if (code === _addItemLastCheckCode) return;
     _addItemLastCheckCode = code;
     
@@ -900,13 +834,12 @@ function erpCheckAddItemCode() {
       statusEl.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>' +
         'Could not verify (will check on save)</span>';
     }
-  }, 500);  // 500ms debounce
+  }, 500);
 }
 
 async function erpSubmitNewItem() {
   if (_isSubmittingAddItem) return;
   
-  // Collect values
   var code = (document.getElementById('addItemCode').value || '').trim();
   var desc = (document.getElementById('addItemDesc').value || '').trim();
   var category = (document.getElementById('addItemCategory').value || '').trim();
@@ -915,49 +848,17 @@ async function erpSubmitNewItem() {
   var costRaw = (document.getElementById('addItemCost').value || '').trim();
   var cost = costRaw ? parseFloat(costRaw) : 0;
   
-  // Validation
-  if (!code) {
-    erpShowToast('Item Code is required', 'warning');
-    document.getElementById('addItemCode').focus();
-    return;
-  }
+  if (!code) { erpShowToast('Item Code is required', 'warning'); return; }
+  if (!desc) { erpShowToast('Description is required', 'warning'); return; }
+  if (!category) { erpShowToast('Category is required', 'warning'); return; }
+  if (!location) { erpShowToast('Location is required', 'warning'); return; }
+  if (!unit) { erpShowToast('Base Unit is required', 'warning'); return; }
+  if (isNaN(cost) || cost < 0) { erpShowToast('Unit Cost must be valid', 'warning'); return; }
   
-  if (!desc) {
-    erpShowToast('Description is required', 'warning');
-    document.getElementById('addItemDesc').focus();
-    return;
-  }
-  
-  if (!category) {
-    erpShowToast('Category is required', 'warning');
-    document.getElementById('addItemCategory').focus();
-    return;
-  }
-  
-  if (!location) {
-    erpShowToast('Location is required', 'warning');
-    document.getElementById('addItemLocation').focus();
-    return;
-  }
-  
-  if (!unit) {
-    erpShowToast('Base Unit is required', 'warning');
-    document.getElementById('addItemUnit').focus();
-    return;
-  }
-  
-  if (isNaN(cost) || cost < 0) {
-    erpShowToast('Unit Cost must be a valid positive number', 'warning');
-    document.getElementById('addItemCost').focus();
-    return;
-  }
-  
-  // Get current user
   var createdBy = localStorage.getItem('ivm_userFullname') || 
                   localStorage.getItem('ivm_username') || 
                   'WAREHOUSE';
   
-  // Submit
   _isSubmittingAddItem = true;
   var btn = document.getElementById('btnSaveNewItem');
   var originalHtml = btn.innerHTML;
@@ -985,15 +886,10 @@ async function erpSubmitNewItem() {
     }
     
     var data = await res.json();
+    if (!data || !data.success) throw new Error((data && data.error) || 'Failed to add item');
     
-    if (!data || !data.success) {
-      throw new Error((data && data.error) || 'Failed to add item');
-    }
-    
-    // Success
     if (_addItemModal) _addItemModal.hide();
     
-    // Show success modal
     var successEl = document.getElementById('erpAddItemSuccessModal');
     if (!_addItemSuccessModal) {
       _addItemSuccessModal = new bootstrap.Modal(successEl);
@@ -1001,15 +897,8 @@ async function erpSubmitNewItem() {
     document.getElementById('addItemSuccessCode').textContent = data.item_code || code;
     _addItemSuccessModal.show();
     
-    // Refresh table
-    if (typeof erpLoadItems === 'function') {
-      erpLoadItems();
-    }
-    
-    // Refresh KPI summary
-    if (typeof erpLoadSummary === 'function') {
-      erpLoadSummary();
-    }
+    if (typeof erpLoadItems === 'function') erpLoadItems();
+    if (typeof erpLoadSummary === 'function') erpLoadSummary();
     
   } catch(err) {
     console.error('[erpSubmitNewItem]', err);
@@ -1022,13 +911,8 @@ async function erpSubmitNewItem() {
 }
 
 function erpAddAnotherItem() {
-  // Hide success modal
   if (_addItemSuccessModal) _addItemSuccessModal.hide();
-  
-  // Open add modal again after slight delay
-  setTimeout(function() {
-    erpOpenAddItemModal();
-  }, 300);
+  setTimeout(function() { erpOpenAddItemModal(); }, 300);
 }
 
 function erpCloseAddItemSuccess() {
@@ -1044,20 +928,17 @@ var _editItemCurrent = null;
 var _isSubmittingEditItem = false;
 
 function erpOpenEditFromDetails() {
-  // Called from the "Edit" button sa Item Details modal
   if (!window._currentItemDetails) {
     erpShowToast('No item loaded', 'warning');
     return;
   }
   
-  // Close Item Details modal first
   var detailsModal = document.getElementById('erpItemModal');
   if (detailsModal) {
     var m = bootstrap.Modal.getInstance(detailsModal);
     if (m) m.hide();
   }
   
-  // Slight delay then open Edit modal
   setTimeout(function() {
     erpOpenEditItemModal(window._currentItemDetails);
   }, 300);
@@ -1069,7 +950,6 @@ async function erpOpenEditItemModal(item) {
     return;
   }
   
-  // Fetch fresh data from DB (para sure na latest)
   var freshItem = null;
   try {
     var rows = await erpFetch('erp_items',
@@ -1089,7 +969,6 @@ async function erpOpenEditItemModal(item) {
     _editItemModal = new bootstrap.Modal(modalEl);
   }
   
-  // Populate form
   document.getElementById('editItemCode').value = data.item_code || '';
   document.getElementById('editItemCodeDisplay').textContent = data.item_code || '—';
   document.getElementById('editItemDesc').value = data.description || '';
@@ -1098,13 +977,11 @@ async function erpOpenEditItemModal(item) {
   document.getElementById('editItemCost').value = data.unit_cost != null ? data.unit_cost : '';
   document.getElementById('editItemStatus').value = data.is_active ? 'true' : 'false';
   
-  // Read-only info
   document.getElementById('editItemStockClass').textContent = data.stock_classification || '—';
   document.getElementById('editItemMovement').textContent = data.inventory_movement || '—';
   document.getElementById('editItemBuffer').textContent = erpNum(data.buffer_stock || 0);
   document.getElementById('editItemActiveMo').textContent = data.active_consumption_months || 0;
   
-  // Last updated
   var lastUpdatedEl = document.getElementById('editItemLastUpdated');
   if (data.updated_by || data.updated_at) {
     var when = data.updated_at ? new Date(data.updated_at).toLocaleString() : '—';
@@ -1114,7 +991,6 @@ async function erpOpenEditItemModal(item) {
     lastUpdatedEl.innerHTML = '';
   }
   
-  // Toggle deactivate button visibility
   var deactivateBtn = document.getElementById('btnDeactivateItem');
   if (data.is_active === false) {
     deactivateBtn.innerHTML = '<i class="bi bi-arrow-counterclockwise me-1"></i>Reactivate';
@@ -1141,29 +1017,11 @@ async function erpSubmitEditItem() {
   var statusRaw = document.getElementById('editItemStatus').value;
   var isActive = statusRaw === 'true';
   
-  // Validation
-  if (!desc) {
-    erpShowToast('Description is required', 'warning');
-    document.getElementById('editItemDesc').focus();
-    return;
-  }
-  if (!category) {
-    erpShowToast('Category is required', 'warning');
-    document.getElementById('editItemCategory').focus();
-    return;
-  }
-  if (!location) {
-    erpShowToast('Location is required', 'warning');
-    document.getElementById('editItemLocation').focus();
-    return;
-  }
-  if (cost !== null && (isNaN(cost) || cost < 0)) {
-    erpShowToast('Unit Cost must be a valid positive number', 'warning');
-    document.getElementById('editItemCost').focus();
-    return;
-  }
+  if (!desc) { erpShowToast('Description is required', 'warning'); return; }
+  if (!category) { erpShowToast('Category is required', 'warning'); return; }
+  if (!location) { erpShowToast('Location is required', 'warning'); return; }
+  if (cost !== null && (isNaN(cost) || cost < 0)) { erpShowToast('Unit Cost must be valid', 'warning'); return; }
   
-  // Get current user
   var updatedBy = localStorage.getItem('ivm_userFullname') || 
                   localStorage.getItem('ivm_username') || 
                   'WAREHOUSE';
@@ -1191,16 +1049,11 @@ async function erpSubmitEditItem() {
     
     if (!res.ok) throw new Error('API error: ' + res.status);
     var data = await res.json();
+    if (!data || !data.success) throw new Error((data && data.error) || 'Failed to update item');
     
-    if (!data || !data.success) {
-      throw new Error((data && data.error) || 'Failed to update item');
-    }
-    
-    // Success
     if (_editItemModal) _editItemModal.hide();
-    erpShowToast('✅ Item updated successfully', 'success');
+    erpShowToast('✅ Item updated successfully');
     
-    // Refresh table
     if (typeof erpLoadItems === 'function') erpLoadItems();
     
   } catch(err) {
@@ -1220,21 +1073,12 @@ async function erpConfirmDeactivateItem() {
   var isCurrentlyActive = _editItemCurrent.is_active !== false;
   
   if (isCurrentlyActive) {
-    if (!confirm('Deactivate item "' + code + '"?\n\nThis will hide it from the main inventory view. You can reactivate it later by editing and setting status to Active.')) {
-      return;
-    }
+    if (!confirm('Deactivate item "' + code + '"?')) return;
   } else {
-    if (!confirm('Reactivate item "' + code + '"?')) {
-      return;
-    }
+    if (!confirm('Reactivate item "' + code + '"?')) return;
+    return erpSubmitEditItem();
   }
   
-  // If reactivating, just do a normal update with is_active=true
-  if (!isCurrentlyActive) {
-    return erpSubmitEditItem(); // Will use the status dropdown value
-  }
-  
-  // Soft delete
   var deletedBy = localStorage.getItem('ivm_userFullname') || 
                   localStorage.getItem('ivm_username') || 
                   'WAREHOUSE';
@@ -1256,16 +1100,11 @@ async function erpConfirmDeactivateItem() {
     
     if (!res.ok) throw new Error('API error: ' + res.status);
     var data = await res.json();
+    if (!data || !data.success) throw new Error((data && data.error) || 'Failed');
     
-    if (!data || !data.success) {
-      throw new Error((data && data.error) || 'Failed to deactivate item');
-    }
-    
-    // Success
     if (_editItemModal) _editItemModal.hide();
-    erpShowToast('✅ Item deactivated', 'success');
+    erpShowToast('✅ Item deactivated');
     
-    // Refresh table
     if (typeof erpLoadItems === 'function') erpLoadItems();
     
   } catch(err) {
@@ -1277,86 +1116,4 @@ async function erpConfirmDeactivateItem() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// NEW ITEMS MODAL — Bagong items na below buffer
-// ═══════════════════════════════════════════════════════════
-var _newItemsAll = [];
-var _newItemsFiltered = [];
-
-async function erpShowNewItemsModal() {
-  var modalEl = document.getElementById('erpNewItemsModal');
-  if (!modalEl) {
-    console.warn('[erpShowNewItemsModal] Modal not found, create one first');
-    erpShowToast('NEW Items modal not yet built. Loading data...');
-    return;
-  }
-  
-  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-  var tbody = document.getElementById('newItemsBody');
-  
-  tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
-    '<div class="erp-spinner"></div>' +
-    '<div class="mt-2">Loading NEW items...</div></td></tr>';
-  
-  modal.show();
-  
-  try {
-    var rows = await erpFetch('erp_items',
-      'select=item_code,description,category,location,on_hand,buffer_stock,ave_monthly_consumption,active_consumption_months,stock_classification,abc_classification,inventory_movement' +
-      '&is_active=eq.true&stock_classification=eq.NEW&buffer_stock=gt.0&order=item_code.asc&limit=1000');
-    
-    _newItemsAll = (rows || []).filter(function(it) {
-      return Number(it.on_hand || 0) <= Number(it.buffer_stock || 0);
-    });
-    
-    document.getElementById('newItemsCount').textContent = _newItemsAll.length;
-    
-    erpRenderNewItems();
-    
-  } catch(err) {
-    console.error('[erpShowNewItemsModal]', err);
-    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty text-danger">' +
-      'Failed to load: ' + erpEsc(err.message) + '</td></tr>';
-  }
-}
-
-function erpRenderNewItems() {
-  var tbody = document.getElementById('newItemsBody');
-  if (!tbody) return;
-  
-  document.getElementById('newItemsCount').textContent = _newItemsAll.length;
-  
-  if (_newItemsAll.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
-      '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
-      'No NEW items below buffer.</td></tr>';
-    return;
-  }
-  
-  var html = '';
-  _newItemsAll.forEach(function(it) {
-    var activeMo = Number(it.active_consumption_months || 0);
-    var buffer = Number(it.buffer_stock || 0);
-    var aveMo = Number(it.ave_monthly_consumption || 0);
-    var onHand = Number(it.on_hand || 0);
-    
-    var statusBadge = '<span class="reorder-badge reorder-new">MONITOR</span>';
-    if (activeMo >= 3) {
-      statusBadge = '<span class="reorder-badge reorder-low">PROMOTE?</span>';
-    }
-    
-    html += '<tr>' +
-      '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
-      '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
-      '<td>' + erpEsc(it.category || '—') + '</td>' +
-      '<td>' + erpEsc(it.location || '—') + '</td>' +
-      '<td class="text-end">' + erpNum(onHand) + '</td>' +
-      '<td class="text-end">' + erpNum(buffer) + '</td>' +
-      '<td class="text-end">' + erpNum(aveMo) + '</td>' +
-      '<td class="text-center">' + activeMo + '</td>' +
-      '<td class="text-center">' + statusBadge + '</td>' +
-      '</tr>';
-  });
-  tbody.innerHTML = html;
-}
-console.log('✅ stock-monitor.js loaded');
+console.log('✅ stock-monitor.js loaded — v2 (deprecated filters applied)');
