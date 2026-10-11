@@ -1,9 +1,9 @@
 // ============================================================
-// GEMCOR ERP — Chat System v2.0
+// GEMCOR ERP — Chat System v2.1
 // DM + Document threads via Supabase `messages` table
-// ✅ Robust load with NULL/empty handling
+// ✅ Role-based MRR filtering (warehouse only)
+// ✅ NULL-safe queries
 // ✅ Explicit nulls on send
-// ✅ Debug logs
 // ============================================================
 
 var _chatState = {
@@ -22,6 +22,35 @@ var _chatState = {
 };
 
 // ═══════════════════════════════════════════════════════════
+// ROLE HELPERS
+// ═══════════════════════════════════════════════════════════
+function _getUserRole() {
+  return localStorage.getItem('ivm_userRole') || '';
+}
+
+function _isWarehouse() {
+  return _getUserRole() === 'warehouse';
+}
+
+function _canAccessDocType(docType) {
+  var typeUpper = String(docType || '').toUpperCase();
+  
+  // MRR — warehouse only
+  if (typeUpper === 'MRR' && !_isWarehouse()) {
+    return false;
+  }
+  
+  // MRIF, MRS — both roles
+  return true;
+}
+
+function _getAllowedDocTypes() {
+  return _isWarehouse() 
+    ? ['MRIF', 'MRR', 'MRS'] 
+    : ['MRIF', 'MRS'];
+}
+
+// ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
@@ -36,7 +65,7 @@ document.addEventListener('DOMContentLoaded', function() {
     return;
   }
   
-  console.log('[Chat] User:', _chatState.currentUser, '| Fullname:', _chatState.currentFullname);
+  console.log('[Chat] User:', _chatState.currentUser, '| Role:', _getUserRole());
   
   chatCheckHealth();
   loadConversations();
@@ -140,7 +169,7 @@ async function loadUserConversations() {
     return u.username !== _chatState.currentUser;
   });
   
-  // ✅ FIXED: Fetch messages with or filter for null/empty doc_no
+  // Fetch messages with doc_no filter for DMs
   var messagesRes = await erpFetch('messages',
     'select=*' +
     '&or=(sender.eq.' + encodeURIComponent(_chatState.currentUser) + ',recipient.eq.' + encodeURIComponent(_chatState.currentUser) + ')' +
@@ -253,11 +282,17 @@ async function loadUserConversations() {
 async function loadDocumentThreads() {
   var container = document.getElementById('chatConversationList');
   
-  // ✅ FIXED: Fetch messages with doc_no NOT null/empty
+  // ═══ ROLE-BASED FILTER — MRR is warehouse-only ═══
+  var allowedDocTypes = _getAllowedDocTypes();
+  var typeFilter = '&doc_type=in.(' + allowedDocTypes.join(',') + ')';
+  
+  console.log('[Chat] Loading doc threads with filter:', allowedDocTypes);
+  
   var messagesRes = await erpFetch('messages',
     'select=*' +
     '&doc_no=not.is.null' +
     '&doc_no=neq.' +
+    typeFilter +
     '&order=created_at.desc&limit=500');
   
   var threadMap = {};
@@ -382,6 +417,21 @@ async function openUserConversation(otherUsername) {
 window.openUserConversation = openUserConversation;
 
 async function openDocConversation(docNo, docType) {
+  // ═══ ROLE-BASED ACCESS CHECK ═══
+  var typeUpper = String(docType || '').toUpperCase();
+  
+  if (typeUpper === 'MRR' && !_isWarehouse()) {
+    console.warn('[Chat] Access denied: MRR is warehouse-only');
+    if (typeof erpShowToast === 'function') {
+      erpShowToast('MRR discussions are accessible to warehouse only', 'warning');
+    }
+    // Redirect to chat home
+    setTimeout(function() {
+      window.location.href = 'chat.html';
+    }, 500);
+    return;
+  }
+  
   _chatState.openWith = docNo;
   _chatState.openType = 'doc';
   _chatState.openDocType = docType || '';
@@ -445,34 +495,28 @@ function closeConversation() {
 window.closeConversation = closeConversation;
 
 // ═══════════════════════════════════════════════════════════
-// ✅ LOAD MESSAGES — ROBUST (handles NULL + empty string)
+// LOAD MESSAGES
 // ═══════════════════════════════════════════════════════════
 async function loadMessages(otherUser, sinceTs, append) {
   var container = document.getElementById('chatMessages');
   if (!container) return;
   
-  console.log('[Chat] Loading messages with:', otherUser, '| since:', sinceTs, '| append:', append);
+  console.log('[Chat] Loading messages with:', otherUser);
   
   try {
-    // ✅ CRITICAL FIX: Handle BOTH NULL and empty string for doc_no
     var docFilter = '&or=(doc_no.is.null,doc_no.eq.)';
     
     var q1 = 'select=*' +
              '&sender=eq.' + encodeURIComponent(_chatState.currentUser) +
              '&recipient=eq.' + encodeURIComponent(otherUser) +
              docFilter +
-             '&order=created_at.asc' +
-             '&limit=500';
+             '&order=created_at.asc&limit=500';
     
     var q2 = 'select=*' +
              '&sender=eq.' + encodeURIComponent(otherUser) +
              '&recipient=eq.' + encodeURIComponent(_chatState.currentUser) +
              docFilter +
-             '&order=created_at.asc' +
-             '&limit=500';
-    
-    console.log('[Chat] Query 1 (sent):', q1);
-    console.log('[Chat] Query 2 (received):', q2);
+             '&order=created_at.asc&limit=500';
     
     var results = await Promise.all([
       erpFetch('messages', q1),
@@ -481,23 +525,18 @@ async function loadMessages(otherUser, sinceTs, append) {
     
     var sent = results[0] || [];
     var received = results[1] || [];
-    
-    console.log('[Chat] Sent:', sent.length, '| Received:', received.length);
-    
     var all = sent.concat(received);
+    
     all.sort(function(a, b) {
       return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });
     
-    console.log('[Chat] Total merged:', all.length);
-    
     _renderMessages(container, all, append, false);
-    
   } catch(err) {
     console.error('[Chat] Load messages failed:', err);
     if (!append) {
       container.innerHTML = '<div class="text-danger text-center py-3 small">' +
-        'Failed to load: ' + (typeof erpEsc === 'function' ? erpEsc(err.message) : err.message) + '</div>';
+        'Failed to load: ' + erpEsc(err.message) + '</div>';
     }
   }
 }
@@ -506,31 +545,19 @@ async function loadDocMessages(docNo, sinceTs, append) {
   var container = document.getElementById('chatMessages');
   if (!container) return;
   
-  console.log('[Chat] Loading doc messages:', docNo);
-  
   try {
     var query = 'select=*' +
                 '&doc_no=eq.' + encodeURIComponent(docNo) +
-                '&order=created_at.asc' +
-                '&limit=500';
+                '&order=created_at.asc&limit=500';
     
     var rows = await erpFetch('messages', query);
-    
-    console.log('[Chat] Doc messages loaded:', (rows || []).length);
-    
     _renderMessages(container, rows || [], append, true);
-    
   } catch(err) {
     console.error('[Chat] Load doc messages failed:', err);
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// ✅ RENDER MESSAGES
-// ═══════════════════════════════════════════════════════════
 function _renderMessages(container, msgs, append, isDocThread) {
-  console.log('[Chat] Rendering', msgs.length, 'messages');
-  
   if (msgs.length === 0 && !append) {
     container.innerHTML = '<div class="text-center text-muted py-5 small">' +
       '<i class="bi bi-chat-dots" style="font-size:2.5rem;opacity:0.3;display:block;margin-bottom:12px;"></i>' +
@@ -577,60 +604,52 @@ function _renderMessages(container, msgs, append, isDocThread) {
   }
   
   container.scrollTop = container.scrollHeight;
-  console.log('[Chat] ✅ Rendered');
 }
 
 // ═══════════════════════════════════════════════════════════
-// ✅ SEND MESSAGE — With explicit nulls + debug logs
+// SEND MESSAGE
 // ═══════════════════════════════════════════════════════════
 async function sendMessage() {
-  console.log('[Chat] sendMessage() called');
-  
   var input = document.getElementById('chatInput');
-  if (!input) {
-    console.error('[Chat] ❌ chatInput not found');
-    return;
-  }
+  if (!input) return;
   
   if (!_chatState.openWith) {
-    console.error('[Chat] ❌ No conversation open');
     if (typeof erpShowToast === 'function') erpShowToast('Open a conversation first', 'warning');
     return;
   }
   
   var body = input.value.trim();
-  if (!body) {
-    console.warn('[Chat] Empty message');
-    return;
-  }
+  if (!body) return;
   
-  console.log('[Chat] Sending:', body);
+  // ═══ Role check for doc threads ═══
+  if (_chatState.openType === 'doc') {
+    var docTypeUpper = String(_chatState.openDocType || '').toUpperCase();
+    if (docTypeUpper === 'MRR' && !_isWarehouse()) {
+      if (typeof erpShowToast === 'function') erpShowToast('MRR discussions are warehouse-only', 'warning');
+      return;
+    }
+  }
   
   input.value = '';
   input.style.height = 'auto';
   
-  // ✅ FIXED: FULLY EXPLICIT payload
   var payload = {
     sender: _chatState.currentUser,
     sender_fullname: _chatState.currentFullname,
     body: body,
     is_read: false,
     read_at: null,
-    doc_no: null,          // ← EXPLICIT NULL
-    doc_type: null,        // ← EXPLICIT NULL
-    recipient: null        // ← EXPLICIT NULL
+    doc_no: null,
+    doc_type: null,
+    recipient: null
   };
   
   if (_chatState.openType === 'user') {
     payload.recipient = _chatState.openWith;
-    // doc_no stays NULL
   } else if (_chatState.openType === 'doc') {
     payload.doc_no = _chatState.openWith;
     payload.doc_type = _chatState.openDocType || '';
-    // recipient stays NULL
   }
-  
-  console.log('[Chat] Payload:', payload);
   
   var container = document.getElementById('chatMessages');
   var tempId = 'temp_' + Date.now();
@@ -643,14 +662,10 @@ async function sendMessage() {
           '<div class="chat-bubble-time">Sending...</div>' +
         '</div>');
       container.scrollTop = container.scrollHeight;
-    } catch(uiErr) {
-      console.warn('[Chat] UI add failed:', uiErr);
-    }
+    } catch(uiErr) {}
   }
   
   try {
-    console.log('[Chat] POST to messages...');
-    
     var ctrl = new AbortController();
     var timer = setTimeout(function() { ctrl.abort(); }, 15000);
     
@@ -662,30 +677,25 @@ async function sendMessage() {
     });
     
     clearTimeout(timer);
-    console.log('[Chat] Response status:', res.status);
     
     if (!res.ok) {
       var errText = await res.text();
-      throw new Error('HTTP ' + res.status + ': ' + errText);
+      throw new Error('HTTP ' + res.status);
     }
     
     var result = await res.json();
-    console.log('[Chat] ✅ Sent successfully:', result);
     
     var temp = document.getElementById(tempId);
     if (temp) temp.remove();
     
-    // Reload messages
-    console.log('[Chat] Reloading messages...');
     try {
       if (_chatState.openType === 'user') {
         await loadMessages(_chatState.openWith, 0, false);
       } else {
         await loadDocMessages(_chatState.openWith, 0, false);
       }
-      console.log('[Chat] ✅ Messages reloaded');
     } catch(loadErr) {
-      console.error('[Chat] ❌ Reload failed:', loadErr);
+      console.error('[Chat] Reload failed:', loadErr);
       if (container && result && result[0]) {
         var sentMsg = result[0];
         container.insertAdjacentHTML('beforeend',
@@ -698,11 +708,11 @@ async function sendMessage() {
     }
     
     if (typeof loadConversations === 'function') {
-      try { loadConversations(); } catch(e) { console.warn('[Chat] Reload list failed:', e); }
+      try { loadConversations(); } catch(e) {}
     }
     
   } catch(err) {
-    console.error('[Chat] ❌ Send failed:', err);
+    console.error('[Chat] Send failed:', err);
     
     var temp2 = document.getElementById(tempId);
     if (temp2) {
@@ -735,9 +745,7 @@ async function markConversationRead(otherUser) {
         read_at: new Date().toISOString()
       })
     });
-  } catch(e) {
-    console.warn('[Chat] Mark read failed:', e);
-  }
+  } catch(e) {}
 }
 
 async function markDocThreadRead(docNo) {
@@ -751,9 +759,7 @@ async function markDocThreadRead(docNo) {
         read_at: new Date().toISOString()
       })
     });
-  } catch(e) {
-    console.warn('[Chat] Mark doc read failed:', e);
-  }
+  } catch(e) {}
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -780,10 +786,7 @@ async function refreshChatBadge() {
     }
     
     localStorage.setItem('ivm_chatUnread', String(count));
-    
-  } catch(err) {
-    console.warn('[Chat] Badge failed:', err);
-  }
+  } catch(err) {}
 }
 window.refreshChatBadge = refreshChatBadge;
 
@@ -819,7 +822,7 @@ function filterConversations() {
 window.filterConversations = filterConversations;
 
 // ═══════════════════════════════════════════════════════════
-// INPUT HANDLERS WITH RETRY
+// INPUT HANDLERS
 // ═══════════════════════════════════════════════════════════
 function setupInputHandlersWithRetry() {
   var attempts = 0;
@@ -832,15 +835,12 @@ function setupInputHandlersWithRetry() {
     var sendBtn = document.getElementById('chatSendBtn');
     
     if (input && sendBtn) {
-      console.log('[Chat] Input handlers setup after ' + attempts + ' attempt(s)');
       _attachInputHandlers(input, sendBtn);
       return;
     }
     
     if (attempts < maxAttempts) {
       setTimeout(trySetup, 100);
-    } else {
-      console.error('[Chat] Failed to find input elements');
     }
   }
   
@@ -848,7 +848,6 @@ function setupInputHandlersWithRetry() {
 }
 
 function _attachInputHandlers(input, sendBtn) {
-  // Remove existing listeners via clone
   var newInput = input.cloneNode(true);
   input.parentNode.replaceChild(newInput, input);
   
@@ -863,7 +862,6 @@ function _attachInputHandlers(input, sendBtn) {
   newInput.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      console.log('[Chat] Enter key pressed');
       sendMessage();
     }
   });
@@ -871,11 +869,8 @@ function _attachInputHandlers(input, sendBtn) {
   newBtn.addEventListener('click', function(e) {
     e.preventDefault();
     e.stopPropagation();
-    console.log('[Chat] Send button clicked');
     sendMessage();
   });
-  
-  console.log('[Chat] ✅ Input handlers attached');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -937,25 +932,6 @@ function erpEsc(s) {
     .replace(/'/g, '&#39;');
 }
 
-function erpShowToast(msg, type) {
-  var toastEl = document.getElementById('erpToast');
-  if (!toastEl) { console.log('[Toast]', type, msg); return; }
-  document.getElementById('erpToastBody').textContent = msg;
-  bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
-}
-
-// ═══════════════════════════════════════════════════════════
-// GLOBAL: Discuss document (called from other pages)
-// ═══════════════════════════════════════════════════════════
-window.discussDocument = function(docNo, docType) {
-  if (!docNo) return;
-  
-  localStorage.setItem('ivm_chat_open_doc', docNo);
-  localStorage.setItem('ivm_chat_open_type', docType || '');
-  
-  window.location.href = 'chat.html?doc=' + encodeURIComponent(docNo) + '&type=' + encodeURIComponent(docType || '');
-};
-
 // ═══════════════════════════════════════════════════════════
 // URL PARAM HANDLER
 // ═══════════════════════════════════════════════════════════
@@ -987,4 +963,4 @@ if (document.readyState === 'loading') {
   setTimeout(checkUrlParams, 1000);
 }
 
-console.log('✅ chat.js v2.0 loaded (NULL-safe queries)');
+console.log('✅ chat.js v2.1 loaded (with MRR role-based filtering)');
