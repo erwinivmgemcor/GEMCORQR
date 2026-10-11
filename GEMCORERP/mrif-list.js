@@ -1,5 +1,6 @@
 // ============================================================
 // GEMCOR ERP — MRIF List Logic
+// v2.0 — Discuss + Warehouse Direct Edit
 // ============================================================
 
 var _mrifAllDocs = [];
@@ -110,7 +111,6 @@ function mrifListComputeKPIs() {
 // ═══════════════════════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════════════════════
-
 function mrifListRender() {
   var tbody = document.getElementById('mrifTableBody');
   if (!tbody) return;
@@ -118,11 +118,6 @@ function mrifListRender() {
   // ═══ Role check for Warehouse Edit ═══
   var userRole = localStorage.getItem('ivm_userRole') || '';
   var canEdit = (userRole === 'warehouse');
-  
-  // ... existing code ...
-function mrifListRender() {
-  var tbody = document.getElementById('mrifTableBody');
-  if (!tbody) return;
   
   // Apply search filter
   var search = (document.getElementById('mrifSearchInput') ? document.getElementById('mrifSearchInput').value : '').toLowerCase().trim();
@@ -165,6 +160,9 @@ function mrifListRender() {
     
     var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
     
+    // Can edit if warehouse + PENDING or PARTIAL
+    var editable = canEdit && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL');
+    
     html += '<tr>' +
       '<td><code>' + erpEsc(d.doc_no) + '</code></td>' +
       '<td>' + erpEsc(dateStr) + '</td>' +
@@ -173,37 +171,32 @@ function mrifListRender() {
       '<td>' + erpEsc(d.jo_no || '—') + '</td>' +
       '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span></td>' +
       '<td class="text-center">' + (d.item_count || 0) + '</td>' +
-     '<td class="text-center">' +
-  '<button class="erp-action-btn primary" onclick="mrifListPrint(\'' + safeDoc + '\')" title="Print Preview">' +
-    '<i class="bi bi-printer"></i>' +
-  '</button>' +
-  '<button class="erp-action-btn" onclick="mrifListView(\'' + safeDoc + '\')" title="View Details">' +
-    '<i class="bi bi-eye"></i>' +
-  '</button>' +
-  '<button class="erp-action-btn" onclick="discussDocument(\'' + safeDoc + '\', \'MRIF\')" title="Discuss">' +
-    '<i class="bi bi-chat-dots"></i>' +
-  '</button>' +
-  // ═══ Edit button — warehouse only, PENDING + PARTIAL only ═══
-  (canEdit && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL') ?
-    '<button class="erp-action-btn" onclick="openWarehouseEdit(\'' + safeDoc + '\', \'MRIF\')" title="Edit (Warehouse)">' +
-      '<i class="bi bi-pencil-square"></i>' +
-    '</button>' 
-    : '') +
-'</td>' +
+      '<td class="text-center">' +
+        '<button class="erp-action-btn primary" onclick="mrifListPrint(\'' + safeDoc + '\')" title="Print Preview">' +
+          '<i class="bi bi-printer"></i>' +
+        '</button>' +
+        '<button class="erp-action-btn" onclick="mrifListView(\'' + safeDoc + '\')" title="View Details">' +
+          '<i class="bi bi-eye"></i>' +
+        '</button>' +
+        '<button class="erp-action-btn" onclick="discussDocument(\'' + safeDoc + '\', \'MRIF\')" title="Discuss">' +
+          '<i class="bi bi-chat-dots"></i>' +
+        '</button>' +
+        (editable ? 
+          '<button class="erp-action-btn" onclick="openWarehouseEdit(\'' + safeDoc + '\', \'MRIF\')" title="Edit (Warehouse)">' +
+            '<i class="bi bi-pencil-square"></i>' +
+          '</button>' 
+          : '') +
+      '</td>' +
       '</tr>';
   });
   tbody.innerHTML = html;
 }
 
-// ═══════════════════════════════════════════════════════════
-// ACTIONS
-// ═══════════════════════════════════════════════════════════
 function mrifListPrint(docNo) {
   erpOpenPrintPreview(docNo, 'MRIF');
 }
 
 async function mrifListView(docNo) {
-  // Fetch doc + items, show in a modal
   erpPrintShowToast('Loading ' + docNo + '...');
   
   try {
@@ -240,10 +233,8 @@ async function mrifListView(docNo) {
     });
     html += '</tbody></table></div>';
     
-    // Show in generic modal
     var modalEl = document.getElementById('erpItemModal');
     if (!modalEl) {
-      // Create modal on the fly
       var modalHtml = '<div class="modal fade" id="erpItemModal" tabindex="-1">' +
         '<div class="modal-dialog modal-lg modal-dialog-scrollable">' +
           '<div class="modal-content">' +
@@ -278,12 +269,9 @@ async function mrifListPopulateFilterOptions() {
   if (!selReq || !selDept) return;
   
   try {
-    // ─── REQUESTORS ───
-    // Try from erp_documents first
     var result = await erpGetDistinctValues('requestor');
     var requestorValues = (result.success && result.values.length > 0) ? result.values : [];
     
-    // If empty, fallback to erp_requestors table
     if (requestorValues.length === 0) {
       try {
         var reqRows = await erpFetch('erp_requestors', 'select=name&order=name.asc');
@@ -293,7 +281,6 @@ async function mrifListPopulateFilterOptions() {
       }
     }
     
-    // Rebuild dropdown
     selReq.innerHTML = '<option value="">All Requestors</option>';
     requestorValues.forEach(function(v) {
       var opt = document.createElement('option');
@@ -302,12 +289,9 @@ async function mrifListPopulateFilterOptions() {
       selReq.appendChild(opt);
     });
     
-    // ─── DEPARTMENTS ───
-    // Try from erp_documents first
     var result2 = await erpGetDistinctValues('department');
     var deptValues = (result2.success && result2.values.length > 0) ? result2.values : [];
     
-    // If empty, fallback to erp_requestors (department field)
     if (deptValues.length === 0) {
       try {
         var deptRows = await erpFetch('erp_requestors', 'select=department&department=not.is.null&order=department.asc');
@@ -324,7 +308,6 @@ async function mrifListPopulateFilterOptions() {
       }
     }
     
-    // Rebuild dropdown
     selDept.innerHTML = '<option value="">All Departments</option>';
     deptValues.forEach(function(v) {
       var opt = document.createElement('option');
@@ -338,6 +321,7 @@ async function mrifListPopulateFilterOptions() {
     console.warn('[mrifListPopulateFilterOptions]', err);
   }
 }
+
 function mrifListOnSearch() {
   clearTimeout(_mrifSearchTimer);
   _mrifSearchTimer = setTimeout(function() {
@@ -441,4 +425,4 @@ function mrifListRefresh() {
   mrifCheckHealth();
 }
 
-console.log('✅ mrif-list.js loaded');
+console.log('✅ mrif-list.js v2.0 loaded');
