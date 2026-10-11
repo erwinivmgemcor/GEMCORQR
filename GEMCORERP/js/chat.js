@@ -568,23 +568,43 @@ function _renderMessages(container, msgs, append, isDocThread) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SEND MESSAGE
+// SEND MESSAGE — Enhanced with debug + timeout + error handling
 // ═══════════════════════════════════════════════════════════
 async function sendMessage() {
+  console.log('[Chat] sendMessage() called');
+  
   var input = document.getElementById('chatInput');
-  if (!input || !_chatState.openWith) return;
+  if (!input) {
+    console.error('[Chat] ❌ chatInput not found');
+    return;
+  }
+  
+  if (!_chatState.openWith) {
+    console.error('[Chat] ❌ No conversation open');
+    if (typeof erpShowToast === 'function') {
+      erpShowToast('Please open a conversation first', 'warning');
+    }
+    return;
+  }
   
   var body = input.value.trim();
-  if (!body) return;
+  if (!body) {
+    console.warn('[Chat] Empty message');
+    return;
+  }
   
-  // Clear input immediately
+  console.log('[Chat] Sending:', body);
+  
+  // Clear input
   input.value = '';
   input.style.height = 'auto';
   
+  // ═══ Build payload ═══
   var payload = {
     sender: _chatState.currentUser,
     sender_fullname: _chatState.currentFullname,
-    body: body
+    body: body,
+    is_read: false
   };
   
   if (_chatState.openType === 'user') {
@@ -594,27 +614,51 @@ async function sendMessage() {
     payload.doc_type = _chatState.openDocType || '';
   }
   
-  // Optimistic UI — show temp bubble
+  console.log('[Chat] Payload:', payload);
+  
+  // ═══ Optimistic UI ═══
   var container = document.getElementById('chatMessages');
   var tempId = 'temp_' + Date.now();
-  container.insertAdjacentHTML('beforeend',
-    '<div class="chat-bubble chat-bubble-me" id="' + tempId + '" style="opacity:0.6;">' +
-      '<div>' + erpEsc(body) + '</div>' +
-      '<div class="chat-bubble-time">Sending...</div>' +
-    '</div>');
-  container.scrollTop = container.scrollHeight;
   
+  if (container) {
+    try {
+      container.insertAdjacentHTML('beforeend',
+        '<div class="chat-bubble chat-bubble-me" id="' + tempId + '" style="opacity:0.6;">' +
+          '<div>' + (typeof erpEsc === 'function' ? erpEsc(body) : body) + '</div>' +
+          '<div class="chat-bubble-time">Sending...</div>' +
+        '</div>');
+      container.scrollTop = container.scrollHeight;
+      console.log('[Chat] ✅ Temp bubble added');
+    } catch(uiErr) {
+      console.warn('[Chat] ⚠️ Could not add temp bubble:', uiErr);
+    }
+  }
+  
+  // ═══ Fetch with timeout ═══
   try {
+    console.log('[Chat] POST to:', erpUrl('messages'));
+    
+    var ctrl = new AbortController();
+    var timer = setTimeout(function() { ctrl.abort(); }, 15000);
+    
     var res = await fetch(erpUrl('messages'), {
       method: 'POST',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: ctrl.signal
     });
+    
+    clearTimeout(timer);
+    console.log('[Chat] Response status:', res.status);
     
     if (!res.ok) {
       var errText = await res.text();
-      throw new Error('Send failed: ' + res.status + ' ' + errText);
+      console.error('[Chat] ❌ Send failed:', res.status, errText);
+      throw new Error('HTTP ' + res.status);
     }
+    
+    var result = await res.json();
+    console.log('[Chat] ✅ Sent:', result);
     
     // Remove temp bubble
     var temp = document.getElementById(tempId);
@@ -628,21 +672,28 @@ async function sendMessage() {
     }
     
     // Refresh conversation list
-    loadConversations();
+    if (typeof loadConversations === 'function') {
+      loadConversations();
+    }
     
   } catch(err) {
-    console.error('[Chat] Send failed:', err);
+    console.error('[Chat] ❌ Send error:', err);
+    
     var temp2 = document.getElementById(tempId);
     if (temp2) {
       temp2.style.opacity = '1';
       temp2.style.background = '#dc2626';
+      var timeDiv = temp2.querySelector('.chat-bubble-time');
+      if (timeDiv) timeDiv.textContent = 'Failed';
     }
-    erpShowToast('Failed to send: ' + err.message, 'danger');
+    
+    if (typeof erpShowToast === 'function') {
+      erpShowToast('Failed to send: ' + err.message, 'danger');
+    }
   }
 }
 
 window.sendMessage = sendMessage;
-
 // ═══════════════════════════════════════════════════════════
 // MARK AS READ
 // ═══════════════════════════════════════════════════════════
