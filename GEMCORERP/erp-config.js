@@ -10,7 +10,7 @@ try { localStorage.setItem('erp_theme', 'light'); } catch(e) {}
 const ERP_SUPABASE_URL = 'https://tphstadcscquiezuxsis.supabase.co';
 const ERP_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRwaHN0YWRjc2NxdWllenV4c2lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1OTI4NTksImV4cCI6MjEwNjE2ODg1OX0.7x7KCpcdGYkDsjs3RBdfhhhSamFP-xEfNY5prIkLWL8';
 
-const ERP_APP_VERSION = '1.1.0';
+const ERP_APP_VERSION = '1.1.1';
 const ERP_CACHE_TTL = {
   STOCK_SUMMARY:  60 * 1000,       // 1 min
   ALL_ITEMS:      5 * 60 * 1000,   // 5 min
