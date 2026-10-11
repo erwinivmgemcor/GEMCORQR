@@ -434,4 +434,91 @@ async function erpHealthCheck() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+// SHARED: Get inventory list for dropdowns (paginated + cached)
+// ✅ Fetches ALL 2,384 items (bypasses Supabase 1000-row limit)
+// ✅ Cached — subsequent calls use memory, no re-fetch
+// ✅ Filters deprecated items (is_deprecated_2026 = false)
+// ═══════════════════════════════════════════════════════════
+var _inventoryListCache = null;
+var _inventoryListPromise = null;
+
+async function erpGetInventoryListForDropdown(forceRefresh) {
+  // Return cache if available (unless force refresh)
+  if (!forceRefresh && _inventoryListCache) {
+    return _inventoryListCache;
+  }
+  
+  // Prevent concurrent calls (return same promise)
+  if (_inventoryListPromise) {
+    return _inventoryListPromise;
+  }
+  
+  _inventoryListPromise = (async function() {
+    var allItems = [];
+    var pageSize = 1000;
+    var offset = 0;
+    var hasMore = true;
+    var maxPages = 20;  // Safety cap: 20,000 items
+    var pageNum = 0;
+    
+    console.log('[Inventory List] Starting paginated fetch...');
+    
+    while (hasMore && pageNum < maxPages) {
+      pageNum++;
+      
+      var query = 'select=item_code,description,base_unit,category,location' +
+                  '&is_active=eq.true' +
+                  '&is_deleted=eq.false' +
+                  '&is_deprecated_2026=eq.false' +
+                  '&order=item_code.asc' +
+                  '&limit=' + pageSize +
+                  '&offset=' + offset;
+      
+      var rows = await erpFetch('erp_items', query);
+      
+      if (!rows || rows.length === 0) {
+        hasMore = false;
+        break;
+      }
+      
+      allItems = allItems.concat(rows);
+      offset += rows.length;
+      
+      console.log('[Inventory List] Page ' + pageNum + ': fetched ' + 
+                  rows.length + ' items (total: ' + allItems.length + ')');
+      
+      if (rows.length < pageSize) {
+        hasMore = false;
+      }
+    }
+    
+    // ═══ Map to frontend format ═══
+    var mapped = allItems.map(function(r) {
+      return { 
+        code: r.item_code, 
+        description: r.description || '', 
+        unit: r.base_unit || 'PIECE',
+        category: r.category || '',
+        location: r.location || ''
+      };
+    });
+    
+    _inventoryListCache = mapped;
+    _inventoryListPromise = null;
+    
+    console.log('[Inventory List] ✅ COMPLETE — Total: ' + mapped.length + ' items');
+    return mapped;
+  })();
+  
+  return _inventoryListPromise;
+}
+
+// ═══ Clear cache (utility) ═══
+function erpClearInventoryCache() {
+  _inventoryListCache = null;
+  _inventoryListPromise = null;
+  console.log('[Inventory List] Cache cleared');
+}
+
 console.log('✅ erp-supabase.js loaded — v3 (with deprecated filters)');
