@@ -62,16 +62,15 @@ async function mrrCheckHealth() {
 
 async function preloadInventory() {
   if (_mrrState.inventoryLoaded) return;
+  
   try {
-    var rows = await erpFetch('inventory', 
-      'select=item_code,description,unit&order=item_code.asc&limit=10000');
-    _mrrState.inventoryList = (rows || []).map(function(r) {
-      return { code: r.item_code, description: r.description || '', unit: r.unit || 'PCS' };
-    });
+    console.log('[Inventory] Loading items via shared helper...');
+    _mrrState.inventoryList = await erpGetInventoryListForDropdown();
     _mrrState.inventoryLoaded = true;
-    console.log('[Inventory] Loaded ' + _mrrState.inventoryList.length + ' items');
+    console.log('[Inventory] ✅ Loaded ' + _mrrState.inventoryList.length + ' items');
   } catch(err) {
     console.warn('[Inventory] Failed:', err.message);
+    _mrrState.inventoryList = [];
   }
 }
 
