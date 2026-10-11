@@ -1303,28 +1303,35 @@ var _editItemCurrent = null;
 var _isSubmittingEditItem = false;
 
 function erpOpenEditFromDetails() {
+  console.log('[Edit] erpOpenEditFromDetails called');
+  
   if (!window._currentItemDetails) {
     erpShowToast('No item loaded', 'warning');
     return;
   }
   
+  // Close Item Details modal first
   var detailsModal = document.getElementById('erpItemModal');
   if (detailsModal) {
     var m = bootstrap.Modal.getInstance(detailsModal);
     if (m) m.hide();
   }
   
+  // Slight delay then open Edit modal
   setTimeout(function() {
     erpOpenEditItemModal(window._currentItemDetails);
-  }, 300);
+  }, 350);
 }
 
 async function erpOpenEditItemModal(item) {
+  console.log('[Edit] erpOpenEditItemModal called for:', item.item_code);
+  
   if (!item || !item.item_code) {
     erpShowToast('Invalid item data', 'warning');
     return;
   }
   
+  // Fetch fresh data from DB
   var freshItem = null;
   try {
     var rows = await erpFetch('erp_items',
@@ -1338,23 +1345,62 @@ async function erpOpenEditItemModal(item) {
   _editItemCurrent = data;
   
   var modalEl = document.getElementById('erpEditItemModal');
-  if (!modalEl) return;
+  if (!modalEl) {
+    console.error('[Edit] Modal erpEditItemModal NOT FOUND in HTML!');
+    erpShowToast('Edit modal not found in HTML', 'danger');
+    return;
+  }
   
   if (!_editItemModal) {
     _editItemModal = new bootstrap.Modal(modalEl);
   }
   
+  // ═══ BASIC INFO ═══
   document.getElementById('editItemCode').value = data.item_code || '';
   document.getElementById('editItemCodeDisplay').textContent = data.item_code || '—';
   document.getElementById('editItemDesc').value = data.description || '';
   document.getElementById('editItemCategory').value = data.category || 'UNCATEGORIZED';
   document.getElementById('editItemLocation').value = data.location || '';
-  document.getElementById('editItemCost').value = data.unit_cost != null ? data.unit_cost : '';
+  
+  // ═══ STOCK & PRICING (BAGO) ═══
+  var onHandEl = document.getElementById('editItemOnHand');
+  if (onHandEl) onHandEl.value = data.on_hand != null ? data.on_hand : 0;
+  
+  document.getElementById('editItemCost').value = data.unit_cost != null ? data.unit_cost : 0;
+  
+  var bufferEl = document.getElementById('editItemBufferStock');
+  if (bufferEl) {
+    bufferEl.value = data.buffer_stock != null ? data.buffer_stock : 0;
+    bufferEl.setAttribute('readonly', 'readonly');
+  }
+  
+  // Buffer lock indicator
+  var lockBtn = document.getElementById('editItemBufferLock');
+  var lockIcon = document.getElementById('editItemBufferLockIcon');
+  var lockText = document.getElementById('editItemBufferLockText');
+  var bufferHint = document.getElementById('editItemBufferHint');
+  
+  if (data.buffer_is_locked) {
+    if (lockIcon) lockIcon.className = 'bi bi-lock-fill me-1';
+    if (lockText) lockText.textContent = 'Locked';
+    if (lockBtn) lockBtn.className = 'btn btn-sm btn-outline-warning';
+    if (bufferHint) bufferHint.innerHTML = '<i class="bi bi-lock-fill text-warning me-1"></i>Locked — click the button above to unlock';
+  } else {
+    if (lockIcon) lockIcon.className = 'bi bi-unlock me-1';
+    if (lockText) lockText.textContent = 'Unlocked';
+    if (lockBtn) lockBtn.className = 'btn btn-sm btn-outline-success';
+    if (bufferHint) bufferHint.innerHTML = '<i class="bi bi-unlock text-success me-1"></i>Unlocked — auto-computed from usage';
+  }
+  
+  var reorderEl = document.getElementById('editItemReorderPoint');
+  if (reorderEl) reorderEl.value = data.reorder_point != null ? data.reorder_point : 0;
+  
+  // ═══ STATUS ═══
   document.getElementById('editItemStatus').value = data.is_active ? 'true' : 'false';
   
+  // ═══ READ-ONLY INFO ═══
   document.getElementById('editItemStockClass').textContent = data.stock_classification || '—';
   document.getElementById('editItemMovement').textContent = data.inventory_movement || '—';
-  document.getElementById('editItemBuffer').textContent = erpNum(data.buffer_stock || 0);
   document.getElementById('editItemActiveMo').textContent = data.active_consumption_months || 0;
   
   var lastUpdatedEl = document.getElementById('editItemLastUpdated');
@@ -1366,36 +1412,138 @@ async function erpOpenEditItemModal(item) {
     lastUpdatedEl.innerHTML = '';
   }
   
+  // ═══ REASON (reset) ═══
+  var reasonEl = document.getElementById('editItemReason');
+  if (reasonEl) reasonEl.value = '';
+  
+  // ═══ DEACTIVATE BUTTON ═══
   var deactivateBtn = document.getElementById('btnDeactivateItem');
   if (data.is_active === false) {
     deactivateBtn.innerHTML = '<i class="bi bi-arrow-counterclockwise me-1"></i>Reactivate';
-    deactivateBtn.className = 'btn btn-outline-success';
+    deactivateBtn.className = 'btn btn-outline-success me-auto';
   } else {
     deactivateBtn.innerHTML = '<i class="bi bi-trash me-1"></i>Deactivate';
-    deactivateBtn.className = 'btn btn-outline-danger';
+    deactivateBtn.className = 'btn btn-outline-danger me-auto';
   }
   
   _isSubmittingEditItem = false;
   _editItemModal.show();
+  console.log('[Edit] Modal shown');
 }
 
-async function erpSubmitEditItem() {
-  if (_isSubmittingEditItem) return;
-  if (!_editItemCurrent) return;
+// ═══════════════════════════════════════════════════════════
+// TOGGLE BUFFER LOCK SA EDIT MODAL
+// ═══════════════════════════════════════════════════════════
+
+window.erpToggleEditBufferLock = function() {
+  var bufferEl = document.getElementById('editItemBufferStock');
+  var lockIcon = document.getElementById('editItemBufferLockIcon');
+  var lockText = document.getElementById('editItemBufferLockText');
+  var lockBtn = document.getElementById('editItemBufferLock');
+  var hintEl = document.getElementById('editItemBufferHint');
   
+  if (!bufferEl) return;
+  
+  var isCurrentlyReadonly = bufferEl.hasAttribute('readonly');
+  
+  if (isCurrentlyReadonly) {
+    // UNLOCK → edit mode
+    bufferEl.removeAttribute('readonly');
+    bufferEl.focus();
+    bufferEl.select();
+    
+    if (lockIcon) lockIcon.className = 'bi bi-unlock me-1';
+    if (lockText) lockText.textContent = 'Unlocked';
+    if (lockBtn) lockBtn.className = 'btn btn-sm btn-outline-success';
+    if (hintEl) hintEl.innerHTML = '<i class="bi bi-pencil-fill text-success me-1"></i>Editing — pwede mo nang baguhin';
+  } else {
+    // LOCK → read-only
+    bufferEl.setAttribute('readonly', 'readonly');
+    
+    if (lockIcon) lockIcon.className = 'bi bi-lock-fill me-1';
+    if (lockText) lockText.textContent = 'Locked';
+    if (lockBtn) lockBtn.className = 'btn btn-sm btn-outline-warning';
+    if (hintEl) hintEl.innerHTML = '<i class="bi bi-lock-fill text-warning me-1"></i>Locked — click the button above to unlock';
+  }
+};
+
+async function erpSubmitEditItem() {
+  console.log('[Edit] erpSubmitEditItem called');
+  
+  if (_isSubmittingEditItem) return;
+  if (!_editItemCurrent) {
+    erpShowToast('No item loaded', 'warning');
+    return;
+  }
+  
+  // ═══ COLLECT ALL FIELDS ═══
   var code = document.getElementById('editItemCode').value;
   var desc = (document.getElementById('editItemDesc').value || '').trim();
   var category = (document.getElementById('editItemCategory').value || '').trim();
   var location = (document.getElementById('editItemLocation').value || '').trim();
+  
+  // Stock & Pricing
+  var onHandRaw = document.getElementById('editItemOnHand') ? document.getElementById('editItemOnHand').value : '';
+  var onHand = onHandRaw !== '' ? parseFloat(onHandRaw) : null;
+  
   var costRaw = (document.getElementById('editItemCost').value || '').trim();
-  var cost = costRaw ? parseFloat(costRaw) : null;
+  var cost = costRaw !== '' ? parseFloat(costRaw) : null;
+  
+  var bufferRaw = document.getElementById('editItemBufferStock') ? document.getElementById('editItemBufferStock').value : '';
+  var buffer = bufferRaw !== '' ? parseFloat(bufferRaw) : null;
+  
+  var reorderRaw = document.getElementById('editItemReorderPoint') ? document.getElementById('editItemReorderPoint').value : '';
+  var reorder = reorderRaw !== '' ? parseFloat(reorderRaw) : null;
+  
+  // Status
   var statusRaw = document.getElementById('editItemStatus').value;
   var isActive = statusRaw === 'true';
   
+  // Reason
+  var reason = (document.getElementById('editItemReason').value || '').trim();
+  
+  // ═══ VALIDATION ═══
   if (!desc) { erpShowToast('Description is required', 'warning'); return; }
   if (!category) { erpShowToast('Category is required', 'warning'); return; }
   if (!location) { erpShowToast('Location is required', 'warning'); return; }
-  if (cost !== null && (isNaN(cost) || cost < 0)) { erpShowToast('Unit Cost must be valid', 'warning'); return; }
+  
+  if (onHand !== null && (isNaN(onHand) || onHand < 0)) { 
+    erpShowToast('On-Hand must be valid (≥ 0)', 'warning'); return; 
+  }
+  if (cost !== null && (isNaN(cost) || cost < 0)) { 
+    erpShowToast('Unit Cost must be valid (≥ 0)', 'warning'); return; 
+  }
+  if (buffer !== null && (isNaN(buffer) || buffer < 0)) { 
+    erpShowToast('Buffer Stock must be valid (≥ 0)', 'warning'); return; 
+  }
+  if (reorder !== null && (isNaN(reorder) || reorder < 0)) { 
+    erpShowToast('Reorder Point must be valid (≥ 0)', 'warning'); return; 
+  }
+  
+  // ═══ CHECK IF MAY CHANGES ═══
+  var old = _editItemCurrent;
+  var hasChanges = false;
+  
+  if (desc !== (old.description || '')) hasChanges = true;
+  if (category !== (old.category || '')) hasChanges = true;
+  if (location !== (old.location || '')) hasChanges = true;
+  if (onHand !== null && onHand !== Number(old.on_hand || 0)) hasChanges = true;
+  if (cost !== null && cost !== Number(old.unit_cost || 0)) hasChanges = true;
+  if (buffer !== null && buffer !== Number(old.buffer_stock || 0)) hasChanges = true;
+  if (reorder !== null && reorder !== Number(old.reorder_point || 0)) hasChanges = true;
+  if (isActive !== old.is_active) hasChanges = true;
+  
+  if (!hasChanges) {
+    erpShowToast('Walang binago', 'info');
+    return;
+  }
+  
+  // ═══ REQUIRE REASON IF MAY CHANGES ═══
+  if (!reason) {
+    erpShowToast('⚠️ Reason is required for changes', 'warning');
+    document.getElementById('editItemReason').focus();
+    return;
+  }
   
   var updatedBy = localStorage.getItem('ivm_userFullname') || 
                   localStorage.getItem('ivm_username') || 
@@ -1408,28 +1556,42 @@ async function erpSubmitEditItem() {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
   
   try {
-    var res = await fetch(erpUrl('rpc/erp_update_item'), {
+    // ═══ Save via new RPC ═══
+    var payload = {
+      p_item_code: code,
+      p_description: desc,
+      p_category: category,
+      p_location: location,
+      p_unit_cost: cost,
+      p_is_active: isActive,
+      p_updated_by: updatedBy,
+      p_reason: reason,
+      p_on_hand: onHand,
+      p_buffer_stock: buffer,
+      p_reorder_point: reorder
+    };
+    
+    console.log('[Edit] Sending payload:', payload);
+    
+    var res = await fetch(erpUrl('rpc/erp_update_item_full'), {
       method: 'POST',
       headers: erpHeaders(),
-      body: JSON.stringify({
-        p_item_code: code,
-        p_description: desc,
-        p_category: category,
-        p_location: location,
-        p_unit_cost: cost,
-        p_is_active: isActive,
-        p_updated_by: updatedBy
-      })
+      body: JSON.stringify(payload)
     });
     
     if (!res.ok) throw new Error('API error: ' + res.status);
     var data = await res.json();
+    
     if (!data || !data.success) throw new Error((data && data.error) || 'Failed to update item');
     
     if (_editItemModal) _editItemModal.hide();
-    erpShowToast('✅ Item updated successfully');
+    erpShowToast('✅ Item updated: ' + code);
     
-    if (typeof erpLoadItems === 'function') erpLoadItems();
+    // Refresh
+    if (typeof erpLoadItems === 'function') await erpLoadItems();
+    if (typeof erpLoadSummary === 'function') await erpLoadSummary();
+    if (typeof erpLoadCharts === 'function') await erpLoadCharts();
+    
   } catch(err) {
     console.error('[erpSubmitEditItem]', err);
     erpShowToast('Failed: ' + err.message, 'danger');
