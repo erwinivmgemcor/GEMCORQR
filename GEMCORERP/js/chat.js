@@ -1,15 +1,18 @@
 // ============================================================
-// GEMCOR ERP — Chat System
+// GEMCOR ERP — Chat System v2.0
 // DM + Document threads via Supabase `messages` table
+// ✅ Robust load with NULL/empty handling
+// ✅ Explicit nulls on send
+// ✅ Debug logs
 // ============================================================
 
 var _chatState = {
   currentUser: null,
   currentFullname: '',
   activeTab: 'chats',
-  openWith: null,           // Username of DM recipient OR doc_no
-  openType: null,           // 'user' | 'doc'
-  openDocType: null,        // MRIF | MRR | MRS
+  openWith: null,
+  openType: null,
+  openDocType: null,
   conversations: [],
   users: [],
   pollTimer: null,
@@ -39,18 +42,14 @@ document.addEventListener('DOMContentLoaded', function() {
   loadConversations();
   refreshChatBadge();
   
-  // Auto-refresh badge every 2 min
   _chatState.badgeTimer = setInterval(refreshChatBadge, 120000);
   
-  // Handle resize
   window.addEventListener('resize', function() {
     _chatState.isMobile = window.matchMedia('(max-width: 767.98px)').matches;
   });
   
-  // Setup input handlers
-  setupInputHandlers();
+  setupInputHandlersWithRetry();
   
-  // Pause polling when tab hidden
   document.addEventListener('visibilitychange', function() {
     if (document.hidden) {
       if (_chatState.pollTimer) clearInterval(_chatState.pollTimer);
@@ -101,7 +100,6 @@ function switchChatTab(tab) {
   
   loadConversations();
 }
-
 window.switchChatTab = switchChatTab;
 
 // ═══════════════════════════════════════════════════════════
@@ -130,7 +128,6 @@ async function loadConversations() {
 async function loadUserConversations() {
   var container = document.getElementById('chatConversationList');
   
-  // ═══ Load all users (except self) ═══
   var usersRes = await erpFetch('users',
     'select=username,fullname,roles,department&order=fullname.asc');
   
@@ -143,14 +140,13 @@ async function loadUserConversations() {
     return u.username !== _chatState.currentUser;
   });
   
-  // ═══ Load recent messages with each user ═══
+  // ✅ FIXED: Fetch messages with or filter for null/empty doc_no
   var messagesRes = await erpFetch('messages',
-    'select=*&or=(sender.eq.' + encodeURIComponent(_chatState.currentUser) +
-    ',recipient.eq.' + encodeURIComponent(_chatState.currentUser) + ')' +
-    '&doc_no=is.null' +
+    'select=*' +
+    '&or=(sender.eq.' + encodeURIComponent(_chatState.currentUser) + ',recipient.eq.' + encodeURIComponent(_chatState.currentUser) + ')' +
+    '&or=(doc_no.is.null,doc_no.eq.)' +
     '&order=created_at.desc&limit=500');
   
-  // Group by other user
   var convMap = {};
   (messagesRes || []).forEach(function(m) {
     var other = m.sender === _chatState.currentUser ? m.recipient : m.sender;
@@ -162,31 +158,24 @@ async function loadUserConversations() {
         unread: 0
       };
     }
-    // Count unread
     if (m.recipient === _chatState.currentUser && !m.is_read) {
       convMap[other].unread++;
     }
   });
   
-  // ═══ Render ═══
   var html = '';
-  
-  // Existing conversations
   var convsWithMsgs = Object.keys(convMap).map(function(k) { return convMap[k]; });
   
-  // Sort: unread first, then most recent
   convsWithMsgs.sort(function(a, b) {
     if (a.unread > 0 && b.unread === 0) return -1;
     if (b.unread > 0 && a.unread === 0) return 1;
     return new Date(b.lastMsg.created_at).getTime() - new Date(a.lastMsg.created_at).getTime();
   });
   
-  // Find user info helper
   function findUser(username) {
     return _chatState.users.find(function(u) { return u.username === username; });
   }
   
-  // Render existing conversations
   convsWithMsgs.forEach(function(c) {
     var user = findUser(c.other);
     var fullname = user ? (user.fullname || c.other) : c.other;
@@ -228,7 +217,6 @@ async function loadUserConversations() {
     '</div>';
   });
   
-  // Then users without messages
   var usersWithoutMsgs = _chatState.users.filter(function(u) {
     return !convMap[u.username];
   });
@@ -265,11 +253,13 @@ async function loadUserConversations() {
 async function loadDocumentThreads() {
   var container = document.getElementById('chatConversationList');
   
-  // ═══ Load messages with doc_no not null ═══
+  // ✅ FIXED: Fetch messages with doc_no NOT null/empty
   var messagesRes = await erpFetch('messages',
-    'select=*&doc_no=not.is.null&order=created_at.desc&limit=500');
+    'select=*' +
+    '&doc_no=not.is.null' +
+    '&doc_no=neq.' +
+    '&order=created_at.desc&limit=500');
   
-  // Group by doc_no
   var threadMap = {};
   (messagesRes || []).forEach(function(m) {
     var docNo = m.doc_no;
@@ -282,7 +272,6 @@ async function loadDocumentThreads() {
         unread: 0
       };
     }
-    // Count unread (if not sender and not read)
     if (m.sender !== _chatState.currentUser && !m.is_read) {
       threadMap[docNo].unread++;
     }
@@ -355,22 +344,18 @@ async function openUserConversation(otherUsername) {
   _chatState.openDocType = null;
   _chatState.lastMsgTs = 0;
   
-  // Mobile view
   if (_chatState.isMobile) {
     document.getElementById('chatWrapper').classList.add('mobile-chat-open');
   }
   
-  // Highlight active
   document.querySelectorAll('.chat-conv-item').forEach(function(el) {
     el.classList.toggle('active', el.getAttribute('data-username') === otherUsername);
   });
   
-  // Show panel
   document.getElementById('chatEmptyState').style.display = 'none';
   document.getElementById('chatPanel').style.display = 'flex';
   document.getElementById('chatDocBanner').style.display = 'none';
   
-  // Find user info
   var user = _chatState.users.find(function(u) { return u.username === otherUsername; });
   var fullname = user ? (user.fullname || otherUsername) : otherUsername;
   var initials = getInitials(fullname);
@@ -378,26 +363,22 @@ async function openUserConversation(otherUsername) {
   document.getElementById('chatWithName').textContent = fullname;
   document.getElementById('chatWithSub').textContent = '@' + otherUsername;
   document.getElementById('chatPanelAvatar').textContent = initials;
+  document.getElementById('chatPanelAvatar').style.background = '';
   
-  // Load messages
   var messagesEl = document.getElementById('chatMessages');
   messagesEl.innerHTML = '<div class="text-center py-3"><div class="erp-spinner" style="width:24px;height:24px;border-width:2.5px;margin:0 auto;"></div></div>';
   
-  // Mark as read
   markConversationRead(otherUsername);
   
   await loadMessages(otherUsername, 0, false);
   
-  // Focus input
   setTimeout(function() {
     var input = document.getElementById('chatInput');
     if (input) input.focus();
   }, 200);
   
-  // Start polling
   startPolling();
 }
-
 window.openUserConversation = openUserConversation;
 
 async function openDocConversation(docNo, docType) {
@@ -422,7 +403,6 @@ async function openDocConversation(docNo, docType) {
   document.getElementById('chatPanelAvatar').innerHTML = '<i class="bi bi-file-earmark-text"></i>';
   document.getElementById('chatPanelAvatar').style.background = 'linear-gradient(135deg,#8b5cf6 0%,#7c3aed 100%)';
   
-  // Show doc banner
   var banner = document.getElementById('chatDocBanner');
   banner.style.display = 'block';
   banner.innerHTML = '<i class="bi bi-file-earmark-text me-1"></i>Discussion about <strong>' + erpEsc(docNo) + '</strong>' +
@@ -442,7 +422,6 @@ async function openDocConversation(docNo, docType) {
   
   startPolling();
 }
-
 window.openDocConversation = openDocConversation;
 
 function closeConversation() {
@@ -463,40 +442,32 @@ function closeConversation() {
   
   loadConversations();
 }
-
 window.closeConversation = closeConversation;
 
 // ═══════════════════════════════════════════════════════════
-// LOAD MESSAGES — Robust version
+// ✅ LOAD MESSAGES — ROBUST (handles NULL + empty string)
 // ═══════════════════════════════════════════════════════════
 async function loadMessages(otherUser, sinceTs, append) {
   var container = document.getElementById('chatMessages');
-  if (!container) {
-    console.warn('[Chat] chatMessages container not found');
-    return;
-  }
+  if (!container) return;
   
   console.log('[Chat] Loading messages with:', otherUser, '| since:', sinceTs, '| append:', append);
   
   try {
-    // ═══ Simpler query — walang complicated "or" syntax ═══
-    // Get ALL messages where:
-    //   - sender = me AND recipient = other (sent by me to them)
-    //   OR
-    //   - sender = other AND recipient = me (sent by them to me)
-    // Approach: Two separate queries, then merge
+    // ✅ CRITICAL FIX: Handle BOTH NULL and empty string for doc_no
+    var docFilter = '&or=(doc_no.is.null,doc_no.eq.)';
     
     var q1 = 'select=*' +
              '&sender=eq.' + encodeURIComponent(_chatState.currentUser) +
              '&recipient=eq.' + encodeURIComponent(otherUser) +
-             '&doc_no=is.null' +
+             docFilter +
              '&order=created_at.asc' +
              '&limit=500';
     
     var q2 = 'select=*' +
              '&sender=eq.' + encodeURIComponent(otherUser) +
              '&recipient=eq.' + encodeURIComponent(_chatState.currentUser) +
-             '&doc_no=is.null' +
+             docFilter +
              '&order=created_at.asc' +
              '&limit=500';
     
@@ -513,7 +484,6 @@ async function loadMessages(otherUser, sinceTs, append) {
     
     console.log('[Chat] Sent:', sent.length, '| Received:', received.length);
     
-    // Merge and sort
     var all = sent.concat(received);
     all.sort(function(a, b) {
       return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
@@ -527,14 +497,11 @@ async function loadMessages(otherUser, sinceTs, append) {
     console.error('[Chat] Load messages failed:', err);
     if (!append) {
       container.innerHTML = '<div class="text-danger text-center py-3 small">' +
-        'Failed to load messages: ' + (typeof erpEsc === 'function' ? erpEsc(err.message) : err.message) + '</div>';
+        'Failed to load: ' + (typeof erpEsc === 'function' ? erpEsc(err.message) : err.message) + '</div>';
     }
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// LOAD DOC MESSAGES — Robust version
-// ═══════════════════════════════════════════════════════════
 async function loadDocMessages(docNo, sinceTs, append) {
   var container = document.getElementById('chatMessages');
   if (!container) return;
@@ -559,7 +526,7 @@ async function loadDocMessages(docNo, sinceTs, append) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER MESSAGES — Robust version
+// ✅ RENDER MESSAGES
 // ═══════════════════════════════════════════════════════════
 function _renderMessages(container, msgs, append, isDocThread) {
   console.log('[Chat] Rendering', msgs.length, 'messages');
@@ -583,7 +550,7 @@ function _renderMessages(container, msgs, append, isDocThread) {
     var dateLabel = formatDateLabel(d);
     
     if (dateLabel !== lastDateLabel) {
-      html += '<div class="chat-date-sep">' + (typeof erpEsc === 'function' ? erpEsc(dateLabel) : dateLabel) + '</div>';
+      html += '<div class="chat-date-sep">' + erpEsc(dateLabel) + '</div>';
       lastDateLabel = dateLabel;
     }
     
@@ -594,15 +561,12 @@ function _renderMessages(container, msgs, append, isDocThread) {
     var senderLine = '';
     if (!isMe && isDocThread) {
       var first = (m.sender_fullname || m.sender || '').split(' ')[0];
-      senderLine = '<div class="chat-bubble-sender">' + (typeof erpEsc === 'function' ? erpEsc(first) : first) + '</div>';
+      senderLine = '<div class="chat-bubble-sender">' + erpEsc(first) + '</div>';
     }
     
-    var body = m.body || '';
-    var escBody = typeof erpEsc === 'function' ? erpEsc(body) : body;
-    
     html += '<div class="' + cls + '">' + senderLine +
-      '<div>' + escBody + '</div>' +
-      '<div class="chat-bubble-time">' + (typeof erpEsc === 'function' ? erpEsc(time) : time) + '</div>' +
+      '<div>' + erpEsc(m.body || '') + '</div>' +
+      '<div class="chat-bubble-time">' + erpEsc(time) + '</div>' +
     '</div>';
   });
   
@@ -617,10 +581,7 @@ function _renderMessages(container, msgs, append, isDocThread) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SEND MESSAGE — Enhanced with debug + timeout + error handling
-// ═══════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════
-// SEND MESSAGE — Bulletproof version
+// ✅ SEND MESSAGE — With explicit nulls + debug logs
 // ═══════════════════════════════════════════════════════════
 async function sendMessage() {
   console.log('[Chat] sendMessage() called');
@@ -645,45 +606,48 @@ async function sendMessage() {
   
   console.log('[Chat] Sending:', body);
   
-  // Clear input
   input.value = '';
   input.style.height = 'auto';
   
-  // Build payload
+  // ✅ FIXED: FULLY EXPLICIT payload
   var payload = {
     sender: _chatState.currentUser,
     sender_fullname: _chatState.currentFullname,
     body: body,
-    is_read: false
+    is_read: false,
+    read_at: null,
+    doc_no: null,          // ← EXPLICIT NULL
+    doc_type: null,        // ← EXPLICIT NULL
+    recipient: null        // ← EXPLICIT NULL
   };
   
   if (_chatState.openType === 'user') {
     payload.recipient = _chatState.openWith;
+    // doc_no stays NULL
   } else if (_chatState.openType === 'doc') {
     payload.doc_no = _chatState.openWith;
     payload.doc_type = _chatState.openDocType || '';
+    // recipient stays NULL
   }
   
   console.log('[Chat] Payload:', payload);
   
-  // Optimistic UI
   var container = document.getElementById('chatMessages');
   var tempId = 'temp_' + Date.now();
   
   if (container) {
     try {
-      var tempHtml = '<div class="chat-bubble chat-bubble-me" id="' + tempId + '" style="opacity:0.6;">' +
-        '<div>' + (typeof erpEsc === 'function' ? erpEsc(body) : body) + '</div>' +
-        '<div class="chat-bubble-time">Sending...</div>' +
-      '</div>';
-      container.insertAdjacentHTML('beforeend', tempHtml);
+      container.insertAdjacentHTML('beforeend',
+        '<div class="chat-bubble chat-bubble-me" id="' + tempId + '" style="opacity:0.6;">' +
+          '<div>' + erpEsc(body) + '</div>' +
+          '<div class="chat-bubble-time">Sending...</div>' +
+        '</div>');
       container.scrollTop = container.scrollHeight;
     } catch(uiErr) {
       console.warn('[Chat] UI add failed:', uiErr);
     }
   }
   
-  // ═══ POST with timeout ═══
   try {
     console.log('[Chat] POST to messages...');
     
@@ -708,38 +672,31 @@ async function sendMessage() {
     var result = await res.json();
     console.log('[Chat] ✅ Sent successfully:', result);
     
-    // Remove temp bubble
     var temp = document.getElementById(tempId);
-    if (temp) {
-      temp.remove();
-      console.log('[Chat] Temp bubble removed');
-    }
+    if (temp) temp.remove();
     
-    // ═══ CRITICAL: Reload messages ═══
+    // Reload messages
     console.log('[Chat] Reloading messages...');
     try {
       if (_chatState.openType === 'user') {
         await loadMessages(_chatState.openWith, 0, false);
-      } else if (_chatState.openType === 'doc') {
+      } else {
         await loadDocMessages(_chatState.openWith, 0, false);
       }
       console.log('[Chat] ✅ Messages reloaded');
     } catch(loadErr) {
       console.error('[Chat] ❌ Reload failed:', loadErr);
-      // Don't fail the whole thing — message was sent anyway
-      // Manually append the sent message
       if (container && result && result[0]) {
         var sentMsg = result[0];
         container.insertAdjacentHTML('beforeend',
           '<div class="chat-bubble chat-bubble-me">' +
-            '<div>' + (typeof erpEsc === 'function' ? erpEsc(sentMsg.body) : sentMsg.body) + '</div>' +
-            '<div class="chat-bubble-time">' + new Date(sentMsg.created_at).toTimeString().slice(0, 5) + '</div>' +
+            '<div>' + erpEsc(sentMsg.body) + '</div>' +
+            '<div class="chat-bubble-time">' + formatTime(new Date(sentMsg.created_at)) + '</div>' +
           '</div>');
         container.scrollTop = container.scrollHeight;
       }
     }
     
-    // Refresh conversation list
     if (typeof loadConversations === 'function') {
       try { loadConversations(); } catch(e) { console.warn('[Chat] Reload list failed:', e); }
     }
@@ -760,8 +717,8 @@ async function sendMessage() {
     }
   }
 }
-
 window.sendMessage = sendMessage;
+
 // ═══════════════════════════════════════════════════════════
 // MARK AS READ
 // ═══════════════════════════════════════════════════════════
@@ -769,7 +726,8 @@ async function markConversationRead(otherUser) {
   try {
     await fetch(erpUrl('messages?recipient=eq.' + encodeURIComponent(_chatState.currentUser) +
                        '&sender=eq.' + encodeURIComponent(otherUser) +
-                       '&doc_no=is.null&is_read=eq.false'), {
+                       '&or=(doc_no.is.null,doc_no.eq.)' +
+                       '&is_read=eq.false'), {
       method: 'PATCH',
       headers: erpHeaders(),
       body: JSON.stringify({
@@ -809,14 +767,12 @@ async function refreshChatBadge() {
     
     var count = (rows || []).length;
     
-    // Update sidebar badge (in nav)
     var badge = document.getElementById('chatBadgeSidebar');
     if (badge) {
       badge.textContent = count;
       badge.classList.toggle('d-none', count === 0);
     }
     
-    // Update tab title
     if (count > 0) {
       document.title = '(' + count + ') Messages — GEMCOR ERP';
     } else {
@@ -829,7 +785,6 @@ async function refreshChatBadge() {
     console.warn('[Chat] Badge failed:', err);
   }
 }
-
 window.refreshChatBadge = refreshChatBadge;
 
 // ═══════════════════════════════════════════════════════════
@@ -861,31 +816,66 @@ function filterConversations() {
     el.style.display = (!term || text.indexOf(term) !== -1) ? '' : 'none';
   });
 }
-
 window.filterConversations = filterConversations;
 
 // ═══════════════════════════════════════════════════════════
-// INPUT HANDLERS
+// INPUT HANDLERS WITH RETRY
 // ═══════════════════════════════════════════════════════════
-function setupInputHandlers() {
-  var input = document.getElementById('chatInput');
-  var sendBtn = document.getElementById('chatSendBtn');
+function setupInputHandlersWithRetry() {
+  var attempts = 0;
+  var maxAttempts = 20;
   
-  if (input) {
-    input.addEventListener('input', function() {
-      this.style.height = 'auto';
-      this.style.height = Math.min(this.scrollHeight, 120) + 'px';
-    });
+  function trySetup() {
+    attempts++;
     
-    input.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-      }
-    });
+    var input = document.getElementById('chatInput');
+    var sendBtn = document.getElementById('chatSendBtn');
+    
+    if (input && sendBtn) {
+      console.log('[Chat] Input handlers setup after ' + attempts + ' attempt(s)');
+      _attachInputHandlers(input, sendBtn);
+      return;
+    }
+    
+    if (attempts < maxAttempts) {
+      setTimeout(trySetup, 100);
+    } else {
+      console.error('[Chat] Failed to find input elements');
+    }
   }
   
-  if (sendBtn) sendBtn.addEventListener('click', sendMessage);
+  trySetup();
+}
+
+function _attachInputHandlers(input, sendBtn) {
+  // Remove existing listeners via clone
+  var newInput = input.cloneNode(true);
+  input.parentNode.replaceChild(newInput, input);
+  
+  var newBtn = sendBtn.cloneNode(true);
+  sendBtn.parentNode.replaceChild(newBtn, sendBtn);
+  
+  newInput.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  });
+  
+  newInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      console.log('[Chat] Enter key pressed');
+      sendMessage();
+    }
+  });
+  
+  newBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[Chat] Send button clicked');
+    sendMessage();
+  });
+  
+  console.log('[Chat] ✅ Input handlers attached');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -960,11 +950,9 @@ function erpShowToast(msg, type) {
 window.discussDocument = function(docNo, docType) {
   if (!docNo) return;
   
-  // Save intent
   localStorage.setItem('ivm_chat_open_doc', docNo);
   localStorage.setItem('ivm_chat_open_type', docType || '');
   
-  // Navigate to chat page
   window.location.href = 'chat.html?doc=' + encodeURIComponent(docNo) + '&type=' + encodeURIComponent(docType || '');
 };
 
@@ -978,7 +966,6 @@ function checkUrlParams() {
   var user = params.get('user');
   
   if (docNo) {
-    // Wait for DOM ready
     setTimeout(function() {
       switchChatTab('documents');
       setTimeout(function() {
@@ -992,7 +979,6 @@ function checkUrlParams() {
   }
 }
 
-// Run URL param check after load
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', function() {
     setTimeout(checkUrlParams, 1000);
@@ -1001,4 +987,4 @@ if (document.readyState === 'loading') {
   setTimeout(checkUrlParams, 1000);
 }
 
-console.log('✅ chat.js loaded');
+console.log('✅ chat.js v2.0 loaded (NULL-safe queries)');
