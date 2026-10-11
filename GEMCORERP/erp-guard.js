@@ -16,6 +16,7 @@
     'new-mrif.html',
     'new-mrs.html',
     'new-mrif-manual.html',
+    'chat.html',
     'new-mrs-manual.html'
   ];
 
