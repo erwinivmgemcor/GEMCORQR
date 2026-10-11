@@ -2368,3 +2368,56 @@ html {
 .editable-cell:hover .editable-cell-tooltip {
   opacity: 1;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   EDIT MODAL — Section Styling
+   ═══════════════════════════════════════════════════════════ */
+
+.erp-form-section {
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  background: #fff;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.erp-form-section-title {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #1e3a5f;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1.5px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+}
+
+#erpEditItemModal .form-label {
+  font-size: 0.88rem;
+  margin-bottom: 6px;
+}
+
+#erpEditItemModal .form-control,
+#erpEditItemModal .form-select {
+  font-size: 0.92rem;
+  padding: 9px 12px;
+  border-radius: 8px;
+}
+
+#erpEditItemModal .form-control-lg {
+  font-size: 1.05rem;
+  padding: 11px 14px;
+}
+
+#erpEditItemModal #editItemBufferStock[readonly] {
+  background: #fef3c7;
+  cursor: not-allowed;
+}
+
+#erpEditItemModal #editItemBufferStock:not([readonly]) {
+  background: #fff;
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+}
