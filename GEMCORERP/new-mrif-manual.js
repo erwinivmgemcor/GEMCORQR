@@ -1,6 +1,7 @@
 // ============================================================
 // GEMCOR ERP — Manual MRIF Creation
 // No JO lookup — manual entry lahat
+// v2 — Fixed: Pagination for inventory preload (all 2,384 items)
 // ============================================================
 
 var _mrifState = {
@@ -63,15 +64,12 @@ async function mrifCheckHealth() {
 async function loadUserDepartment() {
   var username = localStorage.getItem('ivm_username') || '';
   if (!username) return;
-  
   var deptField = document.getElementById('mrifDepartment');
   deptField.placeholder = 'Loading...';
   deptField.disabled = true;
-  
   try {
     var rows = await erpFetch('users', 
       'username=eq.' + encodeURIComponent(username) + '&select=department&limit=1');
-    
     if (rows && rows[0] && rows[0].department) {
       var dept = rows[0].department.trim();
       _mrifState.department = dept;
@@ -86,7 +84,6 @@ async function loadUserDepartment() {
     } else {
       deptField.placeholder = 'Enter department';
       deptField.disabled = false;
-      deptField.readOnly = false;
     }
   } catch(err) {
     deptField.placeholder = 'Enter department';
@@ -94,21 +91,80 @@ async function loadUserDepartment() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+// PRELOAD INVENTORY — With Pagination (FIXED)
+// ✅ Uses erp_items (new ERP table)
+// ✅ Fetches ALL 2,384 items (not just 1,000)
+// ✅ Excludes deprecated items
+// ═══════════════════════════════════════════════════════════
 async function preloadInventory() {
   if (_mrifState.inventoryLoaded) return;
+  
   try {
-    var rows = await erpFetch('inventory', 
-      'select=item_code,description,unit&order=item_code.asc&limit=10000');
-    _mrifState.inventoryList = (rows || []).map(function(r) {
-      return { code: r.item_code, description: r.description || '', unit: r.unit || 'PIECE' };
+    console.log('[Inventory] Starting paginated fetch from erp_items...');
+    
+    var allItems = [];
+    var pageSize = 1000;
+    var offset = 0;
+    var hasMore = true;
+    var maxPages = 20;  // Safety cap: 20,000 items max
+    var pageNum = 0;
+    
+    while (hasMore && pageNum < maxPages) {
+      pageNum++;
+      
+      var query = 'select=item_code,description,base_unit,category,location' +
+                  '&is_active=eq.true' +
+                  '&is_deleted=eq.false' +
+                  '&is_deprecated_2026=eq.false' +
+                  '&order=item_code.asc' +
+                  '&limit=' + pageSize +
+                  '&offset=' + offset;
+      
+      var rows = await erpFetch('erp_items', query);
+      
+      if (!rows || rows.length === 0) {
+        console.log('[Inventory] Page ' + pageNum + ': empty — done');
+        hasMore = false;
+        break;
+      }
+      
+      allItems = allItems.concat(rows);
+      offset += rows.length;
+      
+      console.log('[Inventory] Page ' + pageNum + ': fetched ' + 
+                  rows.length + ' items (total: ' + allItems.length + ')');
+      
+      // If fewer than pageSize, we've reached the end
+      if (rows.length < pageSize) {
+        hasMore = false;
+      }
+    }
+    
+    // ═══ Map to frontend format ═══
+    _mrifState.inventoryList = allItems.map(function(r) {
+      return { 
+        code: r.item_code, 
+        description: r.description || '', 
+        unit: r.base_unit || 'PIECE',
+        category: r.category || '',
+        location: r.location || ''
+      };
     });
+    
     _mrifState.inventoryLoaded = true;
-    console.log('[Inventory] Loaded ' + _mrifState.inventoryList.length + ' items');
+    console.log('[Inventory] ✅ COMPLETE — Loaded ' + _mrifState.inventoryList.length + ' items');
+    
   } catch(err) {
     console.warn('[Inventory] Failed:', err.message);
+    _mrifState.inventoryList = [];
+    _mrifState.inventoryLoaded = false;
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+// ITEMS MANAGEMENT
+// ═══════════════════════════════════════════════════════════
 function addItemRow() {
   var emptyState = document.getElementById('itemsEmptyState');
   if (emptyState) emptyState.style.display = 'none';
@@ -130,7 +186,7 @@ function addItemRow() {
   });
   
   document.getElementById('itemsContainer').appendChild(clone);
-  _mrifState.items.push({ code: '', description: '', qty: 1, unit: 'PIECE', remarks: '' });
+  _mrifState.items.push({ code: '', description: '', qty: 1, atlQty: 1, unit: 'PIECE', remarks: '' });
   
   setTimeout(function() {
     var newRow = document.querySelector('.erp-item-row[data-item-idx="' + idx + '"]');
@@ -142,12 +198,10 @@ function removeItemRow(btn) {
   var row = btn.closest('.erp-item-row');
   if (!row) return;
   if (!confirm('Remove this item?')) return;
-  
   var idx = parseInt(row.getAttribute('data-item-idx'), 10);
   _mrifState.items[idx] = null;
   row.remove();
   reindexItemRows();
-  
   var remaining = document.querySelectorAll('.erp-item-row').length;
   if (remaining === 0) {
     document.getElementById('itemsEmptyState').style.display = 'block';
@@ -217,18 +271,15 @@ function selectItemFromDropdown(row, el) {
   var code = el.getAttribute('data-code');
   var desc = el.getAttribute('data-desc');
   var unit = el.getAttribute('data-unit');
-  
   row.querySelector('.item-code-input').value = code;
   row.querySelector('.item-desc-input').value = desc;
   row.querySelector('.item-unit-input').value = unit;
   row.querySelector('.item-dropdown').classList.add('d-none');
-  
   if (_mrifState.items[idx]) {
     _mrifState.items[idx].code = code;
     _mrifState.items[idx].description = desc;
     _mrifState.items[idx].unit = unit;
   }
-  
   setTimeout(function() {
     row.querySelector('.item-qty-input').focus();
     row.querySelector('.item-qty-input').select();
@@ -261,13 +312,11 @@ async function submitMrif() {
     return;
   }
   
-  // Collect manual optional fields
   var joNo = document.getElementById('mrifJoNo').value.trim();
   var gemSoNo = document.getElementById('mrifGemSoNo').value.trim();
   var clientName = document.getElementById('mrifClientName').value.trim();
   var project = document.getElementById('mrifProject').value.trim();
   
-  // Collect items
   var validItems = [];
   var rows = document.querySelectorAll('.erp-item-row');
   for (var i = 0; i < rows.length; i++) {
@@ -286,7 +335,7 @@ async function submitMrif() {
       erpShowToast('Item #' + (i + 1) + ' has invalid quantity', 'warning');
       return;
     }
-    validItems.push({ code: code, description: desc, qty: qty, unit: unit, remarks: remarks });
+    validItems.push({ code: code, description: desc, qty: qty, atlQty: 0, unit: unit, remarks: remarks });
   }
   
   if (validItems.length === 0) {
@@ -305,7 +354,6 @@ async function submitMrif() {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
   
   try {
-    // RPC
     var rpcRes = await fetch(erpUrl('rpc/get_next_doc_number'), {
       method: 'POST',
       headers: erpHeaders(),
@@ -320,7 +368,6 @@ async function submitMrif() {
     
     console.log('[Submit] Doc No:', docNo);
     
-    // Insert document
     var docRes = await fetch(erpUrl('documents'), {
       method: 'POST',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
@@ -344,7 +391,6 @@ async function submitMrif() {
     var docArr = await docRes.json();
     var doc = docArr[0];
     
-    // Insert items
     var itemPayloads = validItems.map(function(it, idx) {
       return {
         document_id: doc.id,
@@ -353,7 +399,7 @@ async function submitMrif() {
         item_code: it.code,
         description: it.description,
         requested_qty: it.qty,
-        issued_qty: 0,
+        issued_qty: it.atlQty || 0,
         unit: it.unit,
         remarks: it.remarks || 'PENDING',
         row_index: idx + 1
@@ -401,7 +447,6 @@ function resetFormSilent() {
   document.getElementById('mrifClientName').value = '';
   document.getElementById('mrifProject').value = '';
   _mrifState.items = [];
-  
   var container = document.getElementById('itemsContainer');
   container.querySelectorAll('.erp-item-row').forEach(function(r) { r.remove(); });
   document.getElementById('itemsEmptyState').style.display = 'block';
@@ -430,4 +475,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3500 }).show();
 }
 
-console.log('✅ new-mrif-manual.js loaded');
+console.log('✅ new-mrif-manual.js v2 loaded (pagination fix)');
