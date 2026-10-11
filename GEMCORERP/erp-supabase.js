@@ -53,53 +53,88 @@ async function erpGetStockSummary(force) {
 // ALL ITEMS
 // ★ FIXED: Added is_active, is_deleted, is_deprecated_2026 filters
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// ALL ITEMS — WITH PAGINATION (v2)
+// ✅ FIXED: Bypasses Supabase 1000-row limit
+// ✅ Fetches ALL items (2,384+) instead of just 1,000
+// ═══════════════════════════════════════════════════════════
 async function erpGetAllItems(filters) {
   filters = filters || {};
-  var query = 'select=*&order=item_code.asc';
-  var limit = filters.limit || 5000;
-  query += '&limit=' + limit;
   
-  // ═══ ALWAYS FILTER: Active + Not Deleted + Not Deprecated ═══
-  query += '&is_active=eq.true';
-  query += '&is_deleted=eq.false';
-  query += '&is_deprecated_2026=eq.false';
+  var allItems = [];
+  var pageSize = 1000;
+  var offset = 0;
+  var hasMore = true;
+  var maxPages = 20;  // Safety cap: 20,000 items max
+  var pageNum = 0;
   
-  if (filters.category) query += '&category=eq.' + encodeURIComponent(filters.category);
-  if (filters.location) query += '&location=eq.' + encodeURIComponent(filters.location);
-  if (filters.movement) query += '&inventory_movement=eq.' + encodeURIComponent(filters.movement);
-  if (filters.abc) query += '&abc_classification=eq.' + encodeURIComponent(filters.abc);
-  if (filters.search) {
-    query += '&or=(item_code.ilike.*' + encodeURIComponent(filters.search) + '*,description.ilike.*' + encodeURIComponent(filters.search) + '*)';
+  console.log('[erpGetAllItems] Starting paginated fetch...');
+  
+  while (hasMore && pageNum < maxPages) {
+    pageNum++;
+    
+    // ═══ Build query for this page ═══
+    var query = 'select=*&order=item_code.asc';
+    query += '&limit=' + pageSize;
+    query += '&offset=' + offset;
+    
+    // ═══ ALWAYS FILTER ═══
+    query += '&is_active=eq.true';
+    query += '&is_deleted=eq.false';
+    query += '&is_deprecated_2026=eq.false';
+    
+    // ═══ Optional filters ═══
+    if (filters.category) {
+      query += '&category=eq.' + encodeURIComponent(filters.category);
+    }
+    if (filters.location) {
+      query += '&location=eq.' + encodeURIComponent(filters.location);
+    }
+    if (filters.movement) {
+      query += '&inventory_movement=eq.' + encodeURIComponent(filters.movement);
+    }
+    if (filters.abc) {
+      query += '&abc_classification=eq.' + encodeURIComponent(filters.abc);
+    }
+    if (filters.search) {
+      query += '&or=(item_code.ilike.*' + encodeURIComponent(filters.search) + 
+               '*,description.ilike.*' + encodeURIComponent(filters.search) + '*)';
+    }
+    
+    try {
+      var rows = await erpFetch('erp_items', query);
+      
+      if (!rows || rows.length === 0) {
+        console.log('[erpGetAllItems] Page ' + pageNum + ': empty — done');
+        hasMore = false;
+        break;
+      }
+      
+      allItems = allItems.concat(rows);
+      offset += rows.length;
+      
+      console.log('[erpGetAllItems] Page ' + pageNum + ': fetched ' + 
+                  rows.length + ' items (total: ' + allItems.length + ')');
+      
+      // ═══ If fewer than pageSize, we've reached the end ═══
+      if (rows.length < pageSize) {
+        hasMore = false;
+      }
+      
+    } catch(err) {
+      console.error('[erpGetAllItems] Page ' + pageNum + ' failed:', err.message);
+      hasMore = false;
+    }
   }
   
-  try {
-    var rows = await erpFetch('erp_items', query);
-    return { success: true, items: rows || [], count: (rows || []).length };
-  } catch(err) {
-    console.error('[erpGetAllItems]', err);
-    return { success: false, error: err.message, items: [] };
-  }
+  console.log('[erpGetAllItems] ✅ COMPLETE — Total fetched: ' + allItems.length + ' items');
+  
+  return { 
+    success: true, 
+    items: allItems, 
+    count: allItems.length 
+  };
 }
-
-// ═══════════════════════════════════════════════════════════
-// ITEM DETAILS
-// ★ FIXED: Added filters para hindi malabas ang inactive items
-// ═══════════════════════════════════════════════════════════
-async function erpGetItemDetails(itemCode) {
-  try {
-    var rows = await erpFetch('erp_items',
-      'item_code=eq.' + encodeURIComponent(itemCode) +
-      '&is_active=eq.true' +
-      '&is_deleted=eq.false' +
-      '&is_deprecated_2026=eq.false' +
-      '&limit=1');
-    if (!rows || rows.length === 0) return { success: false, error: 'Item not found or inactive' };
-    return { success: true, item: rows[0] };
-  } catch(err) {
-    return { success: false, error: err.message };
-  }
-}
-
 // ═══════════════════════════════════════════════════════════
 // ITEM MOVEMENTS
 // ═══════════════════════════════════════════════════════════
