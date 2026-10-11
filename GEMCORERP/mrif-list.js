@@ -110,6 +110,16 @@ function mrifListComputeKPIs() {
 // ═══════════════════════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════════════════════
+
+function mrifListRender() {
+  var tbody = document.getElementById('mrifTableBody');
+  if (!tbody) return;
+  
+  // ═══ Role check for Warehouse Edit ═══
+  var userRole = localStorage.getItem('ivm_userRole') || '';
+  var canEdit = (userRole === 'warehouse');
+  
+  // ... existing code ...
 function mrifListRender() {
   var tbody = document.getElementById('mrifTableBody');
   if (!tbody) return;
@@ -163,7 +173,7 @@ function mrifListRender() {
       '<td>' + erpEsc(d.jo_no || '—') + '</td>' +
       '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span></td>' +
       '<td class="text-center">' + (d.item_count || 0) + '</td>' +
-      '<td class="text-center">' +
+     '<td class="text-center">' +
   '<button class="erp-action-btn primary" onclick="mrifListPrint(\'' + safeDoc + '\')" title="Print Preview">' +
     '<i class="bi bi-printer"></i>' +
   '</button>' +
@@ -173,6 +183,12 @@ function mrifListRender() {
   '<button class="erp-action-btn" onclick="discussDocument(\'' + safeDoc + '\', \'MRIF\')" title="Discuss">' +
     '<i class="bi bi-chat-dots"></i>' +
   '</button>' +
+  // ═══ Edit button — warehouse only, PENDING + PARTIAL only ═══
+  (canEdit && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL') ?
+    '<button class="erp-action-btn" onclick="openWarehouseEdit(\'' + safeDoc + '\', \'MRIF\')" title="Edit (Warehouse)">' +
+      '<i class="bi bi-pencil-square"></i>' +
+    '</button>' 
+    : '') +
 '</td>' +
       '</tr>';
   });
