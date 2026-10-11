@@ -185,21 +185,13 @@ async function preloadInventory() {
   if (_mrifState.inventoryLoaded) return;
   
   try {
-    console.log('[Inventory] Preloading...');
-    var rows = await erpFetch('inventory', 
-      'select=item_code,description,unit&order=item_code.asc&limit=10000');
-    
-    _mrifState.inventoryList = (rows || []).map(function(r) {
-      return {
-        code: r.item_code,
-        description: r.description || '',
-        unit: r.unit || 'PIECE'
-      };
-    });
+    console.log('[Inventory] Loading items via shared helper...');
+    _mrifState.inventoryList = await erpGetInventoryListForDropdown();
     _mrifState.inventoryLoaded = true;
-    console.log('[Inventory] Loaded ' + _mrifState.inventoryList.length + ' items');
+    console.log('[Inventory] ✅ Loaded ' + _mrifState.inventoryList.length + ' items');
   } catch(err) {
-    console.warn('[Inventory] Preload failed:', err.message);
+    console.warn('[Inventory] Failed:', err.message);
+    _mrifState.inventoryList = [];
   }
 }
 
