@@ -377,8 +377,9 @@ async function erpGetPrfPoByPo(poNo) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// DISTINCT VALUES
-// ★ FIXED: Added is_active/is_deleted/is_deprecated_2026 filter for erp_items
+// DISTINCT VALUES — With Pagination
+// ✅ Bypasses PostgREST 1000-row limit
+// ✅ Returns ALL unique values (e.g., all categories)
 // ═══════════════════════════════════════════════════════════
 async function erpGetDistinctValues(column) {
   var docColumns = ['requestor', 'department', 'status', 'doc_type', 'jo_no', 'gem_so_no', 'client_name', 'project', 'po_no', 'vendor', 'dr_no', 'prepared_by'];
@@ -393,18 +394,50 @@ async function erpGetDistinctValues(column) {
   }
   
   try {
-    var query = 'select=' + column + '&' + column + '=not.is.null&order=' + column + '.asc&limit=5000';
+    // ═══ PAGINATION LOOP ═══
+    var allRows = [];
+    var pageSize = 1000;
+    var offset = 0;
+    var hasMore = true;
+    var maxPages = 20;  // Safety: 20,000 rows max
+    var pageNum = 0;
     
-    // ★ Add filter only for erp_items queries
-    if (table === 'erp_items') {
-      query += '&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false';
+    while (hasMore && pageNum < maxPages) {
+      pageNum++;
+      
+      var query = 'select=' + column + 
+                  '&' + column + '=not.is.null' +
+                  '&order=' + column + '.asc' +
+                  '&limit=' + pageSize +
+                  '&offset=' + offset;
+      
+      // Add filter only for erp_items queries
+      if (table === 'erp_items') {
+        query += '&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false';
+      }
+      
+      var rows = await erpFetch(table, query);
+      
+      if (!rows || rows.length === 0) {
+        hasMore = false;
+        break;
+      }
+      
+      allRows = allRows.concat(rows);
+      offset += rows.length;
+      
+      console.log('[DistinctValues] ' + column + ' Page ' + pageNum + ': fetched ' + 
+                  rows.length + ' (total: ' + allRows.length + ')');
+      
+      if (rows.length < pageSize) {
+        hasMore = false;
+      }
     }
     
-    var rows = await erpFetch(table, query);
-    
+    // ═══ Extract unique values ═══
     var seen = {};
     var values = [];
-    (rows || []).forEach(function(r) {
+    allRows.forEach(function(r) {
       var v = r[column];
       if (v && String(v).trim() && !seen[v]) {
         seen[v] = true;
@@ -412,7 +445,10 @@ async function erpGetDistinctValues(column) {
       }
     });
     
+    console.log('[DistinctValues] ' + column + ' ✅ Complete: ' + values.length + ' unique from ' + allRows.length + ' rows');
+    
     return { success: true, values: values };
+    
   } catch(err) {
     console.warn('[erpGetDistinctValues]', column, err.message);
     return { success: false, error: err.message, values: [] };
