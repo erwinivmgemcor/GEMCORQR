@@ -309,17 +309,13 @@ function erpRenderTable() {
       '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
       '<td>' + erpEsc(it.category || '—') + '</td>' +
       '<td>' + erpEsc(it.location || '—') + '</td>' +
-      '<td class="text-end ' + qtyClass + ' editable-cell on-hand-cell" ' +
-        'onclick="erpOpenEditModal(\'' + safeCode + '\', \'on_hand\')" ' +
-        'title="Click to edit">' +
-        erpNum(onHand) +
-      '</td>' +
-      '<td class="text-end buffer-cell editable-cell" ' +
-        'onclick="erpOpenEditModal(\'' + safeCode + '\', \'buffer_stock\')" ' +
-        'title="Click to edit">' +
-        (isLocked ? '<i class="bi bi-lock-fill" style="color:#dc2626;font-size:0.7rem;margin-right:4px;" title="Locked (manual value)"></i>' : '') +
-        erpNum(buffer) +
-      '</td>' +
+     '<td class="text-end ' + qtyClass + '">' +
+  erpNum(onHand) +
+'</td>' +
+'<td class="text-end buffer-cell">' +
+  (isLocked ? '<i class="bi bi-lock-fill" style="color:#dc2626;font-size:0.7rem;margin-right:4px;" title="Locked (manual value)"></i>' : '') +
+  erpNum(buffer) +
+'</td>' +
       '<td class="text-center">' + erpEsc(it.base_unit || '') + '</td>' +
       '<td class="text-center usage-cell">' + activeMo + '</td>' +
       '<td class="text-end usage-cell">' + erpNum(aveMo) + '</td>' +
