@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Messages — GEMCOR ERP</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1e3a5f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="erp-design-system.css">
+<link rel="stylesheet" href="erp-styles.css">
+<link rel="stylesheet" href="erp-nav.css">
+<link rel="stylesheet" href="erp-notif.css">
+<link rel="stylesheet" href="js/chat.css">
+
+<script src="erp-guard.js"></script>
+<script src="erp-theme.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script defer src="erp-config.js"></script>
+<script defer src="erp-supabase.js"></script>
+<script defer src="erp-nav.js"></script>
+<script defer src="js/update.js"></script>
+<script defer src="js/chat.js"></script>
+<script defer src="notifications.js"></script>
+</head>
+<body>
+
+<nav class="erp-topbar">
+  <div class="erp-topbar-left">
+    <img src="../gemcor-logo.png" alt="GEMCOR" class="erp-logo" onerror="this.style.display='none'">
+    <div>
+      <div class="erp-brand">GEMCOR ERP</div>
+      <div class="erp-brand-sub">Messages <span class="badge-live">LIVE</span></div>
+    </div>
+  </div>
+  <div id="erpNavBar"></div>
+  <div class="erp-topbar-right">
+    <div class="erp-health" id="erpHealthBadge">
+      <span class="dot dot-pending"></span>
+      <span id="erpHealthText">Checking...</span>
+    </div>
+    <button class="theme-toggle-btn" onclick="erpToggleTheme()" id="themeToggleBtn" title="Toggle light/dark mode">
+      <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
+    </button>
+    <a href="management-dashboard.html" class="erp-btn-outline">
+      <i class="bi bi-arrow-left"></i> <span>Back</span>
+    </a>
+  </div>
+</nav>
+
+<div class="erp-container">
+  <div class="chat-wrapper" id="chatWrapper">
+    
+    <!-- Sidebar — Conversation List -->
+    <aside class="chat-sidebar" id="chatSidebar">
+      
+      <!-- Tabs -->
+      <div class="chat-sidebar-header">
+        <div class="chat-tabs">
+          <button class="chat-tab-btn active" data-tab="chats" onclick="switchChatTab('chats')">
+            <i class="bi bi-people-fill me-1"></i>Chats
+          </button>
+          <button class="chat-tab-btn" data-tab="documents" onclick="switchChatTab('documents')">
+            <i class="bi bi-file-earmark-text me-1"></i>Documents
+          </button>
+        </div>
+      </div>
+      
+      <!-- Search -->
+      <div class="chat-search-wrap">
+        <i class="bi bi-search"></i>
+        <input type="text" 
+               id="chatSearchInput" 
+               class="chat-search-input" 
+               placeholder="Search conversations..."
+               oninput="filterConversations()">
+      </div>
+      
+      <!-- Conversation List -->
+      <div class="chat-conv-list" id="chatConversationList">
+        <div class="chat-conv-loading">
+          <div class="erp-spinner" style="width:24px;height:24px;border-width:2.5px;"></div>
+        </div>
+      </div>
+      
+    </aside>
+    
+    <!-- Main — Chat Panel -->
+    <main class="chat-main">
+      
+      <!-- Empty State -->
+      <div class="chat-empty-state" id="chatEmptyState">
+        <i class="bi bi-chat-square-dots"></i>
+        <h5>Welcome to Messages</h5>
+        <p class="text-muted small mb-0">Pick a conversation to start chatting.</p>
+        <div class="chat-empty-hint">
+          <i class="bi bi-lightbulb me-1"></i>
+          Tip: Discuss specific documents in the <strong>Documents</strong> tab
+        </div>
+      </div>
+      
+      <!-- Chat Panel -->
+      <div class="chat-panel" id="chatPanel" style="display:none;">
+        
+        <!-- Header -->
+        <div class="chat-panel-header">
+          <button class="chat-back-btn d-md-none" id="chatBackBtn" title="Back" onclick="closeConversation()">
+            <i class="bi bi-arrow-left"></i>
+          </button>
+          <div class="chat-panel-info">
+            <div class="chat-panel-avatar" id="chatPanelAvatar">?</div>
+            <div class="chat-panel-meta">
+              <div class="chat-panel-name" id="chatWithName">—</div>
+              <div class="chat-panel-sub" id="chatWithSub">—</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Document Banner (if thread) -->
+        <div class="chat-doc-banner" id="chatDocBanner" style="display:none;"></div>
+        
+        <!-- Messages -->
+        <div class="chat-messages" id="chatMessages"></div>
+        
+        <!-- Input -->
+        <div class="chat-input-row">
+          <textarea id="chatInput" 
+                    class="chat-input" 
+                    placeholder="Type a message..." 
+                    rows="1" 
+                    maxlength="500"></textarea>
+          <button class="chat-send-btn" id="chatSendBtn" title="Send">
+            <i class="bi bi-send-fill"></i>
+          </button>
+        </div>
+        
+      </div>
+      
+    </main>
+    
+  </div>
+
+  <div class="erp-footer">
+    <div>GEMCOR ERP — Messages v1.0.0</div>
+    <div>Pure Supabase • No Google Sheets • Live Data</div>
+  </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="erpToast" class="toast erp-toast">
+    <div class="toast-body" id="erpToastBody">Message</div>
+  </div>
+</div>
+
+</body>
+</html>
