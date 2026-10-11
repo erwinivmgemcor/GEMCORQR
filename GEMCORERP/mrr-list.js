@@ -90,6 +90,9 @@ function mrrListComputeKPIs() {
   document.getElementById('mrrKpiPartial').textContent = erpNum(partial);
 }
 
+var userRole = localStorage.getItem('ivm_userRole') || '';
+var canEdit = (userRole === 'warehouse');
+
 function mrrListRender() {
   var tbody = document.getElementById('mrrTableBody');
   if (!tbody) return;
@@ -146,19 +149,24 @@ function mrrListRender() {
       '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span></td>' +
       '<td class="text-center">' + (d.item_count || 0) + '</td>' +
       '<td class="text-center">' +
-        '<button class="erp-action-btn primary" onclick="mrrListPrint(\'' + safeDoc + '\')" title="Print">' +
-          '<i class="bi bi-printer"></i>' +
-        '</button>' +
-        '<button class="erp-action-btn" onclick="mrrListView(\'' + safeDoc + '\')" title="View">' +
-          '<i class="bi bi-eye"></i>' +
-        '</button>' +
-        // ═══ Discuss button — WAREHOUSE ONLY ═══
-        (canDiscussMRR ? 
-          '<button class="erp-action-btn" onclick="discussDocument(\'' + safeDoc + '\', \'MRR\')" title="Discuss">' +
-            '<i class="bi bi-chat-dots"></i>' +
-          '</button>' 
-          : '') +
-      '</td>' +
+  '<button class="erp-action-btn primary" onclick="mrrListPrint(\'' + safeDoc + '\')" title="Print">' +
+    '<i class="bi bi-printer"></i>' +
+  '</button>' +
+  '<button class="erp-action-btn" onclick="mrrListView(\'' + safeDoc + '\')" title="View">' +
+    '<i class="bi bi-eye"></i>' +
+  '</button>' +
+  (canDiscussMRR ? 
+    '<button class="erp-action-btn" onclick="discussDocument(\'' + safeDoc + '\', \'MRR\')" title="Discuss">' +
+      '<i class="bi bi-chat-dots"></i>' +
+    '</button>' 
+    : '') +
+  // ═══ Edit button — warehouse only ═══
+  (canEdit && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL') ?
+    '<button class="erp-action-btn" onclick="openWarehouseEdit(\'' + safeDoc + '\', \'MRR\')" title="Edit (Warehouse)">' +
+      '<i class="bi bi-pencil-square"></i>' +
+    '</button>' 
+    : '') +
+'</td>' +
       '</tr>';
   });
   tbody.innerHTML = html;
