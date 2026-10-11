@@ -136,6 +136,29 @@ async function erpGetAllItems(filters) {
   };
 }
 // ═══════════════════════════════════════════════════════════
+// ITEM DETAILS
+// ═══════════════════════════════════════════════════════════
+async function erpGetItemDetails(itemCode) {
+  try {
+    var rows = await erpFetch('erp_items',
+      'item_code=eq.' + encodeURIComponent(itemCode) +
+      '&is_active=eq.true' +
+      '&is_deleted=eq.false' +
+      '&is_deprecated_2026=eq.false' +
+      '&limit=1');
+    
+    if (!rows || rows.length === 0) {
+      return { success: false, error: 'Item not found or inactive' };
+    }
+    
+    return { success: true, item: rows[0] };
+  } catch(err) {
+    console.error('[erpGetItemDetails]', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
 // ITEM MOVEMENTS
 // ═══════════════════════════════════════════════════════════
 async function erpGetItemMovements(itemCode, limit) {
