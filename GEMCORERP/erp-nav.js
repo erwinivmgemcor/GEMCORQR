@@ -1,7 +1,8 @@
 // ============================================================
-// GEMCOR ERP — Navigation & Layout System v8.0
+// GEMCOR ERP — Navigation & Layout System v8.1
 // Professional Enterprise Design
 // Clean, Minimal, Self-Contained
+// v8.1 — Added Chat/Messages integration
 // ============================================================
 
 (function() {
@@ -45,21 +46,6 @@
         }
       ]
     },
-var PAGE_TITLES = {
-    {
-  id: 'communication',
-  label: 'Communication',
-  items: [
-    {
-      id: 'chat',
-      label: 'Messages',
-      icon: 'bi-chat-dots',
-      href: 'chat.html',
-      roles: ['warehouse', 'production'],
-      badgeId: 'chatBadgeSidebar'
-    }
-  ]
-},
     {
       id: 'documents',
       label: 'Documents',
@@ -128,68 +114,87 @@ var PAGE_TITLES = {
         }
       ]
     },
-   {
-  id: 'production',
-  label: 'Production',
-  items: [
+    // ═══════════════════════════════════════════════════════════
+    // COMMUNICATION — NEW GROUP (includes Chat)
+    // ═══════════════════════════════════════════════════════════
     {
-      id: 'my-requests',
-      label: 'My Requests',
-      icon: 'bi-list-check',
-      href: 'my-requests.html',
-      roles: ['production']
-    },
-    {
-      id: 'new-mrif-group',
-      label: 'New MRIF',
-      icon: 'bi-box-arrow-up-right',
-      roles: ['production'],
-      type: 'submenu',
+      id: 'communication',
+      label: 'Communication',
       items: [
         {
-          id: 'new-mrif',
-          label: 'With JO',
-          icon: 'bi-hash',
-          href: 'new-mrif.html',
-          roles: ['production']
-        },
-        {
-          id: 'new-mrif-manual',
-          label: 'Manual (No JO)',
-          icon: 'bi-pencil-square',
-          href: 'new-mrif-manual.html',
-          roles: ['production']
+          id: 'chat',
+          label: 'Messages',
+          icon: 'bi-chat-dots',
+          href: 'chat.html',
+          roles: ['warehouse', 'production'],
+          badgeId: 'chatBadgeSidebar'
         }
       ]
     },
     {
-      id: 'new-mrs-group',
-      label: 'New MRS',
-      icon: 'bi-arrow-counterclockwise',
-      roles: ['production'],
-      type: 'submenu',
+      id: 'production',
+      label: 'Production',
       items: [
         {
-          id: 'new-mrs',
-          label: 'With JO',
-          icon: 'bi-hash',
-          href: 'new-mrs.html',
+          id: 'my-requests',
+          label: 'My Requests',
+          icon: 'bi-list-check',
+          href: 'my-requests.html',
           roles: ['production']
         },
         {
-          id: 'new-mrs-manual',
-          label: 'Manual (No JO)',
-          icon: 'bi-pencil-square',
-          href: 'new-mrs-manual.html',
-          roles: ['production']
+          id: 'new-mrif-group',
+          label: 'New MRIF',
+          icon: 'bi-box-arrow-up-right',
+          roles: ['production'],
+          type: 'submenu',
+          items: [
+            {
+              id: 'new-mrif',
+              label: 'With JO',
+              icon: 'bi-hash',
+              href: 'new-mrif.html',
+              roles: ['production']
+            },
+            {
+              id: 'new-mrif-manual',
+              label: 'Manual (No JO)',
+              icon: 'bi-pencil-square',
+              href: 'new-mrif-manual.html',
+              roles: ['production']
+            }
+          ]
+        },
+        {
+          id: 'new-mrs-group',
+          label: 'New MRS',
+          icon: 'bi-arrow-counterclockwise',
+          roles: ['production'],
+          type: 'submenu',
+          items: [
+            {
+              id: 'new-mrs',
+              label: 'With JO',
+              icon: 'bi-hash',
+              href: 'new-mrs.html',
+              roles: ['production']
+            },
+            {
+              id: 'new-mrs-manual',
+              label: 'Manual (No JO)',
+              icon: 'bi-pencil-square',
+              href: 'new-mrs-manual.html',
+              roles: ['production']
+            }
+          ]
         }
       ]
     }
-  ]
-}
   ];
 
-  // Page title mapping
+  // ═══════════════════════════════════════════════════════════
+  // PAGE TITLES — Add new pages here
+  // ═══════════════════════════════════════════════════════════
   var PAGE_TITLES = {
     'management-dashboard': 'Management Dashboard',
     'stock-monitor': 'Stock Monitor',
@@ -203,6 +208,7 @@ var PAGE_TITLES = {
     'usage-trend': 'Usage Trend',
     'usage-entry': 'Usage Entry',
     'process-history': 'Process History',
+    'chat': 'Messages',              // ← NEW
     'my-requests': 'My Requests',
     'new-mrif': 'New MRIF',
     'new-mrr': 'New MRR',
@@ -386,84 +392,98 @@ var PAGE_TITLES = {
         nav.appendChild(label);
       }
 
-     // Items
-allowedItems.forEach(function(item) {
-  // ─── Submenu (nested items) ───
-  if (item.type === 'submenu' && item.items && item.items.length > 0) {
-    var allowedSubItems = item.items.filter(function(sub) {
-      return _isAllowed(sub, userRole);
+      // Items
+      allowedItems.forEach(function(item) {
+        // ─── Submenu (nested items) ───
+        if (item.type === 'submenu' && item.items && item.items.length > 0) {
+          var allowedSubItems = item.items.filter(function(sub) {
+            return _isAllowed(sub, userRole);
+          });
+          if (allowedSubItems.length === 0) return;
+
+          var subActive = allowedSubItems.some(function(sub) {
+            return sub.id === currentPage;
+          });
+
+          var subContainer = document.createElement('div');
+          subContainer.className = 'erp-sidebar-submenu' + (subActive ? ' has-active' : '');
+
+          // Parent
+          var parent = document.createElement('div');
+          parent.className = 'erp-sidebar-item erp-sidebar-submenu-parent' + (subActive ? ' active' : '');
+          parent.title = item.label;
+          parent.setAttribute('data-nav-id', item.id);
+          parent.innerHTML =
+            '<i class="bi ' + item.icon + '"></i>' +
+            '<span class="erp-sidebar-item-label">' + _escapeHtml(item.label) + '</span>' +
+            '<i class="bi bi-chevron-down erp-sidebar-submenu-caret"></i>';
+
+          // Submenu list
+          var subList = document.createElement('div');
+          subList.className = 'erp-sidebar-submenu-list';
+
+          allowedSubItems.forEach(function(sub) {
+            var subIsActive = (sub.id === currentPage);
+            var subLink = document.createElement('a');
+            subLink.href = sub.href;
+            subLink.className = 'erp-sidebar-subitem' + (subIsActive ? ' active' : '');
+            subLink.title = sub.label;
+            subLink.setAttribute('data-nav-id', sub.id);
+            subLink.innerHTML =
+              '<i class="bi ' + sub.icon + '"></i>' +
+              '<span>' + _escapeHtml(sub.label) + '</span>';
+            subList.appendChild(subLink);
+          });
+
+          // Toggle on parent click
+          parent.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            subContainer.classList.toggle('open');
+          });
+
+          subContainer.appendChild(parent);
+          subContainer.appendChild(subList);
+          nav.appendChild(subContainer);
+
+        } else {
+          // ─── Regular item ───
+          var isActive = (item.id === currentPage);
+
+          var link = document.createElement('a');
+          link.href = item.href;
+          link.className = 'erp-sidebar-item' + (isActive ? ' active' : '');
+          link.title = item.label;
+          link.setAttribute('data-nav-id', item.id);
+
+          // Badge support
+          var badgeHtml = '';
+          if (item.badgeId) {
+            badgeHtml = '<span class="badge bg-danger d-none" id="' + item.badgeId + '">0</span>';
+          }
+
+          link.innerHTML =
+            '<i class="bi ' + item.icon + '"></i>' +
+            '<span class="erp-sidebar-item-label">' + _escapeHtml(item.label) + '</span>' +
+            badgeHtml;
+
+          nav.appendChild(link);
+        }
+      });
     });
-    if (allowedSubItems.length === 0) return;
 
-    var subActive = allowedSubItems.some(function(sub) {
-      return sub.id === currentPage;
-    });
-
-    var subContainer = document.createElement('div');
-    subContainer.className = 'erp-sidebar-submenu' + (subActive ? ' has-active' : '');
-
-    // Parent
-    var parent = document.createElement('div');
-    parent.className = 'erp-sidebar-item erp-sidebar-submenu-parent' + (subActive ? ' active' : '');
-    parent.title = item.label;
-    parent.setAttribute('data-nav-id', item.id);
-    parent.innerHTML =
-      '<i class="bi ' + item.icon + '"></i>' +
-      '<span class="erp-sidebar-item-label">' + _escapeHtml(item.label) + '</span>' +
-      '<i class="bi bi-chevron-down erp-sidebar-submenu-caret"></i>';
-
-    // Submenu list
-    var subList = document.createElement('div');
-    subList.className = 'erp-sidebar-submenu-list';
-
-    allowedSubItems.forEach(function(sub) {
-      var subIsActive = (sub.id === currentPage);
-      var subLink = document.createElement('a');
-      subLink.href = sub.href;
-      subLink.className = 'erp-sidebar-subitem' + (subIsActive ? ' active' : '');
-      subLink.title = sub.label;
-      subLink.setAttribute('data-nav-id', sub.id);
-      subLink.innerHTML =
-        '<i class="bi ' + sub.icon + '"></i>' +
-        '<span>' + _escapeHtml(sub.label) + '</span>';
-      subList.appendChild(subLink);
-    });
-
-    // Toggle on parent click
-    parent.addEventListener('click', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      subContainer.classList.toggle('open');
-    });
-
-    subContainer.appendChild(parent);
-    subContainer.appendChild(subList);
-    nav.appendChild(subContainer);
-
-  } else {
-    // ─── Regular item ───
-    var isActive = (item.id === currentPage);
-
-    var link = document.createElement('a');
-    link.href = item.href;
-    link.className = 'erp-sidebar-item' + (isActive ? ' active' : '');
-    link.title = item.label;
-    link.setAttribute('data-nav-id', item.id);
-
-    link.innerHTML =
-      '<i class="bi ' + item.icon + '"></i>' +
-      '<span class="erp-sidebar-item-label">' + _escapeHtml(item.label) + '</span>';
-
-    nav.appendChild(link);
-  }
-});
-});
     sidebar.appendChild(nav);
 
     // ─── Footer ───
     var footer = document.createElement('div');
     footer.className = 'erp-sidebar-footer';
-    footer.innerHTML = '<span class="erp-sidebar-version">v1.0.0</span>';
+
+    var version = 'v1.0.0';
+    try {
+      version = 'v' + (window.ERP_APP_VERSION || '1.0.0');
+    } catch(e) {}
+
+    footer.innerHTML = '<span class="erp-sidebar-version">' + version + '</span>';
     sidebar.appendChild(footer);
 
     return sidebar;
@@ -673,7 +693,10 @@ allowedItems.forEach(function(item) {
       }, 100);
     }
 
-    console.log('[Nav v8.0] Rendered. Page:', current, '| Role:', userRole, '| Collapsed:', _isCollapsed());
+    // Health check
+    setTimeout(_checkHealth, 500);
+
+    console.log('[Nav v8.1] Rendered. Page:', current, '| Role:', userRole, '| Collapsed:', _isCollapsed());
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -752,12 +775,15 @@ allowedItems.forEach(function(item) {
       sessionStorage.clear();
     } catch(e) {}
 
-    window.location.href = '../index.html';
+    window.location.href = 'login.html';
   };
 
   window.erpUserRefresh = function() {
     if (typeof erpClearCache === 'function') {
       erpClearCache();
+    }
+    if (typeof erpClearInventoryCache === 'function') {
+      erpClearInventoryCache();
     }
     location.reload();
   };
@@ -779,7 +805,9 @@ allowedItems.forEach(function(item) {
     isCollapsed: _isCollapsed,
     setCollapsed: _setCollapsed,
     getCurrentPage: _getCurrentPage,
-    getUserInfo: _getUserInfo
+    getUserInfo: _getUserInfo,
+    getNavGroups: function() { return NAV_GROUPS; },
+    getPageTitles: function() { return PAGE_TITLES; }
   };
 
   // ═══════════════════════════════════════════════════════════
@@ -792,5 +820,5 @@ allowedItems.forEach(function(item) {
     renderNav();
   }
 
-  console.log('✅ erp-nav.js v8.0 loaded');
+  console.log('✅ erp-nav.js v8.1 loaded (with Chat integration)');
 })();
