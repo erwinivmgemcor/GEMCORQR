@@ -164,13 +164,16 @@ function mrifListRender() {
       '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span></td>' +
       '<td class="text-center">' + (d.item_count || 0) + '</td>' +
       '<td class="text-center">' +
-        '<button class="erp-action-btn primary" onclick="mrifListPrint(\'' + safeDoc + '\')" title="Print Preview">' +
-          '<i class="bi bi-printer"></i>' +
-        '</button>' +
-        '<button class="erp-action-btn" onclick="mrifListView(\'' + safeDoc + '\')" title="View Details">' +
-          '<i class="bi bi-eye"></i>' +
-        '</button>' +
-      '</td>' +
+  '<button class="erp-action-btn primary" onclick="mrifListPrint(\'' + safeDoc + '\')" title="Print Preview">' +
+    '<i class="bi bi-printer"></i>' +
+  '</button>' +
+  '<button class="erp-action-btn" onclick="mrifListView(\'' + safeDoc + '\')" title="View Details">' +
+    '<i class="bi bi-eye"></i>' +
+  '</button>' +
+  '<button class="erp-action-btn" onclick="discussDocument(\'' + safeDoc + '\', \'MRIF\')" title="Discuss">' +
+    '<i class="bi bi-chat-dots"></i>' +
+  '</button>' +
+'</td>' +
       '</tr>';
   });
   tbody.innerHTML = html;
