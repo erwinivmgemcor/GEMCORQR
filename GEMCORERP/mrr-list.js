@@ -1,5 +1,7 @@
 // ============================================================
 // GEMCOR ERP — MRR List Logic
+// v2.0 — Discuss button hidden for Production users
+// (MRR discussions are warehouse-only)
 // ============================================================
 
 var _mrrAllDocs = [];
@@ -92,6 +94,10 @@ function mrrListRender() {
   var tbody = document.getElementById('mrrTableBody');
   if (!tbody) return;
   
+  // ═══ ROLE CHECK — Only warehouse can discuss MRR ═══
+  var userRole = localStorage.getItem('ivm_userRole') || '';
+  var canDiscussMRR = (userRole === 'warehouse');
+  
   var search = (document.getElementById('mrrSearchInput') ? document.getElementById('mrrSearchInput').value : '').toLowerCase().trim();
   _mrrFilteredDocs = _mrrAllDocs.filter(function(d) {
     if (!search) return true;
@@ -139,17 +145,20 @@ function mrrListRender() {
       '<td>' + erpEsc(d.dr_no || '—') + '</td>' +
       '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span></td>' +
       '<td class="text-center">' + (d.item_count || 0) + '</td>' +
-     '<td class="text-center">' +
-  '<button class="erp-action-btn primary" onclick="mrrListPrint(\'' + safeDoc + '\')" title="Print">' +
-    '<i class="bi bi-printer"></i>' +
-  '</button>' +
-  '<button class="erp-action-btn" onclick="mrrListView(\'' + safeDoc + '\')" title="View">' +
-    '<i class="bi bi-eye"></i>' +
-  '</button>' +
-  '<button class="erp-action-btn" onclick="discussDocument(\'' + safeDoc + '\', \'MRR\')" title="Discuss">' +
-    '<i class="bi bi-chat-dots"></i>' +
-  '</button>' +
-'</td>' +
+      '<td class="text-center">' +
+        '<button class="erp-action-btn primary" onclick="mrrListPrint(\'' + safeDoc + '\')" title="Print">' +
+          '<i class="bi bi-printer"></i>' +
+        '</button>' +
+        '<button class="erp-action-btn" onclick="mrrListView(\'' + safeDoc + '\')" title="View">' +
+          '<i class="bi bi-eye"></i>' +
+        '</button>' +
+        // ═══ Discuss button — WAREHOUSE ONLY ═══
+        (canDiscussMRR ? 
+          '<button class="erp-action-btn" onclick="discussDocument(\'' + safeDoc + '\', \'MRR\')" title="Discuss">' +
+            '<i class="bi bi-chat-dots"></i>' +
+          '</button>' 
+          : '') +
+      '</td>' +
       '</tr>';
   });
   tbody.innerHTML = html;
@@ -312,4 +321,4 @@ function mrrListRefresh() {
   mrrCheckHealth();
 }
 
-console.log('✅ mrr-list.js loaded');
+console.log('✅ mrr-list.js v2.0 loaded (Discuss button — warehouse only)');
