@@ -45,6 +45,21 @@
         }
       ]
     },
+var PAGE_TITLES = {
+    {
+  id: 'communication',
+  label: 'Communication',
+  items: [
+    {
+      id: 'chat',
+      label: 'Messages',
+      icon: 'bi-chat-dots',
+      href: 'chat.html',
+      roles: ['warehouse', 'production'],
+      badgeId: 'chatBadgeSidebar'
+    }
+  ]
+},
     {
       id: 'documents',
       label: 'Documents',
