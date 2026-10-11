@@ -568,20 +568,36 @@ window.erpOpenCsvImport = function() {
 };
 
 window.erpDownloadCsvTemplate = function() {
-  var csv = 'item_code,on_hand,unit_cost,buffer_stock\n';
-  _erpAllItems.slice(0, 50).forEach(function(it) {
-    csv += it.item_code + ',' + (it.on_hand || 0) + ',' + (it.unit_cost || 0) + ',' + (it.buffer_stock || 0) + '\n';
+  if (!_erpAllItems || _erpAllItems.length === 0) {
+    erpShowToast('No items loaded. Please refresh the page.', 'warning');
+    return;
+  }
+  
+  // ═══ CSV Header (may description na) ═══
+  var csv = 'item_code,description,on_hand,unit_cost,buffer_stock\n';
+  
+  // ═══ ALL items (walang slice limit) ═══
+  _erpAllItems.forEach(function(it) {
+    var code = String(it.item_code || '').replace(/,/g, ' ');
+    var desc = String(it.description || '').replace(/,/g, ' ').replace(/"/g, '""');
+    var onHand = Number(it.on_hand || 0);
+    var unitCost = Number(it.unit_cost || 0);
+    var buffer = Number(it.buffer_stock || 0);
+    
+    // Quote description kung may comma
+    var descField = desc.indexOf(',') !== -1 ? '"' + desc + '"' : desc;
+    
+    csv += code + ',' + descField + ',' + onHand + ',' + unitCost + ',' + buffer + '\n';
   });
   
   var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   var link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = 'inventory_import_template.csv';
+  link.download = 'inventory_import_template_' + new Date().toISOString().slice(0, 10) + '.csv';
   link.click();
   
-  erpShowToast('✅ Template downloaded (50 items sample)');
+  erpShowToast('✅ Template downloaded: ' + _erpAllItems.length + ' items');
 };
-
 window.erpHandleCsvUpload = function(event) {
   var file = event.target.files[0];
   if (!file) return;
@@ -596,11 +612,12 @@ window.erpHandleCsvUpload = function(event) {
       return;
     }
     
-    var header = lines[0].split(',').map(function(h) { return h.trim().toLowerCase(); });
-    var itemCodeIdx = header.indexOf('item_code');
-    var onHandIdx = header.indexOf('on_hand');
-    var unitCostIdx = header.indexOf('unit_cost');
-    var bufferIdx = header.indexOf('buffer_stock');
+   var header = lines[0].split(',').map(function(h) { return h.trim().toLowerCase(); });
+var itemCodeIdx = header.indexOf('item_code');
+var descriptionIdx = header.indexOf('description');  // NEW
+var onHandIdx = header.indexOf('on_hand');
+var unitCostIdx = header.indexOf('unit_cost');
+var bufferIdx = header.indexOf('buffer_stock');
     
     if (itemCodeIdx === -1) {
       erpShowToast('CSV must have "item_code" column', 'danger');
@@ -616,10 +633,13 @@ window.erpHandleCsvUpload = function(event) {
       
       if (!itemCode) continue;
       
-      var row = { item_code: itemCode };
-      if (onHandIdx !== -1 && parts[onHandIdx]) row.on_hand = parseFloat(parts[onHandIdx]) || 0;
-      if (unitCostIdx !== -1 && parts[unitCostIdx]) row.unit_cost = parseFloat(parts[unitCostIdx]) || 0;
-      if (bufferIdx !== -1 && parts[bufferIdx]) row.buffer_stock = parseFloat(parts[bufferIdx]) || 0;
+     var row = { item_code: itemCode };
+if (descriptionIdx !== -1 && parts[descriptionIdx]) {
+  row.description = parts[descriptionIdx].trim().replace(/^"|"$/g, '');
+}
+if (onHandIdx !== -1 && parts[onHandIdx]) row.on_hand = parseFloat(parts[onHandIdx]) || 0;
+if (unitCostIdx !== -1 && parts[unitCostIdx]) row.unit_cost = parseFloat(parts[unitCostIdx]) || 0;
+if (bufferIdx !== -1 && parts[bufferIdx]) row.buffer_stock = parseFloat(parts[bufferIdx]) || 0;
       
       var existing = _erpAllItems.find(function(it) { return it.item_code === itemCode; });
       row._valid = !!existing;
@@ -646,14 +666,22 @@ window.erpHandleCsvUpload = function(event) {
         ? '<span class="badge bg-success">VALID</span>' 
         : '<span class="badge bg-danger">NOT FOUND</span>';
       
-      html += '<tr class="' + (row._valid ? 'valid' : 'invalid') + '">' +
-        '<td>' + (idx + 1) + '</td>' +
-        '<td><code>' + erpEsc(row.item_code) + '</code></td>' +
-        '<td class="text-end">' + (row.on_hand != null ? erpNum(row.on_hand) : '—') + '</td>' +
-        '<td class="text-end">' + (row.unit_cost != null ? erpPeso(row.unit_cost) : '—') + '</td>' +
-        '<td class="text-end">' + (row.buffer_stock != null ? erpNum(row.buffer_stock) : '—') + '</td>' +
-        '<td class="text-center">' + statusBadge + '</td>' +
-        '</tr>';
+     // Get item description (from CSV, or fallback sa _erpAllItems)
+var itemDesc = row.description || '';
+if (!itemDesc) {
+  var existingItem = _erpAllItems.find(function(it) { return it.item_code === row.item_code; });
+  itemDesc = existingItem ? existingItem.description : '—';
+}
+
+html += '<tr class="' + (row._valid ? 'valid' : 'invalid') + '">' +
+  '<td>' + (idx + 1) + '</td>' +
+  '<td><code>' + erpEsc(row.item_code) + '</code></td>' +
+  '<td class="text-muted small">' + erpEsc(itemDesc.substring(0, 50)) + (itemDesc.length > 50 ? '…' : '') + '</td>' +
+  '<td class="text-end">' + (row.on_hand != null ? erpNum(row.on_hand) : '—') + '</td>' +
+  '<td class="text-end">' + (row.unit_cost != null ? erpPeso(row.unit_cost) : '—') + '</td>' +
+  '<td class="text-end">' + (row.buffer_stock != null ? erpNum(row.buffer_stock) : '—') + '</td>' +
+  '<td class="text-center">' + statusBadge + '</td>' +
+  '</tr>';
     });
     
     tbody.innerHTML = html;
