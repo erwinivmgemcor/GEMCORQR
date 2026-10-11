@@ -89,16 +89,15 @@ async function loadUserDepartment() {
 
 async function preloadInventory() {
   if (_mrsState.inventoryLoaded) return;
+  
   try {
-    var rows = await erpFetch('inventory', 
-      'select=item_code,description,unit&order=item_code.asc&limit=10000');
-    _mrsState.inventoryList = (rows || []).map(function(r) {
-      return { code: r.item_code, description: r.description || '', unit: r.unit || 'PIECE' };
-    });
+    console.log('[Inventory] Loading items via shared helper...');
+    _mrsState.inventoryList = await erpGetInventoryListForDropdown();
     _mrsState.inventoryLoaded = true;
-    console.log('[Inventory] Loaded ' + _mrsState.inventoryList.length + ' items');
+    console.log('[Inventory] ✅ Loaded ' + _mrsState.inventoryList.length + ' items');
   } catch(err) {
     console.warn('[Inventory] Failed:', err.message);
+    _mrsState.inventoryList = [];
   }
 }
 
