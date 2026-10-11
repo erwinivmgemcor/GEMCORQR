@@ -467,58 +467,103 @@ function closeConversation() {
 window.closeConversation = closeConversation;
 
 // ═══════════════════════════════════════════════════════════
-// LOAD MESSAGES
+// LOAD MESSAGES — Robust version
 // ═══════════════════════════════════════════════════════════
 async function loadMessages(otherUser, sinceTs, append) {
   var container = document.getElementById('chatMessages');
-  if (!container) return;
-  
-  if (!append) {
-    // Will be replaced
+  if (!container) {
+    console.warn('[Chat] chatMessages container not found');
+    return;
   }
   
+  console.log('[Chat] Loading messages with:', otherUser, '| since:', sinceTs, '| append:', append);
+  
   try {
-    var query = 'select=*' +
-                '&or=(and(sender.eq.' + encodeURIComponent(_chatState.currentUser) +
-                ',recipient.eq.' + encodeURIComponent(otherUser) + '),' +
-                'and(sender.eq.' + encodeURIComponent(otherUser) +
-                ',recipient.eq.' + encodeURIComponent(_chatState.currentUser) + '))' +
-                '&doc_no=is.null' +
-                '&order=created_at.asc' +
-                (sinceTs > 0 ? '&created_at=gt.' + new Date(sinceTs).toISOString() : '') +
-                '&limit=200';
+    // ═══ Simpler query — walang complicated "or" syntax ═══
+    // Get ALL messages where:
+    //   - sender = me AND recipient = other (sent by me to them)
+    //   OR
+    //   - sender = other AND recipient = me (sent by them to me)
+    // Approach: Two separate queries, then merge
     
-    var rows = await erpFetch('messages', query);
+    var q1 = 'select=*' +
+             '&sender=eq.' + encodeURIComponent(_chatState.currentUser) +
+             '&recipient=eq.' + encodeURIComponent(otherUser) +
+             '&doc_no=is.null' +
+             '&order=created_at.asc' +
+             '&limit=500';
     
-    _renderMessages(container, rows || [], append);
+    var q2 = 'select=*' +
+             '&sender=eq.' + encodeURIComponent(otherUser) +
+             '&recipient=eq.' + encodeURIComponent(_chatState.currentUser) +
+             '&doc_no=is.null' +
+             '&order=created_at.asc' +
+             '&limit=500';
+    
+    console.log('[Chat] Query 1 (sent):', q1);
+    console.log('[Chat] Query 2 (received):', q2);
+    
+    var results = await Promise.all([
+      erpFetch('messages', q1),
+      erpFetch('messages', q2)
+    ]);
+    
+    var sent = results[0] || [];
+    var received = results[1] || [];
+    
+    console.log('[Chat] Sent:', sent.length, '| Received:', received.length);
+    
+    // Merge and sort
+    var all = sent.concat(received);
+    all.sort(function(a, b) {
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+    
+    console.log('[Chat] Total merged:', all.length);
+    
+    _renderMessages(container, all, append, false);
+    
   } catch(err) {
     console.error('[Chat] Load messages failed:', err);
     if (!append) {
-      container.innerHTML = '<div class="text-danger text-center py-3 small">Failed to load messages</div>';
+      container.innerHTML = '<div class="text-danger text-center py-3 small">' +
+        'Failed to load messages: ' + (typeof erpEsc === 'function' ? erpEsc(err.message) : err.message) + '</div>';
     }
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+// LOAD DOC MESSAGES — Robust version
+// ═══════════════════════════════════════════════════════════
 async function loadDocMessages(docNo, sinceTs, append) {
   var container = document.getElementById('chatMessages');
   if (!container) return;
+  
+  console.log('[Chat] Loading doc messages:', docNo);
   
   try {
     var query = 'select=*' +
                 '&doc_no=eq.' + encodeURIComponent(docNo) +
                 '&order=created_at.asc' +
-                (sinceTs > 0 ? '&created_at=gt.' + new Date(sinceTs).toISOString() : '') +
-                '&limit=200';
+                '&limit=500';
     
     var rows = await erpFetch('messages', query);
     
+    console.log('[Chat] Doc messages loaded:', (rows || []).length);
+    
     _renderMessages(container, rows || [], append, true);
+    
   } catch(err) {
     console.error('[Chat] Load doc messages failed:', err);
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+// RENDER MESSAGES — Robust version
+// ═══════════════════════════════════════════════════════════
 function _renderMessages(container, msgs, append, isDocThread) {
+  console.log('[Chat] Rendering', msgs.length, 'messages');
+  
   if (msgs.length === 0 && !append) {
     container.innerHTML = '<div class="text-center text-muted py-5 small">' +
       '<i class="bi bi-chat-dots" style="font-size:2.5rem;opacity:0.3;display:block;margin-bottom:12px;"></i>' +
@@ -538,7 +583,7 @@ function _renderMessages(container, msgs, append, isDocThread) {
     var dateLabel = formatDateLabel(d);
     
     if (dateLabel !== lastDateLabel) {
-      html += '<div class="chat-date-sep">' + erpEsc(dateLabel) + '</div>';
+      html += '<div class="chat-date-sep">' + (typeof erpEsc === 'function' ? erpEsc(dateLabel) : dateLabel) + '</div>';
       lastDateLabel = dateLabel;
     }
     
@@ -549,12 +594,15 @@ function _renderMessages(container, msgs, append, isDocThread) {
     var senderLine = '';
     if (!isMe && isDocThread) {
       var first = (m.sender_fullname || m.sender || '').split(' ')[0];
-      senderLine = '<div class="chat-bubble-sender">' + erpEsc(first) + '</div>';
+      senderLine = '<div class="chat-bubble-sender">' + (typeof erpEsc === 'function' ? erpEsc(first) : first) + '</div>';
     }
     
+    var body = m.body || '';
+    var escBody = typeof erpEsc === 'function' ? erpEsc(body) : body;
+    
     html += '<div class="' + cls + '">' + senderLine +
-      '<div>' + erpEsc(m.body) + '</div>' +
-      '<div class="chat-bubble-time">' + erpEsc(time) + '</div>' +
+      '<div>' + escBody + '</div>' +
+      '<div class="chat-bubble-time">' + (typeof erpEsc === 'function' ? erpEsc(time) : time) + '</div>' +
     '</div>';
   });
   
@@ -565,10 +613,14 @@ function _renderMessages(container, msgs, append, isDocThread) {
   }
   
   container.scrollTop = container.scrollHeight;
+  console.log('[Chat] ✅ Rendered');
 }
 
 // ═══════════════════════════════════════════════════════════
 // SEND MESSAGE — Enhanced with debug + timeout + error handling
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// SEND MESSAGE — Bulletproof version
 // ═══════════════════════════════════════════════════════════
 async function sendMessage() {
   console.log('[Chat] sendMessage() called');
@@ -581,9 +633,7 @@ async function sendMessage() {
   
   if (!_chatState.openWith) {
     console.error('[Chat] ❌ No conversation open');
-    if (typeof erpShowToast === 'function') {
-      erpShowToast('Please open a conversation first', 'warning');
-    }
+    if (typeof erpShowToast === 'function') erpShowToast('Open a conversation first', 'warning');
     return;
   }
   
@@ -599,7 +649,7 @@ async function sendMessage() {
   input.value = '';
   input.style.height = 'auto';
   
-  // ═══ Build payload ═══
+  // Build payload
   var payload = {
     sender: _chatState.currentUser,
     sender_fullname: _chatState.currentFullname,
@@ -616,27 +666,26 @@ async function sendMessage() {
   
   console.log('[Chat] Payload:', payload);
   
-  // ═══ Optimistic UI ═══
+  // Optimistic UI
   var container = document.getElementById('chatMessages');
   var tempId = 'temp_' + Date.now();
   
   if (container) {
     try {
-      container.insertAdjacentHTML('beforeend',
-        '<div class="chat-bubble chat-bubble-me" id="' + tempId + '" style="opacity:0.6;">' +
-          '<div>' + (typeof erpEsc === 'function' ? erpEsc(body) : body) + '</div>' +
-          '<div class="chat-bubble-time">Sending...</div>' +
-        '</div>');
+      var tempHtml = '<div class="chat-bubble chat-bubble-me" id="' + tempId + '" style="opacity:0.6;">' +
+        '<div>' + (typeof erpEsc === 'function' ? erpEsc(body) : body) + '</div>' +
+        '<div class="chat-bubble-time">Sending...</div>' +
+      '</div>';
+      container.insertAdjacentHTML('beforeend', tempHtml);
       container.scrollTop = container.scrollHeight;
-      console.log('[Chat] ✅ Temp bubble added');
     } catch(uiErr) {
-      console.warn('[Chat] ⚠️ Could not add temp bubble:', uiErr);
+      console.warn('[Chat] UI add failed:', uiErr);
     }
   }
   
-  // ═══ Fetch with timeout ═══
+  // ═══ POST with timeout ═══
   try {
-    console.log('[Chat] POST to:', erpUrl('messages'));
+    console.log('[Chat] POST to messages...');
     
     var ctrl = new AbortController();
     var timer = setTimeout(function() { ctrl.abort(); }, 15000);
@@ -653,31 +702,50 @@ async function sendMessage() {
     
     if (!res.ok) {
       var errText = await res.text();
-      console.error('[Chat] ❌ Send failed:', res.status, errText);
-      throw new Error('HTTP ' + res.status);
+      throw new Error('HTTP ' + res.status + ': ' + errText);
     }
     
     var result = await res.json();
-    console.log('[Chat] ✅ Sent:', result);
+    console.log('[Chat] ✅ Sent successfully:', result);
     
     // Remove temp bubble
     var temp = document.getElementById(tempId);
-    if (temp) temp.remove();
+    if (temp) {
+      temp.remove();
+      console.log('[Chat] Temp bubble removed');
+    }
     
-    // Reload messages
-    if (_chatState.openType === 'user') {
-      await loadMessages(_chatState.openWith, 0, false);
-    } else {
-      await loadDocMessages(_chatState.openWith, 0, false);
+    // ═══ CRITICAL: Reload messages ═══
+    console.log('[Chat] Reloading messages...');
+    try {
+      if (_chatState.openType === 'user') {
+        await loadMessages(_chatState.openWith, 0, false);
+      } else if (_chatState.openType === 'doc') {
+        await loadDocMessages(_chatState.openWith, 0, false);
+      }
+      console.log('[Chat] ✅ Messages reloaded');
+    } catch(loadErr) {
+      console.error('[Chat] ❌ Reload failed:', loadErr);
+      // Don't fail the whole thing — message was sent anyway
+      // Manually append the sent message
+      if (container && result && result[0]) {
+        var sentMsg = result[0];
+        container.insertAdjacentHTML('beforeend',
+          '<div class="chat-bubble chat-bubble-me">' +
+            '<div>' + (typeof erpEsc === 'function' ? erpEsc(sentMsg.body) : sentMsg.body) + '</div>' +
+            '<div class="chat-bubble-time">' + new Date(sentMsg.created_at).toTimeString().slice(0, 5) + '</div>' +
+          '</div>');
+        container.scrollTop = container.scrollHeight;
+      }
     }
     
     // Refresh conversation list
     if (typeof loadConversations === 'function') {
-      loadConversations();
+      try { loadConversations(); } catch(e) { console.warn('[Chat] Reload list failed:', e); }
     }
     
   } catch(err) {
-    console.error('[Chat] ❌ Send error:', err);
+    console.error('[Chat] ❌ Send failed:', err);
     
     var temp2 = document.getElementById(tempId);
     if (temp2) {
@@ -688,7 +756,7 @@ async function sendMessage() {
     }
     
     if (typeof erpShowToast === 'function') {
-      erpShowToast('Failed to send: ' + err.message, 'danger');
+      erpShowToast('Failed: ' + err.message, 'danger');
     }
   }
 }
