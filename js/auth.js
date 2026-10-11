@@ -306,21 +306,26 @@ window.openModePicker = function() {
 
 function logoutUser() {
   if (!confirm('Logout ' + (state.currentUserFullname || state.currentUser) + '?')) return;
+  
   state.currentUser = null;
   state.currentUserFullname = '';
   state.userRole = null;
   state.pendingRole = null;
   state.allowedRoles = null;
-  localStorage.removeItem('ivm_username');
-  localStorage.removeItem('ivm_userFullname');
-  localStorage.removeItem('ivm_userRole');
-  localStorage.removeItem('ivm_requestorName');
-  localStorage.removeItem('ivm_allowedRoles');
-  localStorage.removeItem('ivm_chatUnread');
-  localStorage.removeItem('ivm_editReqCount');
-  localStorage.removeItem('ivm_userDepartment');
-  sessionStorage.clear();
-  location.reload();
+  
+  // Clear all localStorage keys
+  var keys = [
+    'ivm_username', 'ivm_userFullname', 'ivm_userRole',
+    'ivm_requestorName', 'ivm_allowedRoles', 'ivm_chatUnread',
+    'ivm_editReqCount', 'ivm_userDepartment'
+  ];
+  keys.forEach(function(k) { localStorage.removeItem(k); });
+  
+  try { sessionStorage.clear(); } catch(e) {}
+  
+  // ★ REDIRECT TO NEW ERP LOGIN
+  console.log('[Auth] Logged out — redirecting to ERP login');
+  window.location.href = 'GEMCORERP/login.html';
 }
 
 function showPinEntry() {
