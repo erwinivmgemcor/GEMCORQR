@@ -91,6 +91,10 @@ function mrsListComputeKPIs() {
   document.getElementById('mrsKpiPartial').textContent = erpNum(partial);
 }
 
+// Sa top ng mrsListRender():
+var userRole = localStorage.getItem('ivm_userRole') || '';
+var canEdit = (userRole === 'warehouse');
+
 function mrsListRender() {
   var tbody = document.getElementById('mrsTableBody');
   if (!tbody) return;
@@ -151,6 +155,11 @@ function mrsListRender() {
   '<button class="erp-action-btn" onclick="discussDocument(\'' + safeDoc + '\', \'MRS\')" title="Discuss">' +
     '<i class="bi bi-chat-dots"></i>' +
   '</button>' +
+  (canEdit && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL') ?
+    '<button class="erp-action-btn" onclick="openWarehouseEdit(\'' + safeDoc + '\', \'MRS\')" title="Edit (Warehouse)">' +
+      '<i class="bi bi-pencil-square"></i>' +
+    '</button>' 
+    : '') +
 '</td>' +
       '</tr>';
   });
