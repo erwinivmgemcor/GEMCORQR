@@ -478,16 +478,27 @@ function _renderProdEditItems() {
   items.forEach(function(it, idx) {
     html += '<tr>'
          +    '<td class="text-center">' + (idx + 1) + '</td>'
+         +    '<td style="position:relative;">'
+         +      '<input type="text" class="form-control form-control-sm prod-edit-item-search" '
+         +        'id="prodEditCode' + idx + '" '
+         +        'data-idx="' + idx + '" '
+         +        'value="' + _escProd(it.itemCode) + '" '
+         +        'placeholder="Type to search..." '
+         +        'autocomplete="off" '
+         +        'oninput="_prodFilterItems(this, ' + idx + ')" '
+         +        'onfocus="_prodFilterItems(this, ' + idx + ')">'
+         +      '<div class="list-group prod-edit-item-dropdown d-none" id="prodEditDropdown' + idx + '" '
+         +        'style="position:fixed;z-index:99999;max-height:260px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.18);"></div>'
+         +    '</td>'
          +    '<td><input type="text" class="form-control form-control-sm" '
-         +      'value="' + _escProd(it.itemCode) + '" '
-         +      'onchange="_prodUpdateItem(' + idx + ', \'itemCode\', this.value)"></td>'
-         +    '<td><input type="text" class="form-control form-control-sm" '
+         +      'id="prodEditDesc' + idx + '" '
          +      'value="' + _escProd(it.description) + '" '
          +      'onchange="_prodUpdateItem(' + idx + ', \'description\', this.value)"></td>'
          +    '<td><input type="number" class="form-control form-control-sm text-center" '
          +      'value="' + it.qty + '" min="0" step="0.01" '
          +      'onchange="_prodUpdateItem(' + idx + ', \'qty\', parseFloat(this.value)||0)"></td>'
          +    '<td><input type="text" class="form-control form-control-sm text-center" '
+         +      'id="prodEditUnit' + idx + '" '
          +      'value="' + _escProd(it.unit) + '" '
          +      'onchange="_prodUpdateItem(' + idx + ', \'unit\', this.value)"></td>'
          +    '<td><input type="text" class="form-control form-control-sm" '
@@ -709,5 +720,213 @@ function _escProd(s) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+// ═══════════════════════════════════════════════════════════
+// ITEM SEARCH — Auto-suggest dropdown
+// ═══════════════════════════════════════════════════════════
+
+// Cache for inventory list
+var _prodEditInventoryCache = null;
+
+// ═══ Filter Items — On input ═══
+function _prodFilterItems(input, idx) {
+  var dropdown = document.getElementById('prodEditDropdown' + idx);
+  if (!dropdown) return;
+  
+  var term = String(input.value || '').toLowerCase().trim();
+  
+  if (!term) {
+    dropdown.classList.add('d-none');
+    return;
+  }
+  
+  // Ensure inventory is loaded
+  if (!_prodEditInventoryCache) {
+    dropdown.innerHTML = '<div class="list-group-item text-muted small" style="padding:8px 12px;">'
+                       + '<i class="bi bi-hourglass-split me-1"></i>Loading inventory...'
+                       + '</div>';
+    _prodPositionDropdown(dropdown, input);
+    dropdown.classList.remove('d-none');
+    
+    // Fetch inventory asynchronously
+    _loadProdEditInventory().then(function() {
+      _prodFilterItems(input, idx);
+    });
+    return;
+  }
+  
+  // Filter matches
+  var matches = _prodEditInventoryCache.filter(function(it) {
+    var code = String(it.code || '').toLowerCase();
+    var desc = String(it.description || '').toLowerCase();
+    return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
+  }).slice(0, 20);
+  
+  // Render
+  dropdown.innerHTML = '';
+  
+  if (matches.length === 0) {
+    dropdown.innerHTML = '<div class="list-group-item text-muted small" style="padding:8px 12px;">'
+                       + 'No matches'
+                       + '</div>';
+  } else {
+    matches.forEach(function(it) {
+      var el = document.createElement('div');
+      el.className = 'list-group-item list-group-item-action';
+      el.style.cssText = 'padding:10px 14px;cursor:pointer;font-size:0.88rem;border-bottom:1px solid #f0f0f0;background:#fff;';
+      el.innerHTML = '<div class="fw-bold" style="color:#1e3a5f;">' + _escProd(it.code) + '</div>'
+                   + '<div class="text-muted small">' + _escProd(it.description) + ' '
+                   +   '<span class="badge bg-light text-dark">' + _escProd(it.unit || 'PIECE') + '</span>'
+                   + '</div>';
+      
+      el.onmousedown = function(e) {
+        e.preventDefault();
+        _prodSelectItem(idx, it.code, it.description, it.unit);
+        dropdown.classList.add('d-none');
+      };
+      dropdown.appendChild(el);
+    });
+  }
+  
+  _prodPositionDropdown(dropdown, input);
+  dropdown.classList.remove('d-none');
+}
+
+window._prodFilterItems = _prodFilterItems;
+
+// ═══ Select Item — Auto-fill description + unit ═══
+function _prodSelectItem(idx, code, description, unit) {
+  // Update state
+  if (_prodEditState.currentItems[idx]) {
+    _prodEditState.currentItems[idx].itemCode = code;
+    _prodEditState.currentItems[idx].description = description || '';
+    _prodEditState.currentItems[idx].unit = unit || 'PIECE';
+  }
+  
+  // Update inputs
+  var codeInput = document.getElementById('prodEditCode' + idx);
+  if (codeInput) codeInput.value = code;
+  
+  var descInput = document.getElementById('prodEditDesc' + idx);
+  if (descInput) descInput.value = description || '';
+  
+  var unitInput = document.getElementById('prodEditUnit' + idx);
+  if (unitInput) unitInput.value = unit || 'PIECE';
+  
+  // Focus next field (Qty)
+  setTimeout(function() {
+    var row = codeInput ? codeInput.closest('tr') : null;
+    if (row) {
+      var qtyInput = row.querySelector('input[type="number"]');
+      if (qtyInput) {
+        qtyInput.focus();
+        qtyInput.select();
+      }
+    }
+  }, 100);
+}
+
+window._prodSelectItem = _prodSelectItem;
+
+// ═══ Position Dropdown ═══
+function _prodPositionDropdown(dropdown, input) {
+  var rect = input.getBoundingClientRect();
+  var spaceBelow = window.innerHeight - rect.bottom;
+  var spaceAbove = rect.top;
+  var dropdownMinHeight = 200;
+  
+  dropdown.style.position = 'fixed';
+  dropdown.style.left = rect.left + 'px';
+  dropdown.style.width = Math.max(rect.width, 320) + 'px';
+  dropdown.style.zIndex = '99999';
+  
+  if (spaceBelow < dropdownMinHeight && spaceAbove > spaceBelow) {
+    dropdown.style.top = 'auto';
+    dropdown.style.bottom = (window.innerHeight - rect.top + 2) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceAbove - 20, 260) + 'px';
+  } else {
+    dropdown.style.bottom = 'auto';
+    dropdown.style.top = (rect.bottom + 2) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceBelow - 20, 260) + 'px';
+  }
+}
+
+// ═══ Load Inventory (cached) ═══
+async function _loadProdEditInventory() {
+  if (_prodEditInventoryCache) return _prodEditInventoryCache;
+  
+  try {
+    // Use the shared helper if available
+    if (typeof erpGetInventoryListForDropdown === 'function') {
+      var list = await erpGetInventoryListForDropdown();
+      _prodEditInventoryCache = list;
+      console.log('[Production Edit] Inventory loaded:', list.length);
+      return list;
+    }
+    
+    // Fallback — fetch directly with pagination
+    console.log('[Production Edit] Loading inventory (fallback)...');
+    var allItems = [];
+    var pageSize = 1000;
+    var offset = 0;
+    var hasMore = true;
+    var pageNum = 0;
+    
+    while (hasMore && pageNum < 20) {
+      pageNum++;
+      
+      var query = 'select=item_code,description,base_unit,category,location' +
+                  '&is_active=eq.true' +
+                  '&is_deleted=eq.false' +
+                  '&is_deprecated_2026=eq.false' +
+                  '&order=item_code.asc' +
+                  '&limit=' + pageSize +
+                  '&offset=' + offset;
+      
+      var rows = await erpFetch('erp_items', query);
+      
+      if (!rows || rows.length === 0) break;
+      
+      allItems = allItems.concat(rows);
+      offset += rows.length;
+      
+      if (rows.length < pageSize) break;
+    }
+    
+    _prodEditInventoryCache = allItems.map(function(r) {
+      return {
+        code: r.item_code,
+        description: r.description || '',
+        unit: r.base_unit || 'PIECE'
+      };
+    });
+    
+    console.log('[Production Edit] Inventory loaded (fallback):', _prodEditInventoryCache.length);
+    return _prodEditInventoryCache;
+    
+  } catch(err) {
+    console.warn('[Production Edit] Load inventory failed:', err);
+    _prodEditInventoryCache = [];
+    return [];
+  }
+}
+
+// ═══ Global click handler — Close dropdowns when clicking outside ═══
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.prod-edit-item-search') && !e.target.closest('.prod-edit-item-dropdown')) {
+    document.querySelectorAll('.prod-edit-item-dropdown').forEach(function(el) {
+      el.classList.add('d-none');
+    });
+  }
+});
+
+// ═══ Reposition dropdowns on scroll ═══
+window.addEventListener('scroll', function() {
+  document.querySelectorAll('.prod-edit-item-dropdown:not(.d-none)').forEach(function(el) {
+    var idx = el.id.replace('prodEditDropdown', '');
+    var input = document.getElementById('prodEditCode' + idx);
+    if (input) _prodPositionDropdown(el, input);
+  });
+}, { passive: true });
 
 console.log('✅ edit-request-permission.js v1.0 loaded');
