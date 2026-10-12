@@ -1,8 +1,8 @@
 // ============================================================
-// GEMCOR ERP — Navigation & Layout System v8.1
+// GEMCOR ERP — Navigation & Layout System v8.2
 // Professional Enterprise Design
 // Clean, Minimal, Self-Contained
-// v8.1 — Added Chat/Messages integration
+// v8.2 — Added Edit Requests nav item
 // ============================================================
 
 (function() {
@@ -84,6 +84,13 @@
           icon: 'bi-file-earmark-text',
           href: 'prf-monitor.html',
           roles: ['warehouse']
+        },
+        {
+          id: 'edit-requests',                    // ← NEW
+          label: 'Edit Requests',                 // ← NEW
+          icon: 'bi-pencil-square',               // ← NEW
+          href: 'edit-requests.html',             // ← NEW
+          roles: ['warehouse']                    // ← NEW
         }
       ]
     },
@@ -114,9 +121,6 @@
         }
       ]
     },
-    // ═══════════════════════════════════════════════════════════
-    // COMMUNICATION — NEW GROUP (includes Chat)
-    // ═══════════════════════════════════════════════════════════
     {
       id: 'communication',
       label: 'Communication',
@@ -204,11 +208,12 @@
     'mrr-list': 'MRR List',
     'mrs-list': 'MRS List',
     'prf-monitor': 'PRF Monitor',
+    'edit-requests': 'Edit Requests',           // ← NEW
     'weekly-monitor': 'Weekly Monitoring',
     'usage-trend': 'Usage Trend',
     'usage-entry': 'Usage Entry',
     'process-history': 'Process History',
-    'chat': 'Messages',              // ← NEW
+    'chat': 'Messages',
     'my-requests': 'My Requests',
     'new-mrif': 'New MRIF',
     'new-mrr': 'New MRR',
@@ -696,7 +701,7 @@
     // Health check
     setTimeout(_checkHealth, 500);
 
-    console.log('[Nav v8.1] Rendered. Page:', current, '| Role:', userRole, '| Collapsed:', _isCollapsed());
+    console.log('[Nav v8.2] Rendered. Page:', current, '| Role:', userRole, '| Collapsed:', _isCollapsed());
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -820,5 +825,5 @@
     renderNav();
   }
 
-  console.log('✅ erp-nav.js v8.1 loaded (with Chat integration)');
+  console.log('✅ erp-nav.js v8.2 loaded (with Edit Requests)');
 })();
