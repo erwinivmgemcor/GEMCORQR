@@ -1,6 +1,9 @@
 // ============================================================
 // GEMCOR ERP — Process MRIF (Warehouse)
-// v2.1 — Atomic update with rollback + enhanced error messages
+// v2.2 — ITEMS FIRST, document last + rollback
+// ✅ Fixes: stock validation on document update
+// ✅ Rollback if document fails
+// ✅ Enhanced error messages
 // ============================================================
 
 var _process = {
@@ -18,7 +21,7 @@ var _process = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Process MRIF] Initializing v2.1 (atomic + rollback)...');
+  console.log('[Process MRIF] Initializing v2.2 (items first + rollback)...');
 
   var urlParams = new URLSearchParams(window.location.search);
   _process.docNo = urlParams.get('doc') || '';
@@ -429,7 +432,7 @@ function updateProgress() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT — ATOMIC UPDATE WITH ROLLBACK
+// SUBMIT — v2.2: ITEMS FIRST, document last + rollback
 // ═══════════════════════════════════════════════════════════
 async function submitProcess() {
   if (_process.isSubmitting) return;
@@ -483,13 +486,55 @@ async function submitProcess() {
                       'WAREHOUSE';
 
     console.log('[submitProcess] ============================================');
-    console.log('[submitProcess] ATOMIC SUBMIT started');
+    console.log('[submitProcess] v2.2 SUBMIT — ITEMS FIRST, DOCUMENT LAST');
     console.log('[submitProcess] Items to update:', preparedItems.length);
     console.log('[submitProcess] Target status:', newStatus);
     console.log('[submitProcess] ============================================');
 
-    // ═══ STEP 2: UPDATE DOCUMENT FIRST (triggers stock validation) ═══
-    console.log('[submitProcess] STEP 1: Updating document status (stock validation will run)...');
+    // ═══ STEP 2: UPDATE ITEMS FIRST ═══
+    // (para may issued_qty value na sa DB pag na-fire ang trigger)
+    console.log('[submitProcess] STEP 1: Updating items FIRST...');
+
+    var itemsUpdated = 0;
+    var itemErrors = [];
+
+    for (var j = 0; j < preparedItems.length; j++) {
+      var pi = preparedItems[j];
+      
+      try {
+        var itemRes = await fetch(erpUrl('doc_items?id=eq.' + pi.id), {
+          method: 'PATCH',
+          headers: erpHeaders({ 'Prefer': 'return=representation' }),
+          body: JSON.stringify({
+            issued_qty: pi.issuedQty,
+            remarks: pi.remarks
+          })
+        });
+
+        if (!itemRes.ok) {
+          var itemErrText = await itemRes.text();
+          console.error('[submitProcess] Item update failed:', pi.itemCode, itemErrText);
+          itemErrors.push(pi.itemCode);
+        } else {
+          itemsUpdated++;
+          console.log('[submitProcess] ✓ Updated item:', pi.itemCode, 'qty:', pi.issuedQty);
+        }
+      } catch(e) {
+        console.error('[submitProcess] Item error:', pi.itemCode, e);
+        itemErrors.push(pi.itemCode);
+      }
+    }
+
+    console.log('[submitProcess] Items updated:', itemsUpdated, '/', preparedItems.length);
+
+    if (itemErrors.length > 0) {
+      throw new Error('Failed to update items: ' + itemErrors.join(', '));
+    }
+
+    // ═══ STEP 3: UPDATE DOCUMENT STATUS (triggers stock validation) ═══
+    // Ngayon na may issued_qty na sa DB, mag-fifire ang trigger
+    // at mag-vavalidate ng stock correctly
+    console.log('[submitProcess] STEP 2: Updating document (trigger will validate stock)...');
 
     var docRes = await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(_process.docNo)), {
       method: 'PATCH',
@@ -502,11 +547,35 @@ async function submitProcess() {
       })
     });
 
-    // ═══ ENHANCED ERROR HANDLING ═══
+    // ═══ IF DOCUMENT FAILS — ROLLBACK ITEMS ═══
     if (!docRes.ok) {
       var errText = await docRes.text();
       console.error('[submitProcess] ❌ Document update FAILED:', docRes.status, errText);
       
+      console.warn('[submitProcess] ⏪ Rolling back', itemsUpdated, 'item updates...');
+      
+      // Rollback items to original state
+      var rollbackCount = 0;
+      for (var k = 0; k < preparedItems.length; k++) {
+        var pi2 = preparedItems[k];
+        try {
+          await fetch(erpUrl('doc_items?id=eq.' + pi2.id), {
+            method: 'PATCH',
+            headers: erpHeaders(),
+            body: JSON.stringify({
+              issued_qty: pi2.originalQty,
+              remarks: pi2.originalRemarks
+            })
+          });
+          rollbackCount++;
+        } catch(e) {
+          console.warn('[submitProcess] Rollback failed for:', pi2.itemCode);
+        }
+      }
+      
+      console.log('[submitProcess] ✅ Rollback complete:', rollbackCount, 'items reverted');
+      
+      // Parse error message for user
       var userFriendlyMsg = 'Failed to update document status';
       
       try {
@@ -523,7 +592,8 @@ async function submitProcess() {
           userFriendlyMsg = '❌ Insufficient stock for ' + itemCode + '.\n\n' +
                             'Current on-hand: ' + (currentMatch ? currentMatch[1] : '0') + '\n' +
                             'Required: ' + (attemptedMatch ? Math.abs(parseFloat(attemptedMatch[1])) : 'unknown') + '\n\n' +
-                            'Please add stock in Stock Monitor before processing.';
+                            'Please add stock in Stock Monitor before processing.\n\n' +
+                            '(Items have been reverted automatically)';
         }
         else if (pgCode === '23502') {
           var colMatch = pgMessage.match(/column "(\w+)"/);
@@ -545,45 +615,12 @@ async function submitProcess() {
       throw new Error(userFriendlyMsg);
     }
 
-    console.log('[submitProcess] ✅ Document updated successfully');
-
-    // ═══ STEP 3: UPDATE ITEMS (only after document succeeds) ═══
-    console.log('[submitProcess] STEP 2: Updating', preparedItems.length, 'items...');
-
-    var itemsUpdated = 0;
-    var itemErrors = [];
-
-    for (var j = 0; j < preparedItems.length; j++) {
-      var pi = preparedItems[j];
-      
-      try {
-        var itemRes = await fetch(erpUrl('doc_items?id=eq.' + pi.id), {
-          method: 'PATCH',
-          headers: erpHeaders({ 'Prefer': 'return=representation' }),
-          body: JSON.stringify({
-            issued_qty: pi.issuedQty,
-            remarks: pi.remarks
-          })
-        });
-
-        if (!itemRes.ok) {
-          var itemErrText = await itemRes.text();
-          console.error('[submitProcess] Item update failed:', pi.itemCode, itemErrText);
-          itemErrors.push(pi.itemCode + ': HTTP ' + itemRes.status);
-        } else {
-          itemsUpdated++;
-        }
-      } catch(e) {
-        console.error('[submitProcess] Item error:', pi.itemCode, e);
-        itemErrors.push(pi.itemCode + ': ' + e.message);
-      }
-    }
-
-    console.log('[submitProcess] ✅ Updated', itemsUpdated, 'items. Errors:', itemErrors.length);
-
-    // ═══ STEP 4: Success ═══
+    // ═══ Success ═══
     console.log('[submitProcess] ============================================');
-    console.log('[submitProcess] ✅ ATOMIC SUBMIT COMPLETE');
+    console.log('[submitProcess] ✅ v2.2 SUBMIT COMPLETE');
+    console.log('[submitProcess] Document:', _process.docNo);
+    console.log('[submitProcess] Status:', newStatus);
+    console.log('[submitProcess] Items:', itemsUpdated);
     console.log('[submitProcess] ============================================');
 
     document.getElementById('successDocNo').textContent = _process.docNo;
@@ -663,7 +700,7 @@ function erpShowToast(msg, type) {
   var toastEl = document.getElementById('erpToast');
   if (!toastEl) { console.log('[Toast]', type, msg); return; }
   document.getElementById('erpToastBody').textContent = msg;
-  bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
+  bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4000 }).show();
 }
 
-console.log('✅ process-mrif.js v2.1 loaded (ATOMIC + ROLLBACK)');
+console.log('✅ process-mrif.js v2.2 loaded (ITEMS FIRST + ROLLBACK)');
