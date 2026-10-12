@@ -1,6 +1,6 @@
 // ============================================================
 // GEMCOR ERP — Process MRIF (Warehouse)
-// Scan + verify + submit with direct Supabase update
+// v2.0 — Enhanced error messages with PG error code parsing
 // ============================================================
 
 var _process = {
@@ -20,7 +20,6 @@ var _process = {
 document.addEventListener('DOMContentLoaded', function() {
   console.log('[Process MRIF] Initializing...');
 
-  // Get doc no from URL
   var urlParams = new URLSearchParams(window.location.search);
   _process.docNo = urlParams.get('doc') || '';
   _process.docType = urlParams.get('type') || 'MRIF';
@@ -34,7 +33,6 @@ document.addEventListener('DOMContentLoaded', function() {
   processCheckHealth();
   loadDocument();
 
-  // Enter key on manual input
   document.getElementById('manualItemInput').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -42,7 +40,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  // Qty modal enter key
   document.getElementById('qtyModalInput').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -73,7 +70,6 @@ async function processCheckHealth() {
 // ═══════════════════════════════════════════════════════════
 async function loadDocument() {
   try {
-    // Load doc
     var docRes = await erpFetch('documents', 'doc_no=eq.' + encodeURIComponent(_process.docNo) + '&limit=1');
     if (!docRes || docRes.length === 0) {
       erpShowToast('Document not found', 'danger');
@@ -81,7 +77,6 @@ async function loadDocument() {
     }
     _process.doc = docRes[0];
 
-    // Load items
     var itemsRes = await erpFetch('doc_items', 'doc_no=eq.' + encodeURIComponent(_process.docNo) + '&order=line_no.asc');
 
     _process.items = (itemsRes || []).map(function(it) {
@@ -100,7 +95,6 @@ async function loadDocument() {
       };
     });
 
-    // Auto-mark items that already have issued_qty > 0
     _process.items.forEach(function(it) {
       if (it.issuedQty > 0) {
         it.verified = true;
@@ -180,7 +174,6 @@ function renderItems() {
   tbody.innerHTML = html;
 
   updateProgress();
-
   document.getElementById('itemsCountLabel').textContent = '(' + _process.items.length + ' items)';
 }
 
@@ -249,7 +242,6 @@ function stopScanner() {
 function onScanSuccess(decodedText) {
   console.log('[Scan]', decodedText);
 
-  // Extract item code from QR
   var code = extractItemCode(decodedText);
   if (!code) {
     updateScanStatus('Not an item QR: ' + decodedText, 'danger');
@@ -271,7 +263,6 @@ function extractItemCode(text) {
 function processScannedItem(code) {
   var codeUpper = code.toUpperCase();
 
-  // Find matching item
   var matchIdx = -1;
   for (var i = 0; i < _process.items.length; i++) {
     var item = _process.items[i];
@@ -293,7 +284,6 @@ function processScannedItem(code) {
   updateScanStatus('Scanned: ' + code, 'success');
   playSuccessBeep();
 
-  // Open qty modal for this item
   openQtyModal(matchIdx);
 }
 
@@ -449,7 +439,7 @@ function updateProgress() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT
+// SUBMIT — Enhanced error messages
 // ═══════════════════════════════════════════════════════════
 async function submitProcess() {
   if (_process.isSubmitting) return;
@@ -469,7 +459,7 @@ async function submitProcess() {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
 
   try {
-    // Update each item in doc_items
+    // ═══ Step 1: Update each item in doc_items ═══
     var allComplete = true;
     var anyIssued = false;
 
@@ -478,7 +468,6 @@ async function submitProcess() {
       if (item.issuedQty < item.requestedQty) allComplete = false;
       if (item.issuedQty > 0) anyIssued = true;
 
-      // Determine remarks
       var newRemarks = item.remarks || '';
       var status = item.issuedQty >= item.requestedQty ? 'SERVED' : (item.issuedQty > 0 ? 'PARTIAL' : 'PENDING');
       if (newRemarks && newRemarks !== 'PENDING' && newRemarks !== 'SERVED' && newRemarks !== 'PARTIAL') {
@@ -487,8 +476,7 @@ async function submitProcess() {
         newRemarks = status;
       }
 
-      // PATCH doc_items
-      var res = await fetch(erpUrl('doc_items?id=eq.' + item.id), {
+      var itemRes = await fetch(erpUrl('doc_items?id=eq.' + item.id), {
         method: 'PATCH',
         headers: erpHeaders(),
         body: JSON.stringify({
@@ -497,19 +485,23 @@ async function submitProcess() {
         })
       });
 
-      if (!res.ok) {
-        console.warn('Failed to update item', item.itemCode);
+      if (!itemRes.ok) {
+        var itemErr = await itemRes.text();
+        console.error('[submitProcess] Item update failed:', item.itemCode, itemErr);
       }
     }
 
-    // Update document status
+    // ═══ Step 2: Update document status ═══
     var newStatus = (allComplete && anyIssued) ? 'COMPLETED' : (anyIssued ? 'PARTIAL' : 'PENDING');
+    var currentUser = localStorage.getItem('ivm_userFullname') || 
+                      localStorage.getItem('ivm_username') || 
+                      'WAREHOUSE';
 
-    var currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
+    console.log('[submitProcess] Updating status:', newStatus, 'for', _process.docNo);
 
     var docRes = await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(_process.docNo)), {
       method: 'PATCH',
-      headers: erpHeaders(),
+      headers: erpHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify({
         status: newStatus,
         processed_by: currentUser,
@@ -518,50 +510,55 @@ async function submitProcess() {
       })
     });
 
-   if (!docRes.ok) {
-  var errText = await docRes.text();
-  console.error('[submitProcess] Doc update FAILED:', docRes.status, errText);
-  
-  var userFriendlyMsg = 'Failed to update document status';
-  
-  try {
-    var errJson = JSON.parse(errText);
-    var pgMessage = errJson.message || '';
-    var pgCode = errJson.code || '';
-    
-    // Insufficient stock (P0001)
-    if (pgMessage.indexOf('Insufficient stock') !== -1) {
-      var itemMatch = pgMessage.match(/item (\S+?)\./);
-      var itemCode = itemMatch ? itemMatch[1] : 'unknown';
-      var currentMatch = pgMessage.match(/Current: ([\d.]+)/);
-      var attemptedMatch = pgMessage.match(/Attempted: (-?[\d.]+)/);
+    // ═══ ENHANCED ERROR HANDLING ═══
+    if (!docRes.ok) {
+      var errText = await docRes.text();
+      console.error('[submitProcess] Doc update FAILED:', docRes.status, errText);
       
-      userFriendlyMsg = '❌ Insufficient stock for ' + itemCode + '.\n\n' +
-                        'Current on-hand: ' + (currentMatch ? currentMatch[1] : '0') + '\n' +
-                        'Required: ' + (attemptedMatch ? Math.abs(parseFloat(attemptedMatch[1])) : 'unknown') + '\n\n' +
-                        'Please add stock in Stock Monitor before processing.';
+      var userFriendlyMsg = 'Failed to update document status';
+      
+      try {
+        var errJson = JSON.parse(errText);
+        var pgMessage = errJson.message || '';
+        var pgCode = errJson.code || '';
+        
+        // Insufficient stock (P0001)
+        if (pgMessage.indexOf('Insufficient stock') !== -1) {
+          var itemMatch = pgMessage.match(/item (\S+?)\./);
+          var itemCode = itemMatch ? itemMatch[1] : 'unknown';
+          var currentMatch = pgMessage.match(/Current: ([\d.]+)/);
+          var attemptedMatch = pgMessage.match(/Attempted: (-?[\d.]+)/);
+          
+          userFriendlyMsg = '❌ Insufficient stock for ' + itemCode + '.\n\n' +
+                            'Current on-hand: ' + (currentMatch ? currentMatch[1] : '0') + '\n' +
+                            'Required: ' + (attemptedMatch ? Math.abs(parseFloat(attemptedMatch[1])) : 'unknown') + '\n\n' +
+                            'Please add stock in Stock Monitor before processing.';
+        }
+        // NOT NULL violation (23502)
+        else if (pgCode === '23502') {
+          var colMatch = pgMessage.match(/column "(\w+)"/);
+          userFriendlyMsg = '⚠️ Database error: missing required field "' + (colMatch ? colMatch[1] : 'unknown') + '"';
+        }
+        // Foreign key violation (23503)
+        else if (pgCode === '23503') {
+          userFriendlyMsg = '⚠️ Reference error: item code not found in inventory master';
+        }
+        // Unique violation (23505)
+        else if (pgCode === '23505') {
+          userFriendlyMsg = '⚠️ Duplicate entry: this document may already be processed';
+        }
+        // Generic PG error
+        else if (pgMessage) {
+          userFriendlyMsg = '❌ ' + pgMessage;
+        }
+      } catch(parseErr) {
+        userFriendlyMsg = '❌ Error: ' + errText.substring(0, 150);
+      }
+      
+      throw new Error(userFriendlyMsg);
     }
-    else if (pgCode === '23502') {
-      var colMatch = pgMessage.match(/column "(\w+)"/);
-      userFriendlyMsg = '⚠️ Database error: missing required field "' + (colMatch ? colMatch[1] : 'unknown') + '"';
-    }
-    else if (pgCode === '23503') {
-      userFriendlyMsg = '⚠️ Reference error: item code not found in inventory master';
-    }
-    else if (pgCode === '23505') {
-      userFriendlyMsg = '⚠️ Duplicate entry: this document may already be processed';
-    }
-    else if (pgMessage) {
-      userFriendlyMsg = '❌ ' + pgMessage;
-    }
-  } catch(parseErr) {
-    userFriendlyMsg = '❌ Error: ' + errText.substring(0, 150);
-  }
-  
-  throw new Error(userFriendlyMsg);
-}
 
-    // Success
+    // ═══ Success ═══
     document.getElementById('successDocNo').textContent = _process.docNo;
     document.getElementById('successStatus').textContent = newStatus;
 
@@ -642,4 +639,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
 }
 
-console.log('✅ process-mrif.js loaded');
+console.log('✅ process-mrif.js v2.0 loaded (enhanced error messages)');
