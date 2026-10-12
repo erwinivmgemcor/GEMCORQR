@@ -1,10 +1,26 @@
 // ============================================================
 // GEMCOR ERP — Edit Request Permission (Production)
-// v1.0 — Production users request edit permission
+// v2.0 — Full production edit form + item auto-suggest + robust save
 // ✅ Uses edit_requests table
 // ✅ Status: PENDING → APPROVED → COMPLETED
-// ✅ Reason required
+// ✅ Item search dropdown on edit form
+// ✅ Robust error handling on save
 // ============================================================
+
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+var _prodEditState = {
+  docNo: null,
+  docType: null,
+  editReqId: null,
+  originalDoc: null,
+  originalItems: [],
+  currentItems: [],
+  modal: null,
+  isSaving: false,
+  inventoryCache: null
+};
 
 // ═══════════════════════════════════════════════════════════
 // CHECK EDIT PERMISSION — Get current state for a document
@@ -16,7 +32,6 @@ async function checkEditPermission(docNo) {
   if (!currentUser) return null;
   
   try {
-    // Query edit_requests table
     var rows = await erpFetch('edit_requests',
       'select=*' +
       '&doc_no=eq.' + encodeURIComponent(docNo) +
@@ -58,7 +73,6 @@ async function requestEditPermission(docNo, docType) {
     return false;
   }
   
-  // ═══ Get reason from user ═══
   var reason = prompt(
     'Request Edit Permission\n\n' +
     'Document: ' + docNo + '\n' +
@@ -67,7 +81,7 @@ async function requestEditPermission(docNo, docType) {
     ''
   );
   
-  if (reason === null) return false; // User cancelled
+  if (reason === null) return false;
   
   reason = String(reason).trim();
   if (!reason) {
@@ -75,13 +89,12 @@ async function requestEditPermission(docNo, docType) {
     return false;
   }
   
-  // ═══ Confirm ═══
   if (!confirm('Submit edit request?\n\nReason: ' + reason)) {
     return false;
   }
   
   try {
-    // ═══ Check if there's already a PENDING request ═══
+    // Check existing PENDING request
     var existing = await erpFetch('edit_requests',
       'select=id,status' +
       '&doc_no=eq.' + encodeURIComponent(docNo) +
@@ -94,7 +107,6 @@ async function requestEditPermission(docNo, docType) {
       return false;
     }
     
-    // ═══ Insert new request ═══
     var res = await fetch(erpUrl('edit_requests'), {
       method: 'POST',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
@@ -119,10 +131,11 @@ async function requestEditPermission(docNo, docType) {
     
     erpShowToast('✅ Edit request submitted. Warehouse will review shortly.', 'success');
     
-    // Refresh the page/section
     setTimeout(function() {
       if (typeof loadMyRequests === 'function') {
         loadMyRequests();
+      } else if (typeof myRequestsLoad === 'function') {
+        myRequestsLoad();
       } else {
         window.location.reload();
       }
@@ -147,7 +160,7 @@ function renderEditButton(docNo, docType, docStatus, editPerm) {
   var safeDoc = String(docNo).replace(/'/g, "\\'");
   var safeType = String(docType || 'MRIF').replace(/'/g, "\\'");
   
-  // ═══ Document-level lock check ═══
+  // Document-level lock
   if (statusUpper === 'COMPLETED') {
     return '<span class="btn btn-sm btn-outline-success disabled" title="Document is fully processed">' +
       '<i class="bi bi-lock-fill me-1"></i>Locked (Completed)' +
@@ -160,7 +173,6 @@ function renderEditButton(docNo, docType, docStatus, editPerm) {
     '</span>';
   }
   
-  // ═══ Edit request state check ═══
   var editStatus = (editPerm && editPerm.status) ? String(editPerm.status).toUpperCase() : 'NONE';
   
   if (editStatus === 'PENDING') {
@@ -186,7 +198,6 @@ function renderEditButton(docNo, docType, docStatus, editPerm) {
     '</button>';
   }
   
-  // NONE or COMPLETED edit request → Request Edit
   return '<button class="btn btn-sm btn-outline-warning" ' +
     'onclick="requestEditPermission(\'' + safeDoc + '\', \'' + safeType + '\')">' +
     '<i class="bi bi-pencil me-1"></i>Request Edit' +
@@ -196,19 +207,8 @@ function renderEditButton(docNo, docType, docStatus, editPerm) {
 window.renderEditButton = renderEditButton;
 
 // ═══════════════════════════════════════════════════════════
-// OPEN PRODUCTION EDIT — Full implementation
+// OPEN PRODUCTION EDIT — Full modal
 // ═══════════════════════════════════════════════════════════
-var _prodEditState = {
-  docNo: null,
-  docType: null,
-  editReqId: null,
-  originalDoc: null,
-  originalItems: [],
-  currentItems: [],
-  modal: null,
-  isSaving: false
-};
-
 async function openProductionEdit(docNo, docType) {
   if (!docNo) {
     erpShowToast('No document selected', 'warning');
@@ -237,7 +237,7 @@ async function openProductionEdit(docNo, docType) {
     
     var doc = docRes[0];
     
-    // ═══ Check status — only PENDING or PARTIAL ═══
+    // ═══ Check status ═══
     var status = String(doc.status || '').toUpperCase();
     if (status !== 'PENDING' && status !== 'PARTIAL') {
       _setProdModalLoading(false);
@@ -280,12 +280,14 @@ async function openProductionEdit(docNo, docType) {
       };
     });
     
-    // Deep copy for editing
     _prodEditState.currentItems = JSON.parse(JSON.stringify(_prodEditState.originalItems));
     
     // ═══ Render form ═══
     _renderProdEditForm(doc);
     _setProdModalLoading(false);
+    
+    // ═══ Preload inventory for search ═══
+    _loadProdEditInventory();
     
   } catch(err) {
     console.error('[Production Edit] Error:', err);
@@ -366,19 +368,18 @@ function _renderProdEditForm(doc) {
   var body = document.getElementById('prodEditBody');
   if (!body) return;
   
-  // Update title
   var titleEl = document.getElementById('prodEditTitle');
   if (titleEl) titleEl.textContent = 'Edit: ' + doc.doc_no;
   
   var html = '';
   
-  // ─── Info alert ───
+  // ═══ Info alert ═══
   html += '<div class="alert alert-info small py-2 mb-3">'
        +    '<i class="bi bi-info-circle me-1"></i>'
        +    'You can edit <strong>items only</strong>. Document header fields are locked to preserve original request data.'
        +  '</div>';
   
-  // ─── Locked Fields ───
+  // ═══ Locked Fields ═══
   html += '<div class="erp-form-section" style="background:#fef3c7;border-color:#fcd34d;">';
   html +=   '<div class="erp-form-section-title" style="color:#92400e;">';
   html +=     '<i class="bi bi-lock-fill me-1"></i>Locked Fields (Read-Only)';
@@ -400,7 +401,6 @@ function _renderProdEditForm(doc) {
        +        '<input type="text" class="form-control" value="' + _escProd(doc.doc_no || '') + '" readonly style="background:#fff;cursor:not-allowed;font-family:monospace;">'
        +      '</div>';
   
-  // Show JO/GEM SO/Client/Project as read-only (but visible for reference)
   if (doc.jo_no) {
     html +=   '<div class="col-md-4">'
          +      '<label class="form-label small fw-bold">JO No.</label>'
@@ -417,7 +417,7 @@ function _renderProdEditForm(doc) {
   html +=   '</div>';
   html += '</div>';
   
-  // ─── Items ───
+  // ═══ Items ═══
   html += '<div class="erp-form-section">';
   html +=   '<div class="erp-form-section-title d-flex justify-content-between align-items-center">'
        +      '<span><i class="bi bi-list-check me-1"></i>Items (<span id="prodEditItemCount">' + _prodEditState.currentItems.length + '</span>)</span>'
@@ -442,7 +442,7 @@ function _renderProdEditForm(doc) {
   html +=   '</div>';
   html += '</div>';
   
-  // ─── Reason ───
+  // ═══ Reason ═══
   html += '<div class="erp-form-section" style="background:#fffbeb;border-color:#fde68a;">';
   html +=   '<div class="erp-form-section-title" style="color:#92400e;">'
        +      '<i class="bi bi-chat-left-text me-1"></i>Reason for Change <span class="text-danger">*</span>'
@@ -459,7 +459,7 @@ function _renderProdEditForm(doc) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ITEMS MANAGEMENT
+// RENDER ITEMS — With auto-suggest dropdown
 // ═══════════════════════════════════════════════════════════
 function _renderProdEditItems() {
   var tbody = document.getElementById('prodEditItemsBody');
@@ -530,12 +530,18 @@ function _prodAddItem() {
     id: null,
     itemCode: '',
     description: '',
-    qty: 0,
+    qty: 1,
     unit: 'PIECE',
     remarks: '',
     lineNo: 0
   });
   _renderProdEditItems();
+  
+  // Focus new input
+  setTimeout(function() {
+    var inputs = document.querySelectorAll('.prod-edit-item-search');
+    if (inputs.length > 0) inputs[inputs.length - 1].focus();
+  }, 100);
 }
 
 window._prodAddItem = _prodAddItem;
@@ -549,186 +555,8 @@ function _prodRemoveItem(idx) {
 window._prodRemoveItem = _prodRemoveItem;
 
 // ═══════════════════════════════════════════════════════════
-// SAVE — Update items + mark request COMPLETED
-// ═══════════════════════════════════════════════════════════
-async function _saveProductionEdit() {
-  if (_prodEditState.isSaving) return;
-  
-  var reason = (document.getElementById('prodEditReason').value || '').trim();
-  
-  if (!reason) {
-    erpShowToast('Reason for change is required', 'warning');
-    document.getElementById('prodEditReason').focus();
-    return;
-  }
-  
-  // Validate items
-  var validItems = [];
-  for (var i = 0; i < _prodEditState.currentItems.length; i++) {
-    var it = _prodEditState.currentItems[i];
-    if (!it.itemCode || !it.itemCode.trim()) {
-      erpShowToast('Item #' + (i + 1) + ' has no item code', 'warning');
-      return;
-    }
-    if (it.qty <= 0) {
-      erpShowToast('Item #' + (i + 1) + ' has invalid qty', 'warning');
-      return;
-    }
-    validItems.push(it);
-  }
-  
-  if (validItems.length === 0) {
-    erpShowToast('Add at least one item', 'warning');
-    return;
-  }
-  
-  if (!confirm('Save changes to ' + _prodEditState.docNo + '?\n\n' + validItems.length + ' item(s) will be updated.')) {
-    return;
-  }
-  
-  _prodEditState.isSaving = true;
-  var btn = document.getElementById('prodEditSaveBtn');
-  var origHtml = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
-  
-  var currentUser = localStorage.getItem('ivm_userFullname') ||
-                    localStorage.getItem('ivm_username') || 'PRODUCTION';
-  
-  try {
-    // ═══ STEP 1: Delete removed items + Update existing + Insert new ═══
-    var originalIds = _prodEditState.originalItems.map(function(it) { return it.id; }).filter(Boolean);
-    var currentIds = validItems.map(function(it) { return it.id; }).filter(Boolean);
-    var removedIds = originalIds.filter(function(id) { return currentIds.indexOf(id) === -1; });
-    
-    // Delete removed
-    if (removedIds.length > 0) {
-      console.log('[Production Edit] Deleting items:', removedIds);
-      await fetch(erpUrl('doc_items?id=in.(' + removedIds.join(',') + ')'), {
-        method: 'DELETE',
-        headers: erpHeaders()
-      });
-    }
-    
-    // Update + Insert
-    for (var j = 0; j < validItems.length; j++) {
-      var item = validItems[j];
-      
-      if (item.id) {
-        // UPDATE
-        await fetch(erpUrl('doc_items?id=eq.' + item.id), {
-          method: 'PATCH',
-          headers: erpHeaders(),
-          body: JSON.stringify({
-            item_code: item.itemCode,
-            description: item.description,
-            requested_qty: item.qty,
-            unit: item.unit,
-            remarks: item.remarks
-          })
-        });
-      } else {
-        // INSERT
-        await fetch(erpUrl('doc_items'), {
-          method: 'POST',
-          headers: erpHeaders({ 'Prefer': 'return=representation' }),
-          body: JSON.stringify({
-            doc_no: _prodEditState.docNo,
-            line_no: j + 1,
-            item_code: item.itemCode,
-            description: item.description,
-            requested_qty: item.qty,
-            issued_qty: 0,
-            unit: item.unit,
-            remarks: item.remarks || 'PENDING',
-            row_index: j + 1
-          })
-        });
-      }
-    }
-    
-    console.log('[Production Edit] ✅ Items updated');
-    
-    // ═══ STEP 2: Audit log ═══
-    try {
-      await fetch(erpUrl('erp_manual_edits_audit'), {
-        method: 'POST',
-        headers: erpHeaders(),
-        body: JSON.stringify([{
-          item_code: _prodEditState.docNo,
-          field_name: 'items',
-          old_value: String(_prodEditState.originalItems.length) + ' items',
-          new_value: String(validItems.length) + ' items',
-          reason: reason,
-          edited_by: currentUser,
-          source: 'PRODUCTION_EDIT'
-        }])
-      });
-    } catch(e) {
-      console.warn('[Production Edit] Audit failed:', e);
-    }
-    
-    // ═══ STEP 3: Mark edit request as COMPLETED ═══
-    if (_prodEditState.editReqId) {
-      await fetch(erpUrl('edit_requests?id=eq.' + _prodEditState.editReqId), {
-        method: 'PATCH',
-        headers: erpHeaders(),
-        body: JSON.stringify({
-          status: 'COMPLETED',
-          completed_at: new Date().toISOString()
-        })
-      });
-      console.log('[Production Edit] ✅ Request marked COMPLETED');
-    }
-    
-    // ═══ STEP 4: Success ═══
-    _closeProdEditModal();
-    erpShowToast('✅ Document updated successfully!', 'success');
-    
-    // Refresh My Requests
-    setTimeout(function() {
-      if (typeof myRequestsLoad === 'function') {
-        myRequestsLoad();
-      } else {
-        window.location.reload();
-      }
-    }, 800);
-    
-  } catch(err) {
-    console.error('[Production Edit] Save failed:', err);
-    erpShowToast('Save failed: ' + err.message, 'danger');
-  } finally {
-    _prodEditState.isSaving = false;
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = origHtml;
-    }
-  }
-}
-
-window._saveProductionEdit = _saveProductionEdit;
-
-// ═══════════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════════
-function _escProd(s) {
-  if (s === null || s === undefined) return '';
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-// ═══════════════════════════════════════════════════════════
 // ITEM SEARCH — Auto-suggest dropdown
 // ═══════════════════════════════════════════════════════════
-
-// Cache for inventory list
-var _prodEditInventoryCache = null;
-
-// ═══ Filter Items — On input ═══
 function _prodFilterItems(input, idx) {
   var dropdown = document.getElementById('prodEditDropdown' + idx);
   if (!dropdown) return;
@@ -740,29 +568,25 @@ function _prodFilterItems(input, idx) {
     return;
   }
   
-  // Ensure inventory is loaded
-  if (!_prodEditInventoryCache) {
+  if (!_prodEditState.inventoryCache) {
     dropdown.innerHTML = '<div class="list-group-item text-muted small" style="padding:8px 12px;">'
                        + '<i class="bi bi-hourglass-split me-1"></i>Loading inventory...'
                        + '</div>';
     _prodPositionDropdown(dropdown, input);
     dropdown.classList.remove('d-none');
     
-    // Fetch inventory asynchronously
     _loadProdEditInventory().then(function() {
       _prodFilterItems(input, idx);
     });
     return;
   }
   
-  // Filter matches
-  var matches = _prodEditInventoryCache.filter(function(it) {
+  var matches = _prodEditState.inventoryCache.filter(function(it) {
     var code = String(it.code || '').toLowerCase();
     var desc = String(it.description || '').toLowerCase();
     return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
   }).slice(0, 20);
   
-  // Render
   dropdown.innerHTML = '';
   
   if (matches.length === 0) {
@@ -794,16 +618,13 @@ function _prodFilterItems(input, idx) {
 
 window._prodFilterItems = _prodFilterItems;
 
-// ═══ Select Item — Auto-fill description + unit ═══
 function _prodSelectItem(idx, code, description, unit) {
-  // Update state
   if (_prodEditState.currentItems[idx]) {
     _prodEditState.currentItems[idx].itemCode = code;
     _prodEditState.currentItems[idx].description = description || '';
     _prodEditState.currentItems[idx].unit = unit || 'PIECE';
   }
   
-  // Update inputs
   var codeInput = document.getElementById('prodEditCode' + idx);
   if (codeInput) codeInput.value = code;
   
@@ -813,7 +634,6 @@ function _prodSelectItem(idx, code, description, unit) {
   var unitInput = document.getElementById('prodEditUnit' + idx);
   if (unitInput) unitInput.value = unit || 'PIECE';
   
-  // Focus next field (Qty)
   setTimeout(function() {
     var row = codeInput ? codeInput.closest('tr') : null;
     if (row) {
@@ -828,7 +648,6 @@ function _prodSelectItem(idx, code, description, unit) {
 
 window._prodSelectItem = _prodSelectItem;
 
-// ═══ Position Dropdown ═══
 function _prodPositionDropdown(dropdown, input) {
   var rect = input.getBoundingClientRect();
   var spaceBelow = window.innerHeight - rect.bottom;
@@ -851,20 +670,19 @@ function _prodPositionDropdown(dropdown, input) {
   }
 }
 
-// ═══ Load Inventory (cached) ═══
 async function _loadProdEditInventory() {
-  if (_prodEditInventoryCache) return _prodEditInventoryCache;
+  if (_prodEditState.inventoryCache) return _prodEditState.inventoryCache;
   
   try {
-    // Use the shared helper if available
+    // Use shared helper if available
     if (typeof erpGetInventoryListForDropdown === 'function') {
       var list = await erpGetInventoryListForDropdown();
-      _prodEditInventoryCache = list;
-      console.log('[Production Edit] Inventory loaded:', list.length);
+      _prodEditState.inventoryCache = list;
+      console.log('[Production Edit] Inventory loaded (shared):', list.length);
       return list;
     }
     
-    // Fallback — fetch directly with pagination
+    // Fallback
     console.log('[Production Edit] Loading inventory (fallback)...');
     var allItems = [];
     var pageSize = 1000;
@@ -893,7 +711,7 @@ async function _loadProdEditInventory() {
       if (rows.length < pageSize) break;
     }
     
-    _prodEditInventoryCache = allItems.map(function(r) {
+    _prodEditState.inventoryCache = allItems.map(function(r) {
       return {
         code: r.item_code,
         description: r.description || '',
@@ -901,17 +719,280 @@ async function _loadProdEditInventory() {
       };
     });
     
-    console.log('[Production Edit] Inventory loaded (fallback):', _prodEditInventoryCache.length);
-    return _prodEditInventoryCache;
+    console.log('[Production Edit] Inventory loaded (fallback):', _prodEditState.inventoryCache.length);
+    return _prodEditState.inventoryCache;
     
   } catch(err) {
     console.warn('[Production Edit] Load inventory failed:', err);
-    _prodEditInventoryCache = [];
+    _prodEditState.inventoryCache = [];
     return [];
   }
 }
 
-// ═══ Global click handler — Close dropdowns when clicking outside ═══
+// ═══════════════════════════════════════════════════════════
+// SAVE — Robust with error handling + line_no reassignment
+// ═══════════════════════════════════════════════════════════
+async function _saveProductionEdit() {
+  if (_prodEditState.isSaving) return;
+  
+  var reason = (document.getElementById('prodEditReason').value || '').trim();
+  
+  if (!reason) {
+    erpShowToast('Reason for change is required', 'warning');
+    document.getElementById('prodEditReason').focus();
+    return;
+  }
+  
+  // ═══ Validate items ═══
+  var validItems = [];
+  for (var i = 0; i < _prodEditState.currentItems.length; i++) {
+    var it = _prodEditState.currentItems[i];
+    if (!it.itemCode || !it.itemCode.trim()) {
+      erpShowToast('Item #' + (i + 1) + ' has no item code', 'warning');
+      return;
+    }
+    if (it.qty <= 0) {
+      erpShowToast('Item #' + (i + 1) + ' has invalid qty (must be > 0)', 'warning');
+      return;
+    }
+    validItems.push(it);
+  }
+  
+  if (validItems.length === 0) {
+    erpShowToast('Add at least one item', 'warning');
+    return;
+  }
+  
+  if (!confirm('Save changes to ' + _prodEditState.docNo + '?\n\n' + validItems.length + ' item(s) will be saved.')) {
+    return;
+  }
+  
+  _prodEditState.isSaving = true;
+  var btn = document.getElementById('prodEditSaveBtn');
+  var origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+  
+  var currentUser = localStorage.getItem('ivm_userFullname') ||
+                    localStorage.getItem('ivm_username') || 'PRODUCTION';
+  
+  try {
+    console.log('[Production Edit] Starting save...');
+    console.log('[Production Edit] Original:', _prodEditState.originalItems.length, 'items');
+    console.log('[Production Edit] Current:', validItems.length, 'items');
+    
+    // ═══ Identify operations ═══
+    var originalIds = _prodEditState.originalItems.map(function(it) { return it.id; }).filter(Boolean);
+    var currentIds = validItems.map(function(it) { return it.id; }).filter(Boolean);
+    var removedIds = originalIds.filter(function(id) { return currentIds.indexOf(id) === -1; });
+    var newItemsCount = validItems.filter(function(it) { return !it.id; }).length;
+    
+    console.log('[Production Edit] Remove:', removedIds.length, '| Update:', currentIds.length, '| Insert:', newItemsCount);
+    
+    // ═══ STEP 1: Delete removed items ═══
+    if (removedIds.length > 0) {
+      console.log('[Production Edit] Deleting IDs:', removedIds);
+      
+      var delRes = await fetch(erpUrl('doc_items?id=in.(' + removedIds.join(',') + ')'), {
+        method: 'DELETE',
+        headers: erpHeaders()
+      });
+      
+      if (!delRes.ok) {
+        var delErr = await delRes.text();
+        console.error('[Production Edit] Delete failed:', delRes.status, delErr);
+        throw new Error('Failed to delete removed items: ' + delRes.status);
+      }
+      
+      console.log('[Production Edit] ✅ Deleted ' + removedIds.length + ' items');
+    }
+    
+    // ═══ STEP 2: Update existing + Insert new ═══
+    var successCount = 0;
+    var failedCount = 0;
+    var errors = [];
+    
+    for (var j = 0; j < validItems.length; j++) {
+      var item = validItems[j];
+      var lineNo = j + 1;
+      
+      try {
+        if (item.id) {
+          // ═══ UPDATE ═══
+          console.log('[Production Edit] Updating #' + lineNo + ':', item.itemCode);
+          
+          var updRes = await fetch(erpUrl('doc_items?id=eq.' + item.id), {
+            method: 'PATCH',
+            headers: erpHeaders({ 'Prefer': 'return=representation' }),
+            body: JSON.stringify({
+              item_code: item.itemCode,
+              description: item.description || '',
+              requested_qty: item.qty,
+              unit: item.unit || 'PIECE',
+              remarks: item.remarks || '',
+              line_no: lineNo
+            })
+          });
+          
+          if (!updRes.ok) {
+            var updErr = await updRes.text();
+            console.error('[Production Edit] Update failed:', updRes.status, updErr);
+            failedCount++;
+            errors.push('Update ' + item.itemCode + ': HTTP ' + updRes.status);
+            continue;
+          }
+          
+          successCount++;
+          console.log('[Production Edit] ✅ Updated:', item.itemCode);
+          
+        } else {
+          // ═══ INSERT ═══
+          console.log('[Production Edit] Inserting #' + lineNo + ':', item.itemCode);
+          
+          var payload = {
+            doc_no: _prodEditState.docNo,
+            line_no: lineNo,
+            item_code: item.itemCode,
+            description: item.description || '',
+            requested_qty: item.qty,
+            issued_qty: 0,
+            unit: item.unit || 'PIECE',
+            remarks: item.remarks || 'PENDING',
+            row_index: lineNo
+          };
+          
+          console.log('[Production Edit] Payload:', payload);
+          
+          var insRes = await fetch(erpUrl('doc_items'), {
+            method: 'POST',
+            headers: erpHeaders({ 'Prefer': 'return=representation' }),
+            body: JSON.stringify(payload)
+          });
+          
+          if (!insRes.ok) {
+            var insErr = await insRes.text();
+            console.error('[Production Edit] Insert failed:', insRes.status, insErr);
+            failedCount++;
+            errors.push('Insert ' + item.itemCode + ': HTTP ' + insRes.status + ' ' + insErr.substring(0, 100));
+            continue;
+          }
+          
+          var insData = await insRes.json();
+          console.log('[Production Edit] ✅ Inserted:', insData);
+          successCount++;
+        }
+      } catch(itemErr) {
+        console.error('[Production Edit] Item error:', itemErr);
+        failedCount++;
+        errors.push(item.itemCode + ': ' + itemErr.message);
+      }
+    }
+    
+    console.log('[Production Edit] Results: ' + successCount + ' saved, ' + failedCount + ' failed');
+    
+    if (failedCount > 0) {
+      var errorMsg = failedCount + ' item(s) failed:\n\n' + errors.slice(0, 3).join('\n');
+      if (errors.length > 3) errorMsg += '\n... and ' + (errors.length - 3) + ' more';
+      throw new Error(errorMsg);
+    }
+    
+    // ═══ STEP 3: Update doc item_count ═══
+    try {
+      await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(_prodEditState.docNo)), {
+        method: 'PATCH',
+        headers: erpHeaders(),
+        body: JSON.stringify({
+          item_count: validItems.length,
+          updated_at: new Date().toISOString()
+        })
+      });
+      console.log('[Production Edit] ✅ Document item_count updated to ' + validItems.length);
+    } catch(e) {
+      console.warn('[Production Edit] Could not update item_count:', e);
+    }
+    
+    // ═══ STEP 4: Audit log ═══
+    try {
+      await fetch(erpUrl('erp_manual_edits_audit'), {
+        method: 'POST',
+        headers: erpHeaders(),
+        body: JSON.stringify([{
+          item_code: _prodEditState.docNo,
+          field_name: 'items',
+          old_value: _prodEditState.originalItems.length + ' items',
+          new_value: validItems.length + ' items',
+          reason: reason,
+          edited_by: currentUser,
+          source: 'PRODUCTION_EDIT'
+        }])
+      });
+      console.log('[Production Edit] ✅ Audit logged');
+    } catch(e) {
+      console.warn('[Production Edit] Audit failed:', e);
+    }
+    
+    // ═══ STEP 5: Mark edit request COMPLETED ═══
+    if (_prodEditState.editReqId) {
+      try {
+        await fetch(erpUrl('edit_requests?id=eq.' + _prodEditState.editReqId), {
+          method: 'PATCH',
+          headers: erpHeaders(),
+          body: JSON.stringify({
+            status: 'COMPLETED',
+            completed_at: new Date().toISOString()
+          })
+        });
+        console.log('[Production Edit] ✅ Edit request marked COMPLETED');
+      } catch(e) {
+        console.warn('[Production Edit] Could not mark completed:', e);
+      }
+    }
+    
+    // ═══ STEP 6: Success ═══
+    _closeProdEditModal();
+    erpShowToast('✅ Document updated! ' + successCount + ' item(s) saved.', 'success');
+    
+    // Refresh My Requests
+    setTimeout(function() {
+      if (typeof myRequestsLoad === 'function') {
+        myRequestsLoad();
+      } else if (typeof loadMyRequests === 'function') {
+        loadMyRequests();
+      } else {
+        window.location.reload();
+      }
+    }, 1000);
+    
+  } catch(err) {
+    console.error('[Production Edit] Save failed:', err);
+    erpShowToast('Save failed: ' + err.message, 'danger');
+  } finally {
+    _prodEditState.isSaving = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  }
+}
+
+window._saveProductionEdit = _saveProductionEdit;
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+function _escProd(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ═══════════════════════════════════════════════════════════
+// GLOBAL CLICK — Close dropdowns when clicking outside
+// ═══════════════════════════════════════════════════════════
 document.addEventListener('click', function(e) {
   if (!e.target.closest('.prod-edit-item-search') && !e.target.closest('.prod-edit-item-dropdown')) {
     document.querySelectorAll('.prod-edit-item-dropdown').forEach(function(el) {
@@ -920,7 +1001,7 @@ document.addEventListener('click', function(e) {
   }
 });
 
-// ═══ Reposition dropdowns on scroll ═══
+// Reposition dropdowns on scroll
 window.addEventListener('scroll', function() {
   document.querySelectorAll('.prod-edit-item-dropdown:not(.d-none)').forEach(function(el) {
     var idx = el.id.replace('prodEditDropdown', '');
@@ -929,4 +1010,4 @@ window.addEventListener('scroll', function() {
   });
 }, { passive: true });
 
-console.log('✅ edit-request-permission.js v1.0 loaded');
+console.log('✅ edit-request-permission.js v2.0 loaded (with auto-suggest + robust save)');
