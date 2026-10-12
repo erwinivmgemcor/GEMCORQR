@@ -9,6 +9,7 @@
 var _whEditState = {
   docNo: null,
   docType: null,
+  documentId: null,    // ← NEW
   originalDoc: null,
   originalItems: [],
   currentItems: [],
@@ -46,6 +47,10 @@ async function openWarehouseEdit(docNo, docType) {
     }
 
     var doc = docRes[0];
+
+    // ═══ Store document_id ═══
+_whEditState.documentId = doc.id;
+console.log('[WarehouseEdit] Document ID:', doc.id);
 
     // ═══ Check status — only PENDING or PARTIAL ═══
     var status = String(doc.status || '').toUpperCase();
@@ -492,21 +497,22 @@ async function _saveWarehouseEdit() {
         if (!updRes.ok) console.warn('[WarehouseEdit] Failed to update item:', item.itemCode);
       } else {
         // INSERT new
-        var insRes = await fetch(erpUrl('doc_items'), {
-          method: 'POST',
-          headers: erpHeaders({ 'Prefer': 'return=representation' }),
-          body: JSON.stringify({
-            doc_no: _whEditState.docNo,
-            line_no: j + 1,
-            item_code: item.itemCode,
-            description: item.description,
-            requested_qty: item.qty,
-            issued_qty: 0,
-            unit: item.unit,
-            remarks: item.remarks || 'PENDING',
-            row_index: j + 1
-          })
-        });
+      var insRes = await fetch(erpUrl('doc_items'), {
+  method: 'POST',
+  headers: erpHeaders({ 'Prefer': 'return=representation' }),
+  body: JSON.stringify({
+    document_id: _whEditState.documentId,    // ← ADD THIS
+    doc_no: _whEditState.docNo,
+    line_no: j + 1,
+    item_code: item.itemCode,
+    description: item.description,
+    requested_qty: item.qty,
+    issued_qty: 0,
+    unit: item.unit,
+    remarks: item.remarks || 'PENDING',
+    row_index: j + 1
+  })
+});
         if (!insRes.ok) console.warn('[WarehouseEdit] Failed to insert item:', item.itemCode);
       }
     }
