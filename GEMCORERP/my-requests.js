@@ -1,6 +1,6 @@
 // ============================================================
 // GEMCOR ERP — My Requests (Production's home page)
-// v2.0 — Edit Request integration + Discuss button
+// v2.1 — FIXED: use username for edit_requests query
 // ============================================================
 
 var _myRequests = {
@@ -9,7 +9,8 @@ var _myRequests = {
   currentPage: 1,
   pageSize: 20,
   searchTimer: null,
-  currentUser: '',
+  currentUser: '',           // Fullname (for documents.requestor)
+  currentUsername: '',       // NEW: Username (for edit_requests.requested_by)
   currentDetails: null
 };
 
@@ -21,9 +22,15 @@ document.addEventListener('DOMContentLoaded', function() {
   
   myRequestsCheckHealth();
   
+  // ═══ Set BOTH fullname and username ═══
   var userFullname = localStorage.getItem('ivm_userFullname') || 
                      localStorage.getItem('ivm_username') || '';
-  _myRequests.currentUser = userFullname;
+  var username = localStorage.getItem('ivm_username') || '';
+  
+  _myRequests.currentUser = userFullname;         // For documents.requestor
+  _myRequests.currentUsername = username;         // For edit_requests.requested_by
+  
+  console.log('[My Requests] User:', userFullname, '| Username:', username);
   
   var welcomeName = document.getElementById('welcomeName');
   if (welcomeName) welcomeName.textContent = userFullname || 'User';
@@ -96,7 +103,7 @@ async function myRequestsLoad() {
   }
   
   try {
-    // Load only MRIF and MRS for this requestor
+    // Load only MRIF and MRS for this requestor (by fullname)
     var rows = await erpFetch('documents',
       'requestor=eq.' + encodeURIComponent(userFullname) +
       '&or=(doc_type.eq.MRIF,doc_type.eq.MRS)' +
@@ -168,13 +175,15 @@ async function myRequestsRender() {
     return true;
   });
   
-  // ═══ Prefetch edit permissions ═══
+  // ═══ Prefetch edit permissions — FIXED: use USERNAME ═══
   var editPermMap = {};
   try {
     var allPerms = await erpFetch('edit_requests',
       'select=*' +
-      '&requested_by=eq.' + encodeURIComponent(_myRequests.currentUser) +
+      '&requested_by=eq.' + encodeURIComponent(_myRequests.currentUsername) +  // ← FIXED
       '&order=created_at.desc&limit=500');
+    
+    console.log('[My Requests] Found', (allPerms || []).length, 'edit requests');
     
     (allPerms || []).forEach(function(p) {
       // Keep only the latest per doc_no
@@ -184,7 +193,7 @@ async function myRequestsRender() {
       }
     });
     
-    console.log('[My Requests] Prefetched edit permissions for ' + Object.keys(editPermMap).length + ' docs');
+    console.log('[My Requests] Edit permission map:', Object.keys(editPermMap));
   } catch(e) {
     console.warn('[My Requests] Could not fetch edit permissions:', e.message);
   }
@@ -487,4 +496,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
 }
 
-console.log('✅ my-requests.js v2.0 loaded (with edit request integration)');
+console.log('✅ my-requests.js v2.1 loaded (username fix for edit requests)');
