@@ -196,19 +196,518 @@ function renderEditButton(docNo, docType, docStatus, editPerm) {
 window.renderEditButton = renderEditButton;
 
 // ═══════════════════════════════════════════════════════════
-// OPEN PRODUCTION EDIT — Placeholder (Phase 4D)
+// OPEN PRODUCTION EDIT — Full implementation
 // ═══════════════════════════════════════════════════════════
-function openProductionEdit(docNo, docType) {
-  // For now, just a placeholder — to be implemented sa Phase 4D
-  erpShowToast('Opening edit form for ' + docNo + '...', 'info');
+var _prodEditState = {
+  docNo: null,
+  docType: null,
+  editReqId: null,
+  originalDoc: null,
+  originalItems: [],
+  currentItems: [],
+  modal: null,
+  isSaving: false
+};
+
+async function openProductionEdit(docNo, docType) {
+  if (!docNo) {
+    erpShowToast('No document selected', 'warning');
+    return;
+  }
   
-  // TODO: Implement actual edit modal in Phase 4D
-  // For now, just a placeholder that shows message
-  setTimeout(function() {
-    alert('Edit form coming soon.\n\nDocument: ' + docNo + '\nType: ' + docType + '\n\nThis will be implemented in the next phase.');
-  }, 500);
+  console.log('[Production Edit] Opening:', docNo, docType);
+  
+  _prodEditState.docNo = docNo;
+  _prodEditState.docType = String(docType || 'MRIF').toUpperCase();
+  _prodEditState.isSaving = false;
+  
+  // Show loading
+  var modalEl = _ensureProdEditModal();
+  _showProdEditModal(modalEl);
+  _setProdModalLoading(true);
+  
+  try {
+    // ═══ Fetch document ═══
+    var docRes = await erpFetch('documents',
+      'select=*&doc_no=eq.' + encodeURIComponent(docNo) + '&limit=1');
+    
+    if (!docRes || docRes.length === 0) {
+      throw new Error('Document not found');
+    }
+    
+    var doc = docRes[0];
+    
+    // ═══ Check status — only PENDING or PARTIAL ═══
+    var status = String(doc.status || '').toUpperCase();
+    if (status !== 'PENDING' && status !== 'PARTIAL') {
+      _setProdModalLoading(false);
+      _closeProdEditModal();
+      erpShowToast('Cannot edit: document is ' + status, 'warning');
+      return;
+    }
+    
+    // ═══ Verify edit permission ═══
+    var currentUser = localStorage.getItem('ivm_username') || '';
+    var permRes = await erpFetch('edit_requests',
+      'select=*&doc_no=eq.' + encodeURIComponent(docNo) +
+      '&requested_by=eq.' + encodeURIComponent(currentUser) +
+      '&status=eq.APPROVED' +
+      '&order=created_at.desc&limit=1');
+    
+    if (!permRes || permRes.length === 0) {
+      _setProdModalLoading(false);
+      _closeProdEditModal();
+      erpShowToast('No approved edit permission for this document', 'warning');
+      return;
+    }
+    
+    _prodEditState.editReqId = permRes[0].id;
+    
+    // ═══ Fetch items ═══
+    var itemsRes = await erpFetch('doc_items',
+      'select=*&doc_no=eq.' + encodeURIComponent(docNo) + '&order=line_no.asc');
+    
+    _prodEditState.originalDoc = doc;
+    _prodEditState.originalItems = (itemsRes || []).map(function(it) {
+      return {
+        id: it.id,
+        itemCode: it.item_code,
+        description: it.description || '',
+        qty: Number(it.requested_qty || 0),
+        unit: it.unit || 'PIECE',
+        remarks: it.remarks || '',
+        lineNo: it.line_no || 0
+      };
+    });
+    
+    // Deep copy for editing
+    _prodEditState.currentItems = JSON.parse(JSON.stringify(_prodEditState.originalItems));
+    
+    // ═══ Render form ═══
+    _renderProdEditForm(doc);
+    _setProdModalLoading(false);
+    
+  } catch(err) {
+    console.error('[Production Edit] Error:', err);
+    _setProdModalLoading(false);
+    _closeProdEditModal();
+    erpShowToast('Failed to load: ' + err.message, 'danger');
+  }
 }
 
 window.openProductionEdit = openProductionEdit;
+
+// ═══════════════════════════════════════════════════════════
+// MODAL MANAGEMENT
+// ═══════════════════════════════════════════════════════════
+function _ensureProdEditModal() {
+  var existing = document.getElementById('productionEditModal');
+  if (existing) return existing;
+  
+  var html = ''
+    + '<div class="modal fade" id="productionEditModal" tabindex="-1" data-bs-backdrop="static">'
+    +   '<div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width:1100px;">'
+    +     '<div class="modal-content">'
+    +       '<div class="modal-header" style="background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff;">'
+    +         '<h5 class="modal-title">'
+    +           '<i class="bi bi-pencil-square me-2"></i>'
+    +           '<span id="prodEditTitle">Edit Document</span>'
+    +           '<span class="badge bg-light text-dark ms-2">Production Edit</span>'
+    +         '</h5>'
+    +         '<button type="button" class="btn-close btn-close-white" onclick="_closeProdEditModal()"></button>'
+    +       '</div>'
+    +       '<div class="modal-body" id="prodEditBody">'
+    +         '<div class="text-center py-5">'
+    +           '<div class="erp-spinner" style="margin:0 auto;"></div>'
+    +           '<div class="mt-2 text-muted">Loading document...</div>'
+    +         '</div>'
+    +       '</div>'
+    +       '<div class="modal-footer">'
+    +         '<button type="button" class="btn btn-outline-secondary" onclick="_closeProdEditModal()">Cancel</button>'
+    +         '<button type="button" class="btn btn-success" id="prodEditSaveBtn" onclick="_saveProductionEdit()">'
+    +           '<i class="bi bi-check-circle me-1"></i>Save Changes'
+    +         '</button>'
+    +       '</div>'
+    +     '</div>'
+    +   '</div>'
+    + '</div>';
+  
+  var wrapper = document.createElement('div');
+  wrapper.innerHTML = html;
+  document.body.appendChild(wrapper.firstChild);
+  
+  return document.getElementById('productionEditModal');
+}
+
+function _showProdEditModal(modalEl) {
+  if (!_prodEditState.modal) {
+    _prodEditState.modal = new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: false });
+  }
+  _prodEditState.modal.show();
+}
+
+function _closeProdEditModal() {
+  if (_prodEditState.modal) {
+    _prodEditState.modal.hide();
+  }
+}
+
+window._closeProdEditModal = _closeProdEditModal;
+
+function _setProdModalLoading(loading) {
+  var btn = document.getElementById('prodEditSaveBtn');
+  if (btn) btn.disabled = loading;
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER FORM
+// ═══════════════════════════════════════════════════════════
+function _renderProdEditForm(doc) {
+  var body = document.getElementById('prodEditBody');
+  if (!body) return;
+  
+  // Update title
+  var titleEl = document.getElementById('prodEditTitle');
+  if (titleEl) titleEl.textContent = 'Edit: ' + doc.doc_no;
+  
+  var html = '';
+  
+  // ─── Info alert ───
+  html += '<div class="alert alert-info small py-2 mb-3">'
+       +    '<i class="bi bi-info-circle me-1"></i>'
+       +    'You can edit <strong>items only</strong>. Document header fields are locked to preserve original request data.'
+       +  '</div>';
+  
+  // ─── Locked Fields ───
+  html += '<div class="erp-form-section" style="background:#fef3c7;border-color:#fcd34d;">';
+  html +=   '<div class="erp-form-section-title" style="color:#92400e;">';
+  html +=     '<i class="bi bi-lock-fill me-1"></i>Locked Fields (Read-Only)';
+  html +=   '</div>';
+  html +=   '<div class="row g-3">';
+  
+  html +=     '<div class="col-md-4">'
+       +        '<label class="form-label small fw-bold">Requestor</label>'
+       +        '<input type="text" class="form-control" value="' + _escProd(doc.requestor || '') + '" readonly style="background:#fff;cursor:not-allowed;">'
+       +      '</div>';
+  
+  html +=     '<div class="col-md-4">'
+       +        '<label class="form-label small fw-bold">Department</label>'
+       +        '<input type="text" class="form-control" value="' + _escProd(doc.department || '') + '" readonly style="background:#fff;cursor:not-allowed;">'
+       +      '</div>';
+  
+  html +=     '<div class="col-md-4">'
+       +        '<label class="form-label small fw-bold">Doc No.</label>'
+       +        '<input type="text" class="form-control" value="' + _escProd(doc.doc_no || '') + '" readonly style="background:#fff;cursor:not-allowed;font-family:monospace;">'
+       +      '</div>';
+  
+  // Show JO/GEM SO/Client/Project as read-only (but visible for reference)
+  if (doc.jo_no) {
+    html +=   '<div class="col-md-4">'
+         +      '<label class="form-label small fw-bold">JO No.</label>'
+         +      '<input type="text" class="form-control" value="' + _escProd(doc.jo_no) + '" readonly style="background:#fff;cursor:not-allowed;">'
+         +    '</div>';
+  }
+  if (doc.gem_so_no) {
+    html +=   '<div class="col-md-4">'
+         +      '<label class="form-label small fw-bold">GEM SO No.</label>'
+         +      '<input type="text" class="form-control" value="' + _escProd(doc.gem_so_no) + '" readonly style="background:#fff;cursor:not-allowed;">'
+         +    '</div>';
+  }
+  
+  html +=   '</div>';
+  html += '</div>';
+  
+  // ─── Items ───
+  html += '<div class="erp-form-section">';
+  html +=   '<div class="erp-form-section-title d-flex justify-content-between align-items-center">'
+       +      '<span><i class="bi bi-list-check me-1"></i>Items (<span id="prodEditItemCount">' + _prodEditState.currentItems.length + '</span>)</span>'
+       +      '<button type="button" class="btn btn-sm btn-outline-primary" onclick="_prodAddItem()">'
+       +        '<i class="bi bi-plus-lg me-1"></i>Add Item'
+       +      '</button>'
+       +    '</div>';
+  
+  html +=   '<div class="table-responsive" style="max-height:400px;overflow-y:auto;">';
+  html +=     '<table class="table table-sm table-bordered align-middle" id="prodEditItemsTable" style="font-size:0.85rem;">';
+  html +=       '<thead class="table-light sticky-top"><tr>'
+       +          '<th style="width:4%">#</th>'
+       +          '<th style="width:15%">Item Code</th>'
+       +          '<th style="width:30%">Description</th>'
+       +          '<th style="width:10%">Qty</th>'
+       +          '<th style="width:10%">Unit</th>'
+       +          '<th style="width:23%">Remarks</th>'
+       +          '<th style="width:8%"></th>'
+       +        '</tr></thead>';
+  html +=       '<tbody id="prodEditItemsBody"></tbody>';
+  html +=     '</table>';
+  html +=   '</div>';
+  html += '</div>';
+  
+  // ─── Reason ───
+  html += '<div class="erp-form-section" style="background:#fffbeb;border-color:#fde68a;">';
+  html +=   '<div class="erp-form-section-title" style="color:#92400e;">'
+       +      '<i class="bi bi-chat-left-text me-1"></i>Reason for Change <span class="text-danger">*</span>'
+       +    '</div>';
+  html +=   '<input type="text" class="form-control" id="prodEditReason" '
+       +      'placeholder="e.g., Corrected quantities per physical count" maxlength="200">';
+  html +=   '<div class="form-text"><i class="bi bi-info-circle me-1"></i>Required for audit trail.</div>';
+  html += '</div>';
+  
+  body.innerHTML = html;
+  
+  // Render items
+  _renderProdEditItems();
+}
+
+// ═══════════════════════════════════════════════════════════
+// ITEMS MANAGEMENT
+// ═══════════════════════════════════════════════════════════
+function _renderProdEditItems() {
+  var tbody = document.getElementById('prodEditItemsBody');
+  if (!tbody) return;
+  
+  var items = _prodEditState.currentItems;
+  
+  if (items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">'
+                    + 'No items. Click "Add Item" to add.'
+                    + '</td></tr>';
+    return;
+  }
+  
+  var html = '';
+  items.forEach(function(it, idx) {
+    html += '<tr>'
+         +    '<td class="text-center">' + (idx + 1) + '</td>'
+         +    '<td><input type="text" class="form-control form-control-sm" '
+         +      'value="' + _escProd(it.itemCode) + '" '
+         +      'onchange="_prodUpdateItem(' + idx + ', \'itemCode\', this.value)"></td>'
+         +    '<td><input type="text" class="form-control form-control-sm" '
+         +      'value="' + _escProd(it.description) + '" '
+         +      'onchange="_prodUpdateItem(' + idx + ', \'description\', this.value)"></td>'
+         +    '<td><input type="number" class="form-control form-control-sm text-center" '
+         +      'value="' + it.qty + '" min="0" step="0.01" '
+         +      'onchange="_prodUpdateItem(' + idx + ', \'qty\', parseFloat(this.value)||0)"></td>'
+         +    '<td><input type="text" class="form-control form-control-sm text-center" '
+         +      'value="' + _escProd(it.unit) + '" '
+         +      'onchange="_prodUpdateItem(' + idx + ', \'unit\', this.value)"></td>'
+         +    '<td><input type="text" class="form-control form-control-sm" '
+         +      'value="' + _escProd(it.remarks) + '" maxlength="200" '
+         +      'onchange="_prodUpdateItem(' + idx + ', \'remarks\', this.value)"></td>'
+         +    '<td class="text-center">'
+         +      '<button type="button" class="btn btn-sm btn-outline-danger" onclick="_prodRemoveItem(' + idx + ')" title="Remove">'
+         +        '<i class="bi bi-trash"></i>'
+         +      '</button>'
+         +    '</td>'
+         +  '</tr>';
+  });
+  
+  tbody.innerHTML = html;
+  
+  var countEl = document.getElementById('prodEditItemCount');
+  if (countEl) countEl.textContent = items.length;
+}
+
+function _prodUpdateItem(idx, field, value) {
+  if (!_prodEditState.currentItems[idx]) return;
+  _prodEditState.currentItems[idx][field] = value;
+}
+
+window._prodUpdateItem = _prodUpdateItem;
+
+function _prodAddItem() {
+  _prodEditState.currentItems.push({
+    id: null,
+    itemCode: '',
+    description: '',
+    qty: 0,
+    unit: 'PIECE',
+    remarks: '',
+    lineNo: 0
+  });
+  _renderProdEditItems();
+}
+
+window._prodAddItem = _prodAddItem;
+
+function _prodRemoveItem(idx) {
+  if (!confirm('Remove this item?')) return;
+  _prodEditState.currentItems.splice(idx, 1);
+  _renderProdEditItems();
+}
+
+window._prodRemoveItem = _prodRemoveItem;
+
+// ═══════════════════════════════════════════════════════════
+// SAVE — Update items + mark request COMPLETED
+// ═══════════════════════════════════════════════════════════
+async function _saveProductionEdit() {
+  if (_prodEditState.isSaving) return;
+  
+  var reason = (document.getElementById('prodEditReason').value || '').trim();
+  
+  if (!reason) {
+    erpShowToast('Reason for change is required', 'warning');
+    document.getElementById('prodEditReason').focus();
+    return;
+  }
+  
+  // Validate items
+  var validItems = [];
+  for (var i = 0; i < _prodEditState.currentItems.length; i++) {
+    var it = _prodEditState.currentItems[i];
+    if (!it.itemCode || !it.itemCode.trim()) {
+      erpShowToast('Item #' + (i + 1) + ' has no item code', 'warning');
+      return;
+    }
+    if (it.qty <= 0) {
+      erpShowToast('Item #' + (i + 1) + ' has invalid qty', 'warning');
+      return;
+    }
+    validItems.push(it);
+  }
+  
+  if (validItems.length === 0) {
+    erpShowToast('Add at least one item', 'warning');
+    return;
+  }
+  
+  if (!confirm('Save changes to ' + _prodEditState.docNo + '?\n\n' + validItems.length + ' item(s) will be updated.')) {
+    return;
+  }
+  
+  _prodEditState.isSaving = true;
+  var btn = document.getElementById('prodEditSaveBtn');
+  var origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+  
+  var currentUser = localStorage.getItem('ivm_userFullname') ||
+                    localStorage.getItem('ivm_username') || 'PRODUCTION';
+  
+  try {
+    // ═══ STEP 1: Delete removed items + Update existing + Insert new ═══
+    var originalIds = _prodEditState.originalItems.map(function(it) { return it.id; }).filter(Boolean);
+    var currentIds = validItems.map(function(it) { return it.id; }).filter(Boolean);
+    var removedIds = originalIds.filter(function(id) { return currentIds.indexOf(id) === -1; });
+    
+    // Delete removed
+    if (removedIds.length > 0) {
+      console.log('[Production Edit] Deleting items:', removedIds);
+      await fetch(erpUrl('doc_items?id=in.(' + removedIds.join(',') + ')'), {
+        method: 'DELETE',
+        headers: erpHeaders()
+      });
+    }
+    
+    // Update + Insert
+    for (var j = 0; j < validItems.length; j++) {
+      var item = validItems[j];
+      
+      if (item.id) {
+        // UPDATE
+        await fetch(erpUrl('doc_items?id=eq.' + item.id), {
+          method: 'PATCH',
+          headers: erpHeaders(),
+          body: JSON.stringify({
+            item_code: item.itemCode,
+            description: item.description,
+            requested_qty: item.qty,
+            unit: item.unit,
+            remarks: item.remarks
+          })
+        });
+      } else {
+        // INSERT
+        await fetch(erpUrl('doc_items'), {
+          method: 'POST',
+          headers: erpHeaders({ 'Prefer': 'return=representation' }),
+          body: JSON.stringify({
+            doc_no: _prodEditState.docNo,
+            line_no: j + 1,
+            item_code: item.itemCode,
+            description: item.description,
+            requested_qty: item.qty,
+            issued_qty: 0,
+            unit: item.unit,
+            remarks: item.remarks || 'PENDING',
+            row_index: j + 1
+          })
+        });
+      }
+    }
+    
+    console.log('[Production Edit] ✅ Items updated');
+    
+    // ═══ STEP 2: Audit log ═══
+    try {
+      await fetch(erpUrl('erp_manual_edits_audit'), {
+        method: 'POST',
+        headers: erpHeaders(),
+        body: JSON.stringify([{
+          item_code: _prodEditState.docNo,
+          field_name: 'items',
+          old_value: String(_prodEditState.originalItems.length) + ' items',
+          new_value: String(validItems.length) + ' items',
+          reason: reason,
+          edited_by: currentUser,
+          source: 'PRODUCTION_EDIT'
+        }])
+      });
+    } catch(e) {
+      console.warn('[Production Edit] Audit failed:', e);
+    }
+    
+    // ═══ STEP 3: Mark edit request as COMPLETED ═══
+    if (_prodEditState.editReqId) {
+      await fetch(erpUrl('edit_requests?id=eq.' + _prodEditState.editReqId), {
+        method: 'PATCH',
+        headers: erpHeaders(),
+        body: JSON.stringify({
+          status: 'COMPLETED',
+          completed_at: new Date().toISOString()
+        })
+      });
+      console.log('[Production Edit] ✅ Request marked COMPLETED');
+    }
+    
+    // ═══ STEP 4: Success ═══
+    _closeProdEditModal();
+    erpShowToast('✅ Document updated successfully!', 'success');
+    
+    // Refresh My Requests
+    setTimeout(function() {
+      if (typeof myRequestsLoad === 'function') {
+        myRequestsLoad();
+      } else {
+        window.location.reload();
+      }
+    }, 800);
+    
+  } catch(err) {
+    console.error('[Production Edit] Save failed:', err);
+    erpShowToast('Save failed: ' + err.message, 'danger');
+  } finally {
+    _prodEditState.isSaving = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  }
+}
+
+window._saveProductionEdit = _saveProductionEdit;
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+function _escProd(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 console.log('✅ edit-request-permission.js v1.0 loaded');
