@@ -13,6 +13,7 @@
 var _prodEditState = {
   docNo: null,
   docType: null,
+  documentId: null,      // ← NEW: for doc_items.document_id
   editReqId: null,
   originalDoc: null,
   originalItems: [],
@@ -236,6 +237,10 @@ async function openProductionEdit(docNo, docType) {
     }
     
     var doc = docRes[0];
+
+    // ═══ Store document_id ═══
+_prodEditState.documentId = doc.id;
+console.log('[Production Edit] Document ID:', doc.id);
     
     // ═══ Check status ═══
     var status = String(doc.status || '').toUpperCase();
@@ -845,42 +850,43 @@ async function _saveProductionEdit() {
           successCount++;
           console.log('[Production Edit] ✅ Updated:', item.itemCode);
           
-        } else {
-          // ═══ INSERT ═══
-          console.log('[Production Edit] Inserting #' + lineNo + ':', item.itemCode);
-          
-          var payload = {
-            doc_no: _prodEditState.docNo,
-            line_no: lineNo,
-            item_code: item.itemCode,
-            description: item.description || '',
-            requested_qty: item.qty,
-            issued_qty: 0,
-            unit: item.unit || 'PIECE',
-            remarks: item.remarks || 'PENDING',
-            row_index: lineNo
-          };
-          
-          console.log('[Production Edit] Payload:', payload);
-          
-          var insRes = await fetch(erpUrl('doc_items'), {
-            method: 'POST',
-            headers: erpHeaders({ 'Prefer': 'return=representation' }),
-            body: JSON.stringify(payload)
-          });
-          
-          if (!insRes.ok) {
-            var insErr = await insRes.text();
-            console.error('[Production Edit] Insert failed:', insRes.status, insErr);
-            failedCount++;
-            errors.push('Insert ' + item.itemCode + ': HTTP ' + insRes.status + ' ' + insErr.substring(0, 100));
-            continue;
-          }
-          
-          var insData = await insRes.json();
-          console.log('[Production Edit] ✅ Inserted:', insData);
-          successCount++;
-        }
+      } else {
+  // ═══ INSERT new ═══
+  console.log('[Production Edit] Inserting #' + lineNo + ':', item.itemCode);
+  
+  var payload = {
+    document_id: _prodEditState.documentId,    // ← REQUIRED
+    doc_no: _prodEditState.docNo,
+    line_no: lineNo,
+    item_code: item.itemCode,
+    description: item.description || '',
+    requested_qty: item.qty,
+    issued_qty: 0,
+    unit: item.unit || 'PIECE',
+    remarks: item.remarks || 'PENDING',
+    row_index: lineNo
+  };
+  
+  console.log('[Production Edit] Payload:', payload);
+  
+  var insRes = await fetch(erpUrl('doc_items'), {
+    method: 'POST',
+    headers: erpHeaders({ 'Prefer': 'return=representation' }),
+    body: JSON.stringify(payload)
+  });
+  
+  if (!insRes.ok) {
+    var insErr = await insRes.text();
+    console.error('[Production Edit] Insert failed:', insRes.status, insErr);
+    failedCount++;
+    errors.push('Insert ' + item.itemCode + ': HTTP ' + insRes.status + ' ' + insErr.substring(0, 100));
+    continue;
+  }
+  
+  var insData = await insRes.json();
+  console.log('[Production Edit] ✅ Inserted:', insData);
+  successCount++;
+}
       } catch(itemErr) {
         console.error('[Production Edit] Item error:', itemErr);
         failedCount++;
