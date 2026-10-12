@@ -518,9 +518,48 @@ async function submitProcess() {
       })
     });
 
-    if (!docRes.ok) {
-      throw new Error('Failed to update document status');
+   if (!docRes.ok) {
+  var errText = await docRes.text();
+  console.error('[submitProcess] Doc update FAILED:', docRes.status, errText);
+  
+  var userFriendlyMsg = 'Failed to update document status';
+  
+  try {
+    var errJson = JSON.parse(errText);
+    var pgMessage = errJson.message || '';
+    var pgCode = errJson.code || '';
+    
+    // Insufficient stock (P0001)
+    if (pgMessage.indexOf('Insufficient stock') !== -1) {
+      var itemMatch = pgMessage.match(/item (\S+?)\./);
+      var itemCode = itemMatch ? itemMatch[1] : 'unknown';
+      var currentMatch = pgMessage.match(/Current: ([\d.]+)/);
+      var attemptedMatch = pgMessage.match(/Attempted: (-?[\d.]+)/);
+      
+      userFriendlyMsg = '❌ Insufficient stock for ' + itemCode + '.\n\n' +
+                        'Current on-hand: ' + (currentMatch ? currentMatch[1] : '0') + '\n' +
+                        'Required: ' + (attemptedMatch ? Math.abs(parseFloat(attemptedMatch[1])) : 'unknown') + '\n\n' +
+                        'Please add stock in Stock Monitor before processing.';
     }
+    else if (pgCode === '23502') {
+      var colMatch = pgMessage.match(/column "(\w+)"/);
+      userFriendlyMsg = '⚠️ Database error: missing required field "' + (colMatch ? colMatch[1] : 'unknown') + '"';
+    }
+    else if (pgCode === '23503') {
+      userFriendlyMsg = '⚠️ Reference error: item code not found in inventory master';
+    }
+    else if (pgCode === '23505') {
+      userFriendlyMsg = '⚠️ Duplicate entry: this document may already be processed';
+    }
+    else if (pgMessage) {
+      userFriendlyMsg = '❌ ' + pgMessage;
+    }
+  } catch(parseErr) {
+    userFriendlyMsg = '❌ Error: ' + errText.substring(0, 150);
+  }
+  
+  throw new Error(userFriendlyMsg);
+}
 
     // Success
     document.getElementById('successDocNo').textContent = _process.docNo;
