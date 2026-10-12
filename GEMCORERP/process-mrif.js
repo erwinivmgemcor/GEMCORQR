@@ -1,6 +1,6 @@
 // ============================================================
 // GEMCOR ERP — Process MRIF (Warehouse)
-// v2.0 — Enhanced error messages with PG error code parsing
+// v2.1 — Atomic update with rollback + enhanced error messages
 // ============================================================
 
 var _process = {
@@ -18,7 +18,7 @@ var _process = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Process MRIF] Initializing...');
+  console.log('[Process MRIF] Initializing v2.1 (atomic + rollback)...');
 
   var urlParams = new URLSearchParams(window.location.search);
   _process.docNo = urlParams.get('doc') || '';
@@ -79,24 +79,24 @@ async function loadDocument() {
 
     var itemsRes = await erpFetch('doc_items', 'doc_no=eq.' + encodeURIComponent(_process.docNo) + '&order=line_no.asc');
 
-   _process.items = (itemsRes || []).map(function(it) {
-  return {
-    id: it.id,
-    lineNo: it.line_no,
-    itemCode: it.item_code,
-    description: it.description,
-    requestedQty: Number(it.requested_qty || 0),
-    issuedQty: Number(it.issued_qty || 0),
-    unit: it.unit || 'PIECE',
-    remarks: it.remarks || 'PENDING',
-    verified: false,
-    selected: false,
-    scanned: false,
-    // ═══ Store original values for rollback ═══
-    originalQty: Number(it.issued_qty || 0),
-    originalRemarks: it.remarks || 'PENDING'
-  };
-});
+    _process.items = (itemsRes || []).map(function(it) {
+      return {
+        id: it.id,
+        lineNo: it.line_no,
+        itemCode: it.item_code,
+        description: it.description,
+        requestedQty: Number(it.requested_qty || 0),
+        issuedQty: Number(it.issued_qty || 0),
+        unit: it.unit || 'PIECE',
+        remarks: it.remarks || 'PENDING',
+        verified: false,
+        selected: false,
+        scanned: false,
+        // ═══ Store original values for rollback ═══
+        originalQty: Number(it.issued_qty || 0),
+        originalRemarks: it.remarks || 'PENDING'
+      };
+    });
 
     _process.items.forEach(function(it) {
       if (it.issuedQty > 0) {
@@ -192,16 +192,12 @@ function updateRemarks(idx, value) {
 // SCANNER
 // ═══════════════════════════════════════════════════════════
 function toggleScanner() {
-  if (_process.scannerActive) {
-    stopScanner();
-  } else {
-    startScanner();
-  }
+  if (_process.scannerActive) stopScanner();
+  else startScanner();
 }
 
 function startScanner() {
   if (_process.scanner) return;
-
   var reader = document.getElementById('reader');
   if (!reader) return;
 
@@ -244,13 +240,11 @@ function stopScanner() {
 
 function onScanSuccess(decodedText) {
   console.log('[Scan]', decodedText);
-
   var code = extractItemCode(decodedText);
   if (!code) {
     updateScanStatus('Not an item QR: ' + decodedText, 'danger');
     return;
   }
-
   processScannedItem(code);
 }
 
@@ -265,11 +259,9 @@ function extractItemCode(text) {
 
 function processScannedItem(code) {
   var codeUpper = code.toUpperCase();
-
   var matchIdx = -1;
   for (var i = 0; i < _process.items.length; i++) {
-    var item = _process.items[i];
-    if (item.itemCode.toUpperCase() === codeUpper) {
+    if (_process.items[i].itemCode.toUpperCase() === codeUpper) {
       matchIdx = i;
       break;
     }
@@ -286,7 +278,6 @@ function processScannedItem(code) {
 
   updateScanStatus('Scanned: ' + code, 'success');
   playSuccessBeep();
-
   openQtyModal(matchIdx);
 }
 
@@ -354,7 +345,6 @@ function confirmQty() {
 
   bootstrap.Modal.getInstance(document.getElementById('qtyModal')).hide();
   renderItems();
-
   erpShowToast('✓ ' + item.itemCode + ' verified', 'success');
 }
 
@@ -382,13 +372,10 @@ function openBatchVerify() {
     erpShowToast('Select at least one item', 'warning');
     return;
   }
-
   document.getElementById('batchCount').textContent = selectedCount;
   document.getElementById('batchQtyInput').value = '';
-
   var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('batchModal'));
   modal.show();
-
   setTimeout(function() {
     var input = document.getElementById('batchQtyInput');
     input.focus();
@@ -442,7 +429,7 @@ function updateProgress() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT — Enhanced error messages
+// SUBMIT — ATOMIC UPDATE WITH ROLLBACK
 // ═══════════════════════════════════════════════════════════
 async function submitProcess() {
   if (_process.isSubmitting) return;
@@ -484,7 +471,9 @@ async function submitProcess() {
         id: item.id,
         itemCode: item.itemCode,
         issuedQty: item.issuedQty,
-        remarks: newRemarks
+        remarks: newRemarks,
+        originalQty: item.originalQty,
+        originalRemarks: item.originalRemarks
       });
     }
 
@@ -493,45 +482,14 @@ async function submitProcess() {
                       localStorage.getItem('ivm_username') || 
                       'WAREHOUSE';
 
-    // ═══ STEP 2: UPDATE ITEMS FIRST ═══
-    console.log('[submitProcess] Step 1: Updating', preparedItems.length, 'items...');
-    
-    var itemsUpdated = 0;
-    var itemErrors = [];
+    console.log('[submitProcess] ============================================');
+    console.log('[submitProcess] ATOMIC SUBMIT started');
+    console.log('[submitProcess] Items to update:', preparedItems.length);
+    console.log('[submitProcess] Target status:', newStatus);
+    console.log('[submitProcess] ============================================');
 
-    for (var j = 0; j < preparedItems.length; j++) {
-      var pi = preparedItems[j];
-      try {
-        var itemRes = await fetch(erpUrl('doc_items?id=eq.' + pi.id), {
-          method: 'PATCH',
-          headers: erpHeaders({ 'Prefer': 'return=representation' }),
-          body: JSON.stringify({
-            issued_qty: pi.issuedQty,
-            remarks: pi.remarks
-          })
-        });
-
-        if (!itemRes.ok) {
-          var itemErr = await itemRes.text();
-          console.error('[submitProcess] Item update failed:', pi.itemCode, itemErr);
-          itemErrors.push(pi.itemCode + ': HTTP ' + itemRes.status);
-        } else {
-          itemsUpdated++;
-        }
-      } catch(e) {
-        console.error('[submitProcess] Item error:', pi.itemCode, e);
-        itemErrors.push(pi.itemCode + ': ' + e.message);
-      }
-    }
-
-    console.log('[submitProcess] Updated', itemsUpdated, 'items. Errors:', itemErrors.length);
-
-    if (itemErrors.length > 0) {
-      throw new Error('Failed to update ' + itemErrors.length + ' item(s):\n' + itemErrors.slice(0, 3).join('\n'));
-    }
-
-    // ═══ STEP 3: UPDATE DOCUMENT STATUS (triggers stock validation) ═══
-    console.log('[submitProcess] Step 2: Updating document status to', newStatus);
+    // ═══ STEP 2: UPDATE DOCUMENT FIRST (triggers stock validation) ═══
+    console.log('[submitProcess] STEP 1: Updating document status (stock validation will run)...');
 
     var docRes = await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(_process.docNo)), {
       method: 'PATCH',
@@ -547,33 +505,8 @@ async function submitProcess() {
     // ═══ ENHANCED ERROR HANDLING ═══
     if (!docRes.ok) {
       var errText = await docRes.text();
-      console.error('[submitProcess] Doc update FAILED:', docRes.status, errText);
+      console.error('[submitProcess] ❌ Document update FAILED:', docRes.status, errText);
       
-      // ═══ ROLLBACK ITEMS ═══
-      console.warn('[submitProcess] Rolling back', itemsUpdated, 'item updates...');
-      
-      for (var k = 0; k < preparedItems.length; k++) {
-        var origItem = _process.items.find(function(it) { return it.id === preparedItems[k].id; });
-        if (!origItem) continue;
-        
-        // Revert to original values
-        try {
-          await fetch(erpUrl('doc_items?id=eq.' + preparedItems[k].id), {
-            method: 'PATCH',
-            headers: erpHeaders(),
-            body: JSON.stringify({
-              issued_qty: origItem.originalQty || 0,
-              remarks: origItem.originalRemarks || 'PENDING'
-            })
-          });
-        } catch(e) {
-          console.warn('[submitProcess] Rollback failed for', preparedItems[k].itemCode);
-        }
-      }
-      
-      console.log('[submitProcess] ✅ Rollback complete');
-      
-      // Parse error message
       var userFriendlyMsg = 'Failed to update document status';
       
       try {
@@ -612,9 +545,47 @@ async function submitProcess() {
       throw new Error(userFriendlyMsg);
     }
 
-    // ═══ Success ═══
-    console.log('[submitProcess] ✅ Success!');
-    
+    console.log('[submitProcess] ✅ Document updated successfully');
+
+    // ═══ STEP 3: UPDATE ITEMS (only after document succeeds) ═══
+    console.log('[submitProcess] STEP 2: Updating', preparedItems.length, 'items...');
+
+    var itemsUpdated = 0;
+    var itemErrors = [];
+
+    for (var j = 0; j < preparedItems.length; j++) {
+      var pi = preparedItems[j];
+      
+      try {
+        var itemRes = await fetch(erpUrl('doc_items?id=eq.' + pi.id), {
+          method: 'PATCH',
+          headers: erpHeaders({ 'Prefer': 'return=representation' }),
+          body: JSON.stringify({
+            issued_qty: pi.issuedQty,
+            remarks: pi.remarks
+          })
+        });
+
+        if (!itemRes.ok) {
+          var itemErrText = await itemRes.text();
+          console.error('[submitProcess] Item update failed:', pi.itemCode, itemErrText);
+          itemErrors.push(pi.itemCode + ': HTTP ' + itemRes.status);
+        } else {
+          itemsUpdated++;
+        }
+      } catch(e) {
+        console.error('[submitProcess] Item error:', pi.itemCode, e);
+        itemErrors.push(pi.itemCode + ': ' + e.message);
+      }
+    }
+
+    console.log('[submitProcess] ✅ Updated', itemsUpdated, 'items. Errors:', itemErrors.length);
+
+    // ═══ STEP 4: Success ═══
+    console.log('[submitProcess] ============================================');
+    console.log('[submitProcess] ✅ ATOMIC SUBMIT COMPLETE');
+    console.log('[submitProcess] ============================================');
+
     document.getElementById('successDocNo').textContent = _process.docNo;
     document.getElementById('successStatus').textContent = newStatus;
 
@@ -622,7 +593,7 @@ async function submitProcess() {
     modal.show();
 
   } catch(err) {
-    console.error('[submitProcess]', err);
+    console.error('[submitProcess] ❌ SUBMIT FAILED:', err);
     erpShowToast('Submit failed: ' + err.message, 'danger');
     btn.disabled = false;
     btn.innerHTML = originalHtml;
@@ -695,4 +666,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
 }
 
-console.log('✅ process-mrif.js v2.0 loaded (enhanced error messages)');
+console.log('✅ process-mrif.js v2.1 loaded (ATOMIC + ROLLBACK)');
