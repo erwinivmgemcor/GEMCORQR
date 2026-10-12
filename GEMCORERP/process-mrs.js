@@ -1,6 +1,9 @@
 // ============================================================
 // GEMCOR ERP — Process MRS (Warehouse Verification)
-// v2.0 — Enhanced error messages with PG error code parsing
+// v2.2 — ITEMS FIRST, document last + rollback
+// ✅ Fixes: stock validation on document update
+// ✅ Rollback if document fails
+// ✅ Enhanced error messages
 // ============================================================
 
 var _process = {
@@ -18,7 +21,7 @@ var _process = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Process MRS] Initializing...');
+  console.log('[Process MRS] Initializing v2.2 (items first + rollback)...');
 
   var urlParams = new URLSearchParams(window.location.search);
   _process.docNo = urlParams.get('doc') || '';
@@ -91,7 +94,10 @@ async function loadDocument() {
         remarks: it.remarks || 'PENDING',
         verified: false,
         selected: false,
-        scanned: false
+        scanned: false,
+        // ═══ Store original values for rollback ═══
+        originalQty: Number(it.issued_qty || 0),
+        originalRemarks: it.remarks || 'PENDING'
       };
     });
 
@@ -195,7 +201,6 @@ function toggleScanner() {
 
 function startScanner() {
   if (_process.scanner) return;
-
   var reader = document.getElementById('reader');
   if (!reader) return;
 
@@ -418,7 +423,7 @@ function updateProgress() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT — Enhanced error messages
+// SUBMIT — v2.2: ITEMS FIRST, document last + rollback
 // ═══════════════════════════════════════════════════════════
 async function submitProcess() {
   if (_process.isSubmitting) return;
@@ -438,8 +443,10 @@ async function submitProcess() {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
 
   try {
+    // ═══ STEP 1: PREPARE UPDATES ═══
     var allComplete = true;
     var anyReturned = false;
+    var preparedItems = [];
 
     for (var i = 0; i < verifiedItems.length; i++) {
       var item = verifiedItems[i];
@@ -454,22 +461,68 @@ async function submitProcess() {
         newRemarks = status;
       }
 
-      var res = await fetch(erpUrl('doc_items?id=eq.' + item.id), {
-        method: 'PATCH',
-        headers: erpHeaders(),
-        body: JSON.stringify({
-          issued_qty: item.issuedQty,
-          remarks: newRemarks
-        })
+      preparedItems.push({
+        id: item.id,
+        itemCode: item.itemCode,
+        issuedQty: item.issuedQty,
+        remarks: newRemarks,
+        originalQty: item.originalQty,
+        originalRemarks: item.originalRemarks
       });
-
-      if (!res.ok) console.warn('Failed to update item', item.itemCode);
     }
 
     var newStatus = (allComplete && anyReturned) ? 'COMPLETED' : (anyReturned ? 'PARTIAL' : 'PENDING');
-    var currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
+    var currentUser = localStorage.getItem('ivm_userFullname') || 
+                      localStorage.getItem('ivm_username') || 
+                      'WAREHOUSE';
 
-    console.log('[submitProcess] Updating status:', newStatus, 'for', _process.docNo);
+    console.log('[submitProcess] ============================================');
+    console.log('[submitProcess] v2.2 MRS SUBMIT — ITEMS FIRST, DOCUMENT LAST');
+    console.log('[submitProcess] Items to update:', preparedItems.length);
+    console.log('[submitProcess] Target status:', newStatus);
+    console.log('[submitProcess] ============================================');
+
+    // ═══ STEP 2: UPDATE ITEMS FIRST ═══
+    console.log('[submitProcess] STEP 1: Updating items FIRST...');
+
+    var itemsUpdated = 0;
+    var itemErrors = [];
+
+    for (var j = 0; j < preparedItems.length; j++) {
+      var pi = preparedItems[j];
+      
+      try {
+        var itemRes = await fetch(erpUrl('doc_items?id=eq.' + pi.id), {
+          method: 'PATCH',
+          headers: erpHeaders({ 'Prefer': 'return=representation' }),
+          body: JSON.stringify({
+            issued_qty: pi.issuedQty,
+            remarks: pi.remarks
+          })
+        });
+
+        if (!itemRes.ok) {
+          var itemErrText = await itemRes.text();
+          console.error('[submitProcess] Item update failed:', pi.itemCode, itemErrText);
+          itemErrors.push(pi.itemCode);
+        } else {
+          itemsUpdated++;
+          console.log('[submitProcess] ✓ Updated item:', pi.itemCode, 'qty:', pi.issuedQty);
+        }
+      } catch(e) {
+        console.error('[submitProcess] Item error:', pi.itemCode, e);
+        itemErrors.push(pi.itemCode);
+      }
+    }
+
+    console.log('[submitProcess] Items updated:', itemsUpdated, '/', preparedItems.length);
+
+    if (itemErrors.length > 0) {
+      throw new Error('Failed to update items: ' + itemErrors.join(', '));
+    }
+
+    // ═══ STEP 3: UPDATE DOCUMENT STATUS (triggers stock validation) ═══
+    console.log('[submitProcess] STEP 2: Updating document (trigger will validate stock)...');
 
     var docRes = await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(_process.docNo)), {
       method: 'PATCH',
@@ -482,10 +535,32 @@ async function submitProcess() {
       })
     });
 
-    // ═══ ENHANCED ERROR HANDLING ═══
+    // ═══ IF DOCUMENT FAILS — ROLLBACK ITEMS ═══
     if (!docRes.ok) {
       var errText = await docRes.text();
-      console.error('[submitProcess] Doc update FAILED:', docRes.status, errText);
+      console.error('[submitProcess] ❌ Document update FAILED:', docRes.status, errText);
+      
+      console.warn('[submitProcess] ⏪ Rolling back', itemsUpdated, 'item updates...');
+      
+      var rollbackCount = 0;
+      for (var k = 0; k < preparedItems.length; k++) {
+        var pi2 = preparedItems[k];
+        try {
+          await fetch(erpUrl('doc_items?id=eq.' + pi2.id), {
+            method: 'PATCH',
+            headers: erpHeaders(),
+            body: JSON.stringify({
+              issued_qty: pi2.originalQty,
+              remarks: pi2.originalRemarks
+            })
+          });
+          rollbackCount++;
+        } catch(e) {
+          console.warn('[submitProcess] Rollback failed for:', pi2.itemCode);
+        }
+      }
+      
+      console.log('[submitProcess] ✅ Rollback complete:', rollbackCount, 'items reverted');
       
       var userFriendlyMsg = 'Failed to update document status';
       
@@ -503,7 +578,8 @@ async function submitProcess() {
           userFriendlyMsg = '❌ Insufficient stock for ' + itemCode + '.\n\n' +
                             'Current on-hand: ' + (currentMatch ? currentMatch[1] : '0') + '\n' +
                             'Required: ' + (attemptedMatch ? Math.abs(parseFloat(attemptedMatch[1])) : 'unknown') + '\n\n' +
-                            'Please add stock in Stock Monitor before processing.';
+                            'Please add stock in Stock Monitor before processing.\n\n' +
+                            '(Items have been reverted automatically)';
         }
         else if (pgCode === '23502') {
           var colMatch = pgMessage.match(/column "(\w+)"/);
@@ -525,13 +601,21 @@ async function submitProcess() {
       throw new Error(userFriendlyMsg);
     }
 
+    // ═══ Success ═══
+    console.log('[submitProcess] ============================================');
+    console.log('[submitProcess] ✅ v2.2 MRS SUBMIT COMPLETE');
+    console.log('[submitProcess] Document:', _process.docNo);
+    console.log('[submitProcess] Status:', newStatus);
+    console.log('[submitProcess] Items:', itemsUpdated);
+    console.log('[submitProcess] ============================================');
+
     document.getElementById('successDocNo').textContent = _process.docNo;
     document.getElementById('successStatus').textContent = newStatus;
 
     new bootstrap.Modal(document.getElementById('successModal')).show();
 
   } catch(err) {
-    console.error('[submitProcess]', err);
+    console.error('[submitProcess] ❌ SUBMIT FAILED:', err);
     erpShowToast('Submit failed: ' + err.message, 'danger');
     btn.disabled = false;
     btn.innerHTML = originalHtml;
@@ -601,7 +685,7 @@ function erpShowToast(msg, type) {
   var toastEl = document.getElementById('erpToast');
   if (!toastEl) { console.log('[Toast]', type, msg); return; }
   document.getElementById('erpToastBody').textContent = msg;
-  bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
+  bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4000 }).show();
 }
 
-console.log('✅ process-mrs.js v2.0 loaded (enhanced error messages)');
+console.log('✅ process-mrs.js v2.2 loaded (ITEMS FIRST + ROLLBACK)');
