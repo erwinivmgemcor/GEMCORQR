@@ -1,6 +1,6 @@
 // ============================================================
 // GEMCOR ERP — My Requests (Production's home page)
-// Shows own MRIF/MRS requests + QR codes
+// v2.0 — Edit Request integration + Discuss button
 // ============================================================
 
 var _myRequests = {
@@ -25,7 +25,8 @@ document.addEventListener('DOMContentLoaded', function() {
                      localStorage.getItem('ivm_username') || '';
   _myRequests.currentUser = userFullname;
   
-  document.getElementById('welcomeName').textContent = userFullname || 'User';
+  var welcomeName = document.getElementById('welcomeName');
+  if (welcomeName) welcomeName.textContent = userFullname || 'User';
   
   // Load department from users table
   loadUserInfo();
@@ -65,9 +66,11 @@ async function loadUserInfo() {
     
     if (rows && rows[0]) {
       var u = rows[0];
-      document.getElementById('welcomeName').textContent = u.fullname || username;
-      document.getElementById('welcomeDept').textContent = 
-        'Department: ' + (u.department || 'Not set');
+      var welcomeName = document.getElementById('welcomeName');
+      var welcomeDept = document.getElementById('welcomeDept');
+      
+      if (welcomeName) welcomeName.textContent = u.fullname || username;
+      if (welcomeDept) welcomeDept.textContent = 'Department: ' + (u.department || 'Not set');
     }
   } catch(err) {
     console.warn('[My Requests] Could not load user info:', err.message);
@@ -81,13 +84,13 @@ async function myRequestsLoad() {
   var tbody = document.getElementById('myTableBody');
   if (!tbody) return;
   
-  tbody.innerHTML = '<tr><td colspan="7" class="erp-empty">' +
+  tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
     '<div class="erp-spinner"></div>' +
     '<div class="mt-2">Loading your requests...</div></td></tr>';
   
   var userFullname = _myRequests.currentUser;
   if (!userFullname) {
-    tbody.innerHTML = '<tr><td colspan="7" class="erp-empty text-danger">' +
+    tbody.innerHTML = '<tr><td colspan="8" class="erp-empty text-danger">' +
       'Could not determine user. Please log in again.</td></tr>';
     return;
   }
@@ -104,10 +107,10 @@ async function myRequestsLoad() {
     console.log('[My Requests] Loaded ' + _myRequests.allDocs.length + ' requests');
     
     myRequestsComputeKPIs();
-    myRequestsRender();
+    await myRequestsRender();
   } catch(err) {
     console.error('[myRequestsLoad]', err);
-    tbody.innerHTML = '<tr><td colspan="7" class="erp-empty text-danger">' +
+    tbody.innerHTML = '<tr><td colspan="8" class="erp-empty text-danger">' +
       'Failed: ' + erpEsc(err.message) + '</td></tr>';
   }
 }
@@ -123,20 +126,32 @@ function myRequestsComputeKPIs() {
     else if (s === 'PARTIAL') partial++;
   });
   
-  document.getElementById('myKpiTotal').textContent = total;
-  document.getElementById('myKpiPending').textContent = pending;
-  document.getElementById('myKpiCompleted').textContent = completed;
-  document.getElementById('myKpiPartial').textContent = partial;
+  var el;
+  el = document.getElementById('myKpiTotal');
+  if (el) el.textContent = total;
+  el = document.getElementById('myKpiPending');
+  if (el) el.textContent = pending;
+  el = document.getElementById('myKpiCompleted');
+  if (el) el.textContent = completed;
+  el = document.getElementById('myKpiPartial');
+  if (el) el.textContent = partial;
 }
 
-function myRequestsRender() {
+// ═══════════════════════════════════════════════════════════
+// RENDER — With Edit Request integration
+// ═══════════════════════════════════════════════════════════
+async function myRequestsRender() {
   var tbody = document.getElementById('myTableBody');
   if (!tbody) return;
   
   // Apply search + filter
-  var search = (document.getElementById('mySearchInput').value || '').toLowerCase().trim();
-  var typeFilter = document.getElementById('myTypeFilter').value;
-  var statusFilter = document.getElementById('myStatusFilter').value;
+  var searchInput = document.getElementById('mySearchInput');
+  var typeFilterEl = document.getElementById('myTypeFilter');
+  var statusFilterEl = document.getElementById('myStatusFilter');
+  
+  var search = (searchInput ? searchInput.value : '').toLowerCase().trim();
+  var typeFilter = typeFilterEl ? typeFilterEl.value : '';
+  var statusFilter = statusFilterEl ? statusFilterEl.value : '';
   
   _myRequests.filteredDocs = _myRequests.allDocs.filter(function(d) {
     if (typeFilter && String(d.doc_type).toUpperCase() !== typeFilter) return false;
@@ -153,23 +168,52 @@ function myRequestsRender() {
     return true;
   });
   
+  // ═══ Prefetch edit permissions ═══
+  var editPermMap = {};
+  try {
+    var allPerms = await erpFetch('edit_requests',
+      'select=*' +
+      '&requested_by=eq.' + encodeURIComponent(_myRequests.currentUser) +
+      '&order=created_at.desc&limit=500');
+    
+    (allPerms || []).forEach(function(p) {
+      // Keep only the latest per doc_no
+      if (!editPermMap[p.doc_no] || 
+          new Date(p.created_at) > new Date(editPermMap[p.doc_no].created_at)) {
+        editPermMap[p.doc_no] = p;
+      }
+    });
+    
+    console.log('[My Requests] Prefetched edit permissions for ' + Object.keys(editPermMap).length + ' docs');
+  } catch(e) {
+    console.warn('[My Requests] Could not fetch edit permissions:', e.message);
+  }
+  
   // Pagination
   var total = _myRequests.filteredDocs.length;
   var start = (_myRequests.currentPage - 1) * _myRequests.pageSize;
   var end = Math.min(start + _myRequests.pageSize, total);
   var pageItems = _myRequests.filteredDocs.slice(start, end);
   
-  document.getElementById('myTableCount').textContent = total + ' items';
-  document.getElementById('myPageTotal').textContent = total;
-  document.getElementById('myPageStart').textContent = total > 0 ? start + 1 : 0;
-  document.getElementById('myPageEnd').textContent = end;
-  document.getElementById('myPageLabel').textContent = 'Page ' + _myRequests.currentPage;
+  var el;
+  el = document.getElementById('myTableCount');
+  if (el) el.textContent = total + ' items';
+  el = document.getElementById('myPageTotal');
+  if (el) el.textContent = total;
+  el = document.getElementById('myPageStart');
+  if (el) el.textContent = total > 0 ? start + 1 : 0;
+  el = document.getElementById('myPageEnd');
+  if (el) el.textContent = end;
+  el = document.getElementById('myPageLabel');
+  if (el) el.textContent = 'Page ' + _myRequests.currentPage;
   
-  document.getElementById('myBtnPrev').disabled = (_myRequests.currentPage <= 1);
-  document.getElementById('myBtnNext').disabled = (end >= total);
+  el = document.getElementById('myBtnPrev');
+  if (el) el.disabled = (_myRequests.currentPage <= 1);
+  el = document.getElementById('myBtnNext');
+  if (el) el.disabled = (end >= total);
   
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No requests found. Click "New MRIF" or "New MRS" to create one.</td></tr>';
     return;
@@ -191,6 +235,10 @@ function myRequestsRender() {
     
     var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
     
+    // ═══ Edit permission state ═══
+    var perm = editPermMap[d.doc_no];
+    var editPerm = perm ? { status: perm.status, request: perm } : { status: 'NONE', request: null };
+    
     html += '<tr>' +
       '<td><code>' + erpEsc(d.doc_no) + '</code></td>' +
       '<td>' + erpEsc(dateStr) + '</td>' +
@@ -202,6 +250,12 @@ function myRequestsRender() {
         '<button class="erp-action-btn primary" onclick="viewRequestDetails(\'' + safeDoc + '\', \'' + typeUpper + '\')" title="View Details">' +
           '<i class="bi bi-eye"></i>' +
         '</button>' +
+        '<button class="erp-action-btn" onclick="discussDocument(\'' + safeDoc + '\', \'' + typeUpper + '\')" title="Discuss">' +
+          '<i class="bi bi-chat-dots"></i>' +
+        '</button>' +
+      '</td>' +
+      '<td class="text-center">' +
+        renderEditButton(d.doc_no, typeUpper, statusUpper, editPerm) +
       '</td>' +
       '</tr>';
   });
@@ -217,9 +271,11 @@ async function viewRequestDetails(docNo, docType) {
   
   var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
   
-  document.getElementById('detailModalTitle').textContent = docNo;
-  document.getElementById('requestDetailBody').innerHTML = 
-    '<div class="text-center py-4"><div class="erp-spinner"></div></div>';
+  var titleEl = document.getElementById('detailModalTitle');
+  if (titleEl) titleEl.textContent = docNo;
+  
+  var bodyEl = document.getElementById('requestDetailBody');
+  if (bodyEl) bodyEl.innerHTML = '<div class="text-center py-4"><div class="erp-spinner"></div></div>';
   
   modal.show();
   
@@ -229,8 +285,7 @@ async function viewRequestDetails(docNo, docType) {
     var itemsRes = await erpFetch('doc_items', 'doc_no=eq.' + encodeURIComponent(docNo) + '&order=line_no.asc');
     
     if (!docRes || docRes.length === 0) {
-      document.getElementById('requestDetailBody').innerHTML = 
-        '<div class="alert alert-danger">Document not found</div>';
+      if (bodyEl) bodyEl.innerHTML = '<div class="alert alert-danger">Document not found</div>';
       return;
     }
     
@@ -293,14 +348,15 @@ async function viewRequestDetails(docNo, docType) {
     }
     html += '</tbody></table></div>';
     
-    document.getElementById('requestDetailBody').innerHTML = html;
+    if (bodyEl) bodyEl.innerHTML = html;
     
   } catch(err) {
     console.error('[viewRequestDetails]', err);
-    document.getElementById('requestDetailBody').innerHTML = 
-      '<div class="alert alert-danger">Failed: ' + erpEsc(err.message) + '</div>';
+    if (bodyEl) bodyEl.innerHTML = '<div class="alert alert-danger">Failed: ' + erpEsc(err.message) + '</div>';
   }
 }
+
+window.viewRequestDetails = viewRequestDetails;
 
 // ═══════════════════════════════════════════════════════════
 // QR DOWNLOAD
@@ -313,6 +369,8 @@ function downloadQr() {
   
   var docNo = _myRequests.currentDetails.doc.doc_no;
   var modalBody = document.getElementById('requestDetailBody');
+  if (!modalBody) return;
+  
   var img = modalBody.querySelector('img');
   if (!img) {
     erpShowToast('QR image not found', 'warning');
@@ -351,6 +409,8 @@ function downloadQr() {
   qrImg.src = img.src;
 }
 
+window.downloadQr = downloadQr;
+
 // ═══════════════════════════════════════════════════════════
 // FILTERS + PAGINATION
 // ═══════════════════════════════════════════════════════════
@@ -362,13 +422,20 @@ function myRequestsOnSearch() {
   }, 300);
 }
 
+window.myRequestsOnSearch = myRequestsOnSearch;
+
 function myRequestsClearFilters() {
-  document.getElementById('mySearchInput').value = '';
-  document.getElementById('myTypeFilter').value = '';
-  document.getElementById('myStatusFilter').value = '';
+  var s = document.getElementById('mySearchInput');
+  var t = document.getElementById('myTypeFilter');
+  var st = document.getElementById('myStatusFilter');
+  if (s) s.value = '';
+  if (t) t.value = '';
+  if (st) st.value = '';
   _myRequests.currentPage = 1;
   myRequestsRender();
 }
+
+window.myRequestsClearFilters = myRequestsClearFilters;
 
 function myRequestsPagePrev() {
   if (_myRequests.currentPage > 1) {
@@ -377,6 +444,8 @@ function myRequestsPagePrev() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 }
+
+window.myRequestsPagePrev = myRequestsPagePrev;
 
 function myRequestsPageNext() {
   var total = _myRequests.filteredDocs.length;
@@ -388,18 +457,27 @@ function myRequestsPageNext() {
   }
 }
 
+window.myRequestsPageNext = myRequestsPageNext;
+
 function myRequestsRefresh() {
   erpShowToast('Refreshing...', 'info');
   myRequestsLoad();
   myRequestsCheckHealth();
 }
 
+window.myRequestsRefresh = myRequestsRefresh;
+
 // ═══════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════
 function erpEsc(s) {
   if (s === null || s === undefined) return '';
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function erpShowToast(msg, type) {
@@ -409,4 +487,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
 }
 
-console.log('✅ my-requests.js loaded');
+console.log('✅ my-requests.js v2.0 loaded (with edit request integration)');
