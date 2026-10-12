@@ -79,21 +79,24 @@ async function loadDocument() {
 
     var itemsRes = await erpFetch('doc_items', 'doc_no=eq.' + encodeURIComponent(_process.docNo) + '&order=line_no.asc');
 
-    _process.items = (itemsRes || []).map(function(it) {
-      return {
-        id: it.id,
-        lineNo: it.line_no,
-        itemCode: it.item_code,
-        description: it.description,
-        requestedQty: Number(it.requested_qty || 0),
-        issuedQty: Number(it.issued_qty || 0),
-        unit: it.unit || 'PIECE',
-        remarks: it.remarks || 'PENDING',
-        verified: false,
-        selected: false,
-        scanned: false
-      };
-    });
+   _process.items = (itemsRes || []).map(function(it) {
+  return {
+    id: it.id,
+    lineNo: it.line_no,
+    itemCode: it.item_code,
+    description: it.description,
+    requestedQty: Number(it.requested_qty || 0),
+    issuedQty: Number(it.issued_qty || 0),
+    unit: it.unit || 'PIECE',
+    remarks: it.remarks || 'PENDING',
+    verified: false,
+    selected: false,
+    scanned: false,
+    // ═══ Store original values for rollback ═══
+    originalQty: Number(it.issued_qty || 0),
+    originalRemarks: it.remarks || 'PENDING'
+  };
+});
 
     _process.items.forEach(function(it) {
       if (it.issuedQty > 0) {
@@ -459,9 +462,10 @@ async function submitProcess() {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
 
   try {
-    // ═══ Step 1: Update each item in doc_items ═══
+    // ═══ STEP 1: PREPARE UPDATES ═══
     var allComplete = true;
     var anyIssued = false;
+    var preparedItems = [];
 
     for (var i = 0; i < verifiedItems.length; i++) {
       var item = verifiedItems[i];
@@ -476,28 +480,58 @@ async function submitProcess() {
         newRemarks = status;
       }
 
-      var itemRes = await fetch(erpUrl('doc_items?id=eq.' + item.id), {
-        method: 'PATCH',
-        headers: erpHeaders(),
-        body: JSON.stringify({
-          issued_qty: item.issuedQty,
-          remarks: newRemarks
-        })
+      preparedItems.push({
+        id: item.id,
+        itemCode: item.itemCode,
+        issuedQty: item.issuedQty,
+        remarks: newRemarks
       });
-
-      if (!itemRes.ok) {
-        var itemErr = await itemRes.text();
-        console.error('[submitProcess] Item update failed:', item.itemCode, itemErr);
-      }
     }
 
-    // ═══ Step 2: Update document status ═══
     var newStatus = (allComplete && anyIssued) ? 'COMPLETED' : (anyIssued ? 'PARTIAL' : 'PENDING');
     var currentUser = localStorage.getItem('ivm_userFullname') || 
                       localStorage.getItem('ivm_username') || 
                       'WAREHOUSE';
 
-    console.log('[submitProcess] Updating status:', newStatus, 'for', _process.docNo);
+    // ═══ STEP 2: UPDATE ITEMS FIRST ═══
+    console.log('[submitProcess] Step 1: Updating', preparedItems.length, 'items...');
+    
+    var itemsUpdated = 0;
+    var itemErrors = [];
+
+    for (var j = 0; j < preparedItems.length; j++) {
+      var pi = preparedItems[j];
+      try {
+        var itemRes = await fetch(erpUrl('doc_items?id=eq.' + pi.id), {
+          method: 'PATCH',
+          headers: erpHeaders({ 'Prefer': 'return=representation' }),
+          body: JSON.stringify({
+            issued_qty: pi.issuedQty,
+            remarks: pi.remarks
+          })
+        });
+
+        if (!itemRes.ok) {
+          var itemErr = await itemRes.text();
+          console.error('[submitProcess] Item update failed:', pi.itemCode, itemErr);
+          itemErrors.push(pi.itemCode + ': HTTP ' + itemRes.status);
+        } else {
+          itemsUpdated++;
+        }
+      } catch(e) {
+        console.error('[submitProcess] Item error:', pi.itemCode, e);
+        itemErrors.push(pi.itemCode + ': ' + e.message);
+      }
+    }
+
+    console.log('[submitProcess] Updated', itemsUpdated, 'items. Errors:', itemErrors.length);
+
+    if (itemErrors.length > 0) {
+      throw new Error('Failed to update ' + itemErrors.length + ' item(s):\n' + itemErrors.slice(0, 3).join('\n'));
+    }
+
+    // ═══ STEP 3: UPDATE DOCUMENT STATUS (triggers stock validation) ═══
+    console.log('[submitProcess] Step 2: Updating document status to', newStatus);
 
     var docRes = await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(_process.docNo)), {
       method: 'PATCH',
@@ -515,6 +549,31 @@ async function submitProcess() {
       var errText = await docRes.text();
       console.error('[submitProcess] Doc update FAILED:', docRes.status, errText);
       
+      // ═══ ROLLBACK ITEMS ═══
+      console.warn('[submitProcess] Rolling back', itemsUpdated, 'item updates...');
+      
+      for (var k = 0; k < preparedItems.length; k++) {
+        var origItem = _process.items.find(function(it) { return it.id === preparedItems[k].id; });
+        if (!origItem) continue;
+        
+        // Revert to original values
+        try {
+          await fetch(erpUrl('doc_items?id=eq.' + preparedItems[k].id), {
+            method: 'PATCH',
+            headers: erpHeaders(),
+            body: JSON.stringify({
+              issued_qty: origItem.originalQty || 0,
+              remarks: origItem.originalRemarks || 'PENDING'
+            })
+          });
+        } catch(e) {
+          console.warn('[submitProcess] Rollback failed for', preparedItems[k].itemCode);
+        }
+      }
+      
+      console.log('[submitProcess] ✅ Rollback complete');
+      
+      // Parse error message
       var userFriendlyMsg = 'Failed to update document status';
       
       try {
@@ -522,7 +581,6 @@ async function submitProcess() {
         var pgMessage = errJson.message || '';
         var pgCode = errJson.code || '';
         
-        // Insufficient stock (P0001)
         if (pgMessage.indexOf('Insufficient stock') !== -1) {
           var itemMatch = pgMessage.match(/item (\S+?)\./);
           var itemCode = itemMatch ? itemMatch[1] : 'unknown';
@@ -534,20 +592,16 @@ async function submitProcess() {
                             'Required: ' + (attemptedMatch ? Math.abs(parseFloat(attemptedMatch[1])) : 'unknown') + '\n\n' +
                             'Please add stock in Stock Monitor before processing.';
         }
-        // NOT NULL violation (23502)
         else if (pgCode === '23502') {
           var colMatch = pgMessage.match(/column "(\w+)"/);
           userFriendlyMsg = '⚠️ Database error: missing required field "' + (colMatch ? colMatch[1] : 'unknown') + '"';
         }
-        // Foreign key violation (23503)
         else if (pgCode === '23503') {
           userFriendlyMsg = '⚠️ Reference error: item code not found in inventory master';
         }
-        // Unique violation (23505)
         else if (pgCode === '23505') {
           userFriendlyMsg = '⚠️ Duplicate entry: this document may already be processed';
         }
-        // Generic PG error
         else if (pgMessage) {
           userFriendlyMsg = '❌ ' + pgMessage;
         }
@@ -559,6 +613,8 @@ async function submitProcess() {
     }
 
     // ═══ Success ═══
+    console.log('[submitProcess] ✅ Success!');
+    
     document.getElementById('successDocNo').textContent = _process.docNo;
     document.getElementById('successStatus').textContent = newStatus;
 
