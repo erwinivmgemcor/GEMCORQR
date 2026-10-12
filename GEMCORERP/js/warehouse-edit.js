@@ -1,15 +1,17 @@
 // ============================================================
 // GEMCOR ERP — Warehouse Direct Edit
-// v1.0 — Edit PENDING + PARTIAL documents directly
+// v1.1 — FIXED: Trigger stock validation via documents.status PATCH
 // ✅ Locked: Requestor, Department, Doc No.
 // ✅ Editable: Header fields + Items
 // ✅ Audit trail via reason
+// ✅ NEW: Auto-compute status + PATCH documents to fire trigger
+// ✅ NEW: Rollback on insufficient stock
 // ============================================================
 
 var _whEditState = {
   docNo: null,
   docType: null,
-  documentId: null,    // ← NEW
+  documentId: null,
   originalDoc: null,
   originalItems: [],
   currentItems: [],
@@ -49,8 +51,8 @@ async function openWarehouseEdit(docNo, docType) {
     var doc = docRes[0];
 
     // ═══ Store document_id ═══
-_whEditState.documentId = doc.id;
-console.log('[WarehouseEdit] Document ID:', doc.id);
+    _whEditState.documentId = doc.id;
+    console.log('[WarehouseEdit] Document ID:', doc.id);
 
     // ═══ Check status — only PENDING or PARTIAL ═══
     var status = String(doc.status || '').toUpperCase();
@@ -72,6 +74,7 @@ console.log('[WarehouseEdit] Document ID:', doc.id);
         itemCode: it.item_code,
         description: it.description || '',
         qty: Number(it.requested_qty || 0),
+        issuedQty: Number(it.issued_qty || 0),   // ← KEEP TRACK
         unit: it.unit || 'PIECE',
         remarks: it.remarks || '',
         lineNo: it.line_no || 0
@@ -102,7 +105,6 @@ function _ensureEditModal() {
   var existing = document.getElementById('warehouseEditModal');
   if (existing) return existing;
 
-  // ═══ Build modal HTML ═══
   var html = ''
     + '<div class="modal fade" id="warehouseEditModal" tabindex="-1" data-bs-backdrop="static">'
     +   '<div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width:1100px;">'
@@ -165,11 +167,9 @@ function _renderEditForm(doc) {
   var body = document.getElementById('whEditBody');
   if (!body) return;
 
-  // Update title
   var titleEl = document.getElementById('whEditTitle');
   if (titleEl) titleEl.textContent = 'Edit: ' + doc.doc_no;
 
-  // ═══ Build form HTML ═══
   var html = '';
 
   // ─── Info alert ───
@@ -206,25 +206,21 @@ function _renderEditForm(doc) {
        +    '</div>';
   html +=   '<div class="row g-3">';
 
-  // JO No.
   html +=     '<div class="col-md-6">'
        +        '<label class="form-label small fw-bold">JO No.</label>'
        +        '<input type="text" class="form-control" id="whEditJoNo" value="' + _escWh(doc.jo_no || '') + '">'
        +      '</div>';
 
-  // GEM SO No.
   html +=     '<div class="col-md-6">'
        +        '<label class="form-label small fw-bold">GEM SO No.</label>'
        +        '<input type="text" class="form-control" id="whEditGemSoNo" value="' + _escWh(doc.gem_so_no || '') + '">'
        +      '</div>';
 
-  // Client Name
   html +=     '<div class="col-md-6">'
        +        '<label class="form-label small fw-bold">Client Name</label>'
        +        '<input type="text" class="form-control" id="whEditClient" value="' + _escWh(doc.client_name || '') + '">'
        +      '</div>';
 
-  // Project
   html +=     '<div class="col-md-6">'
        +        '<label class="form-label small fw-bold">Project</label>'
        +        '<input type="text" class="form-control" id="whEditProject" value="' + _escWh(doc.project || '') + '">'
@@ -237,7 +233,7 @@ function _renderEditForm(doc) {
     try {
       var d = new Date(dateRaw);
       if (!isNaN(d.getTime())) {
-        dateVal = d.toISOString().split('T')[0]; // YYYY-MM-DD
+        dateVal = d.toISOString().split('T')[0];
       }
     } catch(e) {}
   }
@@ -263,15 +259,17 @@ function _renderEditForm(doc) {
   html +=       '<thead class="table-light sticky-top"><tr>'
        +          '<th style="width:4%">#</th>'
        +          '<th style="width:15%">Item Code</th>'
-       +          '<th style="width:30%">Description</th>'
-       +          '<th style="width:10%">Qty</th>'
-       +          '<th style="width:10%">Unit</th>'
-       +          '<th style="width:23%">Remarks</th>'
+       +          '<th style="width:28%">Description</th>'
+       +          '<th style="width:9%">Req Qty</th>'
+       +          '<th style="width:9%">Issued Qty</th>'
+       +          '<th style="width:8%">Unit</th>'
+       +          '<th style="width:19%">Remarks</th>'
        +          '<th style="width:8%"></th>'
        +        '</tr></thead>';
   html +=       '<tbody id="whEditItemsBody"></tbody>';
   html +=     '</table>';
   html +=   '</div>';
+  html +=   '<div class="form-text mt-2"><i class="bi bi-info-circle me-1"></i>Issued Qty changes will trigger stock validation on save.</div>';
   html += '</div>';
 
   // ─── Reason ───
@@ -286,7 +284,6 @@ function _renderEditForm(doc) {
 
   body.innerHTML = html;
 
-  // ═══ Render items ═══
   _renderWhEditItems();
 }
 
@@ -302,7 +299,7 @@ function _renderWhEditItems() {
   var items = _whEditState.currentItems;
 
   if (items.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">'
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">'
                     + 'No items. Click "Add Item" to add.'
                     + '</td></tr>';
     return;
@@ -310,7 +307,7 @@ function _renderWhEditItems() {
 
   var html = '';
   items.forEach(function(it, idx) {
-    html += '<tr>'
+    html += '<tr data-idx="' + idx + '">'
          +    '<td class="text-center">' + (idx + 1) + '</td>'
          +    '<td><input type="text" class="form-control form-control-sm" '
          +      'value="' + _escWh(it.itemCode) + '" '
@@ -321,6 +318,9 @@ function _renderWhEditItems() {
          +    '<td><input type="number" class="form-control form-control-sm text-center" '
          +      'value="' + it.qty + '" min="0" step="0.01" '
          +      'onchange="_whUpdateItem(' + idx + ', \'qty\', parseFloat(this.value)||0)"></td>'
+         +    '<td><input type="number" class="form-control form-control-sm text-center" '
+         +      'value="' + (it.issuedQty || 0) + '" min="0" step="0.01" '
+         +      'onchange="_whUpdateItem(' + idx + ', \'issuedQty\', parseFloat(this.value)||0)"></td>'
          +    '<td><input type="text" class="form-control form-control-sm text-center" '
          +      'value="' + _escWh(it.unit) + '" '
          +      'onchange="_whUpdateItem(' + idx + ', \'unit\', this.value)"></td>'
@@ -337,7 +337,6 @@ function _renderWhEditItems() {
 
   tbody.innerHTML = html;
 
-  // Update count
   var countEl = document.getElementById('whEditItemCount');
   if (countEl) countEl.textContent = items.length;
 }
@@ -355,6 +354,7 @@ function _whAddItem() {
     itemCode: '',
     description: '',
     qty: 0,
+    issuedQty: 0,
     unit: 'PIECE',
     remarks: '',
     lineNo: 0
@@ -373,7 +373,7 @@ function _whRemoveItem(idx) {
 window._whRemoveItem = _whRemoveItem;
 
 // ═══════════════════════════════════════════════════════════
-// SAVE — Direct PATCH + Audit
+// SAVE — v1.1 FIXED: PATCH documents.status to fire trigger
 // ═══════════════════════════════════════════════════════════
 async function _saveWarehouseEdit() {
   if (_whEditState.isSaving) return;
@@ -393,7 +393,6 @@ async function _saveWarehouseEdit() {
     return;
   }
 
-  // ═══ Validate items ═══
   var validItems = [];
   for (var i = 0; i < _whEditState.currentItems.length; i++) {
     var it = _whEditState.currentItems[i];
@@ -413,7 +412,6 @@ async function _saveWarehouseEdit() {
     return;
   }
 
-  // ═══ Confirm ═══
   if (!confirm('Save changes to ' + _whEditState.docNo + '?\n\n' + validItems.length + ' item(s) will be updated.')) {
     return;
   }
@@ -429,9 +427,20 @@ async function _saveWarehouseEdit() {
                     'WAREHOUSE';
   var currentUsername = localStorage.getItem('ivm_username') || '';
 
+  // ═══ Track original values for rollback ═══
+  var originalItemsBackup = JSON.parse(JSON.stringify(_whEditState.originalItems));
+
   try {
-    // ═══ STEP 1: PATCH document header ═══
-    // ⚠️ IMPORTANT: Do NOT update requestor, department, doc_no
+    console.log('[WarehouseEdit] ============================================');
+    console.log('[WarehouseEdit] SAVE START — v1.1');
+    console.log('[WarehouseEdit] Doc:', _whEditState.docNo);
+    console.log('[WarehouseEdit] Items:', validItems.length);
+    console.log('[WarehouseEdit] ============================================');
+
+    // ═══════════════════════════════════════════════════════════
+    // STEP 1: PATCH document header (non-status fields only)
+    // ⚠️ Do NOT change status here — trigger would fire too early
+    // ═══════════════════════════════════════════════════════════
     var docPatchBody = {
       jo_no: newJoNo,
       gem_so_no: newGemSoNo,
@@ -440,13 +449,11 @@ async function _saveWarehouseEdit() {
       updated_at: new Date().toISOString()
     };
 
-    // Only include date_prepared if may value
     if (newDate) {
-      // Preserve time if existing
       docPatchBody.date_prepared = newDate;
     }
 
-    console.log('[WarehouseEdit] Patching document:', docPatchBody);
+    console.log('[WarehouseEdit] STEP 1: Patching document header...');
 
     var docRes = await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(_whEditState.docNo)), {
       method: 'PATCH',
@@ -456,19 +463,21 @@ async function _saveWarehouseEdit() {
 
     if (!docRes.ok) {
       var errText = await docRes.text();
-      throw new Error('Document update failed: ' + docRes.status + ' ' + errText);
+      throw new Error('Document header update failed: ' + docRes.status + ' ' + errText);
     }
 
-    console.log('[WarehouseEdit] ✅ Document updated');
+    console.log('[WarehouseEdit] ✅ Document header updated');
 
-    // ═══ STEP 2: Handle items — DELETE removed + INSERT new ═══
+    // ═══════════════════════════════════════════════════════════
+    // STEP 2: Handle items — DELETE removed + UPDATE existing + INSERT new
+    // ═══════════════════════════════════════════════════════════
     var originalIds = _whEditState.originalItems.map(function(it) { return it.id; }).filter(Boolean);
     var currentIds = validItems.map(function(it) { return it.id; }).filter(Boolean);
     var removedIds = originalIds.filter(function(id) { return currentIds.indexOf(id) === -1; });
 
     // Delete removed items
     if (removedIds.length > 0) {
-      console.log('[WarehouseEdit] Deleting items:', removedIds);
+      console.log('[WarehouseEdit] STEP 2a: Deleting', removedIds.length, 'removed items');
       var delRes = await fetch(erpUrl('doc_items?id=in.(' + removedIds.join(',') + ')'), {
         method: 'DELETE',
         headers: erpHeaders()
@@ -490,37 +499,157 @@ async function _saveWarehouseEdit() {
             item_code: item.itemCode,
             description: item.description,
             requested_qty: item.qty,
+            issued_qty: Number(item.issuedQty || 0),  // ← KEEP issued_qty
             unit: item.unit,
-            remarks: item.remarks
+            remarks: item.remarks || 'PENDING',
+            line_no: j + 1
           })
         });
-        if (!updRes.ok) console.warn('[WarehouseEdit] Failed to update item:', item.itemCode);
+        if (!updRes.ok) {
+          console.warn('[WarehouseEdit] Failed to update item:', item.itemCode);
+        }
       } else {
         // INSERT new
-      var insRes = await fetch(erpUrl('doc_items'), {
-  method: 'POST',
-  headers: erpHeaders({ 'Prefer': 'return=representation' }),
-  body: JSON.stringify({
-    document_id: _whEditState.documentId,    // ← ADD THIS
-    doc_no: _whEditState.docNo,
-    line_no: j + 1,
-    item_code: item.itemCode,
-    description: item.description,
-    requested_qty: item.qty,
-    issued_qty: 0,
-    unit: item.unit,
-    remarks: item.remarks || 'PENDING',
-    row_index: j + 1
-  })
-});
-        if (!insRes.ok) console.warn('[WarehouseEdit] Failed to insert item:', item.itemCode);
+        var insRes = await fetch(erpUrl('doc_items'), {
+          method: 'POST',
+          headers: erpHeaders({ 'Prefer': 'return=representation' }),
+          body: JSON.stringify({
+            document_id: _whEditState.documentId,
+            doc_no: _whEditState.docNo,
+            line_no: j + 1,
+            item_code: item.itemCode,
+            description: item.description,
+            requested_qty: item.qty,
+            issued_qty: Number(item.issuedQty || 0),
+            unit: item.unit,
+            remarks: item.remarks || 'PENDING',
+            row_index: j + 1
+          })
+        });
+        if (!insRes.ok) {
+          console.warn('[WarehouseEdit] Failed to insert item:', item.itemCode);
+        }
       }
     }
 
     console.log('[WarehouseEdit] ✅ Items updated');
 
-    // ═══ STEP 3: Audit log ═══
-    // Log header changes
+    // ═══════════════════════════════════════════════════════════
+    // STEP 3: Compute new status from FRESH items in DB
+    // ═══════════════════════════════════════════════════════════
+    console.log('[WarehouseEdit] STEP 3: Computing new status...');
+
+    var freshItems = await erpFetch('doc_items',
+      'select=issued_qty,requested_qty&doc_no=eq.' + encodeURIComponent(_whEditState.docNo));
+
+    var allComplete = (freshItems || []).every(function(it) {
+      return Number(it.issued_qty || 0) >= Number(it.requested_qty || 0);
+    });
+    var anyIssued = (freshItems || []).some(function(it) {
+      return Number(it.issued_qty || 0) > 0;
+    });
+
+    var newDocStatus = (allComplete && anyIssued) ? 'COMPLETED' :
+                       (anyIssued ? 'PARTIAL' : 'PENDING');
+
+    console.log('[WarehouseEdit] New status computed:', newDocStatus);
+
+    // ═══════════════════════════════════════════════════════════
+    // STEP 4: PATCH documents.status — THIS FIRES THE TRIGGER
+    // ⚠️ If insufficient stock, this will FAIL → rollback items
+    // ═══════════════════════════════════════════════════════════
+    console.log('[WarehouseEdit] STEP 4: Patching documents.status (trigger will validate stock)...');
+
+    var statusRes = await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(_whEditState.docNo)), {
+      method: 'PATCH',
+      headers: erpHeaders({ 'Prefer': 'return=representation' }),
+      body: JSON.stringify({
+        status: newDocStatus,
+        updated_at: new Date().toISOString()
+      })
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // ROLLBACK IF FAILED
+    // ═══════════════════════════════════════════════════════════
+    if (!statusRes.ok) {
+      var statusErrText = await statusRes.text();
+      console.error('[WarehouseEdit] ❌ Status PATCH FAILED:', statusRes.status, statusErrText);
+
+      console.warn('[WarehouseEdit] ⏪ Rolling back items to original...');
+
+      // Rollback: Delete newly inserted + restore original
+      // Simplest approach: delete all current + re-insert originals
+      try {
+        // Delete all current items
+        var allCurrentIds = validItems.map(function(it) { return it.id; }).filter(Boolean);
+        if (allCurrentIds.length > 0) {
+          await fetch(erpUrl('doc_items?id=in.(' + allCurrentIds.join(',') + ')'), {
+            method: 'DELETE',
+            headers: erpHeaders()
+          });
+        }
+
+        // Re-insert original items
+        var restorePayload = originalItemsBackup.map(function(it, idx) {
+          return {
+            document_id: _whEditState.documentId,
+            doc_no: _whEditState.docNo,
+            line_no: idx + 1,
+            item_code: it.itemCode,
+            description: it.description,
+            requested_qty: it.qty,
+            issued_qty: it.issuedQty,
+            unit: it.unit,
+            remarks: it.remarks,
+            row_index: idx + 1
+          };
+        });
+
+        if (restorePayload.length > 0) {
+          await fetch(erpUrl('doc_items'), {
+            method: 'POST',
+            headers: erpHeaders(),
+            body: JSON.stringify(restorePayload)
+          });
+        }
+
+        console.log('[WarehouseEdit] ✅ Rollback complete');
+      } catch(rollbackErr) {
+        console.error('[WarehouseEdit] ❌ Rollback failed:', rollbackErr);
+      }
+
+      // Parse error for friendly message
+      var friendlyMsg = 'Failed to update document status';
+      try {
+        var errJson = JSON.parse(statusErrText);
+        var pgMsg = errJson.message || '';
+        if (pgMsg.indexOf('Insufficient stock') !== -1) {
+          var itemMatch = pgMsg.match(/item (\S+?)\./);
+          var itemCode = itemMatch ? itemMatch[1] : 'unknown';
+          var currMatch = pgMsg.match(/Current: ([\d.]+)/);
+          var attMatch = pgMsg.match(/Attempted: (-?[\d.]+)/);
+
+          friendlyMsg = '❌ Insufficient stock for ' + itemCode + '.\n\n' +
+                        'Current on-hand: ' + (currMatch ? currMatch[1] : '0') + '\n' +
+                        'Required: ' + (attMatch ? Math.abs(parseFloat(attMatch[1])) : 'unknown') + '\n\n' +
+                        'Please add stock in Stock Monitor before editing.\n\n' +
+                        '(Changes have been reverted)';
+        } else if (pgMsg) {
+          friendlyMsg = '❌ ' + pgMsg;
+        }
+      } catch(parseErr) {
+        friendlyMsg = '❌ Error: ' + statusErrText.substring(0, 150);
+      }
+
+      throw new Error(friendlyMsg);
+    }
+
+    console.log('[WarehouseEdit] ✅ Status PATCHED to:', newDocStatus);
+
+    // ═══════════════════════════════════════════════════════════
+    // STEP 5: Audit log
+    // ═══════════════════════════════════════════════════════════
     var originalDoc = _whEditState.originalDoc;
     var headerChanges = [];
     if ((originalDoc.jo_no || '') !== newJoNo) headerChanges.push({ field: 'jo_no', old: originalDoc.jo_no || '', new: newJoNo });
@@ -528,7 +657,6 @@ async function _saveWarehouseEdit() {
     if ((originalDoc.client_name || '') !== newClient) headerChanges.push({ field: 'client_name', old: originalDoc.client_name || '', new: newClient });
     if ((originalDoc.project || '') !== newProject) headerChanges.push({ field: 'project', old: originalDoc.project || '', new: newProject });
 
-    // Insert audit rows
     for (var k = 0; k < headerChanges.length; k++) {
       var ch = headerChanges[k];
       try {
@@ -552,11 +680,18 @@ async function _saveWarehouseEdit() {
 
     console.log('[WarehouseEdit] ✅ Audit logged');
 
-    // ═══ STEP 4: Success ═══
-    _closeEditModal();
-    erpShowToast('✅ Document updated: ' + _whEditState.docNo, 'success');
+    // ═══════════════════════════════════════════════════════════
+    // SUCCESS
+    // ═══════════════════════════════════════════════════════════
+    console.log('[WarehouseEdit] ============================================');
+    console.log('[WarehouseEdit] ✅ SAVE COMPLETE');
+    console.log('[WarehouseEdit] Status:', newDocStatus);
+    console.log('[WarehouseEdit] ============================================');
 
-    // Refresh list if function exists
+    _closeEditModal();
+    erpShowToast('✅ Document updated: ' + _whEditState.docNo + ' (' + newDocStatus + ')', 'success');
+
+    // Refresh list
     if (typeof mrifListRefresh === 'function' && _whEditState.docType === 'MRIF') {
       setTimeout(mrifListRefresh, 500);
     } else if (typeof mrrListRefresh === 'function' && _whEditState.docType === 'MRR') {
@@ -566,7 +701,7 @@ async function _saveWarehouseEdit() {
     }
 
   } catch(err) {
-    console.error('[WarehouseEdit] Save failed:', err);
+    console.error('[WarehouseEdit] ❌ Save failed:', err);
     erpShowToast('Save failed: ' + err.message, 'danger');
   } finally {
     _whEditState.isSaving = false;
@@ -592,4 +727,4 @@ function _escWh(s) {
     .replace(/'/g, '&#39;');
 }
 
-console.log('✅ warehouse-edit.js v1.0 loaded');
+console.log('✅ warehouse-edit.js v1.1 loaded (trigger fires via documents.status PATCH)');
