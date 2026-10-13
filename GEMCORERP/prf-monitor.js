@@ -1,8 +1,9 @@
 // ============================================================
-// GEMCOR ERP — PRF Monitor (v3.3)
-// Two Tabs + Bulk Status Update + PO# Display from erp_prf_po_cache
-// ✅ v3.2 FIX: Prefer prf_items.po_no over poCacheMap
-// ✅ v3.3 NEW: PRF Items Edit (Revision Mode) + Version History
+// GEMCOR ERP — PRF Monitor (v3.4)
+// Two Tabs + Bulk Status Update + PO# Display
+// ✅ v3.2: Prefer prf_items.po_no over poCacheMap
+// ✅ v3.3: PRF Items Edit (Revision Mode) + Version History
+// ✅ v3.4: Version Filter (Latest only / All versions)
 // ============================================================
 
 var _prfMonitor = {
@@ -18,14 +19,15 @@ var _prfMonitor = {
   itemPageSize: 50,
   searchTimer: null,
   currentPrf: null,
-  selectedItems: {}
+  selectedItems: {},
+  versionFilter: 'latest'  // ✅ NEW: 'latest' | 'all'
 };
 
 // ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[PRF Monitor v3.3] Initializing...');
+  console.log('[PRF Monitor v3.4] Initializing...');
 
   prfMonitorCheckHealth();
   prfMonitorLoad();
@@ -76,9 +78,7 @@ async function prfMonitorFetchPoCache() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ✅ Resolve PO data with priority logic
-// Priority 1: prf_items.po_no (manual entry / bulk sync)
-// Priority 2: erp_prf_po_cache (legacy)
+// Resolve PO data
 // ═══════════════════════════════════════════════════════════
 function _resolvePoData(item, prfNo) {
   var itemPoNo = String(item.po_no || '').trim();
@@ -109,15 +109,54 @@ function _resolvePoData(item, prfNo) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ✅ Version badge helper
+// ✅ v3.4: VERSION BADGE with LATEST/OLD indicator
 // ═══════════════════════════════════════════════════════════
-function _versionBadge(prf) {
+function _versionBadge(prf, latestPrfId) {
   var v = parseInt(prf.version_number, 10) || 1;
-  if (v <= 1) return '';
-  return ' <span class="badge bg-warning text-dark" style="font-size:0.62rem;" title="Revision v' + v + '">v' + v + '</span>';
+  if (v <= 1 && !latestPrfId) return '';
+  
+  var isLatest = (prf.id === latestPrfId);
+  
+  if (v <= 1 && latestPrfId) {
+    // v1 na hindi latest (may bagong version na)
+    return ' <span class="badge bg-secondary" style="font-size:0.6rem;" title="Superseded by latest version">v1 OLD</span>';
+  }
+  
+  if (isLatest) {
+    return ' <span class="badge bg-success" style="font-size:0.62rem;" title="Latest version">v' + v + ' LATEST</span>';
+  } else {
+    return ' <span class="badge bg-secondary" style="font-size:0.62rem;" title="Superseded by latest version">v' + v + ' OLD</span>';
+  }
 }
 
 window._versionBadge = _versionBadge;
+
+// ═══════════════════════════════════════════════════════════
+// ✅ v3.4: GET LATEST VERSION ONLY (per base_prf_no)
+// ═══════════════════════════════════════════════════════════
+function _getLatestVersionsOnly(prfs) {
+  var baseMap = {};
+  
+  prfs.forEach(function(p) {
+    var base = String(p.base_prf_no || p.prf_no || '').trim();
+    if (!base) return;
+    
+    var v = parseInt(p.version_number, 10) || 1;
+    
+    if (!baseMap[base] || v > (parseInt(baseMap[base].version_number, 10) || 1)) {
+      baseMap[base] = p;
+    }
+  });
+  
+  return Object.keys(baseMap).map(function(k) { return baseMap[k]; });
+}
+
+function _getLatestPrfIds(prfs) {
+  var latestVersions = _getLatestVersionsOnly(prfs);
+  var idSet = {};
+  latestVersions.forEach(function(p) { idSet[p.id] = true; });
+  return idSet;
+}
 
 // ═══════════════════════════════════════════════════════════
 // TAB SWITCHING
@@ -141,6 +180,25 @@ function prfSwitchTab(tab) {
 window.prfSwitchTab = prfSwitchTab;
 
 // ═══════════════════════════════════════════════════════════
+// ✅ v3.4: VERSION FILTER TOGGLE
+// ═══════════════════════════════════════════════════════════
+function prfToggleVersionFilter(mode) {
+  _prfMonitor.versionFilter = mode || 'latest';
+  console.log('[PRF Monitor] Version filter:', _prfMonitor.versionFilter);
+  
+  // Reset page
+  _prfMonitor.currentPrfPage = 1;
+  _prfMonitor.currentItemPage = 1;
+  
+  prfMonitorComputeStatus();
+  prfMonitorComputeKPIs();
+  prfMonitorRenderPrfTab();
+  prfMonitorRenderItemTab();
+}
+
+window.prfToggleVersionFilter = prfToggleVersionFilter;
+
+// ═══════════════════════════════════════════════════════════
 // LOAD DATA
 // ═══════════════════════════════════════════════════════════
 async function prfMonitorLoad() {
@@ -159,7 +217,6 @@ async function prfMonitorLoad() {
   }
 
   try {
-    // ─── Query 1: Fetch PRF documents ───
     var query = 'select=*&order=created_at.desc&limit=2000';
 
     var catFilterEl = document.getElementById('prfCategoryFilter');
@@ -184,9 +241,8 @@ async function prfMonitorLoad() {
 
     var prfs = await erpFetch('prf_documents', query);
     _prfMonitor.allPrfs = prfs || [];
-    console.log('[PRF Monitor v3.3] Loaded', _prfMonitor.allPrfs.length, 'PRFs');
+    console.log('[PRF Monitor v3.4] Loaded', _prfMonitor.allPrfs.length, 'PRFs');
 
-    // ─── Query 2: Fetch items ───
     if (_prfMonitor.allPrfs.length > 0) {
       var prfIds = _prfMonitor.allPrfs.map(function(p) { return p.id; });
       var allItems = [];
@@ -214,19 +270,19 @@ async function prfMonitorLoad() {
         it._prfDate = prf.created_at || '';
         it._prfCategory = prf.category || '';
         it._prfRequestor = prf.requestor || '';
+        it._basePrfNo = prf.base_prf_no || prf.prf_no || '';
+        it._versionNumber = parseInt(prf.version_number, 10) || 1;
       });
 
       _prfMonitor.allItems = allItems;
-      console.log('[PRF Monitor v3.3] Loaded', allItems.length, 'items');
+      console.log('[PRF Monitor v3.4] Loaded', allItems.length, 'items');
     } else {
       _prfMonitor.allItems = [];
     }
 
-    // ─── Query 3: Fetch PO cache ───
     try {
       _prfMonitor.poCacheMap = await prfMonitorFetchPoCache();
     } catch(e) {
-      console.warn('[PRF Monitor] Could not load PO cache:', e.message);
       _prfMonitor.poCacheMap = {};
     }
 
@@ -254,14 +310,25 @@ function prfUpdateTabCounts() {
   var prfCountEl = document.getElementById('prfTabCount');
   var itemCountEl = document.getElementById('itemTabCount');
 
-  if (prfCountEl) prfCountEl.textContent = _prfMonitor.allPrfs.length;
-  if (itemCountEl) itemCountEl.textContent = _prfMonitor.allItems.length;
+  var prfsToCount = _prfMonitor.versionFilter === 'latest' 
+    ? _getLatestVersionsOnly(_prfMonitor.allPrfs) 
+    : _prfMonitor.allPrfs;
+  
+  var latestIds = _getLatestPrfIds(_prfMonitor.allPrfs);
+  var itemsToCount = _prfMonitor.versionFilter === 'latest'
+    ? _prfMonitor.allItems.filter(function(it) { return latestIds[it.prf_id]; })
+    : _prfMonitor.allItems;
+
+  if (prfCountEl) prfCountEl.textContent = prfsToCount.length;
+  if (itemCountEl) itemCountEl.textContent = itemsToCount.length;
 }
 
 // ═══════════════════════════════════════════════════════════
-// COMPUTE STATUS
+// COMPUTE STATUS (latest only by default)
 // ═══════════════════════════════════════════════════════════
 function prfMonitorComputeStatus() {
+  var latestIds = _getLatestPrfIds(_prfMonitor.allPrfs);
+  
   var itemsByPrf = {};
   _prfMonitor.allItems.forEach(function(it) {
     if (!itemsByPrf[it.prf_id]) itemsByPrf[it.prf_id] = [];
@@ -292,20 +359,27 @@ function prfMonitorComputeStatus() {
 
     prf._statusCounts = counts;
     prf._statusTotal = total;
+    prf._isLatestVersion = !!latestIds[prf.id];
   });
 }
 
 // ═══════════════════════════════════════════════════════════
-// COMPUTE KPIs
+// COMPUTE KPIs (latest only by default)
 // ═══════════════════════════════════════════════════════════
 function prfMonitorComputeKPIs() {
+  var latestIds = _getLatestPrfIds(_prfMonitor.allPrfs);
+  
+  var itemsToCount = _prfMonitor.versionFilter === 'latest'
+    ? _prfMonitor.allItems.filter(function(it) { return latestIds[it.prf_id]; })
+    : _prfMonitor.allItems;
+
   var totalItems = 0;
   var unservedItems = 0;
   var staggeredItems = 0;
   var servedItems = 0;
   var canceledItems = 0;
 
-  _prfMonitor.allItems.forEach(function(it) {
+  itemsToCount.forEach(function(it) {
     totalItems++;
     var s = String(it.status || 'UNSERVED').toUpperCase();
     if (s === 'UNSERVED') unservedItems++;
@@ -314,7 +388,9 @@ function prfMonitorComputeKPIs() {
     else if (s === 'CANCELED') canceledItems++;
   });
 
-  var prfCount = _prfMonitor.allPrfs.length;
+  var prfCount = _prfMonitor.versionFilter === 'latest'
+    ? _getLatestVersionsOnly(_prfMonitor.allPrfs).length
+    : _prfMonitor.allPrfs.length;
 
   document.getElementById('prfKpiTotal').textContent = erpNum(totalItems);
   document.getElementById('prfKpiUnserved').textContent = erpNum(unservedItems);
@@ -325,15 +401,14 @@ function prfMonitorComputeKPIs() {
   var totalSub = document.getElementById('prfKpiTotalSub');
   if (totalSub) totalSub.textContent = 'across ' + prfCount + ' PRF' + (prfCount === 1 ? '' : 's');
 
-  console.log('[PRF KPI] Items:', totalItems,
+  console.log('[PRF KPI] Mode:', _prfMonitor.versionFilter,
+    '| Items:', totalItems,
     '| Unserved:', unservedItems,
-    '| Staggered:', staggeredItems,
-    '| Served:', servedItems,
-    '| Canceled:', canceledItems);
+    '| Served:', servedItems);
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER TAB 1: BY PRF
+// RENDER TAB 1: BY PRF (with version filter)
 // ═══════════════════════════════════════════════════════════
 function prfMonitorRenderPrfTab() {
   var tbody = document.getElementById('prfTableBody');
@@ -345,7 +420,13 @@ function prfMonitorRenderPrfTab() {
   var search = (searchInput ? searchInput.value : '').toLowerCase().trim();
   var statusFilter = statusFilterEl ? statusFilterEl.value : '';
 
-  _prfMonitor.filteredPrfs = _prfMonitor.allPrfs.filter(function(p) {
+  // ✅ v3.4: Filter by version mode
+  var latestIds = _getLatestPrfIds(_prfMonitor.allPrfs);
+  var basePrfs = _prfMonitor.versionFilter === 'latest'
+    ? _getLatestVersionsOnly(_prfMonitor.allPrfs)
+    : _prfMonitor.allPrfs;
+
+  _prfMonitor.filteredPrfs = basePrfs.filter(function(p) {
     if (statusFilter && String(p._status || '').toUpperCase() !== statusFilter) return false;
 
     if (search) {
@@ -403,7 +484,9 @@ function prfMonitorRenderPrfTab() {
     var safePrf = String(p.prf_no || '').replace(/'/g, "\\'");
     var safeId = p.id;
     var safeBasePrf = String(p.base_prf_no || p.prf_no || '').replace(/'/g, "\\'");
-    var versionBadge = _versionBadge(p);
+    
+    // ✅ v3.4: Dynamic version badge
+    var versionBadge = _versionBadge(p, latestIds[p.id] ? p.id : null);
 
     html += '<tr>' +
       '<td><code>' + erpEsc(p.prf_no) + '</code>' + versionBadge + '</td>' +
@@ -437,7 +520,7 @@ function prfMonitorRenderPrfTab() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER TAB 2: BY ITEM
+// RENDER TAB 2: BY ITEM (with version filter)
 // ═══════════════════════════════════════════════════════════
 function prfMonitorRenderItemTab() {
   var tbody = document.getElementById('itemTableBody');
@@ -449,7 +532,13 @@ function prfMonitorRenderItemTab() {
   var search = (searchInput ? searchInput.value : '').toLowerCase().trim();
   var statusFilter = statusFilterEl ? statusFilterEl.value : '';
 
-  _prfMonitor.filteredItems = _prfMonitor.allItems.filter(function(it) {
+  // ✅ v3.4: Filter items by version mode
+  var latestIds = _getLatestPrfIds(_prfMonitor.allPrfs);
+  var baseItems = _prfMonitor.versionFilter === 'latest'
+    ? _prfMonitor.allItems.filter(function(it) { return latestIds[it.prf_id]; })
+    : _prfMonitor.allItems;
+
+  _prfMonitor.filteredItems = baseItems.filter(function(it) {
     if (statusFilter && String(it.status || 'UNSERVED').toUpperCase() !== statusFilter) return false;
 
     if (search) {
@@ -531,12 +620,17 @@ function prfMonitorRenderItemTab() {
       }
     }
 
+    // ✅ v3.4: Version badge sa PRF No. cell
+    var versionBadgeSmall = it._versionNumber > 1 
+      ? ' <span class="badge bg-warning text-dark" style="font-size:0.55rem;">v' + it._versionNumber + '</span>'
+      : '';
+
     html += '<tr class="' + rowClass + '" data-item-id="' + it.id + '">' +
       '<td><input type="checkbox" class="item-select-cb" data-item-id="' + it.id + '"' +
         (isSelected ? ' checked' : '') +
         ' onchange="toggleItemSelect(' + it.id + ', this.checked)"></td>' +
       '<td>' + (start + idx + 1) + '</td>' +
-      '<td><span class="prf-link" onclick="viewPrfDetailsFromItem(' + it.prf_id + ')">' + erpEsc(it._prfNo) + '</span></td>' +
+      '<td><span class="prf-link" onclick="viewPrfDetailsFromItem(' + it.prf_id + ')">' + erpEsc(it._prfNo) + '</span>' + versionBadgeSmall + '</td>' +
       '<td>' + erpEsc(dateStr) + '</td>' +
       '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
       '<td title="' + erpEsc(it.description || '') + '">' + erpEsc(truncate(it.description || '—', 45)) + '</td>' +
@@ -672,8 +766,7 @@ async function bulkUpdateStatus(newStatus) {
     return;
   }
 
-  var confirmMsg = 'Mark ' + selectedIds.length + ' item(s) as ' + newStatus + '?';
-  if (!confirm(confirmMsg)) return;
+  if (!confirm('Mark ' + selectedIds.length + ' item(s) as ' + newStatus + '?')) return;
 
   try {
     var currentUser = localStorage.getItem('ivm_userFullname') ||
@@ -691,7 +784,7 @@ async function bulkUpdateStatus(newStatus) {
 
     if (!res.ok) {
       var errText = await res.text();
-      throw new Error('Bulk update failed: ' + res.status + ' ' + errText.substring(0, 100));
+      throw new Error('Bulk update failed: ' + res.status);
     }
 
     erpShowToast('✅ ' + selectedIds.length + ' item(s) marked as ' + newStatus, 'success');
@@ -738,24 +831,21 @@ async function updateItemStatus(itemId, newStatus) {
 // EXPORT SELECTED ITEMS
 // ═══════════════════════════════════════════════════════════
 function exportSelectedItems() {
-  var selectedIds = Object.keys(_prfMonitor.selectedItems).filter(function(id) {
-    return _prfMonitor.selectedItems[id] === true;
-  });
-
-  if (selectedIds.length === 0) {
-    erpShowToast('No items selected', 'warning');
-    return;
-  }
-
   var items = _prfMonitor.allItems.filter(function(it) {
     return _prfMonitor.selectedItems[it.id] === true;
   });
 
-  var headers = ['PRF No.', 'Item Code', 'Description', 'Qty Order', 'Unit', 'PO#', 'Supplier', 'Date Delivered', 'Status'];
+  if (items.length === 0) {
+    erpShowToast('No items selected', 'warning');
+    return;
+  }
+
+  var headers = ['PRF No.', 'Version', 'Item Code', 'Description', 'Qty Order', 'Unit', 'PO#', 'Supplier', 'Date Delivered', 'Status'];
   var rows = items.map(function(it) {
     var poData = _resolvePoData(it);
     return [
       it._prfNo || '',
+      it._versionNumber || 1,
       it.item_code || '',
       it.description || '',
       it.qty_for_order || 0,
@@ -805,7 +895,10 @@ async function viewPrfDetails(prfId) {
     var html = '';
 
     html += '<div class="row g-2 mb-3" style="font-size:0.9rem;">';
-    html += '<div class="col-md-6"><strong>PRF No.:</strong> <code>' + erpEsc(prf.prf_no) + '</code></div>';
+    html += '<div class="col-md-6"><strong>PRF No.:</strong> <code>' + erpEsc(prf.prf_no) + '</code>';
+    var vNum = parseInt(prf.version_number, 10) || 1;
+    if (vNum > 1) html += ' <span class="badge bg-warning text-dark">v' + vNum + '</span>';
+    html += '</div>';
     html += '<div class="col-md-6"><strong>Category:</strong> <span class="badge bg-primary">' + erpEsc(prf.category) + '</span></div>';
     html += '<div class="col-md-6"><strong>Requestor:</strong> ' + erpEsc(prf.requestor || '—') + '</div>';
     html += '<div class="col-md-6"><strong>Department:</strong> ' + erpEsc(prf.department || '—') + '</div>';
@@ -1096,8 +1189,6 @@ async function prfSyncAndRecompute() {
   try {
     var GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbwTiA7IOQOdq7cfuiiptoA06Oa7xkuh2-wA1fSA3pP2gqZKHUvcjy5AF2rb28ThF842/exec';
 
-    console.log('[PRF Sync] Calling GAS orchestrator...');
-
     var syncRes = await fetch(GAS_WEBHOOK_URL + '?action=prfSyncAndRecompute&_t=' + Date.now(), {
       redirect: 'follow'
     });
@@ -1105,14 +1196,13 @@ async function prfSyncAndRecompute() {
     var syncText = await syncRes.text();
     var syncData;
     try { syncData = JSON.parse(syncText); } catch(e) {
-      throw new Error('Invalid response from GAS: ' + syncText.substring(0, 100));
+      throw new Error('Invalid response from GAS');
     }
 
     if (!syncData.success) {
       throw new Error(syncData.error || 'Unknown error');
     }
 
-    console.log('[PRF Sync] ✅ Complete:', syncData);
     erpShowToast('✅ Sync complete! ' + syncData.synced + ' rows, ' +
                  syncData.statusChanges + ' status updates', 'success');
 
@@ -1126,31 +1216,6 @@ async function prfSyncAndRecompute() {
       btn.disabled = false;
       btn.innerHTML = origHtml;
     }
-  }
-}
-
-// ═══════════════════════════════════════════════════════════
-// RECOMPUTE ONLY
-// ═══════════════════════════════════════════════════════════
-async function prfRecomputeOnly() {
-  if (!confirm('Recompute all PRF item statuses?')) return;
-
-  erpShowToast('Recomputing...', 'info');
-
-  try {
-    var res = await fetch(erpUrl('rpc/compute_prf_item_status'), {
-      method: 'POST',
-      headers: erpHeaders(),
-      body: JSON.stringify({ p_prf_no: null })
-    });
-
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-
-    var changes = await res.json();
-    erpShowToast('✅ ' + (changes || []).length + ' items updated', 'success');
-    await prfMonitorLoad();
-  } catch(err) {
-    erpShowToast('Error: ' + err.message, 'danger');
   }
 }
 
@@ -1218,10 +1283,7 @@ window.savePoEdit = async function() {
       })
     });
     
-    if (!res.ok) {
-      var errText = await res.text();
-      throw new Error('HTTP ' + res.status + ': ' + errText);
-    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     
     bootstrap.Modal.getInstance(document.getElementById('poEditModal')).hide();
     erpShowToast('✅ PO data saved for ' + prfNo, 'success');
@@ -1273,11 +1335,12 @@ function prfMonitorExportItems() {
     erpShowToast('No items to export', 'warning');
     return;
   }
-  var headers = ['PRF No.', 'Date', 'Item Code', 'Description', 'On-Hand', 'Qty Order', 'Unit', 'PO#', 'Supplier', 'Date Delivered', 'Status', 'Remarks'];
+  var headers = ['PRF No.', 'Version', 'Date', 'Item Code', 'Description', 'On-Hand', 'Qty Order', 'Unit', 'PO#', 'Supplier', 'Date Delivered', 'Status', 'Remarks'];
   var rows = _prfMonitor.filteredItems.map(function(it) {
     var poData = _resolvePoData(it);
     return [
       it._prfNo || '',
+      it._versionNumber || 1,
       it._prfDate ? new Date(it._prfDate).toLocaleDateString() : '',
       it.item_code || '',
       it.description || '',
@@ -1349,7 +1412,6 @@ function erpShowToast(msg, type) {
 window.prfMonitorLoad = prfMonitorLoad;
 window.prfMonitorRefresh = prfMonitorRefresh;
 window.prfSyncAndRecompute = prfSyncAndRecompute;
-window.prfRecomputeOnly = prfRecomputeOnly;
 window.prfMonitorClearFilters = prfMonitorClearFilters;
 window.prfMonitorOnSearch = prfMonitorOnSearch;
 window.prfMonitorApplyFilter = prfMonitorApplyFilter;
@@ -1373,7 +1435,7 @@ window.exportSelectedItems = exportSelectedItems;
 window.printCurrentPrf = printCurrentPrf;
 
 // ═══════════════════════════════════════════════════════════
-// ✅ NEW: PRF ITEMS EDIT (REVISION MODE)
+// PRF ITEMS EDIT (REVISION MODE)
 // ═══════════════════════════════════════════════════════════
 
 var _editPrfState = {
@@ -1794,114 +1856,8 @@ function _syncEditPrfInputs() {
   });
 }
 
-window.openPrfVersionHistory = async function(basePrfNo) {
-  document.getElementById('prfHistoryTitle').textContent = basePrfNo;
-  document.getElementById('prfHistoryBody').innerHTML = 
-    '<div class="text-center py-4"><div class="erp-spinner" style="margin:0 auto;"></div></div>';
-  
-  var modalEl = document.getElementById('prfVersionHistoryModal');
-  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-  modal.show();
-  
-  try {
-    var versions = await erpFetch('prf_documents',
-      'select=*&base_prf_no=eq.' + encodeURIComponent(basePrfNo) +
-      '&order=version_number.desc');
-    
-    var audits = await erpFetch('prf_revision_audit',
-      'select=*&base_prf_no=eq.' + encodeURIComponent(basePrfNo) +
-      '&order=created_at.desc');
-    
-    renderVersionHistory(versions || [], audits || []);
-  } catch(err) {
-    document.getElementById('prfHistoryBody').innerHTML = 
-      '<div class="alert alert-danger">Failed: ' + erpEsc(err.message) + '</div>';
-  }
-};
-
-function renderVersionHistory(versions, audits) {
-  var body = document.getElementById('prfHistoryBody');
-  if (!body) return;
-  
-  var html = '';
-  
-  html += '<h6 class="mb-3"><i class="bi bi-layers me-1"></i>All Versions (' + versions.length + ')</h6>';
-  
-  if (versions.length === 0) {
-    html += '<div class="text-muted text-center py-3">No versions found</div>';
-  } else {
-    html += '<div class="list-group mb-4">';
-    versions.forEach(function(v) {
-      var vNum = parseInt(v.version_number, 10) || 1;
-      var dateStr = v.created_at ? new Date(v.created_at).toLocaleString() : '—';
-      
-      html += '<div class="list-group-item">' +
-        '<div class="d-flex justify-content-between align-items-start">' +
-          '<div class="flex-grow-1">' +
-            '<div class="d-flex align-items-center gap-2 flex-wrap">' +
-              '<strong style="font-family:\'Courier New\',monospace;">' + erpEsc(v.prf_no) + '</strong>' +
-              '<span class="badge ' + (vNum === 1 ? 'bg-secondary' : 'bg-warning text-dark') + '">' +
-                'v' + vNum + '</span>' +
-              '<span class="badge bg-light text-dark">' + erpEsc(v.category) + '</span>' +
-              '<span class="text-muted small">' + (v.total_items || 0) + ' items · ' + 
-                (v.total_qty || 0) + ' qty</span>' +
-            '</div>' +
-            '<div class="small text-muted mt-1">' +
-              '<i class="bi bi-calendar me-1"></i>' + erpEsc(dateStr) +
-              (v.revised_by_fullname ? ' · <i class="bi bi-person me-1"></i>' + erpEsc(v.revised_by_fullname) : '') +
-            '</div>' +
-            (v.revision_reason ? '<div class="small mt-2 p-2" style="background:#fffbeb;border-radius:6px;">' +
-              '<strong>Reason:</strong> ' + erpEsc(v.revision_reason) + '</div>' : '') +
-          '</div>' +
-        '</div>' +
-      '</div>';
-    });
-    html += '</div>';
-  }
-  
-  if (audits.length > 0) {
-    html += '<h6 class="mb-3"><i class="bi bi-clock-history me-1"></i>Revision History</h6>';
-    html += '<div class="table-responsive"><table class="erp-table" style="font-size:0.82rem;">';
-    html += '<thead><tr><th>Date</th><th>Version</th><th>By</th><th>Changes</th><th>Reason</th></tr></thead><tbody>';
-    
-    audits.forEach(function(a) {
-      var dateStr = a.created_at ? new Date(a.created_at).toLocaleString() : '—';
-      var changes = a.changes || {};
-      var addedCount = (changes.added || []).length;
-      var removedCount = (changes.removed || []).length;
-      var modifiedCount = (changes.modified || []).length;
-      
-      // ✅ Better changes display
-      var changesParts = [];
-      if (addedCount > 0) {
-        changesParts.push('<span class="badge bg-success">+' + addedCount + ' added</span>');
-      }
-      if (removedCount > 0) {
-        changesParts.push('<span class="badge bg-danger">−' + removedCount + ' removed</span>');
-      }
-      if (modifiedCount > 0) {
-        changesParts.push('<span class="badge bg-warning text-dark">' + modifiedCount + ' modified</span>');
-      }
-      
-      var changesSummary = changesParts.length > 0 
-        ? changesParts.join(' ')
-        : '<span class="text-muted small">No item changes</span>';
-      
-      html += '<tr>' +
-        '<td style="font-size:0.75rem;">' + erpEsc(dateStr) + '</td>' +
-        '<td><span class="badge bg-secondary">v' + a.from_version + ' → v' + a.to_version + '</span></td>' +
-        '<td>' + erpEsc(a.revised_by_fullname || a.revised_by) + '</td>' +
-        '<td>' + changesSummary + '</td>' +
-        '<td style="font-size:0.75rem;">' + erpEsc(a.reason || '—') + '</td>' +
-      '</tr>';
-    });
-    html += '</tbody></table></div>';
-  }
-  
-  body.innerHTML = html;
-}
 // ═══════════════════════════════════════════════════════════
-// ✅ AUTO-SUGGEST FOR EDIT PRF ITEMS
+// AUTO-SUGGEST FOR EDIT PRF ITEMS
 // ═══════════════════════════════════════════════════════════
 
 var _editPrfInventoryCache = null;
@@ -1963,7 +1919,6 @@ window.onEditPrfItemSearch = async function(idx, value) {
       return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
     }).slice(0, 25);
 
-    // Sort: exact > starts-with > contains
     matches.sort(function(a, b) {
       var aC = String(a.code || '').toLowerCase();
       var bC = String(b.code || '').toLowerCase();
@@ -2056,7 +2011,6 @@ window.selectEditPrfItem = function(idx, code, description, unit) {
   var dropdown = document.getElementById('editPrfDropdown' + idx);
   if (dropdown) dropdown.classList.add('d-none');
 
-  // Focus qty input
   setTimeout(function() {
     if (row) {
       var qtyInput = row.querySelector('input[data-field="qty_for_order"]');
@@ -2075,7 +2029,6 @@ window.onEditPrfItemBlur = function(idx) {
   }, 200);
 };
 
-// Hide dropdowns on click outside
 document.addEventListener('click', function(e) {
   if (!e.target.closest('.edit-prf-item-search') && !e.target.closest('.edit-prf-item-dropdown')) {
     document.querySelectorAll('.edit-prf-item-dropdown').forEach(function(el) {
@@ -2084,7 +2037,6 @@ document.addEventListener('click', function(e) {
   }
 });
 
-// Reposition on scroll
 window.addEventListener('scroll', function() {
   document.querySelectorAll('.edit-prf-item-dropdown:not(.d-none)').forEach(function(el) {
     var idx = el.id.replace('editPrfDropdown', '');
@@ -2093,4 +2045,113 @@ window.addEventListener('scroll', function() {
   });
 }, { passive: true });
 
-console.log('✅ prf-monitor.js v3.3 loaded (prf_items.po_no priority + PRF Edit + Version History)');
+// ═══════════════════════════════════════════════════════════
+// VERSION HISTORY
+// ═══════════════════════════════════════════════════════════
+
+window.openPrfVersionHistory = async function(basePrfNo) {
+  document.getElementById('prfHistoryTitle').textContent = basePrfNo;
+  document.getElementById('prfHistoryBody').innerHTML = 
+    '<div class="text-center py-4"><div class="erp-spinner" style="margin:0 auto;"></div></div>';
+  
+  var modalEl = document.getElementById('prfVersionHistoryModal');
+  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+  
+  try {
+    var versions = await erpFetch('prf_documents',
+      'select=*&base_prf_no=eq.' + encodeURIComponent(basePrfNo) +
+      '&order=version_number.desc');
+    
+    var audits = await erpFetch('prf_revision_audit',
+      'select=*&base_prf_no=eq.' + encodeURIComponent(basePrfNo) +
+      '&order=created_at.desc');
+    
+    renderVersionHistory(versions || [], audits || []);
+  } catch(err) {
+    document.getElementById('prfHistoryBody').innerHTML = 
+      '<div class="alert alert-danger">Failed: ' + erpEsc(err.message) + '</div>';
+  }
+};
+
+function renderVersionHistory(versions, audits) {
+  var body = document.getElementById('prfHistoryBody');
+  if (!body) return;
+  
+  var html = '';
+  
+  html += '<h6 class="mb-3"><i class="bi bi-layers me-1"></i>All Versions (' + versions.length + ')</h6>';
+  
+  if (versions.length === 0) {
+    html += '<div class="text-muted text-center py-3">No versions found</div>';
+  } else {
+    var maxVersion = Math.max.apply(null, versions.map(function(v) {
+      return parseInt(v.version_number, 10) || 1;
+    }));
+    
+    html += '<div class="list-group mb-4">';
+    versions.forEach(function(v) {
+      var vNum = parseInt(v.version_number, 10) || 1;
+      var isLatest = (vNum === maxVersion);
+      var dateStr = v.created_at ? new Date(v.created_at).toLocaleString() : '—';
+      
+      html += '<div class="list-group-item"' + (isLatest ? ' style="background:#f0fdf4;border-left:4px solid #10b981;"' : '') + '>' +
+        '<div class="d-flex justify-content-between align-items-start">' +
+          '<div class="flex-grow-1">' +
+            '<div class="d-flex align-items-center gap-2 flex-wrap">' +
+              '<strong style="font-family:\'Courier New\',monospace;">' + erpEsc(v.prf_no) + '</strong>' +
+              '<span class="badge ' + (isLatest ? 'bg-success' : 'bg-secondary') + '">' +
+                'v' + vNum + (isLatest ? ' LATEST' : ' OLD') + '</span>' +
+              '<span class="badge bg-light text-dark">' + erpEsc(v.category) + '</span>' +
+              '<span class="text-muted small">' + (v.total_items || 0) + ' items · ' + 
+                (v.total_qty || 0) + ' qty</span>' +
+            '</div>' +
+            '<div class="small text-muted mt-1">' +
+              '<i class="bi bi-calendar me-1"></i>' + erpEsc(dateStr) +
+              (v.revised_by_fullname ? ' · <i class="bi bi-person me-1"></i>' + erpEsc(v.revised_by_fullname) : '') +
+            '</div>' +
+            (v.revision_reason ? '<div class="small mt-2 p-2" style="background:#fffbeb;border-radius:6px;">' +
+              '<strong>Reason:</strong> ' + erpEsc(v.revision_reason) + '</div>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+  }
+  
+  if (audits.length > 0) {
+    html += '<h6 class="mb-3"><i class="bi bi-clock-history me-1"></i>Revision History</h6>';
+    html += '<div class="table-responsive"><table class="erp-table" style="font-size:0.82rem;">';
+    html += '<thead><tr><th>Date</th><th>Version</th><th>By</th><th>Changes</th><th>Reason</th></tr></thead><tbody>';
+    
+    audits.forEach(function(a) {
+      var dateStr = a.created_at ? new Date(a.created_at).toLocaleString() : '—';
+      var changes = a.changes || {};
+      var addedCount = (changes.added || []).length;
+      var removedCount = (changes.removed || []).length;
+      var modifiedCount = (changes.modified || []).length;
+      
+      var changesParts = [];
+      if (addedCount > 0) changesParts.push('<span class="badge bg-success">+' + addedCount + ' added</span>');
+      if (removedCount > 0) changesParts.push('<span class="badge bg-danger">−' + removedCount + ' removed</span>');
+      if (modifiedCount > 0) changesParts.push('<span class="badge bg-warning text-dark">' + modifiedCount + ' modified</span>');
+      
+      var changesSummary = changesParts.length > 0 
+        ? changesParts.join(' ')
+        : '<span class="text-muted small">No item changes</span>';
+      
+      html += '<tr>' +
+        '<td style="font-size:0.75rem;">' + erpEsc(dateStr) + '</td>' +
+        '<td><span class="badge bg-secondary">v' + a.from_version + ' → v' + a.to_version + '</span></td>' +
+        '<td>' + erpEsc(a.revised_by_fullname || a.revised_by) + '</td>' +
+        '<td>' + changesSummary + '</td>' +
+        '<td style="font-size:0.75rem;">' + erpEsc(a.reason || '—') + '</td>' +
+      '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  
+  body.innerHTML = html;
+}
+
+console.log('✅ prf-monitor.js v3.4 loaded (with version filter)');
