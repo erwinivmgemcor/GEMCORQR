@@ -176,10 +176,10 @@ async function loginUser() {
     console.log('[Auth] Verifying user:', username, '/', role);
     
     // ═══ Query users table ═══
-            var url = erpUrl('users') + 
-              '?username=' + encodeURIComponent(username) +
-              '&password=' + encodeURIComponent(password) +
-              '&select=username,fullname,roles,department,is_admin,is_active' +
+                var url = erpUrl('users') + 
+              '?username=eq.' + encodeURIComponent(username) +
+              '&password=eq.' + encodeURIComponent(password) +
+              '&select=username,fullname,roles,department' +
               '&limit=1';
     
     var res = await fetch(url, {
@@ -204,8 +204,31 @@ async function loginUser() {
       return;
     }
     
-        var user = users[0];
+           var user = users[0];
     console.log('[Auth] User found:', user.username, '| Roles:', user.roles);
+    
+    // ✅ Separate query para sa admin/active flags (avoid 400 error)
+    try {
+      var extraRes = await fetch(erpUrl('users') + 
+        '?username=eq.' + encodeURIComponent(username) +
+        '&select=is_admin,is_active' +
+        '&limit=1', {
+        method: 'GET',
+        headers: erpHeaders(),
+        cache: 'no-store'
+      });
+      
+      if (extraRes.ok) {
+        var extraData = await extraRes.json();
+        if (extraData && extraData[0]) {
+          user.is_admin = extraData[0].is_admin === true;
+          user.is_active = extraData[0].is_active !== false;
+        }
+      }
+    } catch(e) {
+      console.warn('[Auth] Could not fetch admin flags:', e.message);
+      user.is_active = true;  // Default: allow login
+    }
     
     // ✅ NEW: Check if user is active
     if (user.is_active === false) {
