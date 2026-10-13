@@ -791,6 +791,33 @@
 
   </div>
 
+     <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- REPLENISHMENT ALERT WIDGET -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="mdash-kpi kpi-amber" id="replenishmentWidget" style="display:none;margin-bottom:20px;cursor:pointer;" onclick="window.location.href='replenishment.html'">
+    <div class="mdash-kpi-header">
+      <div class="mdash-kpi-label">
+        <i class="bi bi-cart-plus-fill me-1"></i>Replenishment Alert
+      </div>
+      <div class="mdash-kpi-icon icon-amber"><i class="bi bi-exclamation-triangle-fill"></i></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+      <div>
+        <div class="mdash-kpi-value kpi-value-sm" id="replenishmentTotal">0</div>
+        <div class="mdash-kpi-sub">items need reorder</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:0.85rem;font-weight:700;color:#dc2626;" id="replenishmentCritical">0 critical</div>
+        <div style="font-size:0.85rem;font-weight:600;color:#d97706;" id="replenishmentUrgent">0 urgent</div>
+        <div style="margin-top:6px;">
+          <button class="erp-btn-primary btn-sm">
+            <i class="bi bi-arrow-right-circle me-1"></i>View Full List
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══════════════════════════════════════════════════════════ -->
   <!-- CHARTS (4) -->
   <!-- ═══════════════════════════════════════════════════════════ -->
