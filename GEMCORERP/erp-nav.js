@@ -13,7 +13,7 @@
   // Grouped, role-based, priority-ordered
   // ═══════════════════════════════════════════════════════════
   var NAV_GROUPS = [
-    {
+       {
       id: 'main',
       label: '',
       items: [
@@ -30,6 +30,14 @@
           icon: 'bi-box-seam',
           href: 'stock-monitor.html',
           roles: ['warehouse']
+        },
+        {
+          id: 'admin-users',
+          label: 'User Management',
+          icon: 'bi-people-fill',
+          href: 'admin-users.html',
+          roles: ['warehouse'],
+          adminOnly: true                    // ✅ NEW
         }
       ]
     },
@@ -230,6 +238,7 @@
   var PAGE_TITLES = {
     'management-dashboard': 'Management Dashboard',
     'stock-monitor': 'Stock Monitor',
+    'admin-users': 'User Management',         // ✅ NEW
     'inventory-count': 'Inventory Count',
     'all-requests': 'All Requests',
     'mrif-list': 'MRIF List',
@@ -278,7 +287,12 @@
     return '';
   }
 
-  function _isAllowed(item, userRole) {
+   function _isAllowed(item, userRole) {
+    // ✅ NEW: adminOnly items
+    if (item.adminOnly) {
+      var isAdmin = localStorage.getItem('ivm_isAdmin') === 'true';
+      if (!isAdmin) return false;
+    }
     if (!item.roles) return true;
     return item.roles.indexOf(userRole) !== -1;
   }
