@@ -1,6 +1,6 @@
 // ============================================================
 // GEMCOR ERP — MRIF List Logic
-// v2.0 — Discuss + Warehouse Direct Edit
+// v2.1 — Null-safe KPI updates (works on MRIF + MRR + MRS pages)
 // ============================================================
 
 var _mrifAllDocs = [];
@@ -13,7 +13,15 @@ var _mrifSearchTimer = null;
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[MRIF List] Initializing...');
+  console.log('[MRIF List v2.1] Initializing...');
+  
+  // ═══ GUARD: Only initialize if MRIF-specific elements exist ═══
+  var isMrifPage = !!document.getElementById('mrifTableBody');
+  if (!isMrifPage) {
+    console.log('[MRIF List] Not on MRIF page — skipping init');
+    return;
+  }
+  
   mrifCheckHealth();
   mrifListLoad();
   mrifListPopulateFilterOptions();
@@ -45,14 +53,16 @@ async function mrifCheckHealth() {
 // ═══════════════════════════════════════════════════════════
 async function mrifListLoad() {
   var tbody = document.getElementById('mrifTableBody');
-  if (tbody) {
-    tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
-      '<div class="erp-spinner"></div>' +
-      '<div class="mt-2">Loading MRIF documents...</div></td></tr>';
+  if (!tbody) {
+    console.log('[MRIF List] Table body not found — skipping load');
+    return;
   }
   
+  tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
+    '<div class="erp-spinner"></div>' +
+    '<div class="mt-2">Loading MRIF documents...</div></td></tr>';
+  
   try {
-    // Build query
     var query = 'select=*&doc_type=eq.MRIF&order=created_at.desc&limit=2000';
     
     var status = document.getElementById('mrifStatusFilter') ? document.getElementById('mrifStatusFilter').value : '';
@@ -73,10 +83,9 @@ async function mrifListLoad() {
     var rows = await erpFetch('documents', query);
     _mrifAllDocs = rows || [];
     
-    // Compute KPIs
-    mrifListComputeKPIs();
+    console.log('[MRIF List] Loaded ' + _mrifAllDocs.length + ' documents');
     
-    // Apply client-side search filter
+    mrifListComputeKPIs();
     mrifListRender();
   } catch(err) {
     console.error('[mrifListLoad]', err);
@@ -88,7 +97,7 @@ async function mrifListLoad() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// KPI COMPUTATION
+// KPI — Null-Safe (works on MRIF / MRR / MRS pages)
 // ═══════════════════════════════════════════════════════════
 function mrifListComputeKPIs() {
   var total = _mrifAllDocs.length;
@@ -101,11 +110,23 @@ function mrifListComputeKPIs() {
     else if (s === 'PARTIAL') partial++;
   });
   
-  document.getElementById('mrifKpiTotal').textContent = erpNum(total);
-  document.getElementById('mrifKpiTotalSub').textContent = total + ' documents';
-  document.getElementById('mrifKpiPending').textContent = erpNum(pending);
-  document.getElementById('mrifKpiCompleted').textContent = erpNum(completed);
-  document.getElementById('mrifKpiPartial').textContent = erpNum(partial);
+  // ✅ Null-safe — works kahit MRR page nag-call ng MRIF script
+  var elTotal = document.getElementById('mrifKpiTotal');
+  if (elTotal) elTotal.textContent = erpNum(total);
+  
+  var elTotalSub = document.getElementById('mrifKpiTotalSub');
+  if (elTotalSub) elTotalSub.textContent = total + ' documents';
+  
+  var elPending = document.getElementById('mrifKpiPending');
+  if (elPending) elPending.textContent = erpNum(pending);
+  
+  var elCompleted = document.getElementById('mrifKpiCompleted');
+  if (elCompleted) elCompleted.textContent = erpNum(completed);
+  
+  var elPartial = document.getElementById('mrifKpiPartial');
+  if (elPartial) elPartial.textContent = erpNum(partial);
+  
+  console.log('[MRIF KPI] Total:', total, '| Pending:', pending, '| Completed:', completed, '| Partial:', partial);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -115,11 +136,9 @@ function mrifListRender() {
   var tbody = document.getElementById('mrifTableBody');
   if (!tbody) return;
   
-  // ═══ Role check for Warehouse Edit ═══
   var userRole = localStorage.getItem('ivm_userRole') || '';
   var canEdit = (userRole === 'warehouse');
   
-  // Apply search filter
   var search = (document.getElementById('mrifSearchInput') ? document.getElementById('mrifSearchInput').value : '').toLowerCase().trim();
   _mrifFilteredDocs = _mrifAllDocs.filter(function(d) {
     if (!search) return true;
@@ -128,20 +147,32 @@ function mrifListRender() {
     return code.indexOf(search) !== -1 || req.indexOf(search) !== -1;
   });
   
-  // Pagination
   var total = _mrifFilteredDocs.length;
   var start = (_mrifCurrentPage - 1) * _mrifPageSize;
   var end = Math.min(start + _mrifPageSize, total);
   var pageItems = _mrifFilteredDocs.slice(start, end);
   
-  document.getElementById('mrifTableCount').textContent = total + ' items';
-  document.getElementById('mrifPageTotal').textContent = total;
-  document.getElementById('mrifPageStart').textContent = total > 0 ? start + 1 : 0;
-  document.getElementById('mrifPageEnd').textContent = end;
-  document.getElementById('mrifPageLabel').textContent = 'Page ' + _mrifCurrentPage;
+  // ✅ Null-safe updates
+  var elCount = document.getElementById('mrifTableCount');
+  if (elCount) elCount.textContent = total + ' items';
   
-  document.getElementById('mrifBtnPrev').disabled = (_mrifCurrentPage <= 1);
-  document.getElementById('mrifBtnNext').disabled = (end >= total);
+  var elPageTotal = document.getElementById('mrifPageTotal');
+  if (elPageTotal) elPageTotal.textContent = total;
+  
+  var elPageStart = document.getElementById('mrifPageStart');
+  if (elPageStart) elPageStart.textContent = total > 0 ? start + 1 : 0;
+  
+  var elPageEnd = document.getElementById('mrifPageEnd');
+  if (elPageEnd) elPageEnd.textContent = end;
+  
+  var elPageLabel = document.getElementById('mrifPageLabel');
+  if (elPageLabel) elPageLabel.textContent = 'Page ' + _mrifCurrentPage;
+  
+  var elBtnPrev = document.getElementById('mrifBtnPrev');
+  if (elBtnPrev) elBtnPrev.disabled = (_mrifCurrentPage <= 1);
+  
+  var elBtnNext = document.getElementById('mrifBtnNext');
+  if (elBtnNext) elBtnNext.disabled = (end >= total);
   
   if (pageItems.length === 0) {
     tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
@@ -159,8 +190,6 @@ function mrifListRender() {
     else if (statusUpper === 'PARTIAL') statusClass = 'status-partial';
     
     var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
-    
-    // Can edit if warehouse + PENDING or PARTIAL
     var editable = canEdit && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL');
     
     html += '<tr>' +
@@ -261,7 +290,7 @@ async function mrifListView(docNo) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// FILTERS
+// FILTERS + PAGINATION
 // ═══════════════════════════════════════════════════════════
 async function mrifListPopulateFilterOptions() {
   var selReq = document.getElementById('mrifRequestorFilter');
@@ -347,9 +376,6 @@ function mrifListClearFilters() {
   mrifListLoad();
 }
 
-// ═══════════════════════════════════════════════════════════
-// PAGINATION
-// ═══════════════════════════════════════════════════════════
 function mrifListPagePrev() {
   if (_mrifCurrentPage > 1) {
     _mrifCurrentPage--;
@@ -368,9 +394,6 @@ function mrifListPageNext() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// EXPORT
-// ═══════════════════════════════════════════════════════════
 function mrifListExport() {
   if (_mrifFilteredDocs.length === 0) {
     erpPrintShowToast('No data to export');
@@ -416,13 +439,10 @@ function _csvEscMrif(val) {
   return s;
 }
 
-// ═══════════════════════════════════════════════════════════
-// REFRESH
-// ═══════════════════════════════════════════════════════════
 function mrifListRefresh() {
   erpPrintShowToast('Refreshing...');
   mrifListLoad();
   mrifCheckHealth();
 }
 
-console.log('✅ mrif-list.js v2.0 loaded');
+console.log('✅ mrif-list.js v2.1 loaded (null-safe KPI updates)');
