@@ -28,6 +28,65 @@
 <script defer src="new-mrr.js"></script>
   <script defer src="notifications.js"></script>
   <script defer src="js/update.js"></script>
+
+  <style>
+/* Item search dropdown */
+.item-search-wrapper {
+  position: relative;
+}
+
+.item-search-dropdown {
+  position: fixed;
+  background: #fff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 99999;
+  min-width: 400px;
+}
+
+.item-search-dropdown.d-none {
+  display: none;
+}
+
+.item-search-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 0.85rem;
+  transition: background 0.1s;
+}
+
+.item-search-item:hover {
+  background: #eef4fb;
+}
+
+.item-search-item:last-child {
+  border-bottom: none;
+}
+
+.item-search-item .item-code {
+  font-family: 'Courier New', monospace;
+  font-weight: 700;
+  color: #1e3a5f;
+  margin-bottom: 2px;
+}
+
+.item-search-item .item-desc {
+  color: #4b5563;
+  font-size: 0.8rem;
+}
+
+.item-search-item .item-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 3px;
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+</style>
 </head>
 <body>
 
