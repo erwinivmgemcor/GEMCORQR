@@ -19,6 +19,11 @@
     'chat.html',
     'new-mrs-manual.html'
   ];
+  
+  // ✅ NEW: Admin-only pages
+  var ADMIN_ONLY_PAGES = [
+    'admin-users.html'
+  ];
 
   function _redirectToLogin(reason) {
     try {
@@ -45,12 +50,24 @@
       return;
     }
 
-    if (!username || !role) {
+       if (!username || !role) {
       _redirectToLogin('No session');
       return;
     }
 
     var currentPage = _getCurrentPage();
+
+    // ✅ NEW: Check admin-only pages
+    if (ADMIN_ONLY_PAGES.indexOf(currentPage) !== -1) {
+      var isAdmin = localStorage.getItem('ivm_isAdmin') === 'true';
+      if (!isAdmin) {
+        console.warn('[ERP Guard] Admin-only page blocked for non-admin: ' + username);
+        window.location.replace('management-dashboard.html');
+        return;
+      }
+      console.log('[ERP Guard] ✓ Admin access granted for ' + username);
+      return;
+    }
 
     // Warehouse: full access
     if (role === 'warehouse') {
@@ -58,7 +75,7 @@
       return;
     }
 
-    // Production: only whitelisted pages
+       // Production: only whitelisted pages
     if (role === 'production') {
       if (PRODUCTION_ALLOWED.indexOf(currentPage) !== -1) {
         console.log('[ERP Guard] ✓ Production access: ' + currentPage);
@@ -71,7 +88,6 @@
     }
 
     _redirectToLogin('Unknown role: ' + role);
-  }
 
   _checkAccess();
 })();
