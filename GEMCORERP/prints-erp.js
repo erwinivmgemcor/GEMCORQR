@@ -126,7 +126,16 @@ function _displayDocNoErp(docNo) {
 function buildErpMrifHtml(docNo, info, items) {
   var requestor = _printEsc(info.Requestor || info.requestor || '');
   var department = _printEsc(info.Department || info.department || '');
-  var dateRaw = info.Date || info.date || info['Date Prepared'] || '';
+  
+  // ✅ Multi-level fallback: Date → date_prepared → created_at → today
+  var dateRaw = info.Date 
+             || info.date 
+             || info['Date Prepared'] 
+             || info['date_prepared'] 
+             || info.created_at 
+             || new Date().toISOString();
+  
+  // ...
   var gemSo = _printEsc(info['GEM SO No.'] || info.gemSoNo || '');
   var joNo = _printEsc(info['JO No.'] || info.joNo || '');
   var client = _printEsc(info['Client Name'] || info.clientName || '');
