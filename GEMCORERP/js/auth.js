@@ -176,10 +176,10 @@ async function loginUser() {
     console.log('[Auth] Verifying user:', username, '/', role);
     
     // ═══ Query users table ═══
-        var url = erpUrl('users') + 
-              '?username=eq.' + encodeURIComponent(username) +
-              '&password=eq.' + encodeURIComponent(password) +
-              '&select=username,fullname,roles,department,is_admin' +
+            var url = erpUrl('users') + 
+              '?username=' + encodeURIComponent(username) +
+              '&password=' + encodeURIComponent(password) +
+              '&select=username,fullname,roles,department,is_admin,is_active' +
               '&limit=1';
     
     var res = await fetch(url, {
@@ -204,8 +204,14 @@ async function loginUser() {
       return;
     }
     
-    var user = users[0];
+        var user = users[0];
     console.log('[Auth] User found:', user.username, '| Roles:', user.roles);
+    
+    // ✅ NEW: Check if user is active
+    if (user.is_active === false) {
+      showError('Your account has been <strong>deactivated</strong>. Please contact admin.');
+      return;
+    }
     
     // ═══ Verify role permission ═══
     var userRoles = Array.isArray(user.roles) ? user.roles : ['warehouse'];
