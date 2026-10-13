@@ -239,7 +239,6 @@ function buildErpMrrHtml(docNo, info, items) {
   var receivingSite = _printEsc(info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON');
   var vendor = _printEsc(info['Vendor/Client'] || info.vendor || '');
   
-  // ✅ Multi-level fallback: date_prepared → Date Prepared → created_at → today
   var datePrepared = info['Date Prepared'] 
                   || info['date_prepared'] 
                   || info.datePrepared 
@@ -247,10 +246,22 @@ function buildErpMrrHtml(docNo, info, items) {
                   || new Date().toISOString();
   
   var poNo = _printEsc(info['PO No.'] || info.poNo || '');
-  var sofNo = _printEsc(info['SOF No.'] || info['sof_no'] || info.sofNo || '');   // ✅ NEW
+  var sofNo = _printEsc(info['SOF No.'] || info['sof_no'] || info.sofNo || '');
+  var prfNo = _printEsc(info['PRF No.'] || info['prf_no'] || info.prfNo || '');   // ✅ NEW
   var drNo = _printEsc(info['DR No.'] || info.drNo || '');
   var receivingDate = info['Receiving Date'] || info.receivingDate || '';
   var preparedBy = _printEsc(info['Prepared By'] || info.preparedBy || '');
+
+  // ═══════════════════════════════════════════════════════════
+  // ✅ COMBINE: PO No. / SOF No. / PRF No. in one line
+  // Example: "12345/SOF#12345/PRF#12345"
+  // Auto-skip kung walang value
+  // ═══════════════════════════════════════════════════════════
+  var poSofPrfParts = [];
+  if (poNo) poSofPrfParts.push(poNo);
+  if (sofNo) poSofPrfParts.push(sofNo);
+  if (prfNo) poSofPrfParts.push(prfNo);
+  var poSofPrfCombined = poSofPrfParts.join('/');
 
   function fmtDate(val) {
     if (!val) return '';
@@ -305,7 +316,7 @@ function buildErpMrrHtml(docNo, info, items) {
     '</div>' +
     '<div class="mrr-title">MATERIALS RECEIVING REPORT</div>' +
     '<table class="mrr-meta-table">' +
-           '<tr><td class="mrr-meta-label">RECEIVING SITE:</td><td class="mrr-meta-value" colspan="5">' + receivingSite + '</td><td class="mrr-meta-label-right">PO No. / SOF No.:</td><td class="mrr-meta-value-right">' + poNo + (sofNo ? ' / ' + sofNo : '') + '</td></tr>' +
+          '<tr><td class="mrr-meta-label">RECEIVING SITE:</td><td class="mrr-meta-value" colspan="5">' + receivingSite + '</td><td class="mrr-meta-label-right">PO No. / SOF No.:</td><td class="mrr-meta-value-right">' + poSofPrfCombined + '</td></tr>' +
       '<tr><td class="mrr-meta-label">VENDOR:</td><td class="mrr-meta-value" colspan="5">' + vendor + '</td><td class="mrr-meta-label-right">DR No / SI No.:</td><td class="mrr-meta-value-right">' + drNo + '</td></tr>' +
       '<tr><td class="mrr-meta-label">DATE PREPARED:</td><td class="mrr-meta-value" colspan="2">' + dateStr + '</td><td class="mrr-meta-label-right">RECEIVING DATE:</td><td class="mrr-meta-value-right" colspan="4">' + recDateStr + '</td></tr>' +
     '</table>' +
@@ -509,7 +520,7 @@ async function erpFetchDocWithItems(docNo, docType) {
       'doc_no=eq.' + encodeURIComponent(docNo) + '&order=line_no.asc');
     
     // Build info object (same structure as old GAS format)
-       var info = {
+          var info = {
       'Requestor': doc.requestor || '',
       'Department': doc.department || '',
       'JO No.': doc.jo_no || '',
@@ -518,8 +529,10 @@ async function erpFetchDocWithItems(docNo, docType) {
       'Project': doc.project || '',
       'Date': doc.date_prepared || '',
       'PO No.': doc.po_no || '',
-      'SOF No.': doc.sof_no || '',           // ✅ NEW
-      'sof_no': doc.sof_no || '',            // ✅ NEW (lowercase key)
+      'SOF No.': doc.sof_no || '',
+      'sof_no': doc.sof_no || '',
+      'PRF No.': doc.prf_no || '',           // ✅ NEW
+      'prf_no': doc.prf_no || '',            // ✅ NEW (lowercase key)
       'Vendor/Client': doc.vendor || '',
       'DR No.': doc.dr_no || '',
       'Receiving Site': doc.receiving_site || '',
