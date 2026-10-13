@@ -1,6 +1,9 @@
 // ============================================================
-// GEMCOR ERP — New MRS Creation
-// Direct Supabase insert + JO lookup + auto-status COMPLETED
+// GEMCOR ERP — New MRS Creation (v2.0)
+// ✅ Auto-suggest for manual item entry
+// ✅ ONLY Qty Returned (warehouse verifies ATL Qty)
+// ✅ Status starts as PENDING (like MRIF)
+// ✅ Auto-fill date_prepared
 // ============================================================
 
 var _mrsState = {
@@ -11,39 +14,51 @@ var _mrsState = {
   requestor: '',
   department: '',
   items: [],
-  inventoryList: [],
-  inventoryLoaded: false,
   isSubmitting: false,
   lastSubmittedAt: 0
 };
+
+// Auto-suggest cache
+var _mrsInventoryCache = null;
+var _mrsInventoryPromise = null;
+var _mrsSearchTimers = {};
 
 // ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[New MRS] Initializing...');
-  
+  console.log('[New MRS v2.0] Initializing...');
+
   mrsCheckHealth();
-  
-  var userFullname = localStorage.getItem('ivm_userFullname') || 
+
+  var userFullname = localStorage.getItem('ivm_userFullname') ||
                      localStorage.getItem('ivm_username') || '';
   _mrsState.requestor = userFullname;
-  
+
   document.getElementById('mrsDate').value = new Date().toLocaleDateString('en-US', {
     month: '2-digit', day: '2-digit', year: 'numeric'
   });
-  
+
   loadUserDepartment();
-  preloadInventory();
-  
+
   document.getElementById('mrsJoNo').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
       e.preventDefault();
       lookupJoNo();
     }
   });
-  
-  console.log('[New MRS] Ready. Requestor:', userFullname);
+
+  // Preload inventory for auto-suggest
+  setTimeout(function() {
+    _mrsLoadInventory().then(function(items) {
+      _mrsInventoryCache = items;
+      console.log('[MRS v2.0] Inventory cache preloaded:', items.length, 'items');
+    }).catch(function(err) {
+      console.warn('[MRS v2.0] Preload failed:', err.message);
+    });
+  }, 500);
+
+  console.log('[New MRS v2.0] Ready. Requestor:', userFullname);
 });
 
 async function mrsCheckHealth() {
@@ -69,15 +84,15 @@ async function mrsCheckHealth() {
 async function loadUserDepartment() {
   var username = localStorage.getItem('ivm_username') || '';
   if (!username) return;
-  
+
   var deptField = document.getElementById('mrsDepartment');
   deptField.placeholder = 'Loading...';
   deptField.disabled = true;
-  
+
   try {
-    var rows = await erpFetch('users', 
+    var rows = await erpFetch('users',
       'username=eq.' + encodeURIComponent(username) + '&select=department&limit=1');
-    
+
     if (rows && rows[0] && rows[0].department) {
       var dept = rows[0].department.trim();
       _mrsState.department = dept;
@@ -100,20 +115,6 @@ async function loadUserDepartment() {
   }
 }
 
-async function preloadInventory() {
-  if (_mrsState.inventoryLoaded) return;
-  
-  try {
-    console.log('[Inventory] Loading items via shared helper...');
-    _mrsState.inventoryList = await erpGetInventoryListForDropdown();
-    _mrsState.inventoryLoaded = true;
-    console.log('[Inventory] ✅ Loaded ' + _mrsState.inventoryList.length + ' items');
-  } catch(err) {
-    console.warn('[Inventory] Failed:', err.message);
-    _mrsState.inventoryList = [];
-  }
-}
-
 // ═══════════════════════════════════════════════════════════
 // JO LOOKUP
 // ═══════════════════════════════════════════════════════════
@@ -121,53 +122,53 @@ async function lookupJoNo() {
   var joNo = document.getElementById('mrsJoNo').value.trim();
   var statusEl = document.getElementById('joStatus');
   var resultEl = document.getElementById('joLookupResult');
-  
+
   if (!joNo) {
     statusEl.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Please enter a JO No.</span>';
     return;
   }
-  
+
   statusEl.innerHTML = '<span class="text-muted"><i class="bi bi-hourglass-split"></i> Looking up...</span>';
   resultEl.className = 'alert alert-info mb-0 py-2';
   resultEl.innerHTML = '<span class="small">Searching...</span>';
-  
+
   try {
-    var rows = await erpFetch('erp_sof_cache', 
+    var rows = await erpFetch('erp_sof_cache',
       'jo_no=eq.' + encodeURIComponent(joNo) + '&limit=1');
-    
+
     if (!rows || rows.length === 0) {
       statusEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> JO No. not found</span>';
       resultEl.className = 'alert alert-warning mb-0 py-2';
       resultEl.innerHTML = '<span class="small"><i class="bi bi-exclamation-triangle me-1"></i>JO No. <strong>' + erpEsc(joNo) + '</strong> not found.</span>';
       return;
     }
-    
+
     var sof = rows[0];
     _mrsState.joNo = joNo;
     _mrsState.gemSoNo = sof.so_form || sof.so_no || '';
     _mrsState.clientName = sof.client_name || '';
     _mrsState.project = sof.project_name || '';
-    
+
     document.getElementById('mrsGemSoNo').value = _mrsState.gemSoNo;
     document.getElementById('mrsClientName').value = _mrsState.clientName;
     document.getElementById('mrsProject').value = _mrsState.project;
     document.getElementById('mrsRequestor').value = _mrsState.requestor;
-    
+
     document.getElementById('step2Card').style.display = 'block';
     document.getElementById('step3Card').style.display = 'block';
     document.getElementById('step4Card').style.display = 'block';
-    
+
     statusEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> JO No. found!</span>';
     resultEl.className = 'alert alert-success mb-0 py-2';
     resultEl.innerHTML = '<span class="small"><i class="bi bi-check-circle me-1"></i>Found: <strong>' + erpEsc(sof.so_form || '') + '</strong> — ' + erpEsc(sof.client_name || '') + '</span>';
-    
+
     erpShowToast('JO No. found!', 'success');
-    
+
     setTimeout(function() {
       var addBtn = document.querySelector('#step3Card .btn-primary');
       if (addBtn) addBtn.focus();
     }, 300);
-    
+
   } catch(err) {
     console.error('[lookupJoNo]', err);
     statusEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> Lookup failed</span>';
@@ -177,226 +178,423 @@ async function lookupJoNo() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ITEMS
+// ITEMS MANAGEMENT
 // ═══════════════════════════════════════════════════════════
 function addItemRow() {
-  var emptyState = document.getElementById('itemsEmptyState');
-  if (emptyState) emptyState.style.display = 'none';
-  
-  var template = document.getElementById('itemRowTemplate');
-  var clone = template.content.cloneNode(true);
-  var row = clone.querySelector('.erp-item-row');
-  
-  var idx = _mrsState.items.length;
-  row.setAttribute('data-item-idx', idx);
-  row.querySelector('.item-number').textContent = (idx + 1);
-  
-  var codeInput = row.querySelector('.item-code-input');
-  codeInput.addEventListener('input', function() { onItemCodeInput(this); });
-  codeInput.addEventListener('focus', function() { onItemCodeInput(this); });
-  codeInput.addEventListener('blur', function() {
-    var self = this;
-    setTimeout(function() { hideItemDropdown(self); }, 200);
+  _mrsState.items.push({
+    itemCode: '',
+    description: '',
+    qtyReturned: 0,
+    unit: 'PIECE',
+    remarks: ''
   });
-  
-  document.getElementById('itemsContainer').appendChild(clone);
-  _mrsState.items.push({ code: '', description: '', qty: 1, atlQty: 1, unit: 'PIECE', remarks: '' });
-  
+  renderItems();
+
+  var newIdx = _mrsState.items.length - 1;
   setTimeout(function() {
-    var newRow = document.querySelector('.erp-item-row[data-item-idx="' + idx + '"]');
-    if (newRow) newRow.querySelector('.item-code-input').focus();
-  }, 100);
+    var input = document.getElementById('mrsItemCode' + newIdx);
+    if (input) input.focus();
+  }, 150);
 }
 
-function removeItemRow(btn) {
-  var row = btn.closest('.erp-item-row');
-  if (!row) return;
-  if (!confirm('Remove this item?')) return;
-  
-  var idx = parseInt(row.getAttribute('data-item-idx'), 10);
-  _mrsState.items[idx] = null;
-  row.remove();
-  reindexItemRows();
-  
-  var remaining = document.querySelectorAll('.erp-item-row').length;
-  if (remaining === 0) {
-    document.getElementById('itemsEmptyState').style.display = 'block';
-  }
-}
+function renderItems() {
+  var tbody = document.getElementById('itemsBody');
+  if (!tbody) return;
 
-function reindexItemRows() {
-  var rows = document.querySelectorAll('.erp-item-row');
-  var newItems = [];
-  rows.forEach(function(row, i) {
-    var oldIdx = parseInt(row.getAttribute('data-item-idx'), 10);
-    var item = _mrsState.items[oldIdx];
-    if (item) {
-      row.setAttribute('data-item-idx', i);
-      row.querySelector('.item-number').textContent = (i + 1);
-      newItems.push(item);
-    }
-  });
-  _mrsState.items = newItems;
-}
-
-function onItemCodeInput(input) {
-  var row = input.closest('.erp-item-row');
-  var dropdown = row.querySelector('.item-dropdown');
-  var term = input.value.toLowerCase().trim();
-  
-  if (!term) { dropdown.classList.add('d-none'); return; }
-  
-  if (!_mrsState.inventoryLoaded) {
-    dropdown.innerHTML = '<div class="erp-item-dropdown-item muted">Loading inventory...</div>';
-    dropdown.classList.remove('d-none');
+  if (_mrsState.items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">' +
+      '<i class="bi bi-inbox fs-3 d-block mb-2 opacity-50"></i>' +
+      'Click "Add Item" to start.</td></tr>';
     return;
   }
-  
-  var matches = _mrsState.inventoryList.filter(function(it) {
-    return it.code.toLowerCase().indexOf(term) !== -1 ||
-           it.description.toLowerCase().indexOf(term) !== -1;
-  }).slice(0, 15);
-  
-  if (matches.length === 0) {
-    dropdown.innerHTML = '<div class="erp-item-dropdown-item muted">No matches — you can type manually</div>';
-    dropdown.classList.remove('d-none');
-    return;
-  }
-  
+
   var html = '';
-  matches.forEach(function(it) {
-    html += '<div class="erp-item-dropdown-item" data-code="' + erpEsc(it.code) + '" data-desc="' + erpEsc(it.description) + '" data-unit="' + erpEsc(it.unit) + '">' +
-      '<div class="item-code">' + erpEsc(it.code) + ' <span class="item-unit">' + erpEsc(it.unit) + '</span></div>' +
-      '<div class="item-desc">' + erpEsc(it.description.substring(0, 80)) + '</div>' +
-    '</div>';
+  _mrsState.items.forEach(function(it, idx) {
+    html += '<tr data-idx="' + idx + '">' +
+      '<td class="text-center">' + (idx + 1) + '</td>' +
+
+      // ═══ ITEM CODE with auto-suggest ═══
+      '<td style="position:relative;">' +
+        '<input type="text" ' +
+          'class="form-control form-control-sm item-code-input" ' +
+          'id="mrsItemCode' + idx + '" ' +
+          'data-idx="' + idx + '" ' +
+          'value="' + erpEsc(it.itemCode) + '" ' +
+          'placeholder="Type to search..." ' +
+          'autocomplete="off" ' +
+          'oninput="onMrsItemCodeInput(' + idx + ', this.value)" ' +
+          'onfocus="onMrsItemCodeInput(' + idx + ', this.value)" ' +
+          'onblur="onMrsItemCodeBlur(' + idx + ')">' +
+        '<div class="item-search-dropdown d-none" id="mrsDropdown' + idx + '"></div>' +
+      '</td>' +
+
+      // ═══ DESCRIPTION (auto-filled) ═══
+      '<td>' +
+        '<input type="text" class="form-control form-control-sm" ' +
+          'id="mrsItemDesc' + idx + '" ' +
+          'value="' + erpEsc(it.description) + '" ' +
+          'placeholder="Auto-filled" ' +
+          'oninput="updateItem(' + idx + ', \'description\', this.value)">' +
+      '</td>' +
+
+      // ═══ QTY RETURNED ═══
+      '<td>' +
+        '<input type="number" class="form-control form-control-sm text-center item-qty-input" ' +
+          'value="' + (it.qtyReturned || 0) + '" ' +
+          'min="0" step="0.01" ' +
+          'oninput="updateItem(' + idx + ', \'qtyReturned\', parseFloat(this.value)||0)">' +
+      '</td>' +
+
+      // ═══ UNIT ═══
+      '<td>' +
+        '<input type="text" class="form-control form-control-sm text-center" ' +
+          'id="mrsItemUnit' + idx + '" ' +
+          'value="' + erpEsc(it.unit || 'PIECE') + '" ' +
+          'oninput="updateItem(' + idx + ', \'unit\', this.value)">' +
+      '</td>' +
+
+      // ═══ REMARKS ═══
+      '<td>' +
+        '<input type="text" class="form-control form-control-sm" ' +
+          'value="' + erpEsc(it.remarks) + '" ' +
+          'placeholder="Optional" ' +
+          'oninput="updateItem(' + idx + ', \'remarks\', this.value)">' +
+      '</td>' +
+
+      // ═══ REMOVE BUTTON ═══
+      '<td class="text-center">' +
+        '<button class="btn btn-sm btn-outline-danger" onclick="removeItem(' + idx + ')" title="Remove">' +
+          '<i class="bi bi-trash"></i>' +
+        '</button>' +
+      '</td>' +
+    '</tr>';
   });
-  dropdown.innerHTML = html;
-  dropdown.classList.remove('d-none');
-  
-  dropdown.querySelectorAll('.erp-item-dropdown-item').forEach(function(el) {
-    if (el.classList.contains('muted')) return;
-    el.addEventListener('mousedown', function(e) {
-      e.preventDefault();
-      selectItemFromDropdown(row, el);
-    });
-  });
+  tbody.innerHTML = html;
 }
 
-function selectItemFromDropdown(row, el) {
-  var idx = parseInt(row.getAttribute('data-item-idx'), 10);
-  var code = el.getAttribute('data-code');
-  var desc = el.getAttribute('data-desc');
-  var unit = el.getAttribute('data-unit');
-  
-  row.querySelector('.item-code-input').value = code;
-  row.querySelector('.item-desc-input').value = desc;
-  row.querySelector('.item-unit-input').value = unit;
-  row.querySelector('.item-dropdown').classList.add('d-none');
-  
+function updateItem(idx, field, value) {
   if (_mrsState.items[idx]) {
-    _mrsState.items[idx].code = code;
-    _mrsState.items[idx].description = desc;
+    _mrsState.items[idx][field] = value;
+  }
+}
+
+function removeItem(idx) {
+  if (!confirm('Remove this item?')) return;
+  _mrsState.items.splice(idx, 1);
+  renderItems();
+}
+
+// ═══════════════════════════════════════════════════════════
+// AUTO-SUGGEST
+// ═══════════════════════════════════════════════════════════
+function onMrsItemCodeInput(idx, value) {
+  var input = document.getElementById('mrsItemCode' + idx);
+  var dropdown = document.getElementById('mrsDropdown' + idx);
+  if (!input || !dropdown) return;
+
+  var term = String(value || '').toLowerCase().trim();
+
+  if (_mrsSearchTimers[idx]) clearTimeout(_mrsSearchTimers[idx]);
+
+  if (!term || term.length < 2) {
+    dropdown.classList.add('d-none');
+    return;
+  }
+
+  dropdown.innerHTML = '<div class="item-search-item muted">' +
+    '<i class="bi bi-hourglass-split me-2"></i>Searching...</div>';
+  _positionMrsDropdown(dropdown, input);
+  dropdown.classList.remove('d-none');
+
+  _mrsSearchTimers[idx] = setTimeout(async function() {
+    await _mrsSearchItems(idx, term);
+  }, 200);
+}
+
+async function _mrsSearchItems(idx, term) {
+  var input = document.getElementById('mrsItemCode' + idx);
+  var dropdown = document.getElementById('mrsDropdown' + idx);
+  if (!input || !dropdown) return;
+
+  try {
+    if (!_mrsInventoryCache) {
+      if (_mrsInventoryPromise) {
+        await _mrsInventoryPromise;
+      } else {
+        _mrsInventoryPromise = _mrsLoadInventory();
+        _mrsInventoryCache = await _mrsInventoryPromise;
+        _mrsInventoryPromise = null;
+      }
+    }
+
+    var items = _mrsInventoryCache || [];
+
+    var matches = items.filter(function(it) {
+      var code = String(it.code || '').toLowerCase();
+      var desc = String(it.description || '').toLowerCase();
+      return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
+    }).slice(0, 30);
+
+    matches.sort(function(a, b) {
+      var aCode = String(a.code || '').toLowerCase();
+      var bCode = String(b.code || '').toLowerCase();
+      var aExact = aCode === term ? 0 : 1;
+      var bExact = bCode === term ? 0 : 1;
+      if (aExact !== bExact) return aExact - bExact;
+      var aStart = aCode.indexOf(term) === 0 ? 0 : 1;
+      var bStart = bCode.indexOf(term) === 0 ? 0 : 1;
+      if (aStart !== bStart) return aStart - bStart;
+      return aCode.localeCompare(bCode);
+    });
+
+    if (matches.length === 0) {
+      dropdown.innerHTML = '<div class="item-search-item muted">' +
+        '<i class="bi bi-x-circle me-2"></i>No matches found</div>';
+      return;
+    }
+
+    var html = '';
+    matches.forEach(function(it) {
+      var code = String(it.code || '');
+      var desc = String(it.description || '');
+      var unit = String(it.unit || 'PIECE');
+      var category = String(it.category || '');
+      var safeCode = code.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      var safeDesc = desc.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      var safeUnit = unit.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+      html += '<div class="item-search-item" ' +
+        'onmousedown="event.preventDefault();selectMrsItem(' + idx + ', \'' +
+          safeCode + '\', \'' + safeDesc + '\', \'' + safeUnit + '\')">' +
+        '<div class="item-code">' + erpEsc(code) + '</div>' +
+        '<div class="item-desc">' + erpEsc(desc.substring(0, 100)) + (desc.length > 100 ? '…' : '') + '</div>' +
+        '<div class="item-meta">' +
+          '<span class="badge bg-light text-dark">' + erpEsc(unit) + '</span>' +
+          (category ? '<span class="badge bg-secondary">' + erpEsc(category) + '</span>' : '') +
+        '</div>' +
+      '</div>';
+    });
+    dropdown.innerHTML = html;
+    _positionMrsDropdown(dropdown, input);
+    dropdown.classList.remove('d-none');
+
+  } catch(err) {
+    console.error('[_mrsSearchItems]', err);
+    dropdown.innerHTML = '<div class="item-search-item muted" style="color:#dc2626;">' +
+      '<i class="bi bi-exclamation-triangle me-2"></i>Search error</div>';
+  }
+}
+
+function selectMrsItem(idx, code, description, unit) {
+  if (_mrsState.items[idx]) {
+    _mrsState.items[idx].itemCode = code;
+    _mrsState.items[idx].description = description;
     _mrsState.items[idx].unit = unit;
   }
-  
+
+  var codeInput = document.getElementById('mrsItemCode' + idx);
+  var descInput = document.getElementById('mrsItemDesc' + idx);
+  var unitInput = document.getElementById('mrsItemUnit' + idx);
+
+  if (codeInput) codeInput.value = code;
+  if (descInput) descInput.value = description;
+  if (unitInput) unitInput.value = unit;
+
+  var dropdown = document.getElementById('mrsDropdown' + idx);
+  if (dropdown) dropdown.classList.add('d-none');
+
+  var row = document.querySelector('tr[data-idx="' + idx + '"]');
+  if (row) {
+    row.classList.add('selected-item-row');
+    setTimeout(function() { row.classList.remove('selected-item-row'); }, 1500);
+  }
+
   setTimeout(function() {
-    row.querySelector('.item-qty-input').focus();
-    row.querySelector('.item-qty-input').select();
+    var qtyInput = row ? row.querySelector('.item-qty-input') : null;
+    if (qtyInput) {
+      qtyInput.focus();
+      qtyInput.select();
+    }
   }, 100);
 }
 
-function hideItemDropdown(input) {
-  var row = input.closest('.erp-item-row');
-  if (row) {
-    var dropdown = row.querySelector('.item-dropdown');
+window.selectMrsItem = selectMrsItem;
+
+function onMrsItemCodeBlur(idx) {
+  setTimeout(function() {
+    var dropdown = document.getElementById('mrsDropdown' + idx);
     if (dropdown) dropdown.classList.add('d-none');
+  }, 200);
+}
+
+function _positionMrsDropdown(dropdown, input) {
+  var rect = input.getBoundingClientRect();
+  var spaceBelow = window.innerHeight - rect.bottom;
+  var spaceAbove = rect.top;
+
+  var width = Math.max(rect.width, 400);
+  var maxWidth = window.innerWidth - rect.left - 20;
+  if (width > maxWidth) width = maxWidth;
+
+  dropdown.style.position = 'fixed';
+  dropdown.style.left = rect.left + 'px';
+  dropdown.style.width = width + 'px';
+  dropdown.style.zIndex = '99999';
+
+  if (spaceBelow < 320 && spaceAbove > spaceBelow) {
+    dropdown.style.top = 'auto';
+    dropdown.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceAbove - 20, 320) + 'px';
+  } else {
+    dropdown.style.bottom = 'auto';
+    dropdown.style.top = (rect.bottom + 4) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceBelow - 20, 320) + 'px';
+  }
+}
+
+async function _mrsLoadInventory() {
+  console.log('[MRS v2.0] Loading inventory for autocomplete...');
+  try {
+    if (typeof erpGetInventoryListForDropdown === 'function') {
+      var list = await erpGetInventoryListForDropdown();
+      console.log('[MRS v2.0] Inventory loaded (shared):', list.length, 'items');
+      return list;
+    }
+
+    var allItems = [];
+    var pageSize = 1000;
+    var offset = 0;
+    var hasMore = true;
+
+    while (hasMore) {
+      var query = 'select=item_code,description,base_unit,category,location' +
+                  '&is_active=eq.true' +
+                  '&is_deleted=eq.false' +
+                  '&is_deprecated_2026=eq.false' +
+                  '&order=item_code.asc' +
+                  '&limit=' + pageSize +
+                  '&offset=' + offset;
+
+      var rows = await erpFetch('erp_items', query);
+      if (!rows || rows.length === 0) break;
+
+      allItems = allItems.concat(rows);
+      offset += rows.length;
+      if (rows.length < pageSize) hasMore = false;
+    }
+
+    var mapped = allItems.map(function(r) {
+      return {
+        code: r.item_code,
+        description: r.description || '',
+        unit: r.base_unit || 'PIECE',
+        category: r.category || '',
+        location: r.location || ''
+      };
+    });
+
+    console.log('[MRS v2.0] Inventory loaded (fallback):', mapped.length, 'items');
+    return mapped;
+  } catch(err) {
+    console.warn('[MRS v2.0] Inventory load failed:', err.message);
+    return [];
   }
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT MRS
+// SUBMIT MRS — Status: PENDING (Warehouse will verify)
 // ═══════════════════════════════════════════════════════════
 async function submitMrs() {
   if (_mrsState.isSubmitting) return;
-  
+
   var now = Date.now();
   if (_mrsState.lastSubmittedAt && (now - _mrsState.lastSubmittedAt) < 10000) {
     erpShowToast('Please wait before submitting again', 'warning');
     return;
   }
-  
+
   if (!_mrsState.joNo) {
     erpShowToast('Please lookup a JO No. first', 'warning');
     return;
   }
-  
+
   var department = document.getElementById('mrsDepartment').value.trim();
   if (!department) {
     erpShowToast('Department is required', 'warning');
     return;
   }
   _mrsState.department = department;
-  
+
   var validItems = [];
-  var rows = document.querySelectorAll('.erp-item-row');
+  var rows = document.querySelectorAll('#itemsBody tr');
   for (var i = 0; i < rows.length; i++) {
     var row = rows[i];
-    var code = row.querySelector('.item-code-input').value.trim();
-    var desc = row.querySelector('.item-desc-input').value.trim();
-    var qty = parseFloat(row.querySelector('.item-qty-input').value) || 0;
-    var atlQty = parseFloat(row.querySelector('.item-atl-input').value) || 0;
-    var unit = row.querySelector('.item-unit-input').value;
-    var remarks = row.querySelector('.item-remarks-input').value.trim();
+    var codeEl = row.querySelector('.item-code-input');
+    var descEl = row.querySelector('#mrsItemDesc' + i);
+    var qtyEl = row.querySelector('.item-qty-input');
+    var unitEl = row.querySelector('#mrsItemUnit' + i);
     
-    if (!code) {
-      erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning');
-      return;
-    }
-    if (qty <= 0) {
+    if (!codeEl) continue;  // Skip empty rows
+
+    var code = codeEl.value.trim();
+    var desc = descEl ? descEl.value.trim() : '';
+    var qtyReturned = qtyEl ? (parseFloat(qtyEl.value) || 0) : 0;
+    var unit = unitEl ? unitEl.value : 'PIECE';
+
+    if (!code) continue;
+
+    if (qtyReturned <= 0) {
       erpShowToast('Item #' + (i + 1) + ' has invalid quantity', 'warning');
       return;
     }
-    validItems.push({ code: code, description: desc, qty: qty, atlQty: atlQty, unit: unit, remarks: remarks });
+
+    validItems.push({
+      code: code,
+      description: desc,
+      qtyReturned: qtyReturned,
+      unit: unit,
+      remarks: ''
+    });
   }
-  
+
   if (validItems.length === 0) {
     erpShowToast('Please add at least one item', 'warning');
     return;
   }
-  
-  if (!confirm('Create MRS with ' + validItems.length + ' item(s)?')) return;
-  
+
+  if (!confirm('Submit MRS with ' + validItems.length + ' item(s)?\n\nStatus will be PENDING — warehouse will verify actual returned qty.')) return;
+
   _mrsState.isSubmitting = true;
   _mrsState.lastSubmittedAt = now;
-  
+
   var btn = document.getElementById('btnSubmitMrs');
   var originalHtml = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
-  
+
   try {
-    // Step 1: Get next doc number via RPC (MRS prefix)
+    // Step 1: RPC for doc number
     var rpcRes = await fetch(erpUrl('rpc/get_next_doc_number'), {
       method: 'POST',
       headers: erpHeaders(),
       body: JSON.stringify({ p_prefix: 'MRS' })
     });
-    
+
     if (!rpcRes.ok) throw new Error('RPC failed');
     var nextNum = await rpcRes.json();
     var padded = String(nextNum).padStart(4, '0');
     var docNo = 'MRS' + padded;
-    
+
     console.log('[Submit MRS] Doc No:', docNo);
-    
-    // Step 2: Insert document (auto COMPLETED for MRS)
-       var docRes = await fetch(erpUrl('documents'), {
+
+    // Step 2: Insert document (status = PENDING)
+    var docRes = await fetch(erpUrl('documents'), {
       method: 'POST',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify({
         doc_no: docNo,
         doc_type: 'MRS',
-        status: 'PENDING',
+        status: 'PENDING',                    // ✅ PENDING (hindi COMPLETED)
         is_bal: false,
         requestor: _mrsState.requestor,
         department: department,
@@ -404,22 +602,23 @@ async function submitMrs() {
         gem_so_no: _mrsState.gemSoNo,
         client_name: _mrsState.clientName,
         project: _mrsState.project,
-        date_prepared: new Date().toISOString().split('T')[0],  // ✅ IDAGDAG ITO
+        date_prepared: new Date().toISOString().split('T')[0],   // ✅ FIX
+        item_count: validItems.length,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
     });
-    
+
     if (!docRes.ok) {
       var errText = await docRes.text();
       throw new Error('Insert doc failed: ' + docRes.status + ' ' + errText);
     }
-    
+
     var docArr = await docRes.json();
     var doc = docArr[0];
     if (!doc || !doc.id) throw new Error('No document ID returned');
-    
-    // Step 3: Insert items
+
+    // Step 3: Insert items (issued_qty = 0, waiting for verification)
     var itemPayloads = validItems.map(function(it, idx) {
       return {
         document_id: doc.id,
@@ -427,28 +626,30 @@ async function submitMrs() {
         line_no: idx + 1,
         item_code: it.code,
         description: it.description,
-        requested_qty: it.qty,
-        issued_qty: it.atlQty,
+        requested_qty: it.qtyReturned,       // Qty Returned = Requested Qty
+        issued_qty: 0,                        // ✅ 0 — warehouse pa mag-verify
         unit: it.unit,
-        remarks: it.remarks || 'SERVED',
+        remarks: 'PENDING',                   // ✅ PENDING
         row_index: idx + 1
       };
     });
-    
+
     var itemsRes = await fetch(erpUrl('doc_items'), {
       method: 'POST',
       headers: erpHeaders(),
       body: JSON.stringify(itemPayloads)
     });
-    
+
     if (!itemsRes.ok) {
       var itemsErrText = await itemsRes.text();
       throw new Error('Insert items failed: ' + itemsRes.status + ' ' + itemsErrText);
     }
-    
-    erpShowToast('✅ MRS created: ' + docNo, 'success');
+
+    console.log('[Submit MRS] Items inserted:', validItems.length);
+
+    erpShowToast('✅ MRS created: ' + docNo + ' (PENDING — pending warehouse verification)', 'success');
     showSuccessModal(docNo);
-    
+
   } catch(err) {
     console.error('[submitMrs]', err);
     erpShowToast('Failed: ' + err.message, 'danger');
@@ -459,15 +660,14 @@ async function submitMrs() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// SUCCESS MODAL
-// ═══════════════════════════════════════════════════════════
 function showSuccessModal(docNo) {
   document.getElementById('successDocNo').textContent = docNo;
+
   var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
   var qrData = base + '../?doc=' + encodeURIComponent(docNo) + '&view=print';
-  document.getElementById('successQrImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(qrData);
-  
+  var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(qrData);
+  document.getElementById('successQrImg').src = qrUrl;
+
   var modalEl = document.getElementById('successModal');
   new bootstrap.Modal(modalEl).show();
   modalEl.addEventListener('hidden.bs.modal', function onHide() {
@@ -477,6 +677,12 @@ function showSuccessModal(docNo) {
 }
 
 function resetFormSilent() {
+  _mrsState.joNo = '';
+  _mrsState.gemSoNo = '';
+  _mrsState.clientName = '';
+  _mrsState.project = '';
+  _mrsState.items = [];
+
   document.getElementById('mrsJoNo').value = '';
   document.getElementById('mrsGemSoNo').value = '';
   document.getElementById('mrsClientName').value = '';
@@ -485,15 +691,12 @@ function resetFormSilent() {
   document.getElementById('joStatus').innerHTML = '';
   document.getElementById('joLookupResult').className = 'alert alert-secondary mb-0 py-2';
   document.getElementById('joLookupResult').innerHTML = '<span class="text-muted small">Enter a JO No. above to auto-fill details</span>';
-  
+
   document.getElementById('step2Card').style.display = 'none';
   document.getElementById('step3Card').style.display = 'none';
   document.getElementById('step4Card').style.display = 'none';
-  
-  _mrsState.items = [];
-  var container = document.getElementById('itemsContainer');
-  container.querySelectorAll('.erp-item-row').forEach(function(r) { r.remove(); });
-  document.getElementById('itemsEmptyState').style.display = 'block';
+
+  renderItems();
 }
 
 function resetForm() {
@@ -507,16 +710,48 @@ function closeSuccessAndReset() {
   if (modal) modal.hide();
 }
 
+// ═══════════════════════════════════════════════════════════
+// GLOBAL: Hide dropdowns
+// ═══════════════════════════════════════════════════════════
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.item-search-dropdown') &&
+      !e.target.classList.contains('item-code-input')) {
+    document.querySelectorAll('.item-search-dropdown').forEach(function(el) {
+      el.classList.add('d-none');
+    });
+  }
+});
+
+window.addEventListener('scroll', function() {
+  document.querySelectorAll('.item-search-dropdown:not(.d-none)').forEach(function(dropdown) {
+    var idx = dropdown.id.replace('mrsDropdown', '');
+    var input = document.getElementById('mrsItemCode' + idx);
+    if (input) _positionMrsDropdown(dropdown, input);
+  });
+}, { passive: true });
+
+window.addEventListener('resize', function() {
+  document.querySelectorAll('.item-search-dropdown:not(.d-none)').forEach(function(el) {
+    el.classList.add('d-none');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
 function erpEsc(s) {
   if (s === null || s === undefined) return '';
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function erpShowToast(msg, type) {
   var toastEl = document.getElementById('erpToast');
   if (!toastEl) { console.log('[Toast]', type, msg); return; }
   document.getElementById('erpToastBody').textContent = msg;
-  bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3500 }).show();
+  var toast = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4000 });
+  toast.show();
 }
 
-console.log('✅ new-mrs.js loaded');
+console.log('✅ new-mrs.js v2.0 loaded (PENDING status + auto-suggest)');
