@@ -1,13 +1,15 @@
 // ============================================================
-// GEMCOR ERP — PRF Monitor (v3.1)
+// GEMCOR ERP — PRF Monitor (v3.2)
 // Two Tabs + Bulk Status Update + PO# Display from erp_prf_po_cache
+// ✅ v3.2 FIX: Prefer prf_items.po_no (manual entry) over poCacheMap
+//              (fallback to erp_prf_po_cache only if prf_items empty)
 // ============================================================
 
 var _prfMonitor = {
   activeTab: 'prf',
   allPrfs: [],
   allItems: [],
-  poCacheMap: {},              // "PRF_NO|ITEM_NO" → { po_no, supplier, date_delivered }
+  poCacheMap: {},              // "PRF_NO|LINE_NO" → { po_no, supplier, date_delivered }
   filteredPrfs: [],
   filteredItems: [],
   currentPrfPage: 1,
@@ -23,7 +25,7 @@ var _prfMonitor = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[PRF Monitor v3.1] Initializing...');
+  console.log('[PRF Monitor v3.2] Initializing...');
 
   prfMonitorCheckHealth();
   prfMonitorLoad();
@@ -48,7 +50,7 @@ async function prfMonitorCheckHealth() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// FETCH PO CACHE (from erp_prf_po_cache)
+// FETCH PO CACHE (from erp_prf_po_cache) — Legacy fallback
 // ═══════════════════════════════════════════════════════════
 async function prfMonitorFetchPoCache() {
   try {
@@ -73,6 +75,42 @@ async function prfMonitorFetchPoCache() {
     console.warn('[PRF Monitor] PO cache fetch failed:', err.message);
     return {};
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+// ✅ NEW HELPER: Resolve PO data with priority logic
+// Priority 1: prf_items.po_no (manual entry / bulk sync)
+// Priority 2: erp_prf_po_cache (legacy)
+// ═══════════════════════════════════════════════════════════
+function _resolvePoData(item, prfNo) {
+  var itemPoNo = String(item.po_no || '').trim();
+  var itemSupplier = String(item.po_supplier || '').trim();
+  var itemDateDelivered = item.po_date_delivered || '';
+
+  // Priority 1: prf_items fields
+  if (itemPoNo) {
+    return {
+      po_no: itemPoNo,
+      supplier: itemSupplier,
+      date_delivered: itemDateDelivered,
+      source: 'prf_items'
+    };
+  }
+
+  // Priority 2: erp_prf_po_cache fallback
+  var cacheKey = String(prfNo || item._prfNo || '').trim() + '|' + (parseInt(item.line_no, 10) || 0);
+  var cachedPo = (_prfMonitor.poCacheMap || {})[cacheKey] || {};
+  if (cachedPo.po_no) {
+    return {
+      po_no: cachedPo.po_no,
+      supplier: cachedPo.supplier,
+      date_delivered: cachedPo.date_delivered,
+      source: 'cache'
+    };
+  }
+
+  // Nothing
+  return { po_no: '', supplier: '', date_delivered: '', source: 'none' };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -140,7 +178,7 @@ async function prfMonitorLoad() {
 
     var prfs = await erpFetch('prf_documents', query);
     _prfMonitor.allPrfs = prfs || [];
-    console.log('[PRF Monitor v3.1] Loaded', _prfMonitor.allPrfs.length, 'PRFs');
+    console.log('[PRF Monitor v3.2] Loaded', _prfMonitor.allPrfs.length, 'PRFs');
 
     // ─── Query 2: Fetch items ───
     if (_prfMonitor.allPrfs.length > 0) {
@@ -174,12 +212,12 @@ async function prfMonitorLoad() {
       });
 
       _prfMonitor.allItems = allItems;
-      console.log('[PRF Monitor v3.1] Loaded', allItems.length, 'items');
+      console.log('[PRF Monitor v3.2] Loaded', allItems.length, 'items');
     } else {
       _prfMonitor.allItems = [];
     }
 
-    // ─── Query 3: Fetch PO cache (NEW) ───
+    // ─── Query 3: Fetch PO cache (legacy fallback) ───
     try {
       _prfMonitor.poCacheMap = await prfMonitorFetchPoCache();
     } catch(e) {
@@ -386,7 +424,7 @@ function prfMonitorRenderPrfTab() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER TAB 2: BY ITEM (with PO# columns)
+// RENDER TAB 2: BY ITEM (with PO# columns) — v3.2 FIXED
 // ═══════════════════════════════════════════════════════════
 function prfMonitorRenderItemTab() {
   var tbody = document.getElementById('itemTableBody');
@@ -406,9 +444,8 @@ function prfMonitorRenderItemTab() {
       var itemCode = String(it.item_code || '').toLowerCase();
       var desc = String(it.description || '').toLowerCase();
 
-      // ✅ Search din sa PO#
-      var cacheKey = String(it._prfNo || '').trim() + '|' + (parseInt(it.line_no, 10) || 0);
-      var poData = (_prfMonitor.poCacheMap || {})[cacheKey] || {};
+      // ✅ Search din sa PO# (check both sources)
+      var poData = _resolvePoData(it);
       var poNo = String(poData.po_no || '').toLowerCase();
       var supplier = String(poData.supplier || '').toLowerCase();
 
@@ -456,17 +493,25 @@ function prfMonitorRenderItemTab() {
 
     var isSelected = _prfMonitor.selectedItems[it.id] === true;
 
-    // ✅ PO data lookup
-    var cacheKey = String(it._prfNo || '').trim() + '|' + (parseInt(it.line_no, 10) || 0);
-    var poData = (_prfMonitor.poCacheMap || {})[cacheKey] || {};
-    var poDisplay = poData.po_no ? '<span class="po-badge">' + erpEsc(poData.po_no) + '</span>' : '<span class="text-muted">—</span>';
-    var supplierDisplay = poData.supplier ? erpEsc(truncate(poData.supplier, 25)) : '<span class="text-muted">—</span>';
+    // ═══ v3.2 FIX: Use _resolvePoData helper (prf_items priority) ═══
+    var poData = _resolvePoData(it);
+
+    var poDisplay = poData.po_no 
+      ? '<span class="po-badge">' + erpEsc(poData.po_no) + '</span>' 
+      : '<span class="text-muted">—</span>';
+
+    var supplierDisplay = poData.supplier 
+      ? erpEsc(truncate(poData.supplier, 25)) 
+      : '<span class="text-muted">—</span>';
+
     var dateDeliveredDisplay = '<span class="text-muted">—</span>';
     if (poData.date_delivered) {
       try {
         var dd = new Date(poData.date_delivered);
         if (!isNaN(dd.getTime())) {
-          dateDeliveredDisplay = erpEsc(dd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
+          dateDeliveredDisplay = erpEsc(dd.toLocaleDateString('en-US', { 
+            month: 'short', day: 'numeric', year: 'numeric' 
+          }));
         } else {
           dateDeliveredDisplay = erpEsc(String(poData.date_delivered));
         }
@@ -697,8 +742,7 @@ function exportSelectedItems() {
 
   var headers = ['PRF No.', 'Item Code', 'Description', 'Qty Order', 'Unit', 'PO#', 'Supplier', 'Date Delivered', 'Status'];
   var rows = items.map(function(it) {
-    var cacheKey = String(it._prfNo || '').trim() + '|' + (parseInt(it.line_no, 10) || 0);
-    var poData = (_prfMonitor.poCacheMap || {})[cacheKey] || {};
+    var poData = _resolvePoData(it);
     return [
       it._prfNo || '',
       it.item_code || '',
@@ -727,7 +771,7 @@ function exportSelectedItems() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// VIEW PRF DETAILS
+// VIEW PRF DETAILS — v3.2 FIXED
 // ═══════════════════════════════════════════════════════════
 async function viewPrfDetails(prfId) {
   var prf = _prfMonitor.allPrfs.find(function(p) { return p.id === prfId; });
@@ -793,17 +837,25 @@ async function viewPrfDetails(prfId) {
       items.forEach(function(it, idx) {
         var status = String(it.status || 'UNSERVED').toUpperCase();
 
-        // ✅ PO lookup
-        var cacheKey = String(prf.prf_no || '').trim() + '|' + (parseInt(it.line_no, 10) || 0);
-        var poData = (_prfMonitor.poCacheMap || {})[cacheKey] || {};
-        var poDisplay = poData.po_no ? '<span class="po-badge">' + erpEsc(poData.po_no) + '</span>' : '<span class="text-muted">—</span>';
-        var supplierDisplay = poData.supplier ? erpEsc(poData.supplier) : '<span class="text-muted">—</span>';
+        // ═══ v3.2 FIX: Use _resolvePoData helper ═══
+        var poData = _resolvePoData(it, prf.prf_no);
+
+        var poDisplay = poData.po_no 
+          ? '<span class="po-badge">' + erpEsc(poData.po_no) + '</span>' 
+          : '<span class="text-muted">—</span>';
+
+        var supplierDisplay = poData.supplier 
+          ? erpEsc(poData.supplier) 
+          : '<span class="text-muted">—</span>';
+
         var dateDeliveredDisplay = '<span class="text-muted">—</span>';
         if (poData.date_delivered) {
           try {
             var dd = new Date(poData.date_delivered);
             if (!isNaN(dd.getTime())) {
-              dateDeliveredDisplay = erpEsc(dd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
+              dateDeliveredDisplay = erpEsc(dd.toLocaleDateString('en-US', { 
+                month: 'short', day: 'numeric', year: 'numeric' 
+              }));
             } else {
               dateDeliveredDisplay = erpEsc(String(poData.date_delivered));
             }
@@ -1013,10 +1065,9 @@ function prfMonitorRefresh() {
   erpShowToast('Refreshing...', 'info');
   prfMonitorLoad();
 }
+
 // ═══════════════════════════════════════════════════════════
-// SYNC & RECOMPUTE — v3.2
-// Full flow: sync PO data from Google Sheet → link prf_items
-// → recompute all item statuses
+// SYNC & RECOMPUTE
 // ═══════════════════════════════════════════════════════════
 async function prfSyncAndRecompute() {
   if (!confirm('Sync PO data from Google Sheet and recompute all statuses?\n\nThis may take 30-60 seconds.')) {
@@ -1067,8 +1118,9 @@ async function prfSyncAndRecompute() {
     }
   }
 }
+
 // ═══════════════════════════════════════════════════════════
-// RECOMPUTE ONLY — for manual retrigger
+// RECOMPUTE ONLY
 // ═══════════════════════════════════════════════════════════
 async function prfRecomputeOnly() {
   if (!confirm('Recompute all PRF item statuses?')) return;
@@ -1093,127 +1145,87 @@ async function prfRecomputeOnly() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SHOW MATCH DETAILS — click item → view MRR contributions
+// MANUAL PO ENTRY
 // ═══════════════════════════════════════════════════════════
-async function prfShowMatchDetails(prfNo, itemCode, lineNo) {
-  console.log('[PRF Match] Loading details for:', prfNo, itemCode);
-
-  // Create modal if not exists
-  var modalEl = document.getElementById('prfMatchModal');
-  if (!modalEl) {
-    var modalHtml =
-      '<div class="modal fade" id="prfMatchModal" tabindex="-1">' +
-        '<div class="modal-dialog modal-lg modal-dialog-scrollable">' +
-          '<div class="modal-content">' +
-            '<div class="modal-header erp-modal-header">' +
-              '<h5 class="modal-title"><i class="bi bi-link-45deg me-2"></i>Match Details</h5>' +
-              '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>' +
-            '</div>' +
-            '<div class="modal-body" id="prfMatchBody"></div>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
-    var wrapper = document.createElement('div');
-    wrapper.innerHTML = modalHtml;
-    document.body.appendChild(wrapper.firstChild);
-    modalEl = document.getElementById('prfMatchModal');
+window.openPoEditModal = function(prfNo, lineNo, itemCode) {
+  var currentItem = _prfMonitor.allItems.find(function(it) {
+    return String(it._prfNo).trim() === String(prfNo).trim() 
+        && parseInt(it.line_no, 10) === parseInt(lineNo, 10);
+  });
+  
+  if (!currentItem) {
+    erpShowToast('Item not found', 'warning');
+    return;
   }
+  
+  var poData = _resolvePoData(currentItem, prfNo);
+  
+  document.getElementById('poEditPrfNo').value = prfNo;
+  document.getElementById('poEditLineNo').value = lineNo;
+  document.getElementById('poEditItemCode').value = itemCode;
+  document.getElementById('poEditDisplay').textContent = 
+    prfNo + ' | Line ' + lineNo + ' | ' + itemCode;
+  
+  document.getElementById('poEditPoNo').value = poData.po_no || '';
+  document.getElementById('poEditSupplier').value = poData.supplier || '';
+  document.getElementById('poEditDateDelivered').value = poData.date_delivered || '';
+  
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('poEditModal')).show();
+};
 
-  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-  document.getElementById('prfMatchBody').innerHTML =
-    '<div class="text-center py-4"><div class="erp-spinner"></div></div>';
-  modal.show();
-
+window.savePoEdit = async function() {
+  var prfNo = document.getElementById('poEditPrfNo').value;
+  var lineNo = parseInt(document.getElementById('poEditLineNo').value, 10);
+  var poNo = document.getElementById('poEditPoNo').value.trim();
+  var supplier = document.getElementById('poEditSupplier').value.trim();
+  var dateDelivered = document.getElementById('poEditDateDelivered').value || null;
+  
+  if (!poNo) {
+    erpShowToast('PO No. is required', 'warning');
+    return;
+  }
+  if (!supplier) {
+    erpShowToast('Supplier is required', 'warning');
+    return;
+  }
+  
+  var btn = document.querySelector('#poEditModal .btn-primary');
+  var origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+  
   try {
-    // Get PRF item details
-    var prfItems = await erpFetch('prf_items',
-      'prf_no=eq.' + encodeURIComponent(prfNo) +
-      '&item_code=eq.' + encodeURIComponent(itemCode) +
-      '&limit=1');
-
-    if (!prfItems || prfItems.length === 0) {
-      document.getElementById('prfMatchBody').innerHTML =
-        '<div class="alert alert-warning">Item not found</div>';
-      return;
+    var res = await fetch(erpUrl('prf_items?prf_no=eq.' + encodeURIComponent(prfNo) 
+      + '&line_no=eq.' + lineNo), {
+      method: 'PATCH',
+      headers: erpHeaders({ 'Prefer': 'return=representation' }),
+      body: JSON.stringify({
+        po_no: poNo,
+        po_supplier: supplier,
+        po_date_delivered: dateDelivered,
+        po_updated_at: new Date().toISOString(),
+        po_updated_by: localStorage.getItem('ivm_username') || 'WAREHOUSE'
+      })
+    });
+    
+    if (!res.ok) {
+      var errText = await res.text();
+      throw new Error('HTTP ' + res.status + ': ' + errText);
     }
-
-    var item = prfItems[0];
-    var poNo = item.po_no;
-
-    // Get all MRRs for this PO + item
-    var mrrItems = [];
-    if (poNo) {
-      var docs = await erpFetch('documents',
-        'doc_type=eq.MRR&po_no=eq.' + encodeURIComponent(poNo) +
-        '&order=created_at.desc');
-
-      if (docs && docs.length > 0) {
-        for (var i = 0; i < docs.length; i++) {
-          var di = await erpFetch('doc_items',
-            'doc_no=eq.' + encodeURIComponent(docs[i].doc_no) +
-            '&item_code=eq.' + encodeURIComponent(itemCode));
-          (di || []).forEach(function(d) {
-            mrrItems.push({
-              docNo: docs[i].doc_no,
-              status: docs[i].status,
-              received: Number(d.issued_qty || 0),
-              created: docs[i].created_at
-            });
-          });
-        }
-      }
-    }
-
-    var totalReceived = mrrItems.reduce(function(s, m) { return s + m.received; }, 0);
-    var qtyOrdered = Number(item.qty_for_order || 0);
-    var variance = qtyOrdered - totalReceived;
-
-    var html = '<div class="row g-2 mb-3">' +
-      '<div class="col-md-6"><strong>PRF No.:</strong> <code>' + erpEsc(prfNo) + '</code></div>' +
-      '<div class="col-md-6"><strong>Item Code:</strong> <code>' + erpEsc(itemCode) + '</code></div>' +
-      '<div class="col-md-6"><strong>PO No.:</strong> <code>' + erpEsc(poNo || 'N/A') + '</code></div>' +
-      '<div class="col-md-6"><strong>Supplier:</strong> ' + erpEsc(item.po_supplier || '—') + '</div>' +
-      '<div class="col-md-6"><strong>Qty Ordered:</strong> ' + erpNum(qtyOrdered) + ' ' + erpEsc(item.unit || '') + '</div>' +
-      '<div class="col-md-6"><strong>Status:</strong> ' + erpEsc(item.status || 'UNSERVED') + '</div>' +
-      '</div>';
-
-    html += '<hr>';
-    html += '<h6>MRR Deliveries (' + mrrItems.length + ')</h6>';
-
-    if (mrrItems.length === 0) {
-      html += '<div class="alert alert-info">No MRR found matching this PO + item.</div>';
-    } else {
-      html += '<table class="table table-sm">' +
-        '<thead><tr><th>MRR No.</th><th>Date</th><th>Status</th><th class="text-end">Received</th></tr></thead>' +
-        '<tbody>';
-      mrrItems.forEach(function(m) {
-        html += '<tr>' +
-          '<td><code>' + erpEsc(m.docNo) + '</code></td>' +
-          '<td>' + new Date(m.created).toLocaleDateString() + '</td>' +
-          '<td>' + erpEsc(m.status) + '</td>' +
-          '<td class="text-end"><strong>' + erpNum(m.received) + '</strong></td>' +
-        '</tr>';
-      });
-      html += '</tbody>' +
-        '<tfoot><tr class="fw-bold">' +
-          '<td colspan="3" class="text-end">TOTAL RECEIVED:</td>' +
-          '<td class="text-end">' + erpNum(totalReceived) + '</td>' +
-        '</tr>' +
-        '<tr class="fw-bold ' + (variance > 0 ? 'text-danger' : 'text-success') + '">' +
-          '<td colspan="3" class="text-end">VARIANCE:</td>' +
-          '<td class="text-end">' + (variance > 0 ? '−' : '+') + erpNum(Math.abs(variance)) + '</td>' +
-        '</tr></tfoot>' +
-      '</table>';
-    }
-
-    document.getElementById('prfMatchBody').innerHTML = html;
-
+    
+    bootstrap.Modal.getInstance(document.getElementById('poEditModal')).hide();
+    erpShowToast('✅ PO data saved for ' + prfNo, 'success');
+    
+    await prfMonitorLoad();
+    
   } catch(err) {
-    console.error('[prfShowMatchDetails]', err);
-    document.getElementById('prfMatchBody').innerHTML =
-      '<div class="alert alert-danger">Error: ' + erpEsc(err.message) + '</div>';
+    console.error('[savePoEdit]', err);
+    erpShowToast('Failed: ' + err.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
   }
-}
+};
 
 // ═══════════════════════════════════════════════════════════
 // EXPORT
@@ -1252,8 +1264,7 @@ function prfMonitorExportItems() {
   }
   var headers = ['PRF No.', 'Date', 'Item Code', 'Description', 'On-Hand', 'Qty Order', 'Unit', 'PO#', 'Supplier', 'Date Delivered', 'Status', 'Remarks'];
   var rows = _prfMonitor.filteredItems.map(function(it) {
-    var cacheKey = String(it._prfNo || '').trim() + '|' + (parseInt(it.line_no, 10) || 0);
-    var poData = (_prfMonitor.poCacheMap || {})[cacheKey] || {};
+    var poData = _resolvePoData(it);
     return [
       it._prfNo || '',
       it._prfDate ? new Date(it._prfDate).toLocaleDateString() : '',
@@ -1328,7 +1339,6 @@ window.prfMonitorLoad = prfMonitorLoad;
 window.prfMonitorRefresh = prfMonitorRefresh;
 window.prfSyncAndRecompute = prfSyncAndRecompute;
 window.prfRecomputeOnly = prfRecomputeOnly;
-window.prfShowMatchDetails = prfShowMatchDetails;
 window.prfMonitorClearFilters = prfMonitorClearFilters;
 window.prfMonitorOnSearch = prfMonitorOnSearch;
 window.prfMonitorApplyFilter = prfMonitorApplyFilter;
@@ -1351,4 +1361,4 @@ window.bulkUpdateStatus = bulkUpdateStatus;
 window.exportSelectedItems = exportSelectedItems;
 window.printCurrentPrf = printCurrentPrf;
 
-console.log('✅ prf-monitor.js v3.1 loaded (with PO# display from cache)');
+console.log('✅ prf-monitor.js v3.2 loaded (prf_items.po_no priority fix)');
