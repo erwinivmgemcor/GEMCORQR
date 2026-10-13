@@ -1,15 +1,15 @@
 // ============================================================
-// GEMCOR ERP — PRF Monitor (v3.2)
+// GEMCOR ERP — PRF Monitor (v3.3)
 // Two Tabs + Bulk Status Update + PO# Display from erp_prf_po_cache
-// ✅ v3.2 FIX: Prefer prf_items.po_no (manual entry) over poCacheMap
-//              (fallback to erp_prf_po_cache only if prf_items empty)
+// ✅ v3.2 FIX: Prefer prf_items.po_no over poCacheMap
+// ✅ v3.3 NEW: PRF Items Edit (Revision Mode) + Version History
 // ============================================================
 
 var _prfMonitor = {
   activeTab: 'prf',
   allPrfs: [],
   allItems: [],
-  poCacheMap: {},              // "PRF_NO|LINE_NO" → { po_no, supplier, date_delivered }
+  poCacheMap: {},
   filteredPrfs: [],
   filteredItems: [],
   currentPrfPage: 1,
@@ -25,7 +25,7 @@ var _prfMonitor = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[PRF Monitor v3.2] Initializing...');
+  console.log('[PRF Monitor v3.3] Initializing...');
 
   prfMonitorCheckHealth();
   prfMonitorLoad();
@@ -50,15 +50,13 @@ async function prfMonitorCheckHealth() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// FETCH PO CACHE (from erp_prf_po_cache) — Legacy fallback
+// FETCH PO CACHE
 // ═══════════════════════════════════════════════════════════
 async function prfMonitorFetchPoCache() {
   try {
-    // Fetch lahat ng may PO# — limit 10000 para safe
     var rows = await erpFetch('erp_prf_po_cache',
       'select=prf_no,item_no,po_no,supplier,date_delivered&po_no=not.is.null&limit=10000');
 
-    // Build lookup map
     var map = {};
     (rows || []).forEach(function(r) {
       var key = String(r.prf_no || '').trim() + '|' + (parseInt(r.item_no, 10) || 0);
@@ -78,7 +76,7 @@ async function prfMonitorFetchPoCache() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ✅ NEW HELPER: Resolve PO data with priority logic
+// ✅ Resolve PO data with priority logic
 // Priority 1: prf_items.po_no (manual entry / bulk sync)
 // Priority 2: erp_prf_po_cache (legacy)
 // ═══════════════════════════════════════════════════════════
@@ -87,7 +85,6 @@ function _resolvePoData(item, prfNo) {
   var itemSupplier = String(item.po_supplier || '').trim();
   var itemDateDelivered = item.po_date_delivered || '';
 
-  // Priority 1: prf_items fields
   if (itemPoNo) {
     return {
       po_no: itemPoNo,
@@ -97,7 +94,6 @@ function _resolvePoData(item, prfNo) {
     };
   }
 
-  // Priority 2: erp_prf_po_cache fallback
   var cacheKey = String(prfNo || item._prfNo || '').trim() + '|' + (parseInt(item.line_no, 10) || 0);
   var cachedPo = (_prfMonitor.poCacheMap || {})[cacheKey] || {};
   if (cachedPo.po_no) {
@@ -109,9 +105,19 @@ function _resolvePoData(item, prfNo) {
     };
   }
 
-  // Nothing
   return { po_no: '', supplier: '', date_delivered: '', source: 'none' };
 }
+
+// ═══════════════════════════════════════════════════════════
+// ✅ Version badge helper
+// ═══════════════════════════════════════════════════════════
+function _versionBadge(prf) {
+  var v = parseInt(prf.version_number, 10) || 1;
+  if (v <= 1) return '';
+  return ' <span class="badge bg-warning text-dark" style="font-size:0.62rem;" title="Revision v' + v + '">v' + v + '</span>';
+}
+
+window._versionBadge = _versionBadge;
 
 // ═══════════════════════════════════════════════════════════
 // TAB SWITCHING
@@ -178,7 +184,7 @@ async function prfMonitorLoad() {
 
     var prfs = await erpFetch('prf_documents', query);
     _prfMonitor.allPrfs = prfs || [];
-    console.log('[PRF Monitor v3.2] Loaded', _prfMonitor.allPrfs.length, 'PRFs');
+    console.log('[PRF Monitor v3.3] Loaded', _prfMonitor.allPrfs.length, 'PRFs');
 
     // ─── Query 2: Fetch items ───
     if (_prfMonitor.allPrfs.length > 0) {
@@ -197,7 +203,6 @@ async function prfMonitorLoad() {
         }
       }
 
-      // Enrich items with PRF metadata
       var prfMap = {};
       _prfMonitor.allPrfs.forEach(function(p) {
         prfMap[p.id] = p;
@@ -212,12 +217,12 @@ async function prfMonitorLoad() {
       });
 
       _prfMonitor.allItems = allItems;
-      console.log('[PRF Monitor v3.2] Loaded', allItems.length, 'items');
+      console.log('[PRF Monitor v3.3] Loaded', allItems.length, 'items');
     } else {
       _prfMonitor.allItems = [];
     }
 
-    // ─── Query 3: Fetch PO cache (legacy fallback) ───
+    // ─── Query 3: Fetch PO cache ───
     try {
       _prfMonitor.poCacheMap = await prfMonitorFetchPoCache();
     } catch(e) {
@@ -225,12 +230,10 @@ async function prfMonitorLoad() {
       _prfMonitor.poCacheMap = {};
     }
 
-    // ─── Compute statuses + KPIs ───
     prfMonitorComputeStatus();
     prfMonitorComputeKPIs();
     prfUpdateTabCounts();
 
-    // ─── Render both tabs ───
     prfMonitorRenderPrfTab();
     prfMonitorRenderItemTab();
 
@@ -256,7 +259,7 @@ function prfUpdateTabCounts() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// COMPUTE STATUS (per document)
+// COMPUTE STATUS
 // ═══════════════════════════════════════════════════════════
 function prfMonitorComputeStatus() {
   var itemsByPrf = {};
@@ -293,7 +296,7 @@ function prfMonitorComputeStatus() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// COMPUTE KPIs (item-level)
+// COMPUTE KPIs
 // ═══════════════════════════════════════════════════════════
 function prfMonitorComputeKPIs() {
   var totalItems = 0;
@@ -348,7 +351,8 @@ function prfMonitorRenderPrfTab() {
     if (search) {
       var prfNo = String(p.prf_no || '').toLowerCase();
       var req = String(p.requestor || '').toLowerCase();
-      if (prfNo.indexOf(search) === -1 && req.indexOf(search) === -1) return false;
+      var basePrfNo = String(p.base_prf_no || '').toLowerCase();
+      if (prfNo.indexOf(search) === -1 && req.indexOf(search) === -1 && basePrfNo.indexOf(search) === -1) return false;
     }
     return true;
   });
@@ -396,13 +400,10 @@ function prfMonitorRenderPrfTab() {
     else if (cat === 'EWMAT') categoryBadge = 'bg-danger';
     else if (cat === 'ENCLOSURE') categoryBadge = 'bg-success';
 
-       var safePrf = String(p.prf_no || '').replace(/'/g, "\\'");
+    var safePrf = String(p.prf_no || '').replace(/'/g, "\\'");
     var safeId = p.id;
     var safeBasePrf = String(p.base_prf_no || p.prf_no || '').replace(/'/g, "\\'");
-    var versionNum = parseInt(p.version_number, 10) || 1;
-    var versionBadge = versionNum > 1 
-      ? ' <span class="badge bg-warning text-dark" style="font-size:0.62rem;">v' + versionNum + '</span>' 
-      : '';
+    var versionBadge = _versionBadge(p);
 
     html += '<tr>' +
       '<td><code>' + erpEsc(p.prf_no) + '</code>' + versionBadge + '</td>' +
@@ -413,7 +414,6 @@ function prfMonitorRenderPrfTab() {
       '<td class="text-center">' + erpNum(p.total_qty || 0) + '</td>' +
       '<td class="text-center"><span class="' + statusClass + '"><i class="bi ' + statusIcon + ' me-1"></i>' + status + '</span></td>' +
       '<td class="text-center">' +
-             '<td class="text-center">' +
         '<button class="erp-action-btn primary" onclick="viewPrfDetails(' + safeId + ')" title="View Details">' +
           '<i class="bi bi-eye"></i>' +
         '</button>' +
@@ -437,7 +437,7 @@ function prfMonitorRenderPrfTab() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER TAB 2: BY ITEM (with PO# columns) — v3.2 FIXED
+// RENDER TAB 2: BY ITEM
 // ═══════════════════════════════════════════════════════════
 function prfMonitorRenderItemTab() {
   var tbody = document.getElementById('itemTableBody');
@@ -457,7 +457,6 @@ function prfMonitorRenderItemTab() {
       var itemCode = String(it.item_code || '').toLowerCase();
       var desc = String(it.description || '').toLowerCase();
 
-      // ✅ Search din sa PO# (check both sources)
       var poData = _resolvePoData(it);
       var poNo = String(poData.po_no || '').toLowerCase();
       var supplier = String(poData.supplier || '').toLowerCase();
@@ -506,7 +505,6 @@ function prfMonitorRenderItemTab() {
 
     var isSelected = _prfMonitor.selectedItems[it.id] === true;
 
-    // ═══ v3.2 FIX: Use _resolvePoData helper (prf_items priority) ═══
     var poData = _resolvePoData(it);
 
     var poDisplay = poData.po_no 
@@ -784,7 +782,7 @@ function exportSelectedItems() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// VIEW PRF DETAILS — v3.2 FIXED
+// VIEW PRF DETAILS
 // ═══════════════════════════════════════════════════════════
 async function viewPrfDetails(prfId) {
   var prf = _prfMonitor.allPrfs.find(function(p) { return p.id === prfId; });
@@ -850,7 +848,6 @@ async function viewPrfDetails(prfId) {
       items.forEach(function(it, idx) {
         var status = String(it.status || 'UNSERVED').toUpperCase();
 
-        // ═══ v3.2 FIX: Use _resolvePoData helper ═══
         var poData = _resolvePoData(it, prf.prf_no);
 
         var poDisplay = poData.po_no 
@@ -1248,10 +1245,11 @@ function prfMonitorExport() {
     erpShowToast('No data to export', 'warning');
     return;
   }
-  var headers = ['PRF No.', 'Date', 'Requestor', 'Category', 'Items', 'Total Qty', 'Status'];
+  var headers = ['PRF No.', 'Version', 'Date', 'Requestor', 'Category', 'Items', 'Total Qty', 'Status'];
   var rows = _prfMonitor.filteredPrfs.map(function(p) {
     return [
       p.prf_no || '',
+      p.version_number || 1,
       p.created_at ? new Date(p.created_at).toLocaleDateString() : '',
       p.requestor || '',
       p.category || '',
@@ -1877,4 +1875,4 @@ function renderVersionHistory(versions, audits) {
   body.innerHTML = html;
 }
 
-console.log('✅ PRF Edit + Version History loaded');
+console.log('✅ prf-monitor.js v3.3 loaded (prf_items.po_no priority + PRF Edit + Version History)');
