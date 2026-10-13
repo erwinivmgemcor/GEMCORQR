@@ -1,15 +1,16 @@
 // ============================================================
 // GEMCOR ERP — Item In & Out (Movement History Viewer)
-// v1.0 — Search item → show ledger + adjustments + manual edits
+// v1.0 — Search item → show movements + manual edits
 // ============================================================
 
 var _io = {
   currentItem: null,
   allMovements: [],
   filteredMovements: [],
+  allEdits: [],
   inventoryCache: null,
   searchTimer: null,
-  isSearching: false
+  activeTab: 'movements'
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -41,11 +42,10 @@ async function ioCheckHealth() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SEARCH AUTOCOMPLETE
+// SEARCH
 // ═══════════════════════════════════════════════════════════
 function ioOnSearchInput(value) {
   var dropdown = document.getElementById('ioSearchDropdown');
-  var input = document.getElementById('ioSearchInput');
   var term = String(value || '').toLowerCase().trim();
 
   if (_io.searchTimer) clearTimeout(_io.searchTimer);
@@ -59,9 +59,7 @@ function ioOnSearchInput(value) {
     '<i class="bi bi-hourglass-split me-1"></i>Searching...</div>';
   dropdown.classList.remove('d-none');
 
-  _io.searchTimer = setTimeout(function() {
-    ioSearchItems(term);
-  }, 250);
+  _io.searchTimer = setTimeout(function() { ioSearchItems(term); }, 250);
 }
 
 async function ioSearchItems(term) {
@@ -73,9 +71,7 @@ async function ioSearchItems(term) {
       } else {
         var rows = await erpFetch('erp_items',
           'select=item_code,description,base_unit,category,location,on_hand' +
-          '&is_active=eq.true' +
-          '&is_deleted=eq.false' +
-          '&limit=5000&order=item_code.asc');
+          '&is_active=eq.true&is_deleted=eq.false&order=item_code.asc&limit=5000');
         _io.inventoryCache = (rows || []).map(function(r) {
           return {
             code: r.item_code,
@@ -96,7 +92,6 @@ async function ioSearchItems(term) {
       return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
     }).slice(0, 25);
 
-    // Sort: exact match > starts-with > contains
     matches.sort(function(a, b) {
       var aC = String(a.code || '').toLowerCase();
       var bC = String(b.code || '').toLowerCase();
@@ -151,22 +146,20 @@ function ioClearSearch() {
   document.getElementById('ioEmptyState').classList.remove('d-none');
   _io.currentItem = null;
   _io.allMovements = [];
+  _io.allEdits = [];
 }
 
 // ═══════════════════════════════════════════════════════════
-// LOAD ITEM + MOVEMENTS
+// LOAD ITEM
 // ═══════════════════════════════════════════════════════════
 async function ioLoadItem(itemCode) {
   if (!itemCode) return;
-
   console.log('[Item In & Out] Loading:', itemCode);
 
   try {
-    // STEP 1: Fetch item info
     var itemRows = await erpFetch('erp_items',
       'select=item_code,description,base_unit,category,location,on_hand,unit_cost' +
-      '&item_code=eq.' + encodeURIComponent(itemCode) +
-      '&limit=1');
+      '&item_code=eq.' + encodeURIComponent(itemCode) + '&limit=1');
 
     if (!itemRows || itemRows.length === 0) {
       erpShowToast('Item not found: ' + itemCode, 'warning');
@@ -176,21 +169,26 @@ async function ioLoadItem(itemCode) {
     var item = itemRows[0];
     _io.currentItem = item;
 
-    // STEP 2: Fetch movements from view
-    var movements = await erpFetch('v_item_movements',
-      'select=*&item_code=eq.' + encodeURIComponent(itemCode) +
-      '&order=transaction_date.desc&limit=1000');
+    // Fetch movements + manual edits in parallel
+    var [movements, edits] = await Promise.all([
+      erpFetch('v_item_movements',
+        'select=*&item_code=eq.' + encodeURIComponent(itemCode) +
+        '&order=transaction_date.desc&limit=1000'),
+      erpFetch('v_item_manual_edits',
+        'select=*&item_code=eq.' + encodeURIComponent(itemCode) +
+        '&order=edited_at.desc&limit=500').catch(function() { return []; })
+    ]);
 
     _io.allMovements = movements || [];
+    _io.allEdits = edits || [];
 
-    console.log('[Item In & Out] Loaded ' + _io.allMovements.length + ' movements');
+    console.log('[Item In & Out] Movements:', _io.allMovements.length, '| Edits:', _io.allEdits.length);
 
-    // STEP 3: Render
     ioRenderItemInfo(item);
     ioComputeKPIs();
     ioRenderMovements();
+    ioRenderEdits();
 
-    // Show content, hide empty
     document.getElementById('ioEmptyState').classList.add('d-none');
     document.getElementById('ioContent').classList.remove('d-none');
 
@@ -200,9 +198,6 @@ async function ioLoadItem(itemCode) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// RENDER ITEM INFO
-// ═══════════════════════════════════════════════════════════
 function ioRenderItemInfo(item) {
   document.getElementById('ioItemCode').textContent = item.item_code || '—';
   document.getElementById('ioItemDesc').textContent = item.description || '—';
@@ -213,23 +208,17 @@ function ioRenderItemInfo(item) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// COMPUTE KPIs
+// KPIs
 // ═══════════════════════════════════════════════════════════
 function ioComputeKPIs() {
-  var totalIn = 0;
-  var totalOut = 0;
-  var adjustments = 0;
+  var totalIn = 0, totalOut = 0, adjustments = 0;
 
   _io.allMovements.forEach(function(m) {
     var qtyIn = Number(m.qty_in || 0);
     var qtyOut = Number(m.qty_out || 0);
     var dir = String(m.direction || '').toUpperCase();
 
-    if (dir === 'ADJUSTMENT') {
-      adjustments++;
-    }
-
-    // Always add the actual quantities
+    if (dir === 'ADJUSTMENT') adjustments++;
     totalIn += qtyIn;
     totalOut += qtyOut;
   });
@@ -238,10 +227,35 @@ function ioComputeKPIs() {
   document.getElementById('ioTotalOut').textContent = ioNum(totalOut);
   document.getElementById('ioTotalAdj').textContent = ioNum(adjustments);
   document.getElementById('ioTotalMovements').textContent = ioNum(_io.allMovements.length);
+
+  document.getElementById('ioTabMovementsCount').textContent = _io.allMovements.length;
+  document.getElementById('ioTabEditsCount').textContent = _io.allEdits.length;
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER MOVEMENTS TABLE
+// TABS
+// ═══════════════════════════════════════════════════════════
+function ioSwitchTab(tab) {
+  _io.activeTab = tab;
+
+  document.querySelectorAll('.io-tab').forEach(function(el) {
+    el.classList.toggle('active', el.getAttribute('data-tab') === tab);
+  });
+
+  var mvTab = document.getElementById('ioTabMovements');
+  var edTab = document.getElementById('ioTabEdits');
+
+  if (tab === 'movements') {
+    mvTab.classList.remove('d-none');
+    edTab.classList.add('d-none');
+  } else {
+    mvTab.classList.add('d-none');
+    edTab.classList.remove('d-none');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER MOVEMENTS
 // ═══════════════════════════════════════════════════════════
 function ioRenderMovements() {
   var tbody = document.getElementById('ioTableBody');
@@ -252,13 +266,10 @@ function ioRenderMovements() {
   var dateTo = document.getElementById('ioDateTo').value;
 
   _io.filteredMovements = _io.allMovements.filter(function(m) {
-    // Direction filter
     if (dirFilter) {
       var dir = String(m.direction || '').toUpperCase();
       if (dir !== dirFilter) return false;
     }
-
-    // Date range
     if (dateFrom || dateTo) {
       var txDate = m.transaction_date ? new Date(m.transaction_date) : null;
       if (txDate) {
@@ -272,14 +283,12 @@ function ioRenderMovements() {
         }
       }
     }
-
     return true;
   });
 
   var total = _io.filteredMovements.length;
   document.getElementById('ioTableCount').textContent = total + ' movements';
 
-  // Subtitle
   var subtitleEl = document.getElementById('ioTableSubtitle');
   if (subtitleEl) {
     if (dirFilter === 'IN') subtitleEl.textContent = 'IN movements only';
@@ -291,7 +300,7 @@ function ioRenderMovements() {
   if (total === 0) {
     tbody.innerHTML = '<tr><td colspan="10" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
-      'No movements found for this filter.</td></tr>';
+      'No movements found.</td></tr>';
     return;
   }
 
@@ -304,8 +313,7 @@ function ioRenderMovements() {
     }) : '—';
 
     var dir = String(m.direction || 'OTHER').toUpperCase();
-    var dirBadge = '';
-    var rowClass = '';
+    var dirBadge = '', rowClass = '';
     if (dir === 'IN') { dirBadge = '<span class="dir-in"><i class="bi bi-arrow-down me-1"></i>IN</span>'; rowClass = 'row-in'; }
     else if (dir === 'OUT') { dirBadge = '<span class="dir-out"><i class="bi bi-arrow-up me-1"></i>OUT</span>'; rowClass = 'row-out'; }
     else if (dir === 'ADJUSTMENT') { dirBadge = '<span class="dir-adj"><i class="bi bi-gear me-1"></i>ADJ</span>'; rowClass = 'row-adj'; }
@@ -316,10 +324,15 @@ function ioRenderMovements() {
     var qtyOut = Number(m.qty_out || 0);
     var inDisplay = qtyIn > 0 ? '<span class="text-success fw-bold">+' + ioNum(qtyIn) + '</span>' : '—';
     var outDisplay = qtyOut > 0 ? '<span class="text-danger fw-bold">−' + ioNum(qtyOut) + '</span>' : '—';
-
     var balance = m.balance_after != null ? ioNum(m.balance_after) : '—';
-
     var typeLabel = String(m.transaction_type || '—').replace(/_/g, ' ');
+
+    // Combine reason: adj_reason + adj_variance + notes
+    var reasonText = m.reason || '';
+    if (m.adj_variance && Number(m.adj_variance) !== 0) {
+      var varStr = (Number(m.adj_variance) > 0 ? '+' : '') + ioNum(m.adj_variance);
+      reasonText = reasonText ? reasonText + ' (' + varStr + ')' : varStr;
+    }
 
     html += '<tr class="' + rowClass + '">' +
       '<td>' + (idx + 1) + '</td>' +
@@ -331,7 +344,54 @@ function ioRenderMovements() {
       '<td class="text-end">' + outDisplay + '</td>' +
       '<td class="text-end fw-bold">' + balance + '</td>' +
       '<td>' + ioEsc(m.performed_by || '—') + '</td>' +
-      '<td title="' + ioEsc(m.reason || '') + '">' + ioEsc(ioTruncate(m.reason || '—', 40)) + '</td>' +
+      '<td title="' + ioEsc(reasonText) + '">' + ioEsc(ioTruncate(reasonText || '—', 40)) + '</td>' +
+    '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER MANUAL EDITS
+// ═══════════════════════════════════════════════════════════
+function ioRenderEdits() {
+  var tbody = document.getElementById('ioEditsBody');
+  if (!tbody) return;
+
+  var total = _io.allEdits.length;
+  document.getElementById('ioEditsCount').textContent = total + ' edits';
+
+  if (total === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
+      '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
+      'No manual edits found.</td></tr>';
+    return;
+  }
+
+  var html = '';
+  _io.allEdits.forEach(function(e, idx) {
+    var editDate = e.edited_at ? new Date(e.edited_at) : null;
+    var dateStr = editDate ? editDate.toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    }) : '—';
+
+    var oldVal = parseFloat(e.old_value) || 0;
+    var newVal = parseFloat(e.new_value) || 0;
+    var change = newVal - oldVal;
+    var changeStr = (change >= 0 ? '+' : '') + ioNum(change);
+
+    var fieldLabel = String(e.field_name || '').replace(/_/g, ' ').toUpperCase();
+
+    html += '<tr>' +
+      '<td>' + (idx + 1) + '</td>' +
+      '<td style="font-size:0.78rem;">' + ioEsc(dateStr) + '</td>' +
+      '<td><span class="badge bg-info text-dark">' + ioEsc(fieldLabel) + '</span></td>' +
+      '<td class="text-end text-muted">' + ioNum(oldVal) + '</td>' +
+      '<td class="text-end text-success fw-bold">' + ioNum(newVal) + '</td>' +
+      '<td class="text-end ' + (change >= 0 ? 'text-success' : 'text-danger') + '">' + changeStr + '</td>' +
+      '<td>' + ioEsc(e.edited_by || '—') + '</td>' +
+      '<td><span class="badge bg-secondary">' + ioEsc(e.source || '—') + '</span></td>' +
+      '<td title="' + ioEsc(e.reason || '') + '">' + ioEsc(ioTruncate(e.reason || '—', 40)) + '</td>' +
     '</tr>';
   });
   tbody.innerHTML = html;
@@ -348,17 +408,11 @@ function ioClearFilters() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// EXPORT CSV
+// EXPORT
 // ═══════════════════════════════════════════════════════════
-function ioExport() {
-  if (!_io.currentItem) {
-    erpShowToast('No item selected', 'warning');
-    return;
-  }
-  if (_io.filteredMovements.length === 0) {
-    erpShowToast('No movements to export', 'warning');
-    return;
-  }
+function ioExportMovements() {
+  if (!_io.currentItem) { erpShowToast('No item selected', 'warning'); return; }
+  if (_io.filteredMovements.length === 0) { erpShowToast('No movements to export', 'warning'); return; }
 
   var item = _io.currentItem;
   var headers = [
@@ -385,18 +439,20 @@ function ioExport() {
 
   var csv = 'Item Code,' + _csvEscIo(item.item_code) + '\n';
   csv += 'Description,' + _csvEscIo(item.description) + '\n';
-  csv += 'Category,' + _csvEscIo(item.category || '') + '\n';
-  csv += 'Current On-Hand,' + (item.on_hand || 0) + '\n';
-  csv += '\n';
+  csv += 'Current On-Hand,' + (item.on_hand || 0) + '\n\n';
   csv += headers.map(_csvEscIo).join(',') + '\n';
   rows.forEach(function(row) { csv += row.map(_csvEscIo).join(',') + '\n'; });
 
+  ioDownloadCsv(csv, 'Item_Movements_' + item.item_code + '_' + new Date().toISOString().slice(0, 10) + '.csv');
+  erpShowToast('✅ Exported ' + rows.length + ' movements', 'success');
+}
+
+function ioDownloadCsv(csv, filename) {
   var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   var link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = 'Item_Movements_' + item.item_code + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+  link.download = filename;
   link.click();
-  erpShowToast('✅ Exported ' + rows.length + ' movements', 'success');
 }
 
 function _csvEscIo(val) {
@@ -436,9 +492,7 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
 }
 
-// ═══════════════════════════════════════════════════════════
-// CLICK OUTSIDE — Close dropdown
-// ═══════════════════════════════════════════════════════════
+// Click outside — close dropdown
 document.addEventListener('click', function(e) {
   if (!e.target.closest('.item-search-wrap')) {
     var dropdown = document.getElementById('ioSearchDropdown');
