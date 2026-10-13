@@ -175,22 +175,27 @@ tr.selected-item-row {
     </h5>
     <div class="row g-3">
       <div class="col-md-6">
-        <label class="form-label fw-bold">PO No.</label>
-        <div class="input-group input-group-lg">
-          <span class="input-group-text"><i class="bi bi-hash"></i></span>
-          <input type="text" id="mrrPoNo" class="form-control" placeholder="e.g. 16811" autocomplete="off">
-          <button class="btn btn-primary" type="button" onclick="lookupPoNo()">
-            <i class="bi bi-search"></i> Lookup
-          </button>
-        </div>
-        <div id="poStatus" class="form-text mt-2"></div>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label fw-bold">Status</label>
-        <div id="poLookupResult" class="alert alert-secondary mb-0 py-2" style="min-height:48px;">
-          <span class="text-muted small">Enter a PO No. above to auto-load items, or skip to add items manually.</span>
-        </div>
-      </div>
+  <label class="form-label fw-bold">PO No. <span class="text-muted small">(optional)</span></label>
+  <div class="input-group input-group-lg">
+    <span class="input-group-text"><i class="bi bi-hash"></i></span>
+    <input type="text" id="mrrPoNo" class="form-control" placeholder="e.g. 16811" autocomplete="off">
+    <button class="btn btn-primary" type="button" onclick="lookupPoNo()">
+      <i class="bi bi-search"></i> Lookup
+    </button>
+  </div>
+  <div id="poStatus" class="form-text mt-2"></div>
+</div>
+<div class="col-md-6">
+  <label class="form-label fw-bold">SOF No. <span class="text-muted small">(optional)</span></label>
+  <input type="text" id="mrrSofNo" class="form-control form-control-lg" placeholder="e.g. SOF#13472" autocomplete="off">
+  <div class="form-text">Supplemental Order Form No.</div>
+</div>
+<div class="col-12">
+  <label class="form-label fw-bold">Status</label>
+  <div id="poLookupResult" class="alert alert-secondary mb-0 py-2" style="min-height:48px;">
+    <span class="text-muted small">Enter a PO No. above to auto-load items, or skip to add items manually.</span>
+  </div>
+</div>
     </div>
   </div>
 
@@ -201,9 +206,13 @@ tr.selected-item-row {
     </h5>
     <div class="row g-3">
       <div class="col-md-6">
-        <label class="form-label fw-bold">PRF No.</label>
-        <input type="text" id="mrrPrfNo" class="form-control" placeholder="Auto-filled from PO">
-      </div>
+  <label class="form-label fw-bold">PRF No.</label>
+  <input type="text" id="mrrPrfNo" class="form-control" placeholder="Auto-filled from PO">
+</div>
+<div class="col-md-6">
+  <label class="form-label fw-bold">SOF No. <span class="text-muted small">(optional)</span></label>
+  <input type="text" id="mrrSofNoDisplay" class="form-control" placeholder="From PO lookup or manual">
+</div>
       <div class="col-md-6">
         <label class="form-label fw-bold">Vendor / Client</label>
         <input type="text" id="mrrVendor" class="form-control" placeholder="Auto-filled from PO">
