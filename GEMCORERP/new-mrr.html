@@ -19,18 +19,10 @@
 <link rel="stylesheet" href="erp-nav.css">
   <link rel="stylesheet" href="erp-notif.css">
 
-<script src="erp-guard.js"></script>
-<script src="erp-theme.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script defer src="erp-config.js"></script>
-<script defer src="erp-supabase.js"></script>
-<script defer src="erp-nav.js"></script>
-<script defer src="new-mrr.js"></script>
-  <script defer src="notifications.js"></script>
-  <script defer src="js/update.js"></script>
-
-  <style>
-/* Item search dropdown */
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- ITEM AUTO-SUGGEST STYLES -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<style>
 .item-search-wrapper {
   position: relative;
 }
@@ -67,6 +59,17 @@
   border-bottom: none;
 }
 
+.item-search-item.muted {
+  color: #9ca3af;
+  cursor: default;
+  text-align: center;
+  padding: 14px;
+}
+
+.item-search-item.muted:hover {
+  background: transparent;
+}
+
 .item-search-item .item-code {
   font-family: 'Courier New', monospace;
   font-weight: 700;
@@ -85,8 +88,43 @@
   margin-top: 3px;
   font-size: 0.72rem;
   color: #6b7280;
+  align-items: center;
+}
+
+.item-search-item .badge {
+  font-size: 0.65rem;
+  padding: 2px 6px;
+}
+
+/* Highlight matched item row */
+tr.selected-item-row {
+  background: #f0fdf4 !important;
+}
+
+/* Dropdown scrollbar */
+.item-search-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.item-search-dropdown::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.item-search-dropdown::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 </style>
+
+<script src="erp-guard.js"></script>
+<script src="erp-theme.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script defer src="erp-config.js"></script>
+<script defer src="erp-supabase.js"></script>
+<script defer src="erp-nav.js"></script>
+<script defer src="new-mrr.js"></script>
+  <script defer src="notifications.js"></script>
+  <script defer src="js/update.js"></script>
 </head>
 <body>
 
@@ -126,18 +164,18 @@
       <i class="bi bi-box-arrow-in-down me-2"></i>Create New MRR
     </h3>
     <p class="text-muted mb-0">
-      Materials Receiving Report. Enter PO No. to auto-load items from the PRF PO master.
+      Materials Receiving Report. Enter PO No. to auto-load items from the PRF PO master, or add items manually with autocomplete.
     </p>
   </div>
 
-  <!-- STEP 1: PO NUMBER -->
+  <!-- STEP 1: PO NUMBER (Optional) -->
   <div class="erp-card" style="padding:24px;margin-bottom:20px;">
     <h5 style="margin-bottom:16px;">
-      <span class="badge bg-primary me-2">1</span>Enter PO Number
+      <span class="badge bg-primary me-2">1</span>Enter PO Number <span class="text-muted small">(optional)</span>
     </h5>
     <div class="row g-3">
       <div class="col-md-6">
-        <label class="form-label fw-bold">PO No. <span class="text-danger">*</span></label>
+        <label class="form-label fw-bold">PO No.</label>
         <div class="input-group input-group-lg">
           <span class="input-group-text"><i class="bi bi-hash"></i></span>
           <input type="text" id="mrrPoNo" class="form-control" placeholder="e.g. 16811" autocomplete="off">
@@ -150,21 +188,21 @@
       <div class="col-md-6">
         <label class="form-label fw-bold">Status</label>
         <div id="poLookupResult" class="alert alert-secondary mb-0 py-2" style="min-height:48px;">
-          <span class="text-muted small">Enter a PO No. above to auto-load items</span>
+          <span class="text-muted small">Enter a PO No. above to auto-load items, or skip to add items manually.</span>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- STEP 2: DOCUMENT DETAILS (auto-filled) -->
-  <div class="erp-card" id="step2Card" style="padding:24px;margin-bottom:20px;display:none;">
+  <!-- STEP 2: DOCUMENT DETAILS -->
+  <div class="erp-card" id="step2Card" style="padding:24px;margin-bottom:20px;">
     <h5 style="margin-bottom:16px;">
       <span class="badge bg-primary me-2">2</span>Document Details
     </h5>
     <div class="row g-3">
       <div class="col-md-6">
         <label class="form-label fw-bold">PRF No.</label>
-        <input type="text" id="mrrPrfNo" class="form-control" readonly>
+        <input type="text" id="mrrPrfNo" class="form-control" placeholder="Auto-filled from PO">
       </div>
       <div class="col-md-6">
         <label class="form-label fw-bold">Vendor / Client</label>
@@ -189,18 +227,16 @@
     </div>
   </div>
 
-  <!-- STEP 3: ITEMS (auto-loaded from PO) -->
-  <div class="erp-card" id="step3Card" style="padding:24px;margin-bottom:20px;display:none;">
+  <!-- STEP 3: ITEMS -->
+  <div class="erp-card" id="step3Card" style="padding:24px;margin-bottom:20px;">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h5 class="mb-0">
-        <span class="badge bg-primary me-2">3</span>Items (from PO)
+        <span class="badge bg-primary me-2">3</span>Items
+        <span class="text-muted small ms-2">(type to search inventory)</span>
       </h5>
-      <div>
-        <small class="text-muted me-2">Edit ATL Qty per item</small>
-        <button class="btn btn-sm btn-primary" onclick="addItemRow()">
-          <i class="bi bi-plus-lg me-1"></i>Add Item
-        </button>
-      </div>
+      <button class="btn btn-sm btn-primary" onclick="addItemRow()">
+        <i class="bi bi-plus-lg me-1"></i>Add Item
+      </button>
     </div>
 
     <div class="table-responsive">
@@ -208,19 +244,20 @@
         <thead>
           <tr>
             <th style="width:5%">#</th>
-            <th style="width:18%">Item Code</th>
-            <th style="width:30%">Description</th>
-            <th style="width:8%" class="text-center">Req Qty</th>
-            <th style="width:10%" class="text-center">ATL Qty</th>
+            <th style="width:20%">Item Code</th>
+            <th style="width:25%">Description</th>
+            <th style="width:9%" class="text-center">Req Qty</th>
+            <th style="width:9%" class="text-center">ATL Qty</th>
             <th style="width:8%" class="text-center">Unit</th>
-            <th style="width:15%">Remarks</th>
+            <th style="width:14%">Remarks</th>
             <th style="width:6%"></th>
           </tr>
         </thead>
         <tbody id="itemsBody">
           <tr>
             <td colspan="8" class="text-center text-muted py-4">
-              Enter a PO No. above to auto-load items
+              <i class="bi bi-inbox fs-3 d-block mb-2 opacity-50"></i>
+              Click "+ Add Item" to start, or enter PO No. above to auto-load items.
             </td>
           </tr>
         </tbody>
@@ -229,7 +266,7 @@
   </div>
 
   <!-- STEP 4: SUBMIT -->
-  <div class="erp-card" id="step4Card" style="padding:24px;margin-bottom:20px;display:none;">
+  <div class="erp-card" id="step4Card" style="padding:24px;margin-bottom:20px;">
     <div class="d-flex justify-content-between align-items-center">
       <div>
         <h6 class="mb-1">Ready to submit?</h6>
@@ -248,8 +285,8 @@
 
   <!-- FOOTER -->
   <div class="erp-footer">
-    <div>GEMCOR ERP — New MRR v1.0.0</div>
-    <div>Pure Supabase • No Google Sheets • Live Data</div>
+    <div>GEMCOR ERP — New MRR v1.1.0</div>
+    <div>Pure Supabase • Auto-suggest enabled</div>
   </div>
 </div>
 
