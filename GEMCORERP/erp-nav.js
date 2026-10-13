@@ -503,9 +503,21 @@
     topbar.id = 'erpThinTopbar';
     topbar.className = 'erp-thin-topbar';
 
-    var pageTitle = PAGE_TITLES[currentPage] || 'GEMCOR ERP';
+   var pageTitle = PAGE_TITLES[currentPage] || 'GEMCOR ERP';
 
-    topbar.innerHTML =
+// ═══ PAGE-SPECIFIC CUSTOM BUTTONS ═══
+var customButtons = '';
+
+if (currentPage === 'prf-monitor') {
+  customButtons +=
+    '<button class="erp-btn-outline-dark" onclick="prfSyncAndRecompute()" ' +
+      'title="Sync PO data from Google Sheet and recompute all statuses" ' +
+      'style="margin-right:6px;font-size:0.8rem;padding:6px 12px;">' +
+      '<i class="bi bi-arrow-repeat"></i> Sync & Recompute' +
+    '</button>';
+}
+
+topbar.innerHTML =
       '<div class="erp-thin-topbar-left">' +
         '<h1 class="erp-thin-page-title">' + _escapeHtml(pageTitle) + '</h1>' +
         '<div class="erp-search-bar" onclick="if(window.erpOpenSearch)erpOpenSearch()">' +
@@ -515,7 +527,8 @@
         '</div>' +
       '</div>' +
       '<div class="erp-thin-topbar-right">' +
-        '<div class="erp-health-dot" id="erpHealthDot" title="Checking...">' +
+  customButtons +                              // ← ITO ANG DAGDAG
+  '<div class="erp-health-dot" id="erpHealthDot" title="Checking...">' +
           '<span class="erp-health-text" id="erpHealthText">Checking...</span>' +
         '</div>' +
         '<div id="erpBellContainer"></div>' +
