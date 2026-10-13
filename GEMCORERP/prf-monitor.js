@@ -1033,59 +1033,27 @@ async function prfSyncAndRecompute() {
   }
 
   try {
-    // ═══ STEP 1: Sync from Google Sheet via GAS webhook ═══
-    console.log('[PRF Sync] STEP 1: Syncing from Google Sheet...');
-
     var GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbwTiA7IOQOdq7cfuiiptoA06Oa7xkuh2-wA1fSA3pP2gqZKHUvcjy5AF2rb28ThF842/exec';
 
-    var syncRes = await fetch(GAS_WEBHOOK_URL + '?action=syncPrfPo&_t=' + Date.now(), {
+    console.log('[PRF Sync] Calling GAS orchestrator...');
+
+    var syncRes = await fetch(GAS_WEBHOOK_URL + '?action=prfSyncAndRecompute&_t=' + Date.now(), {
       redirect: 'follow'
     });
 
     var syncText = await syncRes.text();
     var syncData;
-    try { syncData = JSON.parse(syncText); } catch(e) { syncData = { success: false, error: 'Invalid response' }; }
+    try { syncData = JSON.parse(syncText); } catch(e) {
+      throw new Error('Invalid response from GAS: ' + syncText.substring(0, 100));
+    }
 
     if (!syncData.success) {
-      throw new Error('Sync failed: ' + (syncData.error || 'Unknown error'));
+      throw new Error(syncData.error || 'Unknown error');
     }
 
-    console.log('[PRF Sync] ✅ Synced', syncData.synced || 0, 'rows in', syncData.elapsed_ms || 0, 'ms');
-
-    // ═══ STEP 2: Link prf_items to PO cache ═══
-    console.log('[PRF Sync] STEP 2: Linking prf_items to PO cache...');
-
-    var linkRes = await fetch(erpUrl('rpc/link_prf_items_to_po_cache'), {
-      method: 'POST',
-      headers: erpHeaders(),
-      body: JSON.stringify({})
-    });
-
-    if (!linkRes.ok) {
-      console.warn('[PRF Sync] Link failed:', linkRes.status);
-    } else {
-      var linkData = await linkRes.json();
-      console.log('[PRF Sync] ✅ Linked', (linkData && linkData[0] ? linkData[0].updated_count : 0), 'items');
-    }
-
-    // ═══ STEP 3: Recompute all statuses ═══
-    console.log('[PRF Sync] STEP 3: Recomputing statuses...');
-
-    var recomputeRes = await fetch(erpUrl('rpc/compute_prf_item_status'), {
-      method: 'POST',
-      headers: erpHeaders(),
-      body: JSON.stringify({ p_prf_no: null })
-    });
-
-    if (!recomputeRes.ok) {
-      throw new Error('Recompute failed: HTTP ' + recomputeRes.status);
-    }
-
-    var changes = await recomputeRes.json();
-    console.log('[PRF Sync] ✅ Recompute complete:', (changes || []).length, 'status changes');
-
-    // ═══ STEP 4: Reload ═══
-    erpShowToast('✅ Sync complete! ' + (syncData.synced || 0) + ' rows synced, ' + (changes || []).length + ' status updates', 'success');
+    console.log('[PRF Sync] ✅ Complete:', syncData);
+    erpShowToast('✅ Sync complete! ' + syncData.synced + ' rows, ' +
+                 syncData.statusChanges + ' status updates', 'success');
 
     await prfMonitorLoad();
 
@@ -1099,7 +1067,6 @@ async function prfSyncAndRecompute() {
     }
   }
 }
-
 // ═══════════════════════════════════════════════════════════
 // RECOMPUTE ONLY — for manual retrigger
 // ═══════════════════════════════════════════════════════════
