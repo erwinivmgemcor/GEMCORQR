@@ -1504,11 +1504,11 @@ function renderEditPrfItems() {
     '<table class="table table-sm table-bordered align-middle" style="font-size:0.85rem;">' +
     '<thead class="table-light sticky-top"><tr>' +
       '<th style="width:4%">#</th>' +
-      '<th style="width:15%">Item Code</th>' +
+      '<th style="width:18%">Item Code</th>' +
       '<th style="width:28%">Description</th>' +
       '<th style="width:10%" class="text-center">Qty Order</th>' +
       '<th style="width:8%" class="text-center">Unit</th>' +
-      '<th style="width:15%">Remarks</th>' +
+      '<th style="width:12%">Remarks</th>' +
       '<th style="width:5%"></th>' +
     '</tr></thead><tbody>';
   
@@ -1519,10 +1519,21 @@ function renderEditPrfItems() {
     items.forEach(function(it, idx) {
       html += '<tr data-idx="' + idx + '"' + (it._isNew ? ' style="background:#f0fdf4;"' : '') + '>' +
         '<td class="text-center">' + (idx + 1) + '</td>' +
-        '<td><input type="text" class="form-control form-control-sm" ' +
-            'value="' + erpEsc(it.item_code) + '" data-field="item_code" ' +
-            'oninput="editPrfUpdateItem(' + idx + ', \'item_code\', this.value)" ' +
-            'style="font-family:\'Courier New\',monospace;"></td>' +
+        '<td style="position:relative;">' +
+          '<input type="text" class="form-control form-control-sm edit-prf-item-search" ' +
+            'id="editPrfItemCode' + idx + '" ' +
+            'data-idx="' + idx + '" ' +
+            'data-field="item_code" ' +
+            'value="' + erpEsc(it.item_code) + '" ' +
+            'placeholder="Type to search..." ' +
+            'autocomplete="off" ' +
+            'oninput="onEditPrfItemSearch(' + idx + ', this.value)" ' +
+            'onfocus="onEditPrfItemSearch(' + idx + ', this.value)" ' +
+            'onblur="onEditPrfItemBlur(' + idx + ')" ' +
+            'style="font-family:\'Courier New\',monospace;">' +
+          '<div class="list-group edit-prf-item-dropdown d-none" id="editPrfDropdown' + idx + '" ' +
+            'style="position:fixed;z-index:99999;max-height:300px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.18);min-width:400px;"></div>' +
+        '</td>' +
         '<td><input type="text" class="form-control form-control-sm" ' +
             'value="' + erpEsc(it.description) + '" data-field="description" ' +
             'oninput="editPrfUpdateItem(' + idx + ', \'description\', this.value)"></td>' +
@@ -1856,14 +1867,29 @@ function renderVersionHistory(versions, audits) {
     audits.forEach(function(a) {
       var dateStr = a.created_at ? new Date(a.created_at).toLocaleString() : '—';
       var changes = a.changes || {};
-      var changesSummary = 
-        '<span class="text-success">+' + ((changes.added || []).length) + '</span> ' +
-        '<span class="text-danger">-' + ((changes.removed || []).length) + '</span> ' +
-        '<span class="text-warning">~' + ((changes.modified || []).length) + '</span>';
+      var addedCount = (changes.added || []).length;
+      var removedCount = (changes.removed || []).length;
+      var modifiedCount = (changes.modified || []).length;
+      
+      // ✅ Better changes display
+      var changesParts = [];
+      if (addedCount > 0) {
+        changesParts.push('<span class="badge bg-success">+' + addedCount + ' added</span>');
+      }
+      if (removedCount > 0) {
+        changesParts.push('<span class="badge bg-danger">−' + removedCount + ' removed</span>');
+      }
+      if (modifiedCount > 0) {
+        changesParts.push('<span class="badge bg-warning text-dark">' + modifiedCount + ' modified</span>');
+      }
+      
+      var changesSummary = changesParts.length > 0 
+        ? changesParts.join(' ')
+        : '<span class="text-muted small">No item changes</span>';
       
       html += '<tr>' +
         '<td style="font-size:0.75rem;">' + erpEsc(dateStr) + '</td>' +
-        '<td><span class="badge bg-secondary">v' + a.from_version + '→v' + a.to_version + '</span></td>' +
+        '<td><span class="badge bg-secondary">v' + a.from_version + ' → v' + a.to_version + '</span></td>' +
         '<td>' + erpEsc(a.revised_by_fullname || a.revised_by) + '</td>' +
         '<td>' + changesSummary + '</td>' +
         '<td style="font-size:0.75rem;">' + erpEsc(a.reason || '—') + '</td>' +
@@ -1874,5 +1900,197 @@ function renderVersionHistory(versions, audits) {
   
   body.innerHTML = html;
 }
+// ═══════════════════════════════════════════════════════════
+// ✅ AUTO-SUGGEST FOR EDIT PRF ITEMS
+// ═══════════════════════════════════════════════════════════
+
+var _editPrfInventoryCache = null;
+var _editPrfSearchTimers = {};
+
+async function _loadEditPrfInventory() {
+  if (_editPrfInventoryCache) return _editPrfInventoryCache;
+  try {
+    if (typeof erpGetInventoryListForDropdown === 'function') {
+      _editPrfInventoryCache = await erpGetInventoryListForDropdown();
+    } else {
+      var rows = await erpFetch('erp_items',
+        'select=item_code,description,base_unit,category,location' +
+        '&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false' +
+        '&order=item_code.asc&limit=5000');
+      _editPrfInventoryCache = (rows || []).map(function(r) {
+        return {
+          code: r.item_code,
+          description: r.description || '',
+          unit: r.base_unit || 'PIECE',
+          category: r.category || '',
+          location: r.location || ''
+        };
+      });
+    }
+    console.log('[EditPRF] Inventory loaded:', _editPrfInventoryCache.length);
+    return _editPrfInventoryCache;
+  } catch(err) {
+    console.warn('[EditPRF] Load inventory failed:', err.message);
+    _editPrfInventoryCache = [];
+    return [];
+  }
+}
+
+window.onEditPrfItemSearch = async function(idx, value) {
+  var input = document.getElementById('editPrfItemCode' + idx);
+  var dropdown = document.getElementById('editPrfDropdown' + idx);
+  if (!input || !dropdown) return;
+
+  var term = String(value || '').toLowerCase().trim();
+
+  if (_editPrfSearchTimers[idx]) clearTimeout(_editPrfSearchTimers[idx]);
+
+  if (!term || term.length < 2) {
+    dropdown.classList.add('d-none');
+    return;
+  }
+
+  dropdown.innerHTML = '<div class="list-group-item text-muted small" style="padding:10px 14px;">' +
+    '<i class="bi bi-hourglass-split me-1"></i>Searching...</div>';
+  _positionEditPrfDropdown(dropdown, input);
+  dropdown.classList.remove('d-none');
+
+  _editPrfSearchTimers[idx] = setTimeout(async function() {
+    var items = await _loadEditPrfInventory();
+    var matches = items.filter(function(it) {
+      var code = String(it.code || '').toLowerCase();
+      var desc = String(it.description || '').toLowerCase();
+      return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
+    }).slice(0, 25);
+
+    // Sort: exact > starts-with > contains
+    matches.sort(function(a, b) {
+      var aC = String(a.code || '').toLowerCase();
+      var bC = String(b.code || '').toLowerCase();
+      var aExact = aC === term ? 0 : 1;
+      var bExact = bC === term ? 0 : 1;
+      if (aExact !== bExact) return aExact - bExact;
+      var aStart = aC.indexOf(term) === 0 ? 0 : 1;
+      var bStart = bC.indexOf(term) === 0 ? 0 : 1;
+      if (aStart !== bStart) return aStart - bStart;
+      return aC.localeCompare(bC);
+    });
+
+    if (matches.length === 0) {
+      dropdown.innerHTML = '<div class="list-group-item text-muted small" style="padding:10px 14px;">' +
+        '<i class="bi bi-x-circle me-1"></i>No matches found</div>';
+      return;
+    }
+
+    var html = '';
+    matches.forEach(function(it) {
+      var code = String(it.code || '');
+      var desc = String(it.description || '');
+      var unit = String(it.unit || 'PIECE');
+      var category = String(it.category || '');
+      var safeCode = code.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      var safeDesc = desc.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      var safeUnit = unit.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+      html += '<div class="list-group-item list-group-item-action" ' +
+        'style="padding:10px 14px;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f0f0f0;background:#fff;" ' +
+        'onmousedown="event.preventDefault();selectEditPrfItem(' + idx + ', \'' +
+          safeCode + '\', \'' + safeDesc + '\', \'' + safeUnit + '\')">' +
+        '<div style="font-family:\'Courier New\',monospace;font-weight:700;color:#1e3a5f;">' + erpEsc(code) + '</div>' +
+        '<div style="color:#4b5563;font-size:0.8rem;">' + erpEsc(desc.substring(0, 100)) + (desc.length > 100 ? '…' : '') + '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:3px;font-size:0.7rem;color:#6b7280;">' +
+          '<span class="badge bg-light text-dark">' + erpEsc(unit) + '</span>' +
+          (category ? '<span class="badge bg-secondary">' + erpEsc(category) + '</span>' : '') +
+        '</div>' +
+      '</div>';
+    });
+    dropdown.innerHTML = html;
+    _positionEditPrfDropdown(dropdown, input);
+    dropdown.classList.remove('d-none');
+  }, 200);
+};
+
+function _positionEditPrfDropdown(dropdown, input) {
+  var rect = input.getBoundingClientRect();
+  var spaceBelow = window.innerHeight - rect.bottom;
+  var spaceAbove = rect.top;
+  var width = Math.max(rect.width, 450);
+  var maxWidth = window.innerWidth - rect.left - 20;
+  if (width > maxWidth) width = maxWidth;
+
+  dropdown.style.position = 'fixed';
+  dropdown.style.left = rect.left + 'px';
+  dropdown.style.width = width + 'px';
+  dropdown.style.zIndex = '99999';
+
+  if (spaceBelow < 320 && spaceAbove > spaceBelow) {
+    dropdown.style.top = 'auto';
+    dropdown.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceAbove - 20, 320) + 'px';
+  } else {
+    dropdown.style.bottom = 'auto';
+    dropdown.style.top = (rect.bottom + 4) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceBelow - 20, 320) + 'px';
+  }
+}
+
+window.selectEditPrfItem = function(idx, code, description, unit) {
+  if (!_editPrfState.currentItems[idx]) return;
+
+  _editPrfState.currentItems[idx].item_code = code;
+  _editPrfState.currentItems[idx].description = description;
+  _editPrfState.currentItems[idx].unit = unit;
+
+  var codeInput = document.getElementById('editPrfItemCode' + idx);
+  if (codeInput) codeInput.value = code;
+
+  var row = codeInput ? codeInput.closest('tr') : null;
+  if (row) {
+    var descInput = row.querySelector('input[data-field="description"]');
+    if (descInput) descInput.value = description;
+
+    var unitInput = row.querySelector('input[data-field="unit"]');
+    if (unitInput) unitInput.value = unit;
+  }
+
+  var dropdown = document.getElementById('editPrfDropdown' + idx);
+  if (dropdown) dropdown.classList.add('d-none');
+
+  // Focus qty input
+  setTimeout(function() {
+    if (row) {
+      var qtyInput = row.querySelector('input[data-field="qty_for_order"]');
+      if (qtyInput) {
+        qtyInput.focus();
+        qtyInput.select();
+      }
+    }
+  }, 100);
+};
+
+window.onEditPrfItemBlur = function(idx) {
+  setTimeout(function() {
+    var dropdown = document.getElementById('editPrfDropdown' + idx);
+    if (dropdown) dropdown.classList.add('d-none');
+  }, 200);
+};
+
+// Hide dropdowns on click outside
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.edit-prf-item-search') && !e.target.closest('.edit-prf-item-dropdown')) {
+    document.querySelectorAll('.edit-prf-item-dropdown').forEach(function(el) {
+      el.classList.add('d-none');
+    });
+  }
+});
+
+// Reposition on scroll
+window.addEventListener('scroll', function() {
+  document.querySelectorAll('.edit-prf-item-dropdown:not(.d-none)').forEach(function(el) {
+    var idx = el.id.replace('editPrfDropdown', '');
+    var input = document.getElementById('editPrfItemCode' + idx);
+    if (input) _positionEditPrfDropdown(el, input);
+  });
+}, { passive: true });
 
 console.log('✅ prf-monitor.js v3.3 loaded (prf_items.po_no priority + PRF Edit + Version History)');
