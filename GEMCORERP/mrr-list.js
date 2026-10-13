@@ -1,6 +1,6 @@
 // ============================================================
 // GEMCOR ERP — MRR List Logic
-// v2.0 — Discuss button hidden for Production users
+// v2.1 — Null-safe KPI updates + Discuss button hidden for Production
 // (MRR discussions are warehouse-only)
 // ============================================================
 
@@ -11,7 +11,7 @@ var _mrrPageSize = 50;
 var _mrrSearchTimer = null;
 
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[MRR List] Initializing...');
+  console.log('[MRR List v2.1] Initializing...');
   mrrCheckHealth();
   mrrListLoad();
   mrrListPopulateFilterOptions();
@@ -63,6 +63,8 @@ async function mrrListLoad() {
     var rows = await erpFetch('documents', query);
     _mrrAllDocs = rows || [];
     
+    console.log('[MRR List] Loaded ' + _mrrAllDocs.length + ' documents');
+    
     mrrListComputeKPIs();
     mrrListRender();
   } catch(err) {
@@ -74,6 +76,9 @@ async function mrrListLoad() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+// KPI — Null-Safe
+// ═══════════════════════════════════════════════════════════
 function mrrListComputeKPIs() {
   var total = _mrrAllDocs.length;
   var pending = 0, completed = 0, partial = 0;
@@ -83,16 +88,29 @@ function mrrListComputeKPIs() {
     else if (s === 'COMPLETED') completed++;
     else if (s === 'PARTIAL') partial++;
   });
-  document.getElementById('mrrKpiTotal').textContent = erpNum(total);
-  document.getElementById('mrrKpiTotalSub').textContent = total + ' receipts';
-  document.getElementById('mrrKpiPending').textContent = erpNum(pending);
-  document.getElementById('mrrKpiCompleted').textContent = erpNum(completed);
-  document.getElementById('mrrKpiPartial').textContent = erpNum(partial);
+  
+  // ✅ Null-safe updates
+  var elTotal = document.getElementById('mrrKpiTotal');
+  if (elTotal) elTotal.textContent = erpNum(total);
+  
+  var elTotalSub = document.getElementById('mrrKpiTotalSub');
+  if (elTotalSub) elTotalSub.textContent = total + ' receipts';
+  
+  var elPending = document.getElementById('mrrKpiPending');
+  if (elPending) elPending.textContent = erpNum(pending);
+  
+  var elCompleted = document.getElementById('mrrKpiCompleted');
+  if (elCompleted) elCompleted.textContent = erpNum(completed);
+  
+  var elPartial = document.getElementById('mrrKpiPartial');
+  if (elPartial) elPartial.textContent = erpNum(partial);
+  
+  console.log('[MRR KPI] Total:', total, '| Pending:', pending, '| Completed:', completed, '| Partial:', partial);
 }
 
-var userRole = localStorage.getItem('ivm_userRole') || '';
-var canEdit = (userRole === 'warehouse');
-
+// ═══════════════════════════════════════════════════════════
+// RENDER — Null-safe
+// ═══════════════════════════════════════════════════════════
 function mrrListRender() {
   var tbody = document.getElementById('mrrTableBody');
   if (!tbody) return;
@@ -100,6 +118,7 @@ function mrrListRender() {
   // ═══ ROLE CHECK — Only warehouse can discuss MRR ═══
   var userRole = localStorage.getItem('ivm_userRole') || '';
   var canDiscussMRR = (userRole === 'warehouse');
+  var canEdit = (userRole === 'warehouse');
   
   var search = (document.getElementById('mrrSearchInput') ? document.getElementById('mrrSearchInput').value : '').toLowerCase().trim();
   _mrrFilteredDocs = _mrrAllDocs.filter(function(d) {
@@ -115,13 +134,27 @@ function mrrListRender() {
   var end = Math.min(start + _mrrPageSize, total);
   var pageItems = _mrrFilteredDocs.slice(start, end);
   
-  document.getElementById('mrrTableCount').textContent = total + ' items';
-  document.getElementById('mrrPageTotal').textContent = total;
-  document.getElementById('mrrPageStart').textContent = total > 0 ? start + 1 : 0;
-  document.getElementById('mrrPageEnd').textContent = end;
-  document.getElementById('mrrPageLabel').textContent = 'Page ' + _mrrCurrentPage;
-  document.getElementById('mrrBtnPrev').disabled = (_mrrCurrentPage <= 1);
-  document.getElementById('mrrBtnNext').disabled = (end >= total);
+  // ✅ Null-safe element updates
+  var elCount = document.getElementById('mrrTableCount');
+  if (elCount) elCount.textContent = total + ' items';
+  
+  var elPageTotal = document.getElementById('mrrPageTotal');
+  if (elPageTotal) elPageTotal.textContent = total;
+  
+  var elPageStart = document.getElementById('mrrPageStart');
+  if (elPageStart) elPageStart.textContent = total > 0 ? start + 1 : 0;
+  
+  var elPageEnd = document.getElementById('mrrPageEnd');
+  if (elPageEnd) elPageEnd.textContent = end;
+  
+  var elPageLabel = document.getElementById('mrrPageLabel');
+  if (elPageLabel) elPageLabel.textContent = 'Page ' + _mrrCurrentPage;
+  
+  var elBtnPrev = document.getElementById('mrrBtnPrev');
+  if (elBtnPrev) elBtnPrev.disabled = (_mrrCurrentPage <= 1);
+  
+  var elBtnNext = document.getElementById('mrrBtnNext');
+  if (elBtnNext) elBtnNext.disabled = (end >= total);
   
   if (pageItems.length === 0) {
     tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
@@ -149,24 +182,23 @@ function mrrListRender() {
       '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span></td>' +
       '<td class="text-center">' + (d.item_count || 0) + '</td>' +
       '<td class="text-center">' +
-  '<button class="erp-action-btn primary" onclick="mrrListPrint(\'' + safeDoc + '\')" title="Print">' +
-    '<i class="bi bi-printer"></i>' +
-  '</button>' +
-  '<button class="erp-action-btn" onclick="mrrListView(\'' + safeDoc + '\')" title="View">' +
-    '<i class="bi bi-eye"></i>' +
-  '</button>' +
-  (canDiscussMRR ? 
-    '<button class="erp-action-btn" onclick="discussDocument(\'' + safeDoc + '\', \'MRR\')" title="Discuss">' +
-      '<i class="bi bi-chat-dots"></i>' +
-    '</button>' 
-    : '') +
-  // ═══ Edit button — warehouse only ═══
-  (canEdit && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL') ?
-    '<button class="erp-action-btn" onclick="openWarehouseEdit(\'' + safeDoc + '\', \'MRR\')" title="Edit (Warehouse)">' +
-      '<i class="bi bi-pencil-square"></i>' +
-    '</button>' 
-    : '') +
-'</td>' +
+        '<button class="erp-action-btn primary" onclick="mrrListPrint(\'' + safeDoc + '\')" title="Print">' +
+          '<i class="bi bi-printer"></i>' +
+        '</button>' +
+        '<button class="erp-action-btn" onclick="mrrListView(\'' + safeDoc + '\')" title="View">' +
+          '<i class="bi bi-eye"></i>' +
+        '</button>' +
+        (canDiscussMRR ? 
+          '<button class="erp-action-btn" onclick="discussDocument(\'' + safeDoc + '\', \'MRR\')" title="Discuss">' +
+            '<i class="bi bi-chat-dots"></i>' +
+          '</button>' 
+          : '') +
+        (canEdit && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL') ?
+          '<button class="erp-action-btn" onclick="openWarehouseEdit(\'' + safeDoc + '\', \'MRR\')" title="Edit (Warehouse)">' +
+            '<i class="bi bi-pencil-square"></i>' +
+          '</button>' 
+          : '') +
+      '</td>' +
       '</tr>';
   });
   tbody.innerHTML = html;
@@ -329,4 +361,4 @@ function mrrListRefresh() {
   mrrCheckHealth();
 }
 
-console.log('✅ mrr-list.js v2.0 loaded (Discuss button — warehouse only)');
+console.log('✅ mrr-list.js v2.1 loaded (null-safe KPI updates)');
