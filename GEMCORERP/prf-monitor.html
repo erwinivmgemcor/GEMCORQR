@@ -548,6 +548,62 @@
 </div>
 
    <!-- ═══════════════════════════════════════════════════════════ -->
+<!-- EDIT PRF ITEMS MODAL (Revision Mode) -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="editPrfItemsModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width:1200px;">
+    <div class="modal-content">
+      <div class="modal-header" style="background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color:#fff;">
+        <h5 class="modal-title">
+          <i class="bi bi-pencil-square me-2"></i>
+          Edit PRF Items — <span id="editPrfItemsTitle">—</span>
+          <span class="badge bg-light text-dark ms-2" id="editPrfVersionBadge">v1 → v2</span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" onclick="closeEditPrfItems()"></button>
+      </div>
+      <div class="modal-body" id="editPrfItemsBody">
+        <div class="text-center py-5">
+          <div class="erp-spinner" style="margin:0 auto;"></div>
+          <div class="mt-2 text-muted">Loading PRF items...</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="me-auto small text-muted">
+          <i class="bi bi-info-circle me-1"></i>
+          Original PRF ay hindi mababago. Ang edits ay bagong version.
+        </div>
+        <button type="button" class="btn btn-outline-secondary" onclick="closeEditPrfItems()">Cancel</button>
+        <button type="button" class="btn btn-warning" id="btnSaveEditPrfItems" onclick="saveEditPrfItems()">
+          <i class="bi bi-check-circle me-1"></i>Save as New Version
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- VERSION HISTORY MODAL -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="prfVersionHistoryModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header erp-modal-header">
+        <h5 class="modal-title">
+          <i class="bi bi-clock-history me-2"></i>
+          Version History — <span id="prfHistoryTitle">—</span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="prfHistoryBody">
+        <div class="text-center py-4">
+          <div class="erp-spinner" style="margin:0 auto;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+   <!-- ═══════════════════════════════════════════════════════════ -->
 <!-- PO EDIT MODAL (Manual PO Entry) -->
 <!-- ═══════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="poEditModal" tabindex="-1">
