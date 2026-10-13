@@ -41,7 +41,7 @@
         }
       ]
     },
-    {
+        {
       id: 'inventory',
       label: 'Inventory',
       items: [
@@ -50,6 +50,13 @@
           label: 'Inventory Count',
           icon: 'bi-clipboard-check',
           href: 'inventory-count.html',
+          roles: ['warehouse']
+        },
+        {
+          id: 'replenishment',
+          label: 'Replenishment Needs',
+          icon: 'bi-cart-plus-fill',
+          href: 'replenishment.html',
           roles: ['warehouse']
         }
       ]
@@ -249,7 +256,8 @@
     'mrif-monitoring': 'MRIF Monitoring',        // ← NEW
     'mrr-monitoring': 'MRR Monitoring',          // ← NEW
     'mrs-monitoring': 'MRS Monitoring',
-        'item-in-out': 'Item In & Out',
+    'item-in-out': 'Item In & Out',
+    'replenishment': 'Replenishment Needs',
     'weekly-monitor': 'Weekly Monitoring',
     'usage-trend': 'Usage Trend',
     'usage-entry': 'Usage Entry',
