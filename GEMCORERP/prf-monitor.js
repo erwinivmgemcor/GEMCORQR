@@ -1359,6 +1359,9 @@ function erpShowToast(msg, type) {
 // Expose functions globally
 window.prfMonitorLoad = prfMonitorLoad;
 window.prfMonitorRefresh = prfMonitorRefresh;
+window.prfSyncAndRecompute = prfSyncAndRecompute;
+window.prfRecomputeOnly = prfRecomputeOnly;
+window.prfShowMatchDetails = prfShowMatchDetails;
 window.prfMonitorClearFilters = prfMonitorClearFilters;
 window.prfMonitorOnSearch = prfMonitorOnSearch;
 window.prfMonitorApplyFilter = prfMonitorApplyFilter;
