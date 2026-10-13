@@ -723,4 +723,35 @@ document.addEventListener('visibilitychange', function() {
   }
 });
 
+// ═══════════════════════════════════════════════════════════
+// ✅ REPLENISHMENT WIDGET
+// ═══════════════════════════════════════════════════════════
+async function loadReplenishmentWidget() {
+  try {
+    var rows = await erpFetch('erp_v_reorder_list', 'select=item_code,urgency&limit=5000');
+    if (!rows || rows.length === 0) {
+      document.getElementById('replenishmentWidget').style.display = 'none';
+      return;
+    }
+
+    var critical = 0, urgent = 0;
+    rows.forEach(function(r) {
+      var u = String(r.urgency || '').toUpperCase();
+      if (u === 'CRITICAL') critical++;
+      else if (u === 'URGENT') urgent++;
+    });
+
+    document.getElementById('replenishmentTotal').textContent = rows.length;
+    document.getElementById('replenishmentCritical').textContent = critical + ' critical';
+    document.getElementById('replenishmentUrgent').textContent = urgent + ' urgent';
+    document.getElementById('replenishmentWidget').style.display = 'block';
+
+  } catch(e) {
+    console.warn('[Replenishment Widget]', e.message);
+  }
+}
+
+// Call after dashboard loads
+setTimeout(loadReplenishmentWidget, 1500);
+
 console.log('✅ management-dashboard.js loaded');
