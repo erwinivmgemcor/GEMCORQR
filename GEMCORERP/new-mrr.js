@@ -1,8 +1,9 @@
 // ============================================================
-// GEMCOR ERP — New MRR Creation (v2 FIXED)
-// Direct Supabase insert + Auto-load items from PO
-// ✅ FIX: Automatic status patch (COMPLETED/PARTIAL) after insert
-// ✅ FIX: Guaranteed trigger fire for stock ledger updates
+// GEMCOR ERP — New MRR Creation (v3)
+// ✅ Auto-suggest for manual item entry
+// ✅ Works with or without PO#
+// ✅ Complete item data from erp_items
+// ✅ Automatic status patch (COMPLETED/PARTIAL) after insert
 // ============================================================
 
 var _mrrState = {
@@ -19,11 +20,16 @@ var _mrrState = {
   lastSubmittedAt: 0
 };
 
+// Auto-suggest cache
+var _mrrInventoryCache = null;
+var _mrrInventoryPromise = null;
+var _mrrSearchTimers = {};
+
 // ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[New MRR v2] Initializing...');
+  console.log('[New MRR v3] Initializing...');
 
   mrrCheckHealth();
 
@@ -43,7 +49,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  console.log('[New MRR v2] Ready. Prepared By:', userFullname);
+  // Preload inventory cache in background
+  setTimeout(function() {
+    _mrrLoadInventory().then(function(items) {
+      _mrrInventoryCache = items;
+      console.log('[MRR v3] Inventory cache preloaded:', items.length, 'items');
+    }).catch(function(err) {
+      console.warn('[MRR v3] Preload failed:', err.message);
+    });
+  }, 500);
+
+  console.log('[New MRR v3] Ready. Prepared By:', userFullname);
 });
 
 async function mrrCheckHealth() {
@@ -67,7 +83,7 @@ async function mrrCheckHealth() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// PO LOOKUP
+// PO LOOKUP (Optional)
 // ═══════════════════════════════════════════════════════════
 async function lookupPoNo() {
   var poNo = document.getElementById('mrrPoNo').value.trim();
@@ -84,49 +100,50 @@ async function lookupPoNo() {
   resultEl.innerHTML = '<span class="small">Searching...</span>';
 
   try {
-    console.log('[MRR Lookup] Querying erp_prf_po_cache for po_no=' + poNo);
-    var rows = await erpFetch('erp_prf_po_cache',
-      'po_no=eq.' + encodeURIComponent(poNo) + '&order=item_no.asc&limit=500');
+    console.log('[MRR Lookup] Querying prf_items for po_no=' + poNo);
+    var rows = await erpFetch('prf_items',
+      'po_no=eq.' + encodeURIComponent(poNo) + '&order=line_no.asc&limit=500');
 
     if (!rows || rows.length === 0) {
       statusEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> PO No. not found</span>';
       resultEl.className = 'alert alert-warning mb-0 py-2';
-      resultEl.innerHTML = '<span class="small"><i class="bi bi-exclamation-triangle me-1"></i>PO No. <strong>' + erpEsc(poNo) + '</strong> not found.</span>';
+      resultEl.innerHTML = '<span class="small"><i class="bi bi-exclamation-triangle me-1"></i>' +
+        'PO No. <strong>' + erpEsc(poNo) + '</strong> not found in PRF records. ' +
+        'You can still add items manually below.</span>';
       return;
     }
 
-    console.log('[MRR Lookup] Found ' + rows.length + ' rows');
+    console.log('[MRR Lookup] Found ' + rows.length + ' items in prf_items');
 
     var first = rows[0];
     _mrrState.poNo = poNo;
     _mrrState.prfNo = first.prf_no || '';
-    _mrrState.client = first.client || '';
-    _mrrState.vendor = first.supplier || first.client || '';
+    _mrrState.client = first.po_supplier || '';
+    _mrrState.vendor = first.po_supplier || '';
 
     document.getElementById('mrrPrfNo').value = _mrrState.prfNo;
     document.getElementById('mrrVendor').value = _mrrState.vendor;
 
+    // ═══ Build items from prf_items (COMPLETE data) ═══
     _mrrState.items = rows.map(function(r, i) {
       return {
-        itemCode: r.inventory_id || '',
+        itemCode: r.item_code || '',
         description: r.description || '',
-        requestedQty: Number(r.qty || 0),
-        issuedQty: Number(r.qty || 0),
+        requestedQty: Number(r.qty_for_order || 0),
+        issuedQty: Number(r.qty_for_order || 0),
         unit: r.unit || 'PCS',
         remarks: '',
-        itemNo: r.item_no || (i + 1)
+        itemNo: r.line_no || (i + 1)
       };
     });
 
     renderItems();
 
-    document.getElementById('step2Card').style.display = 'block';
-    document.getElementById('step3Card').style.display = 'block';
-    document.getElementById('step4Card').style.display = 'block';
-
     statusEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> PO No. found!</span>';
     resultEl.className = 'alert alert-success mb-0 py-2';
-    resultEl.innerHTML = '<span class="small"><i class="bi bi-check-circle me-1"></i>Found: <strong>' + erpEsc(_mrrState.prfNo) + '</strong> — ' + erpEsc(_mrrState.client) + ' (' + rows.length + ' items)</span>';
+    resultEl.innerHTML = '<span class="small"><i class="bi bi-check-circle me-1"></i>' +
+      'Found: <strong>' + erpEsc(_mrrState.prfNo) + '</strong> — ' +
+      erpEsc(_mrrState.client) + ' (' + rows.length + ' items)</span>';
 
     erpShowToast('PO No. found! ' + rows.length + ' items loaded.', 'success');
 
@@ -143,14 +160,36 @@ async function lookupPoNo() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ITEMS RENDERING
+// ITEMS MANAGEMENT
 // ═══════════════════════════════════════════════════════════
+function addItemRow() {
+  _mrrState.items.push({
+    itemCode: '',
+    description: '',
+    requestedQty: 0,
+    issuedQty: 0,
+    unit: 'PCS',
+    remarks: '',
+    itemNo: _mrrState.items.length + 1
+  });
+  renderItems();
+
+  // Focus the new row's item code input
+  var newIdx = _mrrState.items.length - 1;
+  setTimeout(function() {
+    var input = document.getElementById('mrrItemCode' + newIdx);
+    if (input) input.focus();
+  }, 150);
+}
+
 function renderItems() {
   var tbody = document.getElementById('itemsBody');
   if (!tbody) return;
 
   if (_mrrState.items.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No items</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">' +
+      '<i class="bi bi-inbox fs-3 d-block mb-2 opacity-50"></i>' +
+      'Click "+ Add Item" to start, or enter PO No. above to auto-load items.</td></tr>';
     return;
   }
 
@@ -158,13 +197,69 @@ function renderItems() {
   _mrrState.items.forEach(function(it, idx) {
     html += '<tr data-idx="' + idx + '">' +
       '<td class="text-center">' + (idx + 1) + '</td>' +
-      '<td><input type="text" class="form-control form-control-sm item-code-input" value="' + erpEsc(it.itemCode) + '" onchange="updateItem(' + idx + ', \'itemCode\', this.value)"></td>' +
-      '<td><input type="text" class="form-control form-control-sm item-desc-input" value="' + erpEsc(it.description) + '" onchange="updateItem(' + idx + ', \'description\', this.value)"></td>' +
-      '<td class="text-center">' + it.requestedQty + '</td>' +
-      '<td><input type="number" class="form-control form-control-sm text-center item-qty-input" value="' + it.issuedQty + '" min="0" step="0.01" onchange="updateItem(' + idx + ', \'issuedQty\', parseFloat(this.value)||0)"></td>' +
-      '<td><input type="text" class="form-control form-control-sm text-center item-unit-input" value="' + erpEsc(it.unit) + '" onchange="updateItem(' + idx + ', \'unit\', this.value)"></td>' +
-      '<td><input type="text" class="form-control form-control-sm item-remarks-input" value="' + erpEsc(it.remarks) + '" placeholder="Optional" onchange="updateItem(' + idx + ', \'remarks\', this.value)"></td>' +
-      '<td class="text-center"><button class="btn btn-sm btn-outline-danger" onclick="removeItem(' + idx + ')" title="Remove"><i class="bi bi-trash"></i></button></td>' +
+
+      // ═══ ITEM CODE with auto-suggest ═══
+      '<td style="position:relative;">' +
+        '<input type="text" ' +
+          'class="form-control form-control-sm item-code-input" ' +
+          'id="mrrItemCode' + idx + '" ' +
+          'data-idx="' + idx + '" ' +
+          'value="' + erpEsc(it.itemCode) + '" ' +
+          'placeholder="Type to search..." ' +
+          'autocomplete="off" ' +
+          'oninput="onMrrItemCodeInput(' + idx + ', this.value)" ' +
+          'onfocus="onMrrItemCodeInput(' + idx + ', this.value)" ' +
+          'onblur="onMrrItemCodeBlur(' + idx + ')">' +
+        '<div class="item-search-dropdown d-none" id="mrrDropdown' + idx + '"></div>' +
+      '</td>' +
+
+      // ═══ DESCRIPTION (auto-filled) ═══
+      '<td>' +
+        '<input type="text" class="form-control form-control-sm" ' +
+          'id="mrrItemDesc' + idx + '" ' +
+          'value="' + erpEsc(it.description) + '" ' +
+          'placeholder="Auto-filled" ' +
+          'oninput="updateItem(' + idx + ', \'description\', this.value)">' +
+      '</td>' +
+
+      // ═══ REQUESTED QTY ═══
+      '<td>' +
+        '<input type="number" class="form-control form-control-sm text-center" ' +
+          'value="' + (it.requestedQty || 0) + '" ' +
+          'min="0" step="0.01" ' +
+          'oninput="updateItem(' + idx + ', \'requestedQty\', parseFloat(this.value)||0)">' +
+      '</td>' +
+
+      // ═══ ATL QTY (Received) ═══
+      '<td>' +
+        '<input type="number" class="form-control form-control-sm text-center item-qty-input" ' +
+          'value="' + (it.issuedQty || 0) + '" ' +
+          'min="0" step="0.01" ' +
+          'oninput="updateItem(' + idx + ', \'issuedQty\', parseFloat(this.value)||0)">' +
+      '</td>' +
+
+      // ═══ UNIT ═══
+      '<td>' +
+        '<input type="text" class="form-control form-control-sm text-center" ' +
+          'id="mrrItemUnit' + idx + '" ' +
+          'value="' + erpEsc(it.unit || 'PCS') + '" ' +
+          'oninput="updateItem(' + idx + ', \'unit\', this.value)">' +
+      '</td>' +
+
+      // ═══ REMARKS ═══
+      '<td>' +
+        '<input type="text" class="form-control form-control-sm" ' +
+          'value="' + erpEsc(it.remarks) + '" ' +
+          'placeholder="Optional" ' +
+          'oninput="updateItem(' + idx + ', \'remarks\', this.value)">' +
+      '</td>' +
+
+      // ═══ REMOVE BUTTON ═══
+      '<td class="text-center">' +
+        '<button class="btn btn-sm btn-outline-danger" onclick="removeItem(' + idx + ')" title="Remove">' +
+          '<i class="bi bi-trash"></i>' +
+        '</button>' +
+      '</td>' +
     '</tr>';
   });
   tbody.innerHTML = html;
@@ -182,21 +277,245 @@ function removeItem(idx) {
   renderItems();
 }
 
-function addItemRow() {
-  _mrrState.items.push({
-    itemCode: '',
-    description: '',
-    requestedQty: 0,
-    issuedQty: 0,
-    unit: 'PCS',
-    remarks: '',
-    itemNo: _mrrState.items.length + 1
-  });
-  renderItems();
+// ═══════════════════════════════════════════════════════════
+// AUTO-SUGGEST — Item Code Input Handler
+// ═══════════════════════════════════════════════════════════
+function onMrrItemCodeInput(idx, value) {
+  var input = document.getElementById('mrrItemCode' + idx);
+  var dropdown = document.getElementById('mrrDropdown' + idx);
+  if (!input || !dropdown) return;
+
+  var term = String(value || '').toLowerCase().trim();
+
+  // Clear previous timer
+  if (_mrrSearchTimers[idx]) clearTimeout(_mrrSearchTimers[idx]);
+
+  if (!term || term.length < 2) {
+    dropdown.classList.add('d-none');
+    return;
+  }
+
+  // Show loading state
+  dropdown.innerHTML = '<div class="item-search-item muted">' +
+    '<i class="bi bi-hourglass-split me-2"></i>Searching...</div>';
+  _positionMrrDropdown(dropdown, input);
+  dropdown.classList.remove('d-none');
+
+  // Debounce search — 200ms
+  _mrrSearchTimers[idx] = setTimeout(async function() {
+    await _mrrSearchItems(idx, term);
+  }, 200);
+}
+
+async function _mrrSearchItems(idx, term) {
+  var input = document.getElementById('mrrItemCode' + idx);
+  var dropdown = document.getElementById('mrrDropdown' + idx);
+  if (!input || !dropdown) return;
+
+  try {
+    // Load inventory cache if not yet loaded
+    if (!_mrrInventoryCache) {
+      if (_mrrInventoryPromise) {
+        await _mrrInventoryPromise;
+      } else {
+        _mrrInventoryPromise = _mrrLoadInventory();
+        _mrrInventoryCache = await _mrrInventoryPromise;
+        _mrrInventoryPromise = null;
+      }
+    }
+
+    var items = _mrrInventoryCache || [];
+
+    // Filter matches
+    var matches = items.filter(function(it) {
+      var code = String(it.code || '').toLowerCase();
+      var desc = String(it.description || '').toLowerCase();
+      return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
+    }).slice(0, 30);
+
+    // Sort: exact > starts-with > contains
+    matches.sort(function(a, b) {
+      var aCode = String(a.code || '').toLowerCase();
+      var bCode = String(b.code || '').toLowerCase();
+      var aExact = aCode === term ? 0 : 1;
+      var bExact = bCode === term ? 0 : 1;
+      if (aExact !== bExact) return aExact - bExact;
+      var aStart = aCode.indexOf(term) === 0 ? 0 : 1;
+      var bStart = bCode.indexOf(term) === 0 ? 0 : 1;
+      if (aStart !== bStart) return aStart - bStart;
+      return aCode.localeCompare(bCode);
+    });
+
+    if (matches.length === 0) {
+      dropdown.innerHTML = '<div class="item-search-item muted">' +
+        '<i class="bi bi-x-circle me-2"></i>No matches found</div>';
+      return;
+    }
+
+    // Build dropdown
+    var html = '';
+    matches.forEach(function(it) {
+      var code = String(it.code || '');
+      var desc = String(it.description || '');
+      var unit = String(it.unit || 'PCS');
+      var category = String(it.category || '');
+
+      // Escape for JS inline
+      var safeCode = code.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      var safeDesc = desc.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      var safeUnit = unit.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+      html += '<div class="item-search-item" ' +
+        'onmousedown="event.preventDefault();selectMrrItem(' + idx + ', \'' +
+          safeCode + '\', \'' + safeDesc + '\', \'' + safeUnit + '\')">' +
+        '<div class="item-code">' + erpEsc(code) + '</div>' +
+        '<div class="item-desc">' + erpEsc(desc.substring(0, 100)) + (desc.length > 100 ? '…' : '') + '</div>' +
+        '<div class="item-meta">' +
+          '<span class="badge bg-light text-dark">' + erpEsc(unit) + '</span>' +
+          (category ? '<span class="badge bg-secondary">' + erpEsc(category) + '</span>' : '') +
+        '</div>' +
+      '</div>';
+    });
+    dropdown.innerHTML = html;
+    _positionMrrDropdown(dropdown, input);
+    dropdown.classList.remove('d-none');
+
+  } catch(err) {
+    console.error('[_mrrSearchItems]', err);
+    dropdown.innerHTML = '<div class="item-search-item muted" style="color:#dc2626;">' +
+      '<i class="bi bi-exclamation-triangle me-2"></i>Search error</div>';
+  }
+}
+
+function selectMrrItem(idx, code, description, unit) {
+  // Update state
+  if (_mrrState.items[idx]) {
+    _mrrState.items[idx].itemCode = code;
+    _mrrState.items[idx].description = description;
+    _mrrState.items[idx].unit = unit;
+  }
+
+  // Update UI inputs
+  var codeInput = document.getElementById('mrrItemCode' + idx);
+  var descInput = document.getElementById('mrrItemDesc' + idx);
+  var unitInput = document.getElementById('mrrItemUnit' + idx);
+
+  if (codeInput) codeInput.value = code;
+  if (descInput) descInput.value = description;
+  if (unitInput) unitInput.value = unit;
+
+  // Hide dropdown
+  var dropdown = document.getElementById('mrrDropdown' + idx);
+  if (dropdown) dropdown.classList.add('d-none');
+
+  // Highlight the row
+  var row = document.querySelector('tr[data-idx="' + idx + '"]');
+  if (row) {
+    row.classList.add('selected-item-row');
+    setTimeout(function() { row.classList.remove('selected-item-row'); }, 1500);
+  }
+
+  // Focus ATL Qty
+  setTimeout(function() {
+    var qtyInput = row ? row.querySelector('.item-qty-input') : null;
+    if (qtyInput) {
+      qtyInput.focus();
+      qtyInput.select();
+    }
+  }, 100);
+}
+
+window.selectMrrItem = selectMrrItem;
+
+function onMrrItemCodeBlur(idx) {
+  // Delay para ma-click ang dropdown item
+  setTimeout(function() {
+    var dropdown = document.getElementById('mrrDropdown' + idx);
+    if (dropdown) dropdown.classList.add('d-none');
+  }, 200);
+}
+
+function _positionMrrDropdown(dropdown, input) {
+  var rect = input.getBoundingClientRect();
+  var spaceBelow = window.innerHeight - rect.bottom;
+  var spaceAbove = rect.top;
+
+  var width = Math.max(rect.width, 400);
+  var maxWidth = window.innerWidth - rect.left - 20;
+  if (width > maxWidth) width = maxWidth;
+
+  dropdown.style.position = 'fixed';
+  dropdown.style.left = rect.left + 'px';
+  dropdown.style.width = width + 'px';
+  dropdown.style.zIndex = '99999';
+
+  if (spaceBelow < 320 && spaceAbove > spaceBelow) {
+    dropdown.style.top = 'auto';
+    dropdown.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceAbove - 20, 320) + 'px';
+  } else {
+    dropdown.style.bottom = 'auto';
+    dropdown.style.top = (rect.bottom + 4) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceBelow - 20, 320) + 'px';
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT MRR (v2 — with GUARANTEED status patch)
+// LOAD INVENTORY CACHE (for autocomplete)
+// ═══════════════════════════════════════════════════════════
+async function _mrrLoadInventory() {
+  console.log('[MRR v3] Loading inventory for autocomplete...');
+  try {
+    // Use shared helper if available
+    if (typeof erpGetInventoryListForDropdown === 'function') {
+      var list = await erpGetInventoryListForDropdown();
+      console.log('[MRR v3] Inventory loaded (shared):', list.length, 'items');
+      return list;
+    }
+
+    // Fallback: paginated fetch
+    var allItems = [];
+    var pageSize = 1000;
+    var offset = 0;
+    var hasMore = true;
+
+    while (hasMore) {
+      var query = 'select=item_code,description,base_unit,category,location' +
+                  '&is_active=eq.true' +
+                  '&is_deleted=eq.false' +
+                  '&is_deprecated_2026=eq.false' +
+                  '&order=item_code.asc' +
+                  '&limit=' + pageSize +
+                  '&offset=' + offset;
+
+      var rows = await erpFetch('erp_items', query);
+      if (!rows || rows.length === 0) break;
+
+      allItems = allItems.concat(rows);
+      offset += rows.length;
+      if (rows.length < pageSize) hasMore = false;
+    }
+
+    var mapped = allItems.map(function(r) {
+      return {
+        code: r.item_code,
+        description: r.description || '',
+        unit: r.base_unit || 'PIECE',
+        category: r.category || '',
+        location: r.location || ''
+      };
+    });
+
+    console.log('[MRR v3] Inventory loaded (fallback):', mapped.length, 'items');
+    return mapped;
+  } catch(err) {
+    console.warn('[MRR v3] Inventory load failed:', err.message);
+    return [];
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SUBMIT MRR
 // ═══════════════════════════════════════════════════════════
 async function submitMrr() {
   if (_mrrState.isSubmitting) return;
@@ -204,11 +523,6 @@ async function submitMrr() {
   var now = Date.now();
   if (_mrrState.lastSubmittedAt && (now - _mrrState.lastSubmittedAt) < 10000) {
     erpShowToast('Please wait a moment before submitting again', 'warning');
-    return;
-  }
-
-  if (!_mrrState.poNo) {
-    erpShowToast('Please lookup a PO No. first', 'warning');
     return;
   }
 
@@ -236,6 +550,9 @@ async function submitMrr() {
 
   var vendor = document.getElementById('mrrVendor').value.trim();
   _mrrState.vendor = vendor;
+
+  var prfNo = document.getElementById('mrrPrfNo').value.trim();
+  _mrrState.prfNo = prfNo;
 
   if (_mrrState.items.length === 0) {
     erpShowToast('No items to submit', 'warning');
@@ -298,26 +615,26 @@ async function submitMrr() {
 
     console.log('[Submit MRR] Final status will be:', overallStatus);
 
-    // ─── Step 3: Insert document as PENDING (to avoid trigger firing early) ───
-    // ✅ KEY FIX: Insert as PENDING first, then patch to final status
+    // ─── Step 3: Insert document ───
     var docRes = await fetch(erpUrl('documents'), {
       method: 'POST',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify({
         doc_no: docNo,
         doc_type: 'MRR',
-        status: 'PENDING',  // ✅ Start as PENDING
+        status: 'PENDING',
         is_bal: false,
         requestor: _mrrState.preparedBy,
         department: '',
-        po_no: _mrrState.poNo,
+        po_no: _mrrState.poNo || '',
         prf_no: _mrrState.prfNo,
         vendor: _mrrState.vendor,
-        client_name: _mrrState.client,
+        client_name: _mrrState.client || '',
         dr_no: _mrrState.drNo,
         receiving_site: _mrrState.receivingSite,
         receiving_date: _mrrState.receivingDate,
         prepared_by: _mrrState.preparedBy,
+        item_count: validItems.length,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
@@ -365,7 +682,7 @@ async function submitMrr() {
 
     console.log('[Submit MRR] Items inserted:', validItems.length);
 
-    // ─── Step 5: PATCH documents to final status (trigger fires NOW with items) ───
+    // ─── Step 5: PATCH documents to final status ───
     if (overallStatus !== 'PENDING') {
       console.log('[Submit MRR] Patching status to:', overallStatus);
 
@@ -373,7 +690,7 @@ async function submitMrr() {
         method: 'PATCH',
         headers: erpHeaders({ 'Prefer': 'return=representation' }),
         body: JSON.stringify({
-          status: overallStatus,  // ✅ Trigger fires now, items are ready
+          status: overallStatus,
           processed_by: _mrrState.preparedBy,
           processed_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
@@ -383,8 +700,7 @@ async function submitMrr() {
       if (!patchRes.ok) {
         var patchErrText = await patchRes.text();
         console.error('[Submit MRR] PATCH failed:', patchErrText);
-        // Don't throw — document is created, just status update failed
-        erpShowToast('⚠️ MRR created but status update may have failed. Check Supabase.', 'warning');
+        erpShowToast('⚠️ MRR created but status update may have failed', 'warning');
       } else {
         console.log('[Submit MRR] Status patched to:', overallStatus);
       }
@@ -403,6 +719,7 @@ async function submitMrr() {
     btn.innerHTML = originalHtml;
   }
 }
+
 // ═══════════════════════════════════════════════════════════
 // SUCCESS MODAL
 // ═══════════════════════════════════════════════════════════
@@ -441,13 +758,9 @@ function resetFormSilent() {
   document.getElementById('mrrDrNo').value = '';
   document.getElementById('poStatus').innerHTML = '';
   document.getElementById('poLookupResult').className = 'alert alert-secondary mb-0 py-2';
-  document.getElementById('poLookupResult').innerHTML = '<span class="text-muted small">Enter a PO No. above to auto-load items</span>';
+  document.getElementById('poLookupResult').innerHTML = '<span class="text-muted small">Enter a PO No. above to auto-load items, or skip to add items manually.</span>';
 
-  document.getElementById('step2Card').style.display = 'none';
-  document.getElementById('step3Card').style.display = 'none';
-  document.getElementById('step4Card').style.display = 'none';
-
-  document.getElementById('itemsBody').innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Enter a PO No. above to auto-load items</td></tr>';
+  renderItems();
 
   console.log('[Reset MRR] Form cleared.');
 }
@@ -463,6 +776,32 @@ function closeSuccessAndReset() {
   var modal = bootstrap.Modal.getInstance(modalEl);
   if (modal) modal.hide();
 }
+
+// ═══════════════════════════════════════════════════════════
+// GLOBAL: Hide dropdowns on outside click + scroll
+// ═══════════════════════════════════════════════════════════
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.item-search-dropdown') &&
+      !e.target.classList.contains('item-code-input')) {
+    document.querySelectorAll('.item-search-dropdown').forEach(function(el) {
+      el.classList.add('d-none');
+    });
+  }
+});
+
+window.addEventListener('scroll', function() {
+  document.querySelectorAll('.item-search-dropdown:not(.d-none)').forEach(function(dropdown) {
+    var idx = dropdown.id.replace('mrrDropdown', '');
+    var input = document.getElementById('mrrItemCode' + idx);
+    if (input) _positionMrrDropdown(dropdown, input);
+  });
+}, { passive: true });
+
+window.addEventListener('resize', function() {
+  document.querySelectorAll('.item-search-dropdown:not(.d-none)').forEach(function(el) {
+    el.classList.add('d-none');
+  });
+});
 
 // ═══════════════════════════════════════════════════════════
 // HELPERS
@@ -482,4 +821,4 @@ function erpShowToast(msg, type) {
   toast.show();
 }
 
-console.log('✅ new-mrr.js v2 loaded (increment-based + guaranteed status patch)');
+console.log('✅ new-mrr.js v3 loaded (with auto-suggest)');
