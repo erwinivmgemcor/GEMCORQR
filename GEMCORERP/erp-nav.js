@@ -119,6 +119,13 @@
       href: 'mrr-monitoring.html',               // ← NEW
       roles: ['warehouse']                       // ← NEW
     },
+    {
+      id: 'mrs-monitoring',
+      label: 'MRS Monitoring',
+      icon: 'bi-arrow-counterclockwise',
+      href: 'mrs-monitoring.html',
+      roles: ['warehouse']
+    },
         {
           id: 'usage-trend',
           label: 'Usage Trend',
@@ -225,6 +232,7 @@
     'edit-requests': 'Edit Requests',           // ← NEW
     'mrif-monitoring': 'MRIF Monitoring',        // ← NEW
     'mrr-monitoring': 'MRR Monitoring',          // ← NEW
+    'mrs-monitoring': 'MRS Monitoring',
     'weekly-monitor': 'Weekly Monitoring',
     'usage-trend': 'Usage Trend',
     'usage-entry': 'Usage Entry',
