@@ -106,6 +106,20 @@
           roles: ['warehouse']
         },
         {
+      id: 'mrif-monitoring',                     // ← NEW
+      label: 'MRIF Monitoring',                  // ← NEW
+      icon: 'bi-clipboard-data',                 // ← NEW
+      href: 'mrif-monitoring.html',              // ← NEW
+      roles: ['warehouse']                       // ← NEW
+    },
+    {
+      id: 'mrr-monitoring',                      // ← NEW
+      label: 'MRR Monitoring',                   // ← NEW
+      icon: 'bi-clipboard-check',                // ← NEW
+      href: 'mrr-monitoring.html',               // ← NEW
+      roles: ['warehouse']                       // ← NEW
+    },
+        {
           id: 'usage-trend',
           label: 'Usage Trend',
           icon: 'bi-graph-up-arrow',
@@ -209,6 +223,8 @@
     'mrs-list': 'MRS List',
     'prf-monitor': 'PRF Monitor',
     'edit-requests': 'Edit Requests',           // ← NEW
+    'mrif-monitoring': 'MRIF Monitoring',        // ← NEW
+    'mrr-monitoring': 'MRR Monitoring',          // ← NEW
     'weekly-monitor': 'Weekly Monitoring',
     'usage-trend': 'Usage Trend',
     'usage-entry': 'Usage Entry',
