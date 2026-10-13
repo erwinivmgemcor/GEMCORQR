@@ -247,6 +247,7 @@ function buildErpMrrHtml(docNo, info, items) {
                   || new Date().toISOString();
   
   var poNo = _printEsc(info['PO No.'] || info.poNo || '');
+  var sofNo = _printEsc(info['SOF No.'] || info['sof_no'] || info.sofNo || '');   // ✅ NEW
   var drNo = _printEsc(info['DR No.'] || info.drNo || '');
   var receivingDate = info['Receiving Date'] || info.receivingDate || '';
   var preparedBy = _printEsc(info['Prepared By'] || info.preparedBy || '');
@@ -304,7 +305,7 @@ function buildErpMrrHtml(docNo, info, items) {
     '</div>' +
     '<div class="mrr-title">MATERIALS RECEIVING REPORT</div>' +
     '<table class="mrr-meta-table">' +
-      '<tr><td class="mrr-meta-label">RECEIVING SITE:</td><td class="mrr-meta-value" colspan="5">' + receivingSite + '</td><td class="mrr-meta-label-right">PO No. / SOF No.:</td><td class="mrr-meta-value-right">' + poNo + '</td></tr>' +
+           '<tr><td class="mrr-meta-label">RECEIVING SITE:</td><td class="mrr-meta-value" colspan="5">' + receivingSite + '</td><td class="mrr-meta-label-right">PO No. / SOF No.:</td><td class="mrr-meta-value-right">' + poNo + (sofNo ? ' / ' + sofNo : '') + '</td></tr>' +
       '<tr><td class="mrr-meta-label">VENDOR:</td><td class="mrr-meta-value" colspan="5">' + vendor + '</td><td class="mrr-meta-label-right">DR No / SI No.:</td><td class="mrr-meta-value-right">' + drNo + '</td></tr>' +
       '<tr><td class="mrr-meta-label">DATE PREPARED:</td><td class="mrr-meta-value" colspan="2">' + dateStr + '</td><td class="mrr-meta-label-right">RECEIVING DATE:</td><td class="mrr-meta-value-right" colspan="4">' + recDateStr + '</td></tr>' +
     '</table>' +
@@ -508,26 +509,28 @@ async function erpFetchDocWithItems(docNo, docType) {
       'doc_no=eq.' + encodeURIComponent(docNo) + '&order=line_no.asc');
     
     // Build info object (same structure as old GAS format)
-      var info = {
-    'Requestor': doc.requestor || '',
-    'Department': doc.department || '',
-    'JO No.': doc.jo_no || '',
-    'GEM SO No.': doc.gem_so_no || '',
-    'Client Name': doc.client_name || '',
-    'Project': doc.project || '',
-    'Date': doc.date_prepared || '',
-    'PO No.': doc.po_no || '',
-    'Vendor/Client': doc.vendor || '',
-    'DR No.': doc.dr_no || '',
-    'Receiving Site': doc.receiving_site || '',
-    'Date Prepared': doc.date_prepared || '',
-    'Receiving Date': doc.receiving_date || '',
-    'Prepared By': doc.prepared_by || '',
-    // ✅ NEW fallback fields:
-    'date_prepared': doc.date_prepared || '',
-    'created_at': doc.created_at || '',
-    'updated_at': doc.updated_at || ''
-  };
+       var info = {
+      'Requestor': doc.requestor || '',
+      'Department': doc.department || '',
+      'JO No.': doc.jo_no || '',
+      'GEM SO No.': doc.gem_so_no || '',
+      'Client Name': doc.client_name || '',
+      'Project': doc.project || '',
+      'Date': doc.date_prepared || '',
+      'PO No.': doc.po_no || '',
+      'SOF No.': doc.sof_no || '',           // ✅ NEW
+      'sof_no': doc.sof_no || '',            // ✅ NEW (lowercase key)
+      'Vendor/Client': doc.vendor || '',
+      'DR No.': doc.dr_no || '',
+      'Receiving Site': doc.receiving_site || '',
+      'Date Prepared': doc.date_prepared || '',
+      'Receiving Date': doc.receiving_date || '',
+      'Prepared By': doc.prepared_by || '',
+      // ✅ NEW fallback fields:
+      'date_prepared': doc.date_prepared || '',
+      'created_at': doc.created_at || '',
+      'updated_at': doc.updated_at || ''
+    };
     
     // Build items array (same structure)
     var mappedItems = (items || []).map(function(it) {
