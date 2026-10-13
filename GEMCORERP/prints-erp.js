@@ -229,7 +229,14 @@ function buildErpMrifHtml(docNo, info, items) {
 function buildErpMrrHtml(docNo, info, items) {
   var receivingSite = _printEsc(info['Receiving Site'] || info.receivingSite || 'GEMCOR CATMON');
   var vendor = _printEsc(info['Vendor/Client'] || info.vendor || '');
-  var datePrepared = info['Date Prepared'] || info.datePrepared || '';
+  
+  // ✅ Multi-level fallback: date_prepared → Date Prepared → created_at → today
+  var datePrepared = info['Date Prepared'] 
+                  || info['date_prepared'] 
+                  || info.datePrepared 
+                  || info.created_at 
+                  || new Date().toISOString();
+  
   var poNo = _printEsc(info['PO No.'] || info.poNo || '');
   var drNo = _printEsc(info['DR No.'] || info.drNo || '');
   var receivingDate = info['Receiving Date'] || info.receivingDate || '';
