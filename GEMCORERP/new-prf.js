@@ -1,7 +1,7 @@
 // ============================================================
-// GEMCOR ERP — Create PRF (v2.3)
+// GEMCOR ERP — Create PRF (v2.4)
 // Two Modes: "From Reorder List" + "Manual Entry"
-// ✅ FIXED: erp_items search uses correct columns (category, not item_class)
+// ✅ FIXED v2.4: Select All / Deselect All checkbox bug
 // ============================================================
 
 var MAX_ITEMS_PER_PRF = 30;
@@ -23,7 +23,7 @@ var _prf = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Create PRF v2.3] Initializing...');
+  console.log('[Create PRF v2.4] Initializing...');
 
   prfCheckHealth();
   initUserInfo();
@@ -159,8 +159,7 @@ async function loadPendingPrfItems() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// LOAD SEARCH CATALOG (from erp_items — with PAGINATION)
-// ✅ v2.4 FIX: Paginated fetch to bypass 1,000 row limit
+// LOAD SEARCH CATALOG (erp_items — PAGINATED)
 // ═══════════════════════════════════════════════════════════
 async function preloadInventoryForSearch() {
   if (_prf.inventoryLoaded) return;
@@ -174,7 +173,6 @@ async function preloadInventoryForSearch() {
     var hasMore = true;
     var pageNum = 1;
 
-    // ✅ PAGINATED FETCH — bypass PostgREST 1,000 row limit
     while (hasMore) {
       var rows = await erpFetch('erp_items',
         'select=item_code,description,base_unit,category,location,on_hand,buffer_stock,ave_monthly_consumption' +
@@ -195,7 +193,6 @@ async function preloadInventoryForSearch() {
         hasMore = false;
       }
 
-      // Small delay to prevent rate limiting
       if (hasMore) await new Promise(function(r) { setTimeout(r, 100); });
     }
 
@@ -255,12 +252,6 @@ async function preloadInventoryForSearch() {
   }
 }
 
-async function preloadErpItemsMap() {
-  if (!_prf.inventoryLoaded) {
-    await preloadInventoryForSearch();
-  }
-}
-
 function getSuggestedQty(itemCode) {
   var item = _prf.erpItemsMap[String(itemCode || '').trim()];
   if (!item) return 0;
@@ -296,7 +287,7 @@ function onCategoryChange() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER REORDER ITEMS
+// RENDER REORDER ITEMS (✅ v2.4 FIXED: Select All bug)
 // ═══════════════════════════════════════════════════════════
 function renderReorderItems() {
   var container = document.getElementById('reorderItemsContainer');
@@ -312,10 +303,20 @@ function renderReorderItems() {
     return;
   }
 
+  // ═══ ✅ v2.4 FIX: Compute selection state para sa header checkbox ═══
+  var allSelected = _prf.items.length > 0 && _prf.items.every(function(it) {
+    return it._selected === true;
+  });
+  var someSelected = _prf.items.some(function(it) { return it._selected === true; });
+
   var html = '<div class="table-responsive">';
   html += '<table class="erp-table" style="font-size:0.82rem;">';
   html += '<thead><tr>' +
-    '<th style="width:3%"><input type="checkbox" id="selectAllChk" onchange="toggleSelectAll(this.checked)"></th>' +
+    '<th style="width:3%">' +
+      '<input type="checkbox" id="selectAllChk"' +
+        (allSelected ? ' checked' : '') +
+        ' onchange="toggleSelectAll(this.checked)" title="Select/Deselect All">' +
+    '</th>' +
     '<th style="width:4%">#</th>' +
     '<th style="width:10%">Item Code</th>' +
     '<th style="width:20%">Description</th>' +
@@ -341,7 +342,7 @@ function renderReorderItems() {
       var pendingText = pendingInfo.map(function(p) {
         return p.prf_no + ' (' + p.status + ')';
       }).join(', ');
-      pendingWarning = ' <span class="badge bg-warning text-dark" title="Already in: ' + 
+      pendingWarning = ' <span class="badge bg-warning text-dark" title="Already in: ' +
         erpEsc(pendingText) + '">⚠ PENDING</span>';
     }
 
@@ -396,11 +397,21 @@ function renderReorderItems() {
     '<i class="bi bi-info-circle me-1"></i>' +
     'Suggested qty = (Buffer − On-Hand)' +
     batchingInfo + '</div>';
+  html += '<div class="d-flex align-items-center gap-3">';
+  html += '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllItems()" title="Clear all selections">' +
+    '<i class="bi bi-x-lg me-1"></i>Deselect All</button>';
   html += '<div><strong>Selected:</strong> ' + _prf.selectedItems.length +
     ' items · <strong>Total Qty:</strong> ' + erpNum(totalQty) + '</div>';
   html += '</div>';
+  html += '</div>';
 
   container.innerHTML = html;
+
+  // ✅ v2.4 FIX: Set indeterminate state sa header checkbox
+  var headerChk = document.getElementById('selectAllChk');
+  if (headerChk && someSelected && !allSelected) {
+    headerChk.indeterminate = true;
+  }
 
   updateItemsCount();
   updateSubmitButton();
@@ -432,7 +443,10 @@ function toggleItemSelect(idx, checked) {
 
 window.toggleItemSelect = toggleItemSelect;
 
+// ✅ v2.4 FIXED: Toggle Select All with proper deselection
 function toggleSelectAll(checked) {
+  console.log('[PRF] Toggle Select All:', checked, '| Items:', _prf.items.length);
+
   _prf.items.forEach(function(it) {
     it._selected = checked;
     if (checked) {
@@ -441,11 +455,27 @@ function toggleSelectAll(checked) {
       it._qtyOrder = 0;
     }
   });
+
+  recomputeSelected();
+  renderReorderItems();
+
+  console.log('[PRF] After toggle — Selected:', _prf.selectedItems.length);
+}
+
+window.toggleSelectAll = toggleSelectAll;
+
+// ✅ NEW: Deselect All helper
+function deselectAllItems() {
+  console.log('[PRF] Deselect All');
+  _prf.items.forEach(function(it) {
+    it._selected = false;
+    it._qtyOrder = 0;
+  });
   recomputeSelected();
   renderReorderItems();
 }
 
-window.toggleSelectAll = toggleSelectAll;
+window.deselectAllItems = deselectAllItems;
 
 function updateQty(idx, value) {
   var item = _prf.items[idx];
@@ -932,6 +962,7 @@ async function createSinglePrf(prfNo, basePrfNo, batchNumber, items, category, p
     body: JSON.stringify({
       prf_no: prfNo,
       base_prf_no: basePrfNo,
+      version_number: 1,
       batch_number: batchNumber,
       category: category,
       requestor: preparedBy,
@@ -1066,4 +1097,4 @@ window.addEventListener('resize', function() {
   });
 });
 
-console.log('✅ new-prf.js v2.3 loaded (category column fix)');
+console.log('✅ new-prf.js v2.4 loaded (Select All fix + Deselect All button)');
