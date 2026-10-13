@@ -55,9 +55,13 @@ function ioOnSearchInput(value) {
     return;
   }
 
-  dropdown.innerHTML = '<div class="item-search-item" style="color:#9ca3af;text-align:center;">' +
+    dropdown.innerHTML = '<div class="item-search-item" style="color:#9ca3af;text-align:center;">' +
     '<i class="bi bi-hourglass-split me-1"></i>Searching...</div>';
   dropdown.classList.remove('d-none');
+
+  // ✅ I-position agad
+  var input = document.getElementById('ioSearchInput');
+  _ioPositionDropdown(dropdown, input);
 
   _io.searchTimer = setTimeout(function() { ioSearchItems(term); }, 250);
 }
@@ -123,8 +127,12 @@ async function ioSearchItems(term) {
         '</div>' +
       '</div>';
     });
-    dropdown.innerHTML = html;
+        dropdown.innerHTML = html;
     dropdown.classList.remove('d-none');
+
+    // ✅ I-position agad ang dropdown
+    var input = document.getElementById('ioSearchInput');
+    _ioPositionDropdown(dropdown, input);
 
   } catch(err) {
     console.error('[ioSearchItems]', err);
@@ -498,6 +506,47 @@ document.addEventListener('click', function(e) {
     var dropdown = document.getElementById('ioSearchDropdown');
     if (dropdown) dropdown.classList.add('d-none');
   }
+});
+
+// ═══════════════════════════════════════════════════════════
+// POSITION DROPDOWN (para hindi matakpan ng parent card)
+// ═══════════════════════════════════════════════════════════
+function _ioPositionDropdown(dropdown, input) {
+  if (!dropdown || !input) return;
+  var rect = input.getBoundingClientRect();
+  var spaceBelow = window.innerHeight - rect.bottom;
+  var spaceAbove = rect.top;
+
+  dropdown.style.position = 'fixed';
+  dropdown.style.left = rect.left + 'px';
+  dropdown.style.width = Math.max(rect.width, 400) + 'px';
+  dropdown.style.zIndex = '99999';
+
+  // Kung kulang ang space sa baba, i-flip pataas
+  if (spaceBelow < 320 && spaceAbove > spaceBelow) {
+    dropdown.style.top = 'auto';
+    dropdown.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceAbove - 20, 400) + 'px';
+  } else {
+    dropdown.style.bottom = 'auto';
+    dropdown.style.top = (rect.bottom + 4) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceBelow - 20, 400) + 'px';
+  }
+}
+
+// Reposition on scroll
+window.addEventListener('scroll', function() {
+  var dropdown = document.getElementById('ioSearchDropdown');
+  var input = document.getElementById('ioSearchInput');
+  if (dropdown && !dropdown.classList.contains('d-none') && input) {
+    _ioPositionDropdown(dropdown, input);
+  }
+}, { passive: true });
+
+// Hide on resize
+window.addEventListener('resize', function() {
+  var dropdown = document.getElementById('ioSearchDropdown');
+  if (dropdown) dropdown.classList.add('d-none');
 });
 
 console.log('✅ item-in-out.js v1.0 loaded');
