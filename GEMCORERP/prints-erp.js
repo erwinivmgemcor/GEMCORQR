@@ -483,22 +483,26 @@ async function erpFetchDocWithItems(docNo, docType) {
       'doc_no=eq.' + encodeURIComponent(docNo) + '&order=line_no.asc');
     
     // Build info object (same structure as old GAS format)
-    var info = {
-      'Requestor': doc.requestor || '',
-      'Department': doc.department || '',
-      'JO No.': doc.jo_no || '',
-      'GEM SO No.': doc.gem_so_no || '',
-      'Client Name': doc.client_name || '',
-      'Project': doc.project || '',
-      'Date': doc.date_prepared || '',
-      'PO No.': doc.po_no || '',
-      'Vendor/Client': doc.vendor || '',
-      'DR No.': doc.dr_no || '',
-      'Receiving Site': doc.receiving_site || '',
-      'Date Prepared': doc.date_prepared || '',
-      'Receiving Date': doc.receiving_date || '',
-      'Prepared By': doc.prepared_by || ''
-    };
+      var info = {
+    'Requestor': doc.requestor || '',
+    'Department': doc.department || '',
+    'JO No.': doc.jo_no || '',
+    'GEM SO No.': doc.gem_so_no || '',
+    'Client Name': doc.client_name || '',
+    'Project': doc.project || '',
+    'Date': doc.date_prepared || '',
+    'PO No.': doc.po_no || '',
+    'Vendor/Client': doc.vendor || '',
+    'DR No.': doc.dr_no || '',
+    'Receiving Site': doc.receiving_site || '',
+    'Date Prepared': doc.date_prepared || '',
+    'Receiving Date': doc.receiving_date || '',
+    'Prepared By': doc.prepared_by || '',
+    // ✅ NEW fallbacks:
+    'date_prepared': doc.date_prepared || '',
+    'created_at': doc.created_at || '',
+    'updated_at': doc.updated_at || ''
+  };
     
     // Build items array (same structure)
     var mappedItems = (items || []).map(function(it) {
