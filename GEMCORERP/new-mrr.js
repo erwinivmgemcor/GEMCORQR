@@ -1,13 +1,14 @@
 // ============================================================
-// GEMCOR ERP — New MRR Creation (v3)
+// GEMCOR ERP — New MRR Creation (v4)
+// ✅ PO Lookup with FALLBACK to erp_prf_po_cache
+// ✅ SOF No. field support (sync between step 1 & 2)
 // ✅ Auto-suggest for manual item entry
-// ✅ Works with or without PO#
-// ✅ Complete item data from erp_items
 // ✅ Automatic status patch (COMPLETED/PARTIAL) after insert
 // ============================================================
 
 var _mrrState = {
   poNo: '',
+  sofNo: '',                    // ✅ NEW
   prfNo: '',
   client: '',
   vendor: '',
@@ -29,7 +30,7 @@ var _mrrSearchTimers = {};
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[New MRR v3] Initializing...');
+  console.log('[New MRR v4] Initializing...');
 
   mrrCheckHealth();
 
@@ -49,17 +50,25 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
+  // ═══ SOF No. SYNC — step 1 ↔ step 2 fields ═══
+  var sofStep1 = document.getElementById('mrrSofNo');
+  var sofStep2 = document.getElementById('mrrSofNoDisplay');
+  if (sofStep1 && sofStep2) {
+    sofStep1.addEventListener('input', function() { sofStep2.value = this.value; });
+    sofStep2.addEventListener('input', function() { sofStep1.value = this.value; });
+  }
+
   // Preload inventory cache in background
   setTimeout(function() {
     _mrrLoadInventory().then(function(items) {
       _mrrInventoryCache = items;
-      console.log('[MRR v3] Inventory cache preloaded:', items.length, 'items');
+      console.log('[MRR v4] Inventory cache preloaded:', items.length, 'items');
     }).catch(function(err) {
-      console.warn('[MRR v3] Preload failed:', err.message);
+      console.warn('[MRR v4] Preload failed:', err.message);
     });
   }, 500);
 
-  console.log('[New MRR v3] Ready. Prepared By:', userFullname);
+  console.log('[New MRR v4] Ready. Prepared By:', userFullname);
 });
 
 async function mrrCheckHealth() {
@@ -83,7 +92,7 @@ async function mrrCheckHealth() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// PO LOOKUP (Optional)
+// PO LOOKUP — with fallback to erp_prf_po_cache
 // ═══════════════════════════════════════════════════════════
 async function lookupPoNo() {
   var poNo = document.getElementById('mrrPoNo').value.trim();
@@ -100,20 +109,53 @@ async function lookupPoNo() {
   resultEl.innerHTML = '<span class="small">Searching...</span>';
 
   try {
+    // ═══ STEP 1: Try prf_items first ═══
     console.log('[MRR Lookup] Querying prf_items for po_no=' + poNo);
     var rows = await erpFetch('prf_items',
       'po_no=eq.' + encodeURIComponent(poNo) + '&order=line_no.asc&limit=500');
 
+    var source = 'prf_items';
+
+    // ═══ STEP 2: Fallback to erp_prf_po_cache ═══
+    if (!rows || rows.length === 0) {
+      console.log('[MRR Lookup] Not in prf_items, trying erp_prf_po_cache...');
+      try {
+        var cacheRows = await erpFetch('erp_prf_po_cache',
+          'po_no=eq.' + encodeURIComponent(poNo) + '&order=item_no.asc&limit=500');
+
+        if (cacheRows && cacheRows.length > 0) {
+          console.log('[MRR Lookup] Found ' + cacheRows.length + ' items in po_cache');
+          // Map po_cache fields to prf_items structure
+          rows = cacheRows.map(function(r) {
+            return {
+              prf_no: r.prf_no || '',
+              item_code: r.inventory_id || '',
+              description: r.description || '',
+              qty_for_order: Number(r.qty || 0),
+              unit: r.unit || 'PCS',
+              line_no: r.item_no || 0,
+              po_supplier: r.supplier || '',
+              _source: 'po_cache'
+            };
+          });
+          source = 'po_cache';
+        }
+      } catch(cacheErr) {
+        console.warn('[MRR Lookup] po_cache query failed:', cacheErr.message);
+      }
+    }
+
+    // ═══ STEP 3: Not found in either ═══
     if (!rows || rows.length === 0) {
       statusEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> PO No. not found</span>';
       resultEl.className = 'alert alert-warning mb-0 py-2';
       resultEl.innerHTML = '<span class="small"><i class="bi bi-exclamation-triangle me-1"></i>' +
-        'PO No. <strong>' + erpEsc(poNo) + '</strong> not found in PRF records. ' +
+        'PO No. <strong>' + erpEsc(poNo) + '</strong> not found in PRF records or PO cache. ' +
         'You can still add items manually below.</span>';
       return;
     }
 
-    console.log('[MRR Lookup] Found ' + rows.length + ' items in prf_items');
+    console.log('[MRR Lookup] Found ' + rows.length + ' items (source: ' + source + ')');
 
     var first = rows[0];
     _mrrState.poNo = poNo;
@@ -124,7 +166,7 @@ async function lookupPoNo() {
     document.getElementById('mrrPrfNo').value = _mrrState.prfNo;
     document.getElementById('mrrVendor').value = _mrrState.vendor;
 
-    // ═══ Build items from prf_items (COMPLETE data) ═══
+    // ═══ Build items ═══
     _mrrState.items = rows.map(function(r, i) {
       return {
         itemCode: r.item_code || '',
@@ -139,11 +181,12 @@ async function lookupPoNo() {
 
     renderItems();
 
+    var sourceLabel = source === 'po_cache' ? ' <em>(from PO cache)</em>' : '';
     statusEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> PO No. found!</span>';
     resultEl.className = 'alert alert-success mb-0 py-2';
     resultEl.innerHTML = '<span class="small"><i class="bi bi-check-circle me-1"></i>' +
-      'Found: <strong>' + erpEsc(_mrrState.prfNo) + '</strong> — ' +
-      erpEsc(_mrrState.client) + ' (' + rows.length + ' items)</span>';
+      'Found: <strong>' + erpEsc(_mrrState.prfNo || poNo) + '</strong>' + sourceLabel + ' — ' +
+      erpEsc(_mrrState.client || 'No client') + ' (' + rows.length + ' items)</span>';
 
     erpShowToast('PO No. found! ' + rows.length + ' items loaded.', 'success');
 
@@ -174,7 +217,6 @@ function addItemRow() {
   });
   renderItems();
 
-  // Focus the new row's item code input
   var newIdx = _mrrState.items.length - 1;
   setTimeout(function() {
     var input = document.getElementById('mrrItemCode' + newIdx);
@@ -197,8 +239,6 @@ function renderItems() {
   _mrrState.items.forEach(function(it, idx) {
     html += '<tr data-idx="' + idx + '">' +
       '<td class="text-center">' + (idx + 1) + '</td>' +
-
-      // ═══ ITEM CODE with auto-suggest ═══
       '<td style="position:relative;">' +
         '<input type="text" ' +
           'class="form-control form-control-sm item-code-input" ' +
@@ -212,8 +252,6 @@ function renderItems() {
           'onblur="onMrrItemCodeBlur(' + idx + ')">' +
         '<div class="item-search-dropdown d-none" id="mrrDropdown' + idx + '"></div>' +
       '</td>' +
-
-      // ═══ DESCRIPTION (auto-filled) ═══
       '<td>' +
         '<input type="text" class="form-control form-control-sm" ' +
           'id="mrrItemDesc' + idx + '" ' +
@@ -221,40 +259,30 @@ function renderItems() {
           'placeholder="Auto-filled" ' +
           'oninput="updateItem(' + idx + ', \'description\', this.value)">' +
       '</td>' +
-
-      // ═══ REQUESTED QTY ═══
       '<td>' +
         '<input type="number" class="form-control form-control-sm text-center" ' +
           'value="' + (it.requestedQty || 0) + '" ' +
           'min="0" step="0.01" ' +
           'oninput="updateItem(' + idx + ', \'requestedQty\', parseFloat(this.value)||0)">' +
       '</td>' +
-
-      // ═══ ATL QTY (Received) ═══
       '<td>' +
         '<input type="number" class="form-control form-control-sm text-center item-qty-input" ' +
           'value="' + (it.issuedQty || 0) + '" ' +
           'min="0" step="0.01" ' +
           'oninput="updateItem(' + idx + ', \'issuedQty\', parseFloat(this.value)||0)">' +
       '</td>' +
-
-      // ═══ UNIT ═══
       '<td>' +
         '<input type="text" class="form-control form-control-sm text-center" ' +
           'id="mrrItemUnit' + idx + '" ' +
           'value="' + erpEsc(it.unit || 'PCS') + '" ' +
           'oninput="updateItem(' + idx + ', \'unit\', this.value)">' +
       '</td>' +
-
-      // ═══ REMARKS ═══
       '<td>' +
         '<input type="text" class="form-control form-control-sm" ' +
           'value="' + erpEsc(it.remarks) + '" ' +
           'placeholder="Optional" ' +
           'oninput="updateItem(' + idx + ', \'remarks\', this.value)">' +
       '</td>' +
-
-      // ═══ REMOVE BUTTON ═══
       '<td class="text-center">' +
         '<button class="btn btn-sm btn-outline-danger" onclick="removeItem(' + idx + ')" title="Remove">' +
           '<i class="bi bi-trash"></i>' +
@@ -278,7 +306,7 @@ function removeItem(idx) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// AUTO-SUGGEST — Item Code Input Handler
+// AUTO-SUGGEST
 // ═══════════════════════════════════════════════════════════
 function onMrrItemCodeInput(idx, value) {
   var input = document.getElementById('mrrItemCode' + idx);
@@ -287,7 +315,6 @@ function onMrrItemCodeInput(idx, value) {
 
   var term = String(value || '').toLowerCase().trim();
 
-  // Clear previous timer
   if (_mrrSearchTimers[idx]) clearTimeout(_mrrSearchTimers[idx]);
 
   if (!term || term.length < 2) {
@@ -295,13 +322,11 @@ function onMrrItemCodeInput(idx, value) {
     return;
   }
 
-  // Show loading state
   dropdown.innerHTML = '<div class="item-search-item muted">' +
     '<i class="bi bi-hourglass-split me-2"></i>Searching...</div>';
   _positionMrrDropdown(dropdown, input);
   dropdown.classList.remove('d-none');
 
-  // Debounce search — 200ms
   _mrrSearchTimers[idx] = setTimeout(async function() {
     await _mrrSearchItems(idx, term);
   }, 200);
@@ -313,7 +338,6 @@ async function _mrrSearchItems(idx, term) {
   if (!input || !dropdown) return;
 
   try {
-    // Load inventory cache if not yet loaded
     if (!_mrrInventoryCache) {
       if (_mrrInventoryPromise) {
         await _mrrInventoryPromise;
@@ -326,14 +350,12 @@ async function _mrrSearchItems(idx, term) {
 
     var items = _mrrInventoryCache || [];
 
-    // Filter matches
     var matches = items.filter(function(it) {
       var code = String(it.code || '').toLowerCase();
       var desc = String(it.description || '').toLowerCase();
       return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
     }).slice(0, 30);
 
-    // Sort: exact > starts-with > contains
     matches.sort(function(a, b) {
       var aCode = String(a.code || '').toLowerCase();
       var bCode = String(b.code || '').toLowerCase();
@@ -352,15 +374,12 @@ async function _mrrSearchItems(idx, term) {
       return;
     }
 
-    // Build dropdown
     var html = '';
     matches.forEach(function(it) {
       var code = String(it.code || '');
       var desc = String(it.description || '');
       var unit = String(it.unit || 'PCS');
       var category = String(it.category || '');
-
-      // Escape for JS inline
       var safeCode = code.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       var safeDesc = desc.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       var safeUnit = unit.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -388,14 +407,12 @@ async function _mrrSearchItems(idx, term) {
 }
 
 function selectMrrItem(idx, code, description, unit) {
-  // Update state
   if (_mrrState.items[idx]) {
     _mrrState.items[idx].itemCode = code;
     _mrrState.items[idx].description = description;
     _mrrState.items[idx].unit = unit;
   }
 
-  // Update UI inputs
   var codeInput = document.getElementById('mrrItemCode' + idx);
   var descInput = document.getElementById('mrrItemDesc' + idx);
   var unitInput = document.getElementById('mrrItemUnit' + idx);
@@ -404,18 +421,15 @@ function selectMrrItem(idx, code, description, unit) {
   if (descInput) descInput.value = description;
   if (unitInput) unitInput.value = unit;
 
-  // Hide dropdown
   var dropdown = document.getElementById('mrrDropdown' + idx);
   if (dropdown) dropdown.classList.add('d-none');
 
-  // Highlight the row
   var row = document.querySelector('tr[data-idx="' + idx + '"]');
   if (row) {
     row.classList.add('selected-item-row');
     setTimeout(function() { row.classList.remove('selected-item-row'); }, 1500);
   }
 
-  // Focus ATL Qty
   setTimeout(function() {
     var qtyInput = row ? row.querySelector('.item-qty-input') : null;
     if (qtyInput) {
@@ -428,7 +442,6 @@ function selectMrrItem(idx, code, description, unit) {
 window.selectMrrItem = selectMrrItem;
 
 function onMrrItemCodeBlur(idx) {
-  // Delay para ma-click ang dropdown item
   setTimeout(function() {
     var dropdown = document.getElementById('mrrDropdown' + idx);
     if (dropdown) dropdown.classList.add('d-none');
@@ -460,20 +473,15 @@ function _positionMrrDropdown(dropdown, input) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// LOAD INVENTORY CACHE (for autocomplete)
-// ═══════════════════════════════════════════════════════════
 async function _mrrLoadInventory() {
-  console.log('[MRR v3] Loading inventory for autocomplete...');
+  console.log('[MRR v4] Loading inventory for autocomplete...');
   try {
-    // Use shared helper if available
     if (typeof erpGetInventoryListForDropdown === 'function') {
       var list = await erpGetInventoryListForDropdown();
-      console.log('[MRR v3] Inventory loaded (shared):', list.length, 'items');
+      console.log('[MRR v4] Inventory loaded (shared):', list.length, 'items');
       return list;
     }
 
-    // Fallback: paginated fetch
     var allItems = [];
     var pageSize = 1000;
     var offset = 0;
@@ -506,10 +514,10 @@ async function _mrrLoadInventory() {
       };
     });
 
-    console.log('[MRR v3] Inventory loaded (fallback):', mapped.length, 'items');
+    console.log('[MRR v4] Inventory loaded (fallback):', mapped.length, 'items');
     return mapped;
   } catch(err) {
-    console.warn('[MRR v3] Inventory load failed:', err.message);
+    console.warn('[MRR v4] Inventory load failed:', err.message);
     return [];
   }
 }
@@ -553,6 +561,14 @@ async function submitMrr() {
 
   var prfNo = document.getElementById('mrrPrfNo').value.trim();
   _mrrState.prfNo = prfNo;
+
+  // ✅ Get SOF No. from either field (step 1 or step 2)
+  var sofStep1 = document.getElementById('mrrSofNo');
+  var sofStep2 = document.getElementById('mrrSofNoDisplay');
+  var sofNo = '';
+  if (sofStep2 && sofStep2.value.trim()) sofNo = sofStep2.value.trim();
+  else if (sofStep1 && sofStep1.value.trim()) sofNo = sofStep1.value.trim();
+  _mrrState.sofNo = sofNo;
 
   if (_mrrState.items.length === 0) {
     erpShowToast('No items to submit', 'warning');
@@ -600,7 +616,7 @@ async function submitMrr() {
 
     var padded = String(nextNum).padStart(7, '0');
     var docNo = 'MRR' + padded;
-    console.log('[Submit MRR] Doc No:', docNo);
+    console.log('[Submit MRR] Doc No:', docNo, '| SOF:', sofNo);
 
     // ─── Step 2: Determine overall status ───
     var allComplete = validItems.every(function(it) {
@@ -613,10 +629,10 @@ async function submitMrr() {
     var overallStatus = (allComplete && anyReceived) ? 'COMPLETED' :
                         (anyReceived ? 'PARTIAL' : 'PENDING');
 
-    console.log('[Submit MRR] Final status will be:', overallStatus);
+    console.log('[Submit MRR] Final status:', overallStatus);
 
     // ─── Step 3: Insert document ───
-        var docRes = await fetch(erpUrl('documents'), {
+    var docRes = await fetch(erpUrl('documents'), {
       method: 'POST',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify({
@@ -627,13 +643,14 @@ async function submitMrr() {
         requestor: _mrrState.preparedBy,
         department: '',
         po_no: _mrrState.poNo || '',
+        sof_no: _mrrState.sofNo || '',         // ✅ NEW
         prf_no: _mrrState.prfNo,
         vendor: _mrrState.vendor,
         client_name: _mrrState.client || '',
         dr_no: _mrrState.drNo,
         receiving_site: _mrrState.receivingSite,
         receiving_date: _mrrState.receivingDate,
-        date_prepared: new Date().toISOString().split('T')[0],  // ✅ ITO!
+        date_prepared: new Date().toISOString().split('T')[0],
         prepared_by: _mrrState.preparedBy,
         item_count: validItems.length,
         created_at: new Date().toISOString(),
@@ -707,7 +724,6 @@ async function submitMrr() {
       }
     }
 
-    // ─── Success ───
     erpShowToast('✅ MRR created: ' + docNo + ' (' + overallStatus + ')', 'success');
     showSuccessModal(docNo);
 
@@ -747,6 +763,7 @@ function showSuccessModal(docNo) {
 // ═══════════════════════════════════════════════════════════
 function resetFormSilent() {
   _mrrState.poNo = '';
+  _mrrState.sofNo = '';              // ✅ NEW
   _mrrState.prfNo = '';
   _mrrState.client = '';
   _mrrState.vendor = '';
@@ -757,6 +774,13 @@ function resetFormSilent() {
   document.getElementById('mrrPrfNo').value = '';
   document.getElementById('mrrVendor').value = '';
   document.getElementById('mrrDrNo').value = '';
+
+  // Clear SOF No. fields (both step 1 & step 2)
+  var sof1 = document.getElementById('mrrSofNo');
+  var sof2 = document.getElementById('mrrSofNoDisplay');
+  if (sof1) sof1.value = '';
+  if (sof2) sof2.value = '';
+
   document.getElementById('poStatus').innerHTML = '';
   document.getElementById('poLookupResult').className = 'alert alert-secondary mb-0 py-2';
   document.getElementById('poLookupResult').innerHTML = '<span class="text-muted small">Enter a PO No. above to auto-load items, or skip to add items manually.</span>';
@@ -822,4 +846,4 @@ function erpShowToast(msg, type) {
   toast.show();
 }
 
-console.log('✅ new-mrr.js v3 loaded (with auto-suggest)');
+console.log('✅ new-mrr.js v4 loaded (PO cache fallback + SOF No. support)');
