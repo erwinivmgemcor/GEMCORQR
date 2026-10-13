@@ -1013,6 +1013,240 @@ function prfMonitorRefresh() {
   erpShowToast('Refreshing...', 'info');
   prfMonitorLoad();
 }
+// ═══════════════════════════════════════════════════════════
+// SYNC & RECOMPUTE — v3.2
+// Full flow: sync PO data from Google Sheet → link prf_items
+// → recompute all item statuses
+// ═══════════════════════════════════════════════════════════
+async function prfSyncAndRecompute() {
+  if (!confirm('Sync PO data from Google Sheet and recompute all statuses?\n\nThis may take 30-60 seconds.')) {
+    return;
+  }
+
+  erpShowToast('Starting sync...', 'info');
+
+  var btn = document.querySelector('button[onclick="prfSyncAndRecompute()"]');
+  var origHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Syncing...';
+  }
+
+  try {
+    // ═══ STEP 1: Sync from Google Sheet via GAS webhook ═══
+    console.log('[PRF Sync] STEP 1: Syncing from Google Sheet...');
+
+    var GAS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbwTiA7IOQOdq7cfuiiptoA06Oa7xkuh2-wA1fSA3pP2gqZKHUvcjy5AF2rb28ThF842/exec';
+
+    var syncRes = await fetch(GAS_WEBHOOK_URL + '?action=syncPrfPo&_t=' + Date.now(), {
+      redirect: 'follow'
+    });
+
+    var syncText = await syncRes.text();
+    var syncData;
+    try { syncData = JSON.parse(syncText); } catch(e) { syncData = { success: false, error: 'Invalid response' }; }
+
+    if (!syncData.success) {
+      throw new Error('Sync failed: ' + (syncData.error || 'Unknown error'));
+    }
+
+    console.log('[PRF Sync] ✅ Synced', syncData.synced || 0, 'rows in', syncData.elapsed_ms || 0, 'ms');
+
+    // ═══ STEP 2: Link prf_items to PO cache ═══
+    console.log('[PRF Sync] STEP 2: Linking prf_items to PO cache...');
+
+    var linkRes = await fetch(erpUrl('rpc/link_prf_items_to_po_cache'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({})
+    });
+
+    if (!linkRes.ok) {
+      console.warn('[PRF Sync] Link failed:', linkRes.status);
+    } else {
+      var linkData = await linkRes.json();
+      console.log('[PRF Sync] ✅ Linked', (linkData && linkData[0] ? linkData[0].updated_count : 0), 'items');
+    }
+
+    // ═══ STEP 3: Recompute all statuses ═══
+    console.log('[PRF Sync] STEP 3: Recomputing statuses...');
+
+    var recomputeRes = await fetch(erpUrl('rpc/compute_prf_item_status'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({ p_prf_no: null })
+    });
+
+    if (!recomputeRes.ok) {
+      throw new Error('Recompute failed: HTTP ' + recomputeRes.status);
+    }
+
+    var changes = await recomputeRes.json();
+    console.log('[PRF Sync] ✅ Recompute complete:', (changes || []).length, 'status changes');
+
+    // ═══ STEP 4: Reload ═══
+    erpShowToast('✅ Sync complete! ' + (syncData.synced || 0) + ' rows synced, ' + (changes || []).length + ' status updates', 'success');
+
+    await prfMonitorLoad();
+
+  } catch(err) {
+    console.error('[PRF Sync] Error:', err);
+    erpShowToast('Sync failed: ' + err.message, 'danger');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// RECOMPUTE ONLY — for manual retrigger
+// ═══════════════════════════════════════════════════════════
+async function prfRecomputeOnly() {
+  if (!confirm('Recompute all PRF item statuses?')) return;
+
+  erpShowToast('Recomputing...', 'info');
+
+  try {
+    var res = await fetch(erpUrl('rpc/compute_prf_item_status'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({ p_prf_no: null })
+    });
+
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+
+    var changes = await res.json();
+    erpShowToast('✅ ' + (changes || []).length + ' items updated', 'success');
+    await prfMonitorLoad();
+  } catch(err) {
+    erpShowToast('Error: ' + err.message, 'danger');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SHOW MATCH DETAILS — click item → view MRR contributions
+// ═══════════════════════════════════════════════════════════
+async function prfShowMatchDetails(prfNo, itemCode, lineNo) {
+  console.log('[PRF Match] Loading details for:', prfNo, itemCode);
+
+  // Create modal if not exists
+  var modalEl = document.getElementById('prfMatchModal');
+  if (!modalEl) {
+    var modalHtml =
+      '<div class="modal fade" id="prfMatchModal" tabindex="-1">' +
+        '<div class="modal-dialog modal-lg modal-dialog-scrollable">' +
+          '<div class="modal-content">' +
+            '<div class="modal-header erp-modal-header">' +
+              '<h5 class="modal-title"><i class="bi bi-link-45deg me-2"></i>Match Details</h5>' +
+              '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>' +
+            '</div>' +
+            '<div class="modal-body" id="prfMatchBody"></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    var wrapper = document.createElement('div');
+    wrapper.innerHTML = modalHtml;
+    document.body.appendChild(wrapper.firstChild);
+    modalEl = document.getElementById('prfMatchModal');
+  }
+
+  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  document.getElementById('prfMatchBody').innerHTML =
+    '<div class="text-center py-4"><div class="erp-spinner"></div></div>';
+  modal.show();
+
+  try {
+    // Get PRF item details
+    var prfItems = await erpFetch('prf_items',
+      'prf_no=eq.' + encodeURIComponent(prfNo) +
+      '&item_code=eq.' + encodeURIComponent(itemCode) +
+      '&limit=1');
+
+    if (!prfItems || prfItems.length === 0) {
+      document.getElementById('prfMatchBody').innerHTML =
+        '<div class="alert alert-warning">Item not found</div>';
+      return;
+    }
+
+    var item = prfItems[0];
+    var poNo = item.po_no;
+
+    // Get all MRRs for this PO + item
+    var mrrItems = [];
+    if (poNo) {
+      var docs = await erpFetch('documents',
+        'doc_type=eq.MRR&po_no=eq.' + encodeURIComponent(poNo) +
+        '&order=created_at.desc');
+
+      if (docs && docs.length > 0) {
+        for (var i = 0; i < docs.length; i++) {
+          var di = await erpFetch('doc_items',
+            'doc_no=eq.' + encodeURIComponent(docs[i].doc_no) +
+            '&item_code=eq.' + encodeURIComponent(itemCode));
+          (di || []).forEach(function(d) {
+            mrrItems.push({
+              docNo: docs[i].doc_no,
+              status: docs[i].status,
+              received: Number(d.issued_qty || 0),
+              created: docs[i].created_at
+            });
+          });
+        }
+      }
+    }
+
+    var totalReceived = mrrItems.reduce(function(s, m) { return s + m.received; }, 0);
+    var qtyOrdered = Number(item.qty_for_order || 0);
+    var variance = qtyOrdered - totalReceived;
+
+    var html = '<div class="row g-2 mb-3">' +
+      '<div class="col-md-6"><strong>PRF No.:</strong> <code>' + erpEsc(prfNo) + '</code></div>' +
+      '<div class="col-md-6"><strong>Item Code:</strong> <code>' + erpEsc(itemCode) + '</code></div>' +
+      '<div class="col-md-6"><strong>PO No.:</strong> <code>' + erpEsc(poNo || 'N/A') + '</code></div>' +
+      '<div class="col-md-6"><strong>Supplier:</strong> ' + erpEsc(item.po_supplier || '—') + '</div>' +
+      '<div class="col-md-6"><strong>Qty Ordered:</strong> ' + erpNum(qtyOrdered) + ' ' + erpEsc(item.unit || '') + '</div>' +
+      '<div class="col-md-6"><strong>Status:</strong> ' + erpEsc(item.status || 'UNSERVED') + '</div>' +
+      '</div>';
+
+    html += '<hr>';
+    html += '<h6>MRR Deliveries (' + mrrItems.length + ')</h6>';
+
+    if (mrrItems.length === 0) {
+      html += '<div class="alert alert-info">No MRR found matching this PO + item.</div>';
+    } else {
+      html += '<table class="table table-sm">' +
+        '<thead><tr><th>MRR No.</th><th>Date</th><th>Status</th><th class="text-end">Received</th></tr></thead>' +
+        '<tbody>';
+      mrrItems.forEach(function(m) {
+        html += '<tr>' +
+          '<td><code>' + erpEsc(m.docNo) + '</code></td>' +
+          '<td>' + new Date(m.created).toLocaleDateString() + '</td>' +
+          '<td>' + erpEsc(m.status) + '</td>' +
+          '<td class="text-end"><strong>' + erpNum(m.received) + '</strong></td>' +
+        '</tr>';
+      });
+      html += '</tbody>' +
+        '<tfoot><tr class="fw-bold">' +
+          '<td colspan="3" class="text-end">TOTAL RECEIVED:</td>' +
+          '<td class="text-end">' + erpNum(totalReceived) + '</td>' +
+        '</tr>' +
+        '<tr class="fw-bold ' + (variance > 0 ? 'text-danger' : 'text-success') + '">' +
+          '<td colspan="3" class="text-end">VARIANCE:</td>' +
+          '<td class="text-end">' + (variance > 0 ? '−' : '+') + erpNum(Math.abs(variance)) + '</td>' +
+        '</tr></tfoot>' +
+      '</table>';
+    }
+
+    document.getElementById('prfMatchBody').innerHTML = html;
+
+  } catch(err) {
+    console.error('[prfShowMatchDetails]', err);
+    document.getElementById('prfMatchBody').innerHTML =
+      '<div class="alert alert-danger">Error: ' + erpEsc(err.message) + '</div>';
+  }
+}
 
 // ═══════════════════════════════════════════════════════════
 // EXPORT
