@@ -368,7 +368,7 @@ async function submitMrif() {
     
     console.log('[Submit] Doc No:', docNo);
     
-    var docRes = await fetch(erpUrl('documents'), {
+        var docRes = await fetch(erpUrl('documents'), {
       method: 'POST',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify({
@@ -382,6 +382,7 @@ async function submitMrif() {
         gem_so_no: gemSoNo,
         client_name: clientName,
         project: project,
+        date_prepared: new Date().toISOString().split('T')[0],  // ✅ IDAGDAG ITO
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
