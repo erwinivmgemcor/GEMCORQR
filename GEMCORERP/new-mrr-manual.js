@@ -1,12 +1,13 @@
 // ============================================================
-// GEMCOR ERP — Manual MRR Creation
-// No PO lookup — manual entry lahat
+// GEMCOR ERP — Manual MRR Creation (v2.0)
+// ✅ NEW: SOF No. field support
 // ============================================================
 
 var _mrrState = {
   preparedBy: '',
   receivingSite: 'GEMCOR CATMON',
   poNo: '',
+  sofNo: '',                    // ✅ NEW
   prfNo: '',
   vendor: '',
   drNo: '',
@@ -22,7 +23,7 @@ var _mrrState = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Manual MRR] Initializing...');
+  console.log('[Manual MRR v2.0] Initializing...');
   
   mrrCheckHealth();
   
@@ -37,7 +38,7 @@ document.addEventListener('DOMContentLoaded', function() {
   
   preloadInventory();
   
-  console.log('[Manual MRR] Ready. Prepared By:', userFullname);
+  console.log('[Manual MRR v2.0] Ready. Prepared By:', userFullname);
 });
 
 async function mrrCheckHealth() {
@@ -62,7 +63,6 @@ async function mrrCheckHealth() {
 
 async function preloadInventory() {
   if (_mrrState.inventoryLoaded) return;
-  
   try {
     console.log('[Inventory] Loading items via shared helper...');
     _mrrState.inventoryList = await erpGetInventoryListForDropdown();
@@ -221,30 +221,19 @@ async function submitMrr() {
   }
   
   var receivingSite = document.getElementById('mrrReceivingSite').value.trim();
-  if (!receivingSite) {
-    erpShowToast('Receiving Site is required', 'warning');
-    return;
-  }
+  if (!receivingSite) { erpShowToast('Receiving Site is required', 'warning'); return; }
   
   var vendor = document.getElementById('mrrVendor').value.trim();
-  if (!vendor) {
-    erpShowToast('Vendor is required', 'warning');
-    return;
-  }
+  if (!vendor) { erpShowToast('Vendor is required', 'warning'); return; }
   
   var drNo = document.getElementById('mrrDrNo').value.trim();
-  if (!drNo) {
-    erpShowToast('DR No. is required', 'warning');
-    return;
-  }
+  if (!drNo) { erpShowToast('DR No. is required', 'warning'); return; }
   
   var receivingDate = document.getElementById('mrrReceivingDate').value;
-  if (!receivingDate) {
-    erpShowToast('Receiving Date is required', 'warning');
-    return;
-  }
+  if (!receivingDate) { erpShowToast('Receiving Date is required', 'warning'); return; }
   
   var poNo = document.getElementById('mrrPoNo').value.trim();
+  var sofNo = document.getElementById('mrrSofNo') ? document.getElementById('mrrSofNo').value.trim() : '';  // ✅ NEW
   var prfNo = document.getElementById('mrrPrfNo').value.trim();
   
   // Collect items
@@ -259,21 +248,12 @@ async function submitMrr() {
     var unit = row.querySelector('.item-unit-input').value;
     var remarks = row.querySelector('.item-remarks-input').value.trim();
     
-    if (!code) {
-      erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning');
-      return;
-    }
-    if (qty <= 0) {
-      erpShowToast('Item #' + (i + 1) + ' has invalid quantity', 'warning');
-      return;
-    }
+    if (!code) { erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning'); return; }
+    if (qty <= 0) { erpShowToast('Item #' + (i + 1) + ' has invalid quantity', 'warning'); return; }
     validItems.push({ code: code, description: desc, qty: qty, atlQty: atlQty, unit: unit, remarks: remarks });
   }
   
-  if (validItems.length === 0) {
-    erpShowToast('Please add at least one item', 'warning');
-    return;
-  }
+  if (validItems.length === 0) { erpShowToast('Please add at least one item', 'warning'); return; }
   
   if (!confirm('Create manual MRR with ' + validItems.length + ' item(s)?')) return;
   
@@ -298,7 +278,7 @@ async function submitMrr() {
     var padded = String(nextNum).padStart(7, '0');
     var docNo = 'MRR' + padded;
     
-    console.log('[Submit] Doc No:', docNo);
+    console.log('[Submit] Doc No:', docNo, '| SOF:', sofNo);
     
     // Insert document
     var docRes = await fetch(erpUrl('documents'), {
@@ -312,6 +292,7 @@ async function submitMrr() {
         requestor: _mrrState.preparedBy,
         department: '',
         po_no: poNo,
+        sof_no: sofNo,                     // ✅ NEW
         prf_no: prfNo,
         vendor: vendor,
         client_name: vendor,
@@ -319,6 +300,8 @@ async function submitMrr() {
         receiving_site: receivingSite,
         receiving_date: receivingDate,
         prepared_by: _mrrState.preparedBy,
+        item_count: validItems.length,     // ✅ ADD
+        date_prepared: new Date().toISOString().split('T')[0],  // ✅ ADD
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
@@ -399,9 +382,11 @@ function showSuccessModal(docNo) {
 
 function resetFormSilent() {
   document.getElementById('mrrPoNo').value = '';
+  document.getElementById('mrrSofNo').value = '';      // ✅ NEW
   document.getElementById('mrrPrfNo').value = '';
   document.getElementById('mrrVendor').value = '';
   document.getElementById('mrrDrNo').value = '';
+  _mrrState.sofNo = '';                                 // ✅ NEW
   _mrrState.items = [];
   
   var container = document.getElementById('itemsContainer');
@@ -432,4 +417,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3500 }).show();
 }
 
-console.log('✅ new-mrr-manual.js loaded');
+console.log('✅ new-mrr-manual.js v2.0 loaded (SOF No. support)');
