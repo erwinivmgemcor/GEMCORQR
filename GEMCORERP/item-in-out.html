@@ -19,88 +19,72 @@
 <link rel="stylesheet" href="erp-notif.css">
 
 <style>
-/* Item search dropdown */
-.item-search-wrap {
-  position: relative;
-}
+.item-search-wrap { position: relative; }
 .item-search-dropdown {
-  position: absolute;
-  top: 100%; left: 0; right: 0;
-  background: #fff;
-  border: 1.5px solid #cbd5e1;
-  border-radius: 10px;
+  position: absolute; top: 100%; left: 0; right: 0;
+  background: #fff; border: 1.5px solid #cbd5e1; border-radius: 10px;
   box-shadow: 0 12px 32px rgba(0,0,0,0.15);
-  max-height: 400px;
-  overflow-y: auto;
-  z-index: 1000;
-  margin-top: 4px;
+  max-height: 400px; overflow-y: auto; z-index: 1000; margin-top: 4px;
 }
 .item-search-dropdown.d-none { display: none; }
 .item-search-item {
-  padding: 12px 16px;
-  cursor: pointer;
-  border-bottom: 1px solid #f0f0f0;
-  transition: background 0.1s;
+  padding: 12px 16px; cursor: pointer;
+  border-bottom: 1px solid #f0f0f0; transition: background 0.1s;
 }
 .item-search-item:hover { background: #eef4fb; }
 .item-search-item:last-child { border-bottom: none; }
 .item-search-item .code {
-  font-family: 'Courier New', monospace;
-  font-weight: 700;
-  color: #1e3a5f;
-  margin-bottom: 3px;
+  font-family: 'Courier New', monospace; font-weight: 700;
+  color: #1e3a5f; margin-bottom: 3px;
 }
-.item-search-item .desc {
-  color: #4b5563;
-  font-size: 0.82rem;
-  margin-bottom: 3px;
-}
-.item-search-item .meta {
-  display: flex;
-  gap: 10px;
-  font-size: 0.72rem;
-  color: #6b7280;
-  flex-wrap: wrap;
-}
+.item-search-item .desc { color: #4b5563; font-size: 0.82rem; margin-bottom: 3px; }
+.item-search-item .meta { display: flex; gap: 10px; font-size: 0.72rem; color: #6b7280; flex-wrap: wrap; }
 
-/* Direction badges */
 .dir-in { background: #d1fae5; color: #065f46; padding: 3px 10px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; }
 .dir-out { background: #fee2e2; color: #991b1b; padding: 3px 10px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; }
 .dir-adj { background: #fef3c7; color: #92400e; padding: 3px 10px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; }
 .dir-mixed { background: #e0e7ff; color: #3730a3; padding: 3px 10px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; }
 .dir-other { background: #f3f4f6; color: #6b7280; padding: 3px 10px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; }
 
-/* Row highlight */
 tr.row-in { border-left: 4px solid #10b981; }
 tr.row-out { border-left: 4px solid #ef4444; }
 tr.row-adj { border-left: 4px solid #f59e0b; }
 
-/* KPI cards */
 .mv-kpi {
-  background: #fff;
-  border-radius: 12px;
-  padding: 18px 20px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  background: #fff; border-radius: 12px; padding: 18px 20px;
+  border: 1px solid #e2e8f0; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 .mv-kpi-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #64748b;
-  margin-bottom: 6px;
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: #64748b; margin-bottom: 6px;
 }
 .mv-kpi-value {
-  font-size: 1.6rem;
-  font-weight: 800;
-  color: #0f172a;
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
+  font-size: 1.6rem; font-weight: 800; color: #0f172a;
+  line-height: 1.1; font-variant-numeric: tabular-nums;
 }
 .mv-kpi-value.value-in { color: #059669; }
 .mv-kpi-value.value-out { color: #dc2626; }
 .mv-kpi-value.value-adj { color: #d97706; }
+
+/* Tabs */
+.io-tabs {
+  display: flex; gap: 4px; margin-bottom: 16px;
+  border-bottom: 2px solid #e2e8f0;
+}
+.io-tab {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 20px; background: transparent; border: none;
+  border-bottom: 3px solid transparent; font-size: 0.9rem;
+  font-weight: 600; color: #6c757d; cursor: pointer;
+  transition: all 0.15s; margin-bottom: -2px; font-family: inherit;
+}
+.io-tab:hover { color: #1e3a5f; background: #f8fafc; }
+.io-tab.active { color: #1e3a5f; border-bottom-color: #1e3a5f; }
+.io-tab .tab-count {
+  display: inline-block; padding: 2px 8px; background: #e5e7eb;
+  border-radius: 10px; font-size: 0.72rem; font-weight: 700; color: #475569;
+}
+.io-tab.active .tab-count { background: #1e3a5f; color: #fff; }
 </style>
 
 <script src="erp-guard.js"></script>
@@ -140,7 +124,6 @@ tr.row-adj { border-left: 4px solid #f59e0b; }
 
 <div class="erp-container">
 
-  <!-- PAGE HEADER -->
   <div class="erp-page-header">
     <div>
       <div class="erp-page-title">
@@ -155,7 +138,7 @@ tr.row-adj { border-left: 4px solid #f59e0b; }
     </div>
   </div>
 
-  <!-- SEARCH CARD -->
+  <!-- SEARCH -->
   <div class="erp-card" style="padding:24px;margin-bottom:20px;">
     <h5 style="margin-bottom:16px;">
       <i class="bi bi-search me-2"></i>Search Item
@@ -187,16 +170,14 @@ tr.row-adj { border-left: 4px solid #f59e0b; }
     <p class="text-muted">Search for an item above to see its IN, OUT, and ADJUSTMENT history</p>
   </div>
 
-  <!-- CONTENT (hidden until item selected) -->
+  <!-- CONTENT -->
   <div id="ioContent" class="d-none">
 
-    <!-- ITEM INFO CARD -->
+    <!-- ITEM INFO -->
     <div class="erp-card" style="padding:20px 24px;margin-bottom:20px;">
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
         <div>
-          <div style="font-size:1.3rem;font-weight:800;font-family:'Courier New',monospace;color:#1e3a5f;" id="ioItemCode">
-            —
-          </div>
+          <div style="font-size:1.3rem;font-weight:800;font-family:'Courier New',monospace;color:#1e3a5f;" id="ioItemCode">—</div>
           <div class="mt-2" style="font-size:0.95rem;" id="ioItemDesc">—</div>
           <div class="mt-2 d-flex gap-3 flex-wrap">
             <span class="badge bg-secondary" id="ioItemCategory">—</span>
@@ -208,14 +189,12 @@ tr.row-adj { border-left: 4px solid #f59e0b; }
           <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">
             Current On-Hand
           </div>
-          <div style="font-size:2rem;font-weight:800;color:#1e3a5f;line-height:1.1;" id="ioOnHand">
-            —
-          </div>
+          <div style="font-size:2rem;font-weight:800;color:#1e3a5f;line-height:1.1;" id="ioOnHand">—</div>
         </div>
       </div>
     </div>
 
-    <!-- SUMMARY KPIs -->
+    <!-- KPIs -->
     <div class="row g-3 mb-3">
       <div class="col-md-3">
         <div class="mv-kpi">
@@ -243,56 +222,105 @@ tr.row-adj { border-left: 4px solid #f59e0b; }
       </div>
     </div>
 
-    <!-- FILTERS -->
-    <div class="erp-card erp-filters-card" style="padding:16px 18px;margin-bottom:20px;">
-      <div class="erp-filters-row">
-        <select id="ioDirectionFilter" class="erp-select" onchange="ioRenderMovements()">
-          <option value="">All Movements</option>
-          <option value="IN">IN only</option>
-          <option value="OUT">OUT only</option>
-          <option value="ADJUSTMENT">Adjustments only</option>
-        </select>
-        <input type="date" id="ioDateFrom" class="erp-select" onchange="ioRenderMovements()" title="From date">
-        <input type="date" id="ioDateTo" class="erp-select" onchange="ioRenderMovements()" title="To date">
-        <button class="erp-btn-clear" onclick="ioClearFilters()">
-          <i class="bi bi-x-lg"></i> Clear
-        </button>
-        <button class="erp-btn-outline-dark ms-auto" onclick="ioExport()" title="Export to CSV">
-          <i class="bi bi-file-earmark-excel me-1"></i>Export
-        </button>
+    <!-- TABS -->
+    <div class="io-tabs">
+      <button class="io-tab active" data-tab="movements" onclick="ioSwitchTab('movements')">
+        <i class="bi bi-clock-history"></i>
+        <span>Movements (IN/OUT/ADJ)</span>
+        <span class="tab-count" id="ioTabMovementsCount">0</span>
+      </button>
+      <button class="io-tab" data-tab="edits" onclick="ioSwitchTab('edits')">
+        <i class="bi bi-pencil-square"></i>
+        <span>Manual Edits (Audit)</span>
+        <span class="tab-count" id="ioTabEditsCount">0</span>
+      </button>
+    </div>
+
+    <!-- TAB 1: MOVEMENTS -->
+    <div id="ioTabMovements">
+      <div class="erp-card erp-filters-card" style="padding:16px 18px;margin-bottom:20px;">
+        <div class="erp-filters-row">
+          <select id="ioDirectionFilter" class="erp-select" onchange="ioRenderMovements()">
+            <option value="">All Movements</option>
+            <option value="IN">IN only</option>
+            <option value="OUT">OUT only</option>
+            <option value="ADJUSTMENT">Adjustments only</option>
+          </select>
+          <input type="date" id="ioDateFrom" class="erp-select" onchange="ioRenderMovements()" title="From date">
+          <input type="date" id="ioDateTo" class="erp-select" onchange="ioRenderMovements()" title="To date">
+          <button class="erp-btn-clear" onclick="ioClearFilters()">
+            <i class="bi bi-x-lg"></i> Clear
+          </button>
+          <button class="erp-btn-outline-dark ms-auto" onclick="ioExportMovements()" title="Export Movements">
+            <i class="bi bi-file-earmark-excel me-1"></i>Export
+          </button>
+        </div>
+      </div>
+
+      <div class="erp-card erp-table-card">
+        <div class="erp-table-header">
+          <div>
+            <i class="bi bi-clock-history me-2"></i>
+            <strong>Movement History</strong>
+            <span class="erp-table-subtitle" id="ioTableSubtitle">All movements</span>
+          </div>
+          <span class="erp-badge" id="ioTableCount">0 items</span>
+        </div>
+        <div class="erp-table-wrap" style="max-height:65vh;">
+          <table class="erp-table" style="font-size:0.82rem;">
+            <thead>
+              <tr>
+                <th style="width:3%">#</th>
+                <th style="width:12%">Date</th>
+                <th style="width:8%" class="text-center">Direction</th>
+                <th style="width:11%">Type</th>
+                <th style="width:13%">Reference</th>
+                <th style="width:7%" class="text-end">IN</th>
+                <th style="width:7%" class="text-end">OUT</th>
+                <th style="width:8%" class="text-end">Balance</th>
+                <th style="width:12%">Performed By</th>
+                <th style="width:19%">Reason / Remarks</th>
+              </tr>
+            </thead>
+            <tbody id="ioTableBody">
+              <tr><td colspan="10" class="erp-empty">No movements</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
-    <!-- MOVEMENTS TABLE -->
-    <div class="erp-card erp-table-card">
-      <div class="erp-table-header">
-        <div>
-          <i class="bi bi-clock-history me-2"></i>
-          <strong>Movement History</strong>
-          <span class="erp-table-subtitle" id="ioTableSubtitle">All movements</span>
+    <!-- TAB 2: MANUAL EDITS -->
+    <div id="ioTabEdits" class="d-none">
+      <div class="erp-card erp-table-card">
+        <div class="erp-table-header">
+          <div>
+            <i class="bi bi-pencil-square me-2"></i>
+            <strong>Manual Edits Audit Log</strong>
+            <span class="erp-table-subtitle">Admin / manager corrections</span>
+          </div>
+          <span class="erp-badge" id="ioEditsCount">0 items</span>
         </div>
-        <span class="erp-badge" id="ioTableCount">0 items</span>
-      </div>
-      <div class="erp-table-wrap" style="max-height:65vh;">
-        <table class="erp-table" style="font-size:0.82rem;">
-          <thead>
-            <tr>
-              <th style="width:3%">#</th>
-              <th style="width:12%">Date</th>
-              <th style="width:9%" class="text-center">Direction</th>
-              <th style="width:12%">Type</th>
-              <th style="width:14%">Reference</th>
-              <th style="width:8%" class="text-end">IN</th>
-              <th style="width:8%" class="text-end">OUT</th>
-              <th style="width:9%" class="text-end">Balance</th>
-              <th style="width:12%">Performed By</th>
-              <th style="width:13%">Reason / Remarks</th>
-            </tr>
-          </thead>
-          <tbody id="ioTableBody">
-            <tr><td colspan="10" class="erp-empty">No movements</td></tr>
-          </tbody>
-        </table>
+        <div class="erp-table-wrap" style="max-height:65vh;">
+          <table class="erp-table" style="font-size:0.82rem;">
+            <thead>
+              <tr>
+                <th style="width:3%">#</th>
+                <th style="width:12%">Date</th>
+                <th style="width:12%">Field</th>
+                <th style="width:10%" class="text-end">Old Value</th>
+                <th style="width:10%" class="text-end">New Value</th>
+                <th style="width:10%" class="text-end">Change</th>
+                <th style="width:12%">Edited By</th>
+                <th style="width:12%">Source</th>
+                <th style="width:19%">Reason</th>
+              </tr>
+            </thead>
+            <tbody id="ioEditsBody">
+              <tr><td colspan="9" class="erp-empty">No manual edits</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
