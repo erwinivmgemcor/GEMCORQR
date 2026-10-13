@@ -1,11 +1,13 @@
 // ============================================================
 // GEMCOR ERP — Edit Request Permission (Production)
-// v2.1 — FIXED: Trigger stock validation via documents.status PATCH
+// v2.2 — FIXED: oninput + force sync before save
 // ✅ Uses edit_requests table
 // ✅ Status: PENDING → APPROVED → COMPLETED
 // ✅ Item search dropdown on edit form
-// ✅ NEW: Auto-compute status + PATCH documents to fire trigger
-// ✅ NEW: Rollback on insufficient stock
+// ✅ v2.1: Auto-compute status + PATCH documents to fire trigger
+// ✅ v2.1: Rollback on insufficient stock
+// ✅ v2.2: oninput event (hindi onchange) para hindi mamiss ang input
+// ✅ v2.2: Force sync inputs to state before save
 // ============================================================
 
 var _prodEditState = {
@@ -269,7 +271,7 @@ async function openProductionEdit(docNo, docType) {
         itemCode: it.item_code,
         description: it.description || '',
         qty: Number(it.requested_qty || 0),
-        issuedQty: Number(it.issued_qty || 0),   // ← KEEP
+        issuedQty: Number(it.issued_qty || 0),
         unit: it.unit || 'PIECE',
         remarks: it.remarks || '',
         lineNo: it.line_no || 0
@@ -452,7 +454,7 @@ function _renderProdEditForm(doc) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER ITEMS
+// RENDER ITEMS — v2.2: oninput + data-field attributes
 // ═══════════════════════════════════════════════════════════
 function _renderProdEditItems() {
   var tbody = document.getElementById('prodEditItemsBody');
@@ -475,6 +477,7 @@ function _renderProdEditItems() {
          +      '<input type="text" class="form-control form-control-sm prod-edit-item-search" '
          +        'id="prodEditCode' + idx + '" '
          +        'data-idx="' + idx + '" '
+         +        'data-field="itemCode" '
          +        'value="' + _escProd(it.itemCode) + '" '
          +        'placeholder="Type to search..." '
          +        'autocomplete="off" '
@@ -485,21 +488,26 @@ function _renderProdEditItems() {
          +    '</td>'
          +    '<td><input type="text" class="form-control form-control-sm" '
          +      'id="prodEditDesc' + idx + '" '
+         +      'data-field="description" '
          +      'value="' + _escProd(it.description) + '" '
-         +      'onchange="_prodUpdateItem(' + idx + ', \'description\', this.value)"></td>'
+         +      'oninput="_prodUpdateItem(' + idx + ', \'description\', this.value)"></td>'
          +    '<td><input type="number" class="form-control form-control-sm text-center" '
+         +      'data-field="qty" '
          +      'value="' + it.qty + '" min="0" step="0.01" '
-         +      'onchange="_prodUpdateItem(' + idx + ', \'qty\', parseFloat(this.value)||0)"></td>'
+         +      'oninput="_prodUpdateItem(' + idx + ', \'qty\', parseFloat(this.value)||0)"></td>'
          +    '<td><input type="number" class="form-control form-control-sm text-center" '
+         +      'data-field="issuedQty" '
          +      'value="' + (it.issuedQty || 0) + '" min="0" step="0.01" '
-         +      'onchange="_prodUpdateItem(' + idx + ', \'issuedQty\', parseFloat(this.value)||0)"></td>'
+         +      'oninput="_prodUpdateItem(' + idx + ', \'issuedQty\', parseFloat(this.value)||0)"></td>'
          +    '<td><input type="text" class="form-control form-control-sm text-center" '
          +      'id="prodEditUnit' + idx + '" '
+         +      'data-field="unit" '
          +      'value="' + _escProd(it.unit) + '" '
-         +      'onchange="_prodUpdateItem(' + idx + ', \'unit\', this.value)"></td>'
+         +      'oninput="_prodUpdateItem(' + idx + ', \'unit\', this.value)"></td>'
          +    '<td><input type="text" class="form-control form-control-sm" '
+         +      'data-field="remarks" '
          +      'value="' + _escProd(it.remarks) + '" maxlength="200" '
-         +      'onchange="_prodUpdateItem(' + idx + ', \'remarks\', this.value)"></td>'
+         +      'oninput="_prodUpdateItem(' + idx + ', \'remarks\', this.value)"></td>'
          +    '<td class="text-center">'
          +      '<button type="button" class="btn btn-sm btn-outline-danger" onclick="_prodRemoveItem(' + idx + ')" title="Remove">'
          +        '<i class="bi bi-trash"></i>'
@@ -517,6 +525,7 @@ function _renderProdEditItems() {
 function _prodUpdateItem(idx, field, value) {
   if (!_prodEditState.currentItems[idx]) return;
   _prodEditState.currentItems[idx][field] = value;
+  console.log('[Production Edit] Updated item[' + idx + '].' + field + ' =', value);
 }
 
 window._prodUpdateItem = _prodUpdateItem;
@@ -551,9 +560,46 @@ function _prodRemoveItem(idx) {
 window._prodRemoveItem = _prodRemoveItem;
 
 // ═══════════════════════════════════════════════════════════
-// ITEM SEARCH
+// FORCE SYNC — v2.2: Basahin muli ang lahat ng inputs bago mag-save
+// ═══════════════════════════════════════════════════════════
+function _prodSyncInputsToState() {
+  console.log('[Production Edit] Force syncing inputs to state...');
+
+  var rows = document.querySelectorAll('#prodEditItemsBody tr');
+  rows.forEach(function(row, idx) {
+    if (!_prodEditState.currentItems[idx]) return;
+
+    var getVal = function(field) {
+      var el = row.querySelector('input[data-field="' + field + '"]');
+      return el ? el.value : '';
+    };
+
+    var getNum = function(field) {
+      var el = row.querySelector('input[data-field="' + field + '"]');
+      return el ? (parseFloat(el.value) || 0) : 0;
+    };
+
+    _prodEditState.currentItems[idx].itemCode = getVal('itemCode');
+    _prodEditState.currentItems[idx].description = getVal('description');
+    _prodEditState.currentItems[idx].qty = getNum('qty');
+    _prodEditState.currentItems[idx].issuedQty = getNum('issuedQty');
+    _prodEditState.currentItems[idx].unit = getVal('unit');
+    _prodEditState.currentItems[idx].remarks = getVal('remarks');
+  });
+
+  console.log('[Production Edit] Synced', rows.length, 'rows');
+  console.log('[Production Edit] currentItems after sync:', JSON.stringify(_prodEditState.currentItems));
+}
+
+window._prodSyncInputsToState = _prodSyncInputsToState;
+
+// ═══════════════════════════════════════════════════════════
+// ITEM SEARCH DROPDOWN
 // ═══════════════════════════════════════════════════════════
 function _prodFilterItems(input, idx) {
+  // Also update the state on every keypress
+  _prodUpdateItem(idx, 'itemCode', input.value);
+
   var dropdown = document.getElementById('prodEditDropdown' + idx);
   if (!dropdown) return;
 
@@ -633,7 +679,7 @@ function _prodSelectItem(idx, code, description, unit) {
   setTimeout(function() {
     var row = codeInput ? codeInput.closest('tr') : null;
     if (row) {
-      var qtyInput = row.querySelector('input[type="number"]');
+      var qtyInput = row.querySelector('input[data-field="qty"]');
       if (qtyInput) {
         qtyInput.focus();
         qtyInput.select();
@@ -724,10 +770,13 @@ async function _loadProdEditInventory() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SAVE — v2.1 FIXED: PATCH documents.status to fire trigger
+// SAVE — v2.2: Force sync + trigger fire + rollback
 // ═══════════════════════════════════════════════════════════
 async function _saveProductionEdit() {
   if (_prodEditState.isSaving) return;
+
+  // ═══ v2.2: Force sync inputs to state BAGO mag-validate ═══
+  _prodSyncInputsToState();
 
   var reason = (document.getElementById('prodEditReason').value || '').trim();
 
@@ -769,12 +818,11 @@ async function _saveProductionEdit() {
   var currentUser = localStorage.getItem('ivm_userFullname') ||
                     localStorage.getItem('ivm_username') || 'PRODUCTION';
 
-  // ═══ Track original values for rollback ═══
   var originalItemsBackup = JSON.parse(JSON.stringify(_prodEditState.originalItems));
 
   try {
     console.log('[Production Edit] ============================================');
-    console.log('[Production Edit] SAVE START — v2.1');
+    console.log('[Production Edit] SAVE START — v2.2');
     console.log('[Production Edit] Doc:', _prodEditState.docNo);
     console.log('[Production Edit] Items:', validItems.length);
     console.log('[Production Edit] ============================================');
@@ -784,9 +832,7 @@ async function _saveProductionEdit() {
     var removedIds = originalIds.filter(function(id) { return currentIds.indexOf(id) === -1; });
     var newItemsCount = validItems.filter(function(it) { return !it.id; }).length;
 
-    // ═══════════════════════════════════════════════════════════
     // STEP 1: Delete removed items
-    // ═══════════════════════════════════════════════════════════
     if (removedIds.length > 0) {
       console.log('[Production Edit] STEP 1: Deleting', removedIds.length, 'items');
 
@@ -804,9 +850,7 @@ async function _saveProductionEdit() {
       console.log('[Production Edit] ✅ Deleted', removedIds.length, 'items');
     }
 
-    // ═══════════════════════════════════════════════════════════
     // STEP 2: Update existing + Insert new
-    // ═══════════════════════════════════════════════════════════
     var successCount = 0;
     var failedCount = 0;
     var errors = [];
@@ -840,6 +884,7 @@ async function _saveProductionEdit() {
           }
 
           successCount++;
+          console.log('[Production Edit] ✅ Updated item:', item.itemCode, 'issued_qty:', item.issuedQty);
         } else {
           // INSERT
           var payload = {
@@ -869,6 +914,7 @@ async function _saveProductionEdit() {
           }
 
           successCount++;
+          console.log('[Production Edit] ✅ Inserted item:', item.itemCode);
         }
       } catch(itemErr) {
         console.error('[Production Edit] Item error:', itemErr);
@@ -885,9 +931,7 @@ async function _saveProductionEdit() {
 
     console.log('[Production Edit] ✅ Items updated:', successCount);
 
-    // ═══════════════════════════════════════════════════════════
-    // STEP 3: Compute new status from FRESH items
-    // ═══════════════════════════════════════════════════════════
+    // STEP 3: Compute new status
     console.log('[Production Edit] STEP 3: Computing new status...');
 
     var freshItems = await erpFetch('doc_items',
@@ -905,9 +949,7 @@ async function _saveProductionEdit() {
 
     console.log('[Production Edit] New status computed:', newDocStatus);
 
-    // ═══════════════════════════════════════════════════════════
     // STEP 4: PATCH documents.status — FIRES TRIGGER
-    // ═══════════════════════════════════════════════════════════
     console.log('[Production Edit] STEP 4: Patching documents.status...');
 
     var statusRes = await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(_prodEditState.docNo)), {
@@ -919,7 +961,7 @@ async function _saveProductionEdit() {
       })
     });
 
-    // ═══ ROLLBACK IF FAILED ═══
+    // ROLLBACK IF FAILED
     if (!statusRes.ok) {
       var statusErrText = await statusRes.text();
       console.error('[Production Edit] ❌ Status PATCH FAILED:', statusRes.status, statusErrText);
@@ -927,7 +969,6 @@ async function _saveProductionEdit() {
       console.warn('[Production Edit] ⏪ Rolling back items...');
 
       try {
-        // Delete current items
         var allCurrentIds = validItems.map(function(it) { return it.id; }).filter(Boolean);
         if (allCurrentIds.length > 0) {
           await fetch(erpUrl('doc_items?id=in.(' + allCurrentIds.join(',') + ')'), {
@@ -936,7 +977,6 @@ async function _saveProductionEdit() {
           });
         }
 
-        // Restore originals
         var restorePayload = originalItemsBackup.map(function(it, idx) {
           return {
             document_id: _prodEditState.documentId,
@@ -965,7 +1005,6 @@ async function _saveProductionEdit() {
         console.error('[Production Edit] ❌ Rollback failed:', rollbackErr);
       }
 
-      // Friendly message
       var friendlyMsg = 'Failed to update document status';
       try {
         var errJson = JSON.parse(statusErrText);
@@ -993,9 +1032,7 @@ async function _saveProductionEdit() {
 
     console.log('[Production Edit] ✅ Status PATCHED to:', newDocStatus);
 
-    // ═══════════════════════════════════════════════════════════
     // STEP 5: Update doc item_count
-    // ═══════════════════════════════════════════════════════════
     try {
       await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(_prodEditState.docNo)), {
         method: 'PATCH',
@@ -1009,9 +1046,7 @@ async function _saveProductionEdit() {
       console.warn('[Production Edit] Could not update item_count:', e);
     }
 
-    // ═══════════════════════════════════════════════════════════
     // STEP 6: Audit log
-    // ═══════════════════════════════════════════════════════════
     try {
       await fetch(erpUrl('erp_manual_edits_audit'), {
         method: 'POST',
@@ -1030,9 +1065,7 @@ async function _saveProductionEdit() {
       console.warn('[Production Edit] Audit failed:', e);
     }
 
-    // ═══════════════════════════════════════════════════════════
     // STEP 7: Mark edit request COMPLETED
-    // ═══════════════════════════════════════════════════════════
     if (_prodEditState.editReqId) {
       try {
         await fetch(erpUrl('edit_requests?id=eq.' + _prodEditState.editReqId), {
@@ -1048,9 +1081,6 @@ async function _saveProductionEdit() {
       }
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // SUCCESS
-    // ═══════════════════════════════════════════════════════════
     console.log('[Production Edit] ============================================');
     console.log('[Production Edit] ✅ SAVE COMPLETE');
     console.log('[Production Edit] Status:', newDocStatus);
@@ -1115,4 +1145,4 @@ window.addEventListener('scroll', function() {
   });
 }, { passive: true });
 
-console.log('✅ edit-request-permission.js v2.1 loaded (trigger fires via documents.status PATCH)');
+console.log('✅ edit-request-permission.js v2.2 loaded (oninput + force sync)');
