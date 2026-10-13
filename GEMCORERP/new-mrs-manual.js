@@ -298,11 +298,11 @@ async function submitMrs() {
     var padded = String(nextNum).padStart(4, '0');
     var docNo = 'MRS' + padded;
     
-    var docRes = await fetch(erpUrl('documents'), {
+       var docRes = await fetch(erpUrl('documents'), {
       method: 'POST',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify({
-                doc_no: docNo,
+        doc_no: docNo,
         doc_type: 'MRS',
         status: 'PENDING',
         is_bal: false,
@@ -312,6 +312,7 @@ async function submitMrs() {
         gem_so_no: gemSoNo,
         client_name: clientName,
         project: project,
+        date_prepared: new Date().toISOString().split('T')[0],  // ✅ IDAGDAG ITO
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
