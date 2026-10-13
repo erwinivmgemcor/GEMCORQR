@@ -1,6 +1,6 @@
 // ============================================================
 // GEMCOR ERP — Authentication & Role Management
-// Standalone ERP login (no legacy dependency)
+// v3.0 — FIXED: Admin flags via v_users_admin view (avoid 400)
 // ============================================================
 
 // ═══════════════════════════════════════════════════════════
@@ -175,8 +175,8 @@ async function loginUser() {
   try {
     console.log('[Auth] Verifying user:', username, '/', role);
     
-    // ═══ Query users table ═══
-                var url = erpUrl('users') + 
+    // ═══ STEP 1: Query users table (BASIC FIELDS ONLY) ═══
+    var url = erpUrl('users') + 
               '?username=eq.' + encodeURIComponent(username) +
               '&password=eq.' + encodeURIComponent(password) +
               '&select=username,fullname,roles,department' +
@@ -204,44 +204,51 @@ async function loginUser() {
       return;
     }
     
-           var user = users[0];
+    var user = users[0];
     console.log('[Auth] User found:', user.username, '| Roles:', user.roles);
     
-    // ✅ Separate query para sa admin/active flags (avoid 400 error)
+    // ═══ STEP 2: Fetch admin flags from VIEW ═══
+    user.is_admin = false;
+    user.is_active = true;
+    
     try {
-      var extraRes = await fetch(erpUrl('users') + 
-        '?username=eq.' + encodeURIComponent(username) +
-        '&select=is_admin,is_active' +
-        '&limit=1', {
+      var flagUrl = erpUrl('v_users_admin') + 
+                    '?username=eq.' + encodeURIComponent(username) +
+                    '&select=is_admin,is_active' +
+                    '&limit=1';
+      
+      var flagRes = await fetch(flagUrl, {
         method: 'GET',
         headers: erpHeaders(),
         cache: 'no-store'
       });
       
-      if (extraRes.ok) {
-        var extraData = await extraRes.json();
-        if (extraData && extraData[0]) {
-          user.is_admin = extraData[0].is_admin === true;
-          user.is_active = extraData[0].is_active !== false;
+      if (flagRes.ok) {
+        var flagData = await flagRes.json();
+        if (flagData && flagData[0]) {
+          user.is_admin = flagData[0].is_admin === true;
+          user.is_active = flagData[0].is_active !== false;
+          console.log('[Auth] Flags — Admin:', user.is_admin, '| Active:', user.is_active);
         }
+      } else {
+        console.warn('[Auth] View query HTTP ' + flagRes.status + ' — using defaults');
       }
-    } catch(e) {
-      console.warn('[Auth] Could not fetch admin flags:', e.message);
-      user.is_active = true;  // Default: allow login
+    } catch(flagErr) {
+      console.warn('[Auth] Could not fetch flags:', flagErr.message);
     }
     
-    // ✅ NEW: Check if user is active
+    // ═══ STEP 3: Block inactive users ═══
     if (user.is_active === false) {
       showError('Your account has been <strong>deactivated</strong>. Please contact admin.');
       return;
     }
     
-    // ═══ Verify role permission ═══
+    // ═══ STEP 4: Verify role permission ═══
     var userRoles = Array.isArray(user.roles) ? user.roles : ['warehouse'];
     
     if (userRoles.indexOf(role) === -1) {
       var allowedRoles = userRoles.map(function(r) {
-        return r === 'warehouse' ? 'Warehouse' : 'Production';
+        return r === 'warehouse' ? 'Warehouse' : (r === 'production' ? 'Production' : r);
       }).join(' and ');
       
       showError('Access denied. Your account is not authorized for <strong>' + 
@@ -250,7 +257,7 @@ async function loginUser() {
       return;
     }
     
-        // ═══ Success — Save session ═══
+    // ═══ STEP 5: Success — Save session ═══
     console.log('[Auth] ✅ Login successful');
     
     localStorage.setItem('ivm_username', user.username);
@@ -355,7 +362,7 @@ function clearSession() {
     'ivm_requestorName',
     'ivm_chatUnread',
     'ivm_editReqCount',
-    'ivm_isAdmin'                // ✅ NEW
+    'ivm_isAdmin'                  // ✅ NEW
   ];
   
   keys.forEach(function(k) {
@@ -394,14 +401,18 @@ window.erpAuth = {
       username: localStorage.getItem('ivm_username'),
       fullname: localStorage.getItem('ivm_userFullname'),
       role: localStorage.getItem('ivm_userRole'),
-      department: localStorage.getItem('ivm_userDepartment')
+      department: localStorage.getItem('ivm_userDepartment'),
+      isAdmin: localStorage.getItem('ivm_isAdmin') === 'true'
     };
   },
   isLoggedIn: function() {
     return !!localStorage.getItem('ivm_username') && !!localStorage.getItem('ivm_userRole');
   },
+  isAdmin: function() {
+    return localStorage.getItem('ivm_isAdmin') === 'true';
+  },
   clearSession: clearSession,
   logout: erpLogout
 };
 
-console.log('✅ auth.js loaded (standalone ERP auth)');
+console.log('✅ auth.js v3.0 loaded (view-based admin flags)');
