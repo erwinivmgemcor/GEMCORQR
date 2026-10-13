@@ -505,7 +505,7 @@ async function erpFetchDocWithItems(docNo, docType) {
     'Date Prepared': doc.date_prepared || '',
     'Receiving Date': doc.receiving_date || '',
     'Prepared By': doc.prepared_by || '',
-    // ✅ NEW fallbacks:
+    // ✅ NEW fallback fields:
     'date_prepared': doc.date_prepared || '',
     'created_at': doc.created_at || '',
     'updated_at': doc.updated_at || ''
