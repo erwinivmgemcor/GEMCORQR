@@ -396,11 +396,16 @@ function prfMonitorRenderPrfTab() {
     else if (cat === 'EWMAT') categoryBadge = 'bg-danger';
     else if (cat === 'ENCLOSURE') categoryBadge = 'bg-success';
 
-    var safePrf = String(p.prf_no || '').replace(/'/g, "\\'");
+       var safePrf = String(p.prf_no || '').replace(/'/g, "\\'");
     var safeId = p.id;
+    var safeBasePrf = String(p.base_prf_no || p.prf_no || '').replace(/'/g, "\\'");
+    var versionNum = parseInt(p.version_number, 10) || 1;
+    var versionBadge = versionNum > 1 
+      ? ' <span class="badge bg-warning text-dark" style="font-size:0.62rem;">v' + versionNum + '</span>' 
+      : '';
 
     html += '<tr>' +
-      '<td><code>' + erpEsc(p.prf_no) + '</code></td>' +
+      '<td><code>' + erpEsc(p.prf_no) + '</code>' + versionBadge + '</td>' +
       '<td>' + erpEsc(dateStr) + '</td>' +
       '<td>' + erpEsc(p.requestor || '—') + '</td>' +
       '<td class="text-center"><span class="badge ' + categoryBadge + '">' + erpEsc(cat || '—') + '</span></td>' +
@@ -408,6 +413,7 @@ function prfMonitorRenderPrfTab() {
       '<td class="text-center">' + erpNum(p.total_qty || 0) + '</td>' +
       '<td class="text-center"><span class="' + statusClass + '"><i class="bi ' + statusIcon + ' me-1"></i>' + status + '</span></td>' +
       '<td class="text-center">' +
+             '<td class="text-center">' +
         '<button class="erp-action-btn primary" onclick="viewPrfDetails(' + safeId + ')" title="View Details">' +
           '<i class="bi bi-eye"></i>' +
         '</button>' +
@@ -415,7 +421,14 @@ function prfMonitorRenderPrfTab() {
           '<i class="bi bi-printer"></i>' +
         '</button>' +
         '<button class="erp-action-btn" onclick="openEditPrfNo(' + safeId + ', \'' + safePrf + '\')" title="Edit PRF No.">' +
-          '<i class="bi bi-pencil"></i>' +
+          '<i class="bi bi-tag"></i>' +
+        '</button>' +
+        '<button class="erp-action-btn" style="background:#f59e0b;color:#fff;" ' +
+          'onclick="openEditPrfItems(' + safeId + ')" title="Edit Items (New Version)">' +
+          '<i class="bi bi-pencil-square"></i>' +
+        '</button>' +
+        '<button class="erp-action-btn" onclick="openPrfVersionHistory(\'' + safeBasePrf + '\')" title="Version History">' +
+          '<i class="bi bi-clock-history"></i>' +
         '</button>' +
       '</td>' +
     '</tr>';
@@ -1361,4 +1374,507 @@ window.bulkUpdateStatus = bulkUpdateStatus;
 window.exportSelectedItems = exportSelectedItems;
 window.printCurrentPrf = printCurrentPrf;
 
-console.log('✅ prf-monitor.js v3.2 loaded (prf_items.po_no priority fix)');
+// ═══════════════════════════════════════════════════════════
+// ✅ NEW: PRF ITEMS EDIT (REVISION MODE)
+// ═══════════════════════════════════════════════════════════
+
+var _editPrfState = {
+  prfId: null,
+  originalPrf: null,
+  originalItems: [],
+  currentItems: [],
+  newVersionNumber: 2,
+  isSaving: false
+};
+
+window.openEditPrfItems = async function(prfId) {
+  console.log('[EditPRF] Opening:', prfId);
+  
+  var prf = _prfMonitor.allPrfs.find(function(p) { return p.id === prfId; });
+  if (!prf) {
+    erpShowToast('PRF not found', 'warning');
+    return;
+  }
+  
+  _editPrfState.prfId = prfId;
+  _editPrfState.originalPrf = prf;
+  _editPrfState.isSaving = false;
+  
+  var basePrfNo = prf.base_prf_no || prf.prf_no;
+  var currentVersion = parseInt(prf.version_number, 10) || 1;
+  
+  try {
+    var versionRows = await erpFetch('prf_documents',
+      'select=version_number&base_prf_no=eq.' + encodeURIComponent(basePrfNo) +
+      '&order=version_number.desc&limit=1');
+    
+    var maxVersion = (versionRows && versionRows[0]) 
+      ? parseInt(versionRows[0].version_number, 10) 
+      : currentVersion;
+    
+    _editPrfState.newVersionNumber = maxVersion + 1;
+  } catch(e) {
+    _editPrfState.newVersionNumber = currentVersion + 1;
+  }
+  
+  document.getElementById('editPrfItemsTitle').textContent = basePrfNo;
+  document.getElementById('editPrfVersionBadge').textContent = 
+    'v' + currentVersion + ' → v' + _editPrfState.newVersionNumber;
+  
+  document.getElementById('editPrfItemsBody').innerHTML = 
+    '<div class="text-center py-5">' +
+      '<div class="erp-spinner" style="margin:0 auto;"></div>' +
+      '<div class="mt-2 text-muted">Loading PRF items...</div>' +
+    '</div>';
+  
+  var modalEl = document.getElementById('editPrfItemsModal');
+  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+  
+  try {
+    var items = await erpFetch('prf_items',
+      'select=*&prf_id=eq.' + prfId + '&order=line_no.asc');
+    
+    _editPrfState.originalItems = (items || []).map(function(it) {
+      return {
+        id: it.id,
+        item_code: it.item_code || '',
+        description: it.description || '',
+        category: it.category || '',
+        location: it.location || '',
+        average_consumption: Number(it.average_consumption || 0),
+        buffer_stock: Number(it.buffer_stock || 0),
+        stock_on_hand: Number(it.stock_on_hand || 0),
+        qty_for_order: Number(it.qty_for_order || 0),
+        unit: it.unit || 'PIECE',
+        remarks: it.remarks || '',
+        _isNew: false
+      };
+    });
+    
+    _editPrfState.currentItems = JSON.parse(JSON.stringify(_editPrfState.originalItems));
+    
+    renderEditPrfItems();
+    
+  } catch(err) {
+    console.error('[openEditPrfItems]', err);
+    document.getElementById('editPrfItemsBody').innerHTML = 
+      '<div class="alert alert-danger">Failed to load items: ' + erpEsc(err.message) + '</div>';
+  }
+};
+
+window.closeEditPrfItems = function() {
+  var modalEl = document.getElementById('editPrfItemsModal');
+  if (modalEl) {
+    var m = bootstrap.Modal.getInstance(modalEl);
+    if (m) m.hide();
+  }
+};
+
+function renderEditPrfItems() {
+  var body = document.getElementById('editPrfItemsBody');
+  if (!body) return;
+  
+  var items = _editPrfState.currentItems;
+  var prf = _editPrfState.originalPrf;
+  
+  var html = '';
+  
+  html += '<div class="alert alert-warning small py-2 mb-3">' +
+    '<i class="bi bi-exclamation-triangle-fill me-1"></i>' +
+    '<strong>Revision Mode:</strong> Puwede kang mag-add, mag-remove, o mag-modify ng items. ' +
+    'Ang original PRF ay mananatili sa database. Ang bagong version ay magiging <strong>v' + 
+    _editPrfState.newVersionNumber + '</strong>.' +
+    '</div>';
+  
+  html += '<div class="row g-2 mb-3 small">' +
+    '<div class="col-md-6"><strong>Category:</strong> ' + erpEsc(prf.category || '—') + '</div>' +
+    '<div class="col-md-6"><strong>Requestor:</strong> ' + erpEsc(prf.requestor || '—') + '</div>' +
+    '</div>';
+  
+  html += '<div class="d-flex justify-content-between align-items-center mb-3">' +
+    '<div>' +
+      '<strong>Items</strong> ' +
+      '<span class="badge bg-secondary ms-1">' + items.length + '</span>' +
+    '</div>' +
+    '<button class="btn btn-sm btn-primary" onclick="addEditPrfItem()">' +
+      '<i class="bi bi-plus-lg me-1"></i>Add Item' +
+    '</button>' +
+    '</div>';
+  
+  html += '<div class="table-responsive" style="max-height:50vh;overflow-y:auto;">' +
+    '<table class="table table-sm table-bordered align-middle" style="font-size:0.85rem;">' +
+    '<thead class="table-light sticky-top"><tr>' +
+      '<th style="width:4%">#</th>' +
+      '<th style="width:15%">Item Code</th>' +
+      '<th style="width:28%">Description</th>' +
+      '<th style="width:10%" class="text-center">Qty Order</th>' +
+      '<th style="width:8%" class="text-center">Unit</th>' +
+      '<th style="width:15%">Remarks</th>' +
+      '<th style="width:5%"></th>' +
+    '</tr></thead><tbody>';
+  
+  if (items.length === 0) {
+    html += '<tr><td colspan="7" class="text-center text-muted py-3">' +
+      'No items. Click "Add Item" above.</td></tr>';
+  } else {
+    items.forEach(function(it, idx) {
+      html += '<tr data-idx="' + idx + '"' + (it._isNew ? ' style="background:#f0fdf4;"' : '') + '>' +
+        '<td class="text-center">' + (idx + 1) + '</td>' +
+        '<td><input type="text" class="form-control form-control-sm" ' +
+            'value="' + erpEsc(it.item_code) + '" data-field="item_code" ' +
+            'oninput="editPrfUpdateItem(' + idx + ', \'item_code\', this.value)" ' +
+            'style="font-family:\'Courier New\',monospace;"></td>' +
+        '<td><input type="text" class="form-control form-control-sm" ' +
+            'value="' + erpEsc(it.description) + '" data-field="description" ' +
+            'oninput="editPrfUpdateItem(' + idx + ', \'description\', this.value)"></td>' +
+        '<td><input type="number" class="form-control form-control-sm text-center" ' +
+            'value="' + (it.qty_for_order || 0) + '" min="0" step="1" data-field="qty_for_order" ' +
+            'oninput="editPrfUpdateItem(' + idx + ', \'qty_for_order\', parseFloat(this.value) || 0)"></td>' +
+        '<td><input type="text" class="form-control form-control-sm text-center" ' +
+            'value="' + erpEsc(it.unit) + '" data-field="unit" ' +
+            'oninput="editPrfUpdateItem(' + idx + ', \'unit\', this.value)"></td>' +
+        '<td><input type="text" class="form-control form-control-sm" ' +
+            'value="' + erpEsc(it.remarks) + '" data-field="remarks" ' +
+            'placeholder="Optional" maxlength="200" ' +
+            'oninput="editPrfUpdateItem(' + idx + ', \'remarks\', this.value)"></td>' +
+        '<td class="text-center">' +
+          '<button class="btn btn-sm btn-outline-danger" onclick="editPrfRemoveItem(' + idx + ')" title="Remove">' +
+            '<i class="bi bi-trash"></i></button></td>' +
+      '</tr>';
+    });
+  }
+  
+  html += '</tbody></table></div>';
+  
+  html += '<div class="mt-3 p-3" style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:8px;">' +
+    '<label class="form-label fw-bold" style="color:#92400e;">' +
+      '<i class="bi bi-chat-left-text me-1"></i>Reason for Revision <span class="text-danger">*</span>' +
+    '</label>' +
+    '<input type="text" class="form-control" id="editPrfRevisionReason" ' +
+      'placeholder="e.g., Manager requested removal of item X" maxlength="300">' +
+    '</div>';
+  
+  body.innerHTML = html;
+}
+
+window.editPrfUpdateItem = function(idx, field, value) {
+  if (!_editPrfState.currentItems[idx]) return;
+  _editPrfState.currentItems[idx][field] = value;
+};
+
+window.addEditPrfItem = function() {
+  _editPrfState.currentItems.push({
+    id: null, item_code: '', description: '',
+    category: _editPrfState.originalPrf.category || '',
+    location: '', average_consumption: 0, buffer_stock: 0, stock_on_hand: 0,
+    qty_for_order: 0, unit: 'PIECE', remarks: '', _isNew: true
+  });
+  renderEditPrfItems();
+  
+  setTimeout(function() {
+    var rows = document.querySelectorAll('#editPrfItemsBody tbody tr');
+    if (rows.length > 0) {
+      var lastRow = rows[rows.length - 1];
+      var firstInput = lastRow.querySelector('input[data-field="item_code"]');
+      if (firstInput) firstInput.focus();
+    }
+  }, 100);
+};
+
+window.editPrfRemoveItem = function(idx) {
+  var item = _editPrfState.currentItems[idx];
+  if (!item) return;
+  
+  if (!item._isNew) {
+    if (!confirm('Remove item "' + item.item_code + '" from this revision?')) return;
+  }
+  
+  _editPrfState.currentItems.splice(idx, 1);
+  renderEditPrfItems();
+};
+
+function computePrfItemsDiff(oldItems, newItems) {
+  var diff = { added: [], removed: [], modified: [] };
+  
+  var oldMap = {};
+  oldItems.forEach(function(it) { oldMap[it.item_code] = it; });
+  
+  var newMap = {};
+  newItems.forEach(function(it) { newMap[it.item_code] = it; });
+  
+  newItems.forEach(function(newIt) {
+    var oldIt = oldMap[newIt.item_code];
+    if (!oldIt) {
+      diff.added.push({ item_code: newIt.item_code, description: newIt.description, qty: newIt.qty_for_order });
+    } else if (Number(oldIt.qty_for_order) !== Number(newIt.qty_for_order)) {
+      diff.modified.push({ item_code: newIt.item_code, old_qty: oldIt.qty_for_order, new_qty: newIt.qty_for_order });
+    }
+  });
+  
+  oldItems.forEach(function(oldIt) {
+    if (!newMap[oldIt.item_code]) {
+      diff.removed.push({ item_code: oldIt.item_code, description: oldIt.description, qty: oldIt.qty_for_order });
+    }
+  });
+  
+  return diff;
+}
+
+window.saveEditPrfItems = async function() {
+  if (_editPrfState.isSaving) return;
+  
+  _syncEditPrfInputs();
+  
+  var prf = _editPrfState.originalPrf;
+  if (!prf) { erpShowToast('No PRF loaded', 'warning'); return; }
+  
+  var reason = (document.getElementById('editPrfRevisionReason').value || '').trim();
+  if (!reason) {
+    erpShowToast('Reason for revision is required', 'warning');
+    document.getElementById('editPrfRevisionReason').focus();
+    return;
+  }
+  
+  var validItems = [];
+  for (var i = 0; i < _editPrfState.currentItems.length; i++) {
+    var it = _editPrfState.currentItems[i];
+    if (!it.item_code || !it.item_code.trim()) {
+      erpShowToast('Item #' + (i + 1) + ' has no item code', 'warning'); return;
+    }
+    if (it.qty_for_order <= 0) {
+      erpShowToast('Item #' + (i + 1) + ' has invalid qty', 'warning'); return;
+    }
+    validItems.push(it);
+  }
+  
+  if (validItems.length === 0) { erpShowToast('Add at least one item', 'warning'); return; }
+  
+  if (!confirm('Save as v' + _editPrfState.newVersionNumber + '?\n\n' +
+    validItems.length + ' item(s) will be saved.')) return;
+  
+  _editPrfState.isSaving = true;
+  var btn = document.getElementById('btnSaveEditPrfItems');
+  var origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+  
+  try {
+    var currentUser = localStorage.getItem('ivm_username') || '';
+    var currentFullname = localStorage.getItem('ivm_userFullname') || currentUser;
+    
+    var basePrfNo = prf.base_prf_no || prf.prf_no;
+    var currentVersion = parseInt(prf.version_number, 10) || 1;
+    var newVersion = _editPrfState.newVersionNumber;
+    var versionedPrfNo = basePrfNo + (newVersion > 1 ? '-v' + newVersion : '');
+    
+    var diff = computePrfItemsDiff(_editPrfState.originalItems, validItems);
+    var totalQty = validItems.reduce(function(s, it) { return s + (it.qty_for_order || 0); }, 0);
+    
+    var newDocPayload = {
+      prf_no: versionedPrfNo,
+      base_prf_no: basePrfNo,
+      version_number: newVersion,
+      parent_prf_id: prf.id,
+      category: prf.category,
+      requestor: prf.requestor,
+      department: prf.department,
+      notes: prf.notes,
+      purpose: prf.purpose || 'STOCK',
+      total_items: validItems.length,
+      total_qty: totalQty,
+      prepared_by: prf.prepared_by,
+      noted_by: prf.noted_by,
+      approved_by: prf.approved_by,
+      revision_reason: reason,
+      revised_by: currentUser,
+      revised_by_fullname: currentFullname,
+      revised_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    var docRes = await fetch(erpUrl('prf_documents'), {
+      method: 'POST',
+      headers: erpHeaders({ 'Prefer': 'return=representation' }),
+      body: JSON.stringify(newDocPayload)
+    });
+    
+    if (!docRes.ok) throw new Error('Insert doc failed: ' + docRes.status);
+    
+    var newDoc = (await docRes.json())[0];
+    if (!newDoc || !newDoc.id) throw new Error('No doc ID returned');
+    
+    var itemPayloads = validItems.map(function(it, idx) {
+      return {
+        prf_id: newDoc.id,
+        prf_no: versionedPrfNo,
+        line_no: idx + 1,
+        item_code: it.item_code,
+        description: it.description,
+        category: it.category || prf.category,
+        location: it.location || '',
+        average_consumption: Number(it.average_consumption || 0),
+        buffer_stock: Number(it.buffer_stock || 0),
+        stock_on_hand: Number(it.stock_on_hand || 0),
+        qty_for_order: Number(it.qty_for_order || 0),
+        unit: it.unit || 'PIECE',
+        status: 'UNSERVED',
+        remarks: it.remarks || ''
+      };
+    });
+    
+    var itemRes = await fetch(erpUrl('prf_items'), {
+      method: 'POST',
+      headers: erpHeaders({ 'Prefer': 'return=minimal' }),
+      body: JSON.stringify(itemPayloads)
+    });
+    
+    if (!itemRes.ok) throw new Error('Insert items failed: ' + itemRes.status);
+    
+    try {
+      await fetch(erpUrl('prf_revision_audit'), {
+        method: 'POST',
+        headers: erpHeaders({ 'Prefer': 'return=minimal' }),
+        body: JSON.stringify({
+          base_prf_no: basePrfNo,
+          prf_no: versionedPrfNo,
+          from_version: currentVersion,
+          to_version: newVersion,
+          new_prf_id: newDoc.id,
+          revised_by: currentUser,
+          revised_by_fullname: currentFullname,
+          reason: reason,
+          changes: diff
+        })
+      });
+    } catch(auditErr) {
+      console.warn('[EditPRF] Audit log failed:', auditErr);
+    }
+    
+    closeEditPrfItems();
+    
+    var diffSummary = 'Added: ' + diff.added.length + 
+                     ' | Removed: ' + diff.removed.length + 
+                     ' | Modified: ' + diff.modified.length;
+    
+    erpShowToast('✅ v' + newVersion + ' created! ' + diffSummary, 'success');
+    
+    await prfMonitorLoad();
+    
+  } catch(err) {
+    console.error('[saveEditPrfItems]', err);
+    erpShowToast('Failed: ' + err.message, 'danger');
+  } finally {
+    _editPrfState.isSaving = false;
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+  }
+};
+
+function _syncEditPrfInputs() {
+  var rows = document.querySelectorAll('#editPrfItemsBody tbody tr');
+  rows.forEach(function(row, idx) {
+    if (!_editPrfState.currentItems[idx]) return;
+    row.querySelectorAll('input[data-field]').forEach(function(inp) {
+      var field = inp.getAttribute('data-field');
+      var val = inp.value;
+      if (field === 'qty_for_order') val = parseFloat(val) || 0;
+      _editPrfState.currentItems[idx][field] = val;
+    });
+  });
+}
+
+window.openPrfVersionHistory = async function(basePrfNo) {
+  document.getElementById('prfHistoryTitle').textContent = basePrfNo;
+  document.getElementById('prfHistoryBody').innerHTML = 
+    '<div class="text-center py-4"><div class="erp-spinner" style="margin:0 auto;"></div></div>';
+  
+  var modalEl = document.getElementById('prfVersionHistoryModal');
+  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+  
+  try {
+    var versions = await erpFetch('prf_documents',
+      'select=*&base_prf_no=eq.' + encodeURIComponent(basePrfNo) +
+      '&order=version_number.desc');
+    
+    var audits = await erpFetch('prf_revision_audit',
+      'select=*&base_prf_no=eq.' + encodeURIComponent(basePrfNo) +
+      '&order=created_at.desc');
+    
+    renderVersionHistory(versions || [], audits || []);
+  } catch(err) {
+    document.getElementById('prfHistoryBody').innerHTML = 
+      '<div class="alert alert-danger">Failed: ' + erpEsc(err.message) + '</div>';
+  }
+};
+
+function renderVersionHistory(versions, audits) {
+  var body = document.getElementById('prfHistoryBody');
+  if (!body) return;
+  
+  var html = '';
+  
+  html += '<h6 class="mb-3"><i class="bi bi-layers me-1"></i>All Versions (' + versions.length + ')</h6>';
+  
+  if (versions.length === 0) {
+    html += '<div class="text-muted text-center py-3">No versions found</div>';
+  } else {
+    html += '<div class="list-group mb-4">';
+    versions.forEach(function(v) {
+      var vNum = parseInt(v.version_number, 10) || 1;
+      var dateStr = v.created_at ? new Date(v.created_at).toLocaleString() : '—';
+      
+      html += '<div class="list-group-item">' +
+        '<div class="d-flex justify-content-between align-items-start">' +
+          '<div class="flex-grow-1">' +
+            '<div class="d-flex align-items-center gap-2 flex-wrap">' +
+              '<strong style="font-family:\'Courier New\',monospace;">' + erpEsc(v.prf_no) + '</strong>' +
+              '<span class="badge ' + (vNum === 1 ? 'bg-secondary' : 'bg-warning text-dark') + '">' +
+                'v' + vNum + '</span>' +
+              '<span class="badge bg-light text-dark">' + erpEsc(v.category) + '</span>' +
+              '<span class="text-muted small">' + (v.total_items || 0) + ' items · ' + 
+                (v.total_qty || 0) + ' qty</span>' +
+            '</div>' +
+            '<div class="small text-muted mt-1">' +
+              '<i class="bi bi-calendar me-1"></i>' + erpEsc(dateStr) +
+              (v.revised_by_fullname ? ' · <i class="bi bi-person me-1"></i>' + erpEsc(v.revised_by_fullname) : '') +
+            '</div>' +
+            (v.revision_reason ? '<div class="small mt-2 p-2" style="background:#fffbeb;border-radius:6px;">' +
+              '<strong>Reason:</strong> ' + erpEsc(v.revision_reason) + '</div>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+  }
+  
+  if (audits.length > 0) {
+    html += '<h6 class="mb-3"><i class="bi bi-clock-history me-1"></i>Revision History</h6>';
+    html += '<div class="table-responsive"><table class="erp-table" style="font-size:0.82rem;">';
+    html += '<thead><tr><th>Date</th><th>Version</th><th>By</th><th>Changes</th><th>Reason</th></tr></thead><tbody>';
+    
+    audits.forEach(function(a) {
+      var dateStr = a.created_at ? new Date(a.created_at).toLocaleString() : '—';
+      var changes = a.changes || {};
+      var changesSummary = 
+        '<span class="text-success">+' + ((changes.added || []).length) + '</span> ' +
+        '<span class="text-danger">-' + ((changes.removed || []).length) + '</span> ' +
+        '<span class="text-warning">~' + ((changes.modified || []).length) + '</span>';
+      
+      html += '<tr>' +
+        '<td style="font-size:0.75rem;">' + erpEsc(dateStr) + '</td>' +
+        '<td><span class="badge bg-secondary">v' + a.from_version + '→v' + a.to_version + '</span></td>' +
+        '<td>' + erpEsc(a.revised_by_fullname || a.revised_by) + '</td>' +
+        '<td>' + changesSummary + '</td>' +
+        '<td style="font-size:0.75rem;">' + erpEsc(a.reason || '—') + '</td>' +
+      '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  
+  body.innerHTML = html;
+}
+
+console.log('✅ PRF Edit + Version History loaded');
