@@ -430,7 +430,7 @@ async function submitMrif() {
     console.log('[Submit] Doc No:', docNo);
     
     // Step 2: Insert document
-    var docRes = await fetch(erpUrl('documents'), {
+        var docRes = await fetch(erpUrl('documents'), {
       method: 'POST',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify({
@@ -444,6 +444,7 @@ async function submitMrif() {
         gem_so_no: _mrifState.gemSoNo,
         client_name: _mrifState.clientName,
         project: _mrifState.project,
+        date_prepared: new Date().toISOString().split('T')[0],  // ✅ IDAGDAG ITO
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
