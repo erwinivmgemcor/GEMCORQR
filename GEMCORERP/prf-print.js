@@ -1,8 +1,7 @@
 // ============================================================
-// GEMCOR ERP — PRF Print Format
+// GEMCOR ERP — PRF Print Format (v1.1)
 // Matches: PURCHASE REQUISITION FORM template
-// QTY (For Order) column BLANK for manual fill
-// Auto-fill Noted By / Approved By
+// ✅ v1.1 NEW: Version indicator sa header (REVISION vN)
 // ============================================================
 
 var PRF_PRINT_CONFIG = {
@@ -28,7 +27,7 @@ async function openPrfPrintPreview(prfId) {
 
     var items = itemsRes || [];
 
-    console.log('[Print] PRF:', prf.prf_no, 'Items:', items.length);
+    console.log('[Print] PRF:', prf.prf_no, '| v' + (prf.version_number || 1), '| Items:', items.length);
 
     var html = buildPrfPrintHtml(prf, items);
     showPrfPrintModal(html, prf.prf_no);
@@ -47,7 +46,9 @@ function buildPrfPrintHtml(prf, items) {
   var dateNeeded = prf.date_needed ? formatPrintDate(prf.date_needed) : '';
 
   var prfNoDisplay = String(prf.prf_no || '').replace(/^PRF#/, '');
-    var versionNum = parseInt(prf.version_number, 10) || 1;
+  
+  // ✅ Version indicator
+  var versionNum = parseInt(prf.version_number, 10) || 1;
   var versionLabel = '';
   if (versionNum > 1) {
     versionLabel = ' <span style="background:#f59e0b;color:#fff;padding:1px 8px;border-radius:10px;font-size:8pt;font-weight:bold;margin-left:4px;">REVISION v' + versionNum + '</span>';
@@ -71,7 +72,7 @@ function buildPrfPrintHtml(prf, items) {
         '<td class="prf-print-td-center">' + avePerDayDisplay + '</td>' +
         '<td class="prf-print-td-center">' + printNum(it.buffer_stock || 0) + '</td>' +
         '<td class="prf-print-td-center">' + printNum(it.stock_on_hand || 0) + '</td>' +
-        '<td class="prf-print-td-center prf-print-qty">' + printNum(it.qty_for_order || 0) + '</td>' +   /* ← QTY NOW FILLED */
+        '<td class="prf-print-td-center prf-print-qty">' + printNum(it.qty_for_order || 0) + '</td>' +
         '<td class="prf-print-td-center">' + printEsc(it.unit || 'PIECE') + '</td>' +
         '<td class="prf-print-td-remarks">' + printEsc(it.remarks || '') + '</td>' +
       '</tr>';
@@ -101,7 +102,7 @@ function buildPrfPrintHtml(prf, items) {
         '<img src="../gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'">' +
       '</div>' +
       '<div class="prf-print-title-block">' +
-                '<div class="prf-print-title">PURCHASE REQUISITION FORM' + versionLabel + '</div>' +
+        '<div class="prf-print-title">PURCHASE REQUISITION FORM' + versionLabel + '</div>' +
       '</div>' +
     '</div>' +
 
@@ -263,19 +264,16 @@ function getPrintStyles() {
     'body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 7pt; color: #000; }',
     '.prf-print-sheet { width: 100%; max-width: 8.1in; margin: 0 auto; background: #fff; padding: 0; }',
     
-    /* Header — compact */
     '.prf-print-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; padding-bottom: 2px; }',
     '.prf-print-logo img { height: 42px; width: auto; }',
     '.prf-print-title-block { flex: 1; text-align: center; }',
     '.prf-print-title { font-size: 11pt; font-weight: bold; letter-spacing: 1px; margin: 0; }',
     
-    /* Meta — compact */
     '.prf-print-meta { width: 100%; border-collapse: collapse; margin-bottom: 4px; font-size: 8pt; }',
     '.prf-print-meta td { padding: 1px 3px; vertical-align: middle; line-height: 1.2; }',
     '.prf-print-label { font-weight: bold; white-space: nowrap; }',
     '.prf-print-value { border-bottom: 1px solid #000; }',
     
-    /* Items table — VERY compact para 30 rows fit */
     '.prf-print-items { width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 6.5pt; table-layout: fixed; }',
     '.prf-print-items th, .prf-print-items td { border: 1px solid #000; padding: 1px 2px; vertical-align: middle; line-height: 1.05; overflow: hidden; }',
     '.prf-print-items th { background: #f0f0f0; font-weight: bold; text-align: center; font-size: 5.5pt; letter-spacing: 0; line-height: 1.1; padding: 2px 1px; }',
@@ -286,7 +284,6 @@ function getPrintStyles() {
     '.prf-print-qty { font-weight: bold; }',
     '.prf-print-blank-row td { min-height: 12px; }',
     
-    /* Signatures — compact */
     '.prf-print-signatures { display: flex; justify-content: space-between; margin-top: 12px; padding: 0 3%; }',
     '.prf-print-sig-block { width: 30%; text-align: center; }',
     '.prf-print-sig-label { font-weight: bold; font-size: 7pt; text-align: left; margin-bottom: 4px; }',
@@ -295,6 +292,7 @@ function getPrintStyles() {
     '.prf-print-sig-caption { font-size: 6pt; margin-top: 1px; }'
   ].join('');
 }
+
 // ═══════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════
@@ -330,4 +328,4 @@ function printEsc(s) {
     .replace(/'/g, '&#39;');
 }
 
-console.log('✅ prf-print.js loaded');
+console.log('✅ prf-print.js v1.1 loaded (version indicator)');
