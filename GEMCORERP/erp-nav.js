@@ -126,6 +126,13 @@
       href: 'mrs-monitoring.html',
       roles: ['warehouse']
     },
+            {
+      id: 'item-in-out',
+      label: 'Item In & Out',
+      icon: 'bi-arrow-left-right',
+      href: 'item-in-out.html',
+      roles: ['warehouse']
+    },
         {
           id: 'usage-trend',
           label: 'Usage Trend',
@@ -233,6 +240,7 @@
     'mrif-monitoring': 'MRIF Monitoring',        // ← NEW
     'mrr-monitoring': 'MRR Monitoring',          // ← NEW
     'mrs-monitoring': 'MRS Monitoring',
+        'item-in-out': 'Item In & Out',
     'weekly-monitor': 'Weekly Monitoring',
     'usage-trend': 'Usage Trend',
     'usage-entry': 'Usage Entry',
