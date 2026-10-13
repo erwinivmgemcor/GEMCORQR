@@ -47,6 +47,11 @@ function buildPrfPrintHtml(prf, items) {
   var dateNeeded = prf.date_needed ? formatPrintDate(prf.date_needed) : '';
 
   var prfNoDisplay = String(prf.prf_no || '').replace(/^PRF#/, '');
+    var versionNum = parseInt(prf.version_number, 10) || 1;
+  var versionLabel = '';
+  if (versionNum > 1) {
+    versionLabel = ' <span style="background:#f59e0b;color:#fff;padding:1px 8px;border-radius:10px;font-size:8pt;font-weight:bold;margin-left:4px;">REVISION v' + versionNum + '</span>';
+  }
 
   var itemsHtml = '';
   var totalItems = items.length;
@@ -96,7 +101,7 @@ function buildPrfPrintHtml(prf, items) {
         '<img src="../gemcor-logo.png" alt="GEMCOR" onerror="this.style.display=\'none\'">' +
       '</div>' +
       '<div class="prf-print-title-block">' +
-        '<div class="prf-print-title">PURCHASE REQUISITION FORM</div>' +
+                '<div class="prf-print-title">PURCHASE REQUISITION FORM' + versionLabel + '</div>' +
       '</div>' +
     '</div>' +
 
