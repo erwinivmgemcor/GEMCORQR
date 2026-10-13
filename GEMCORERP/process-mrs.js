@@ -1,9 +1,6 @@
 // ============================================================
 // GEMCOR ERP — Process MRS (Warehouse Verification)
-// v2.2 — ITEMS FIRST, document last + rollback
-// ✅ Fixes: stock validation on document update
-// ✅ Rollback if document fails
-// ✅ Enhanced error messages
+// v2.3 — ITEMS FIRST + null-safe DOM updates
 // ============================================================
 
 var _process = {
@@ -21,34 +18,44 @@ var _process = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Process MRS] Initializing v2.2 (items first + rollback)...');
+  console.log('[Process MRS] Initializing v2.3 (items first + rollback)...');
 
   var urlParams = new URLSearchParams(window.location.search);
   _process.docNo = urlParams.get('doc') || '';
   _process.docType = 'MRS';
 
   if (!_process.docNo) {
-    document.getElementById('docNoTitle').innerHTML = '<i class="bi bi-exclamation-triangle text-danger me-2"></i>No document specified';
-    document.getElementById('docMetaInfo').textContent = 'Please select a document from All Requests';
+    var docNoTitle = document.getElementById('docNoTitle');
+    if (docNoTitle) {
+      docNoTitle.innerHTML = '<i class="bi bi-exclamation-triangle text-danger me-2"></i>No document specified';
+    }
+    var metaInfo = document.getElementById('docMetaInfo');
+    if (metaInfo) metaInfo.textContent = 'Please select a document from All Requests';
     return;
   }
 
   processCheckHealth();
   loadDocument();
 
-  document.getElementById('manualItemInput').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      manualItemVerify();
-    }
-  });
+  var manualInput = document.getElementById('manualItemInput');
+  if (manualInput) {
+    manualInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        manualItemVerify();
+      }
+    });
+  }
 
-  document.getElementById('qtyModalInput').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      confirmQty();
-    }
-  });
+  var qtyModalInput = document.getElementById('qtyModalInput');
+  if (qtyModalInput) {
+    qtyModalInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        confirmQty();
+      }
+    });
+  }
 });
 
 async function processCheckHealth() {
@@ -59,11 +66,11 @@ async function processCheckHealth() {
     var text = document.getElementById('erpHealthText');
     var dot = badge.querySelector('.dot');
     if (result.success) {
-      dot.className = 'dot dot-ok';
-      text.textContent = 'Connected (' + result.latency + 'ms)';
+      if (dot) dot.className = 'dot dot-ok';
+      if (text) text.textContent = 'Connected (' + result.latency + 'ms)';
     } else {
-      dot.className = 'dot dot-error';
-      text.textContent = 'Offline';
+      if (dot) dot.className = 'dot dot-error';
+      if (text) text.textContent = 'Offline';
     }
   } catch(e) {}
 }
@@ -79,6 +86,12 @@ async function loadDocument() {
       return;
     }
     _process.doc = docRes[0];
+
+    // ═══ Check kung MRS talaga ═══
+    if (String(_process.doc.doc_type || '').toUpperCase() !== 'MRS') {
+      erpShowToast('This document is not an MRS: ' + _process.doc.doc_type, 'danger');
+      return;
+    }
 
     var itemsRes = await erpFetch('doc_items', 'doc_no=eq.' + encodeURIComponent(_process.docNo) + '&order=line_no.asc');
 
@@ -101,6 +114,7 @@ async function loadDocument() {
       };
     });
 
+    // ═══ If existing issued_qty > 0, mark as verified ═══
     _process.items.forEach(function(it) {
       if (it.issuedQty > 0) {
         it.verified = true;
@@ -119,9 +133,12 @@ async function loadDocument() {
 
 function renderDocInfo() {
   var doc = _process.doc;
+  if (!doc) return;
 
-  document.getElementById('docNoTitle').innerHTML =
-    '<i class="bi bi-arrow-counterclockwise me-2"></i>' + erpEsc(doc.doc_no);
+  var docNoTitle = document.getElementById('docNoTitle');
+  if (docNoTitle) {
+    docNoTitle.innerHTML = '<i class="bi bi-arrow-counterclockwise me-2"></i>' + erpEsc(doc.doc_no);
+  }
 
   var metaParts = [];
   if (doc.requestor) metaParts.push('<i class="bi bi-person me-1"></i>' + erpEsc(doc.requestor));
@@ -131,16 +148,19 @@ function renderDocInfo() {
   if (doc.client_name) metaParts.push('<i class="bi bi-shop me-1"></i>' + erpEsc(doc.client_name));
   if (doc.project) metaParts.push('<i class="bi bi-geo-alt me-1"></i>' + erpEsc(doc.project));
 
-  document.getElementById('docMetaInfo').innerHTML = metaParts.join(' &nbsp;·&nbsp; ');
+  var metaInfo = document.getElementById('docMetaInfo');
+  if (metaInfo) metaInfo.innerHTML = metaParts.join(' &nbsp;·&nbsp; ');
 
   var status = String(doc.status || 'PENDING').toUpperCase();
   var statusBadge = document.getElementById('docStatusBadge');
-  statusBadge.textContent = status;
-  statusBadge.className = 'badge';
-  if (status === 'COMPLETED') statusBadge.className += ' bg-success';
-  else if (status === 'PARTIAL') statusBadge.className += ' bg-info text-dark';
-  else if (status === 'PENDING') statusBadge.className += ' bg-warning text-dark';
-  else statusBadge.className += ' bg-secondary';
+  if (statusBadge) {
+    statusBadge.textContent = status;
+    statusBadge.className = 'badge';
+    if (status === 'COMPLETED') statusBadge.className += ' bg-success';
+    else if (status === 'PARTIAL') statusBadge.className += ' bg-info text-dark';
+    else if (status === 'PENDING') statusBadge.className += ' bg-warning text-dark';
+    else statusBadge.className += ' bg-secondary';
+  }
 
   document.title = 'Process ' + doc.doc_no + ' — GEMCOR ERP';
 }
@@ -163,6 +183,8 @@ function renderItems() {
     var returnedDisplay = it.verified ? it.issuedQty : '—';
     var returnedClass = it.verified ? 'text-success fw-bold' : 'text-muted';
 
+    var remarksVal = (it.remarks === 'PENDING' || it.remarks === 'SERVED' || it.remarks === 'PARTIAL') ? '' : it.remarks;
+
     html += '<tr ' + rowClass + ' data-idx="' + idx + '">' +
       '<td><input type="checkbox" class="item-select-cb" data-idx="' + idx + '"' + (it.selected ? ' checked' : '') + ' onchange="toggleItemSelect(' + idx + ', this.checked)"></td>' +
       '<td>' + (idx + 1) + '</td>' +
@@ -172,7 +194,7 @@ function renderItems() {
       '<td class="text-center ' + returnedClass + '">' + returnedDisplay + '</td>' +
       '<td class="text-center">' + erpEsc(it.unit) + '</td>' +
       '<td>' +
-        '<input type="text" class="form-control form-control-sm item-remarks" data-idx="' + idx + '" value="' + erpEsc(it.remarks === 'PENDING' || it.remarks === 'SERVED' || it.remarks === 'PARTIAL' ? '' : it.remarks) + '" placeholder="Optional" onchange="updateRemarks(' + idx + ', this.value)">' +
+        '<input type="text" class="form-control form-control-sm item-remarks" data-idx="' + idx + '" value="' + erpEsc(remarksVal) + '" placeholder="Optional" onchange="updateRemarks(' + idx + ', this.value)">' +
         '<button class="btn btn-sm btn-link p-0 mt-1" onclick="openQtyModal(' + idx + ')">Edit Qty</button>' +
       '</td>' +
     '</tr>';
@@ -180,7 +202,8 @@ function renderItems() {
   tbody.innerHTML = html;
 
   updateProgress();
-  document.getElementById('itemsCountLabel').textContent = '(' + _process.items.length + ' items)';
+  var countLabel = document.getElementById('itemsCountLabel');
+  if (countLabel) countLabel.textContent = '(' + _process.items.length + ' items)';
 }
 
 function toggleItemSelect(idx, checked) {
@@ -219,8 +242,11 @@ function startScanner() {
       qrbox: { width: 250, height: 250 }
     }, onScanSuccess, function() {}).then(function() {
       _process.scannerActive = true;
-      document.getElementById('btnToggleScanner').innerHTML = '<i class="bi bi-x-circle me-1"></i>Stop Camera';
-      document.getElementById('btnToggleScanner').className = 'btn btn-sm btn-danger';
+      var btn = document.getElementById('btnToggleScanner');
+      if (btn) {
+        btn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Stop Camera';
+        btn.className = 'btn btn-sm btn-danger';
+      }
     }).catch(function(err) {
       erpShowToast('Camera error: ' + err, 'danger');
     });
@@ -235,8 +261,11 @@ function stopScanner() {
       _process.scanner.clear();
       _process.scanner = null;
       _process.scannerActive = false;
-      document.getElementById('btnToggleScanner').innerHTML = '<i class="bi bi-camera-video me-1"></i>Start Camera';
-      document.getElementById('btnToggleScanner').className = 'btn btn-sm btn-outline-secondary';
+      var btn = document.getElementById('btnToggleScanner');
+      if (btn) {
+        btn.innerHTML = '<i class="bi bi-camera-video me-1"></i>Start Camera';
+        btn.className = 'btn btn-sm btn-outline-secondary';
+      }
     }).catch(function() {});
   }
 }
@@ -290,6 +319,7 @@ function updateScanStatus(msg, type) {
 
 function manualItemVerify() {
   var input = document.getElementById('manualItemInput');
+  if (!input) return;
   var code = (input.value || '').trim();
   if (!code) return;
   input.value = '';
@@ -305,27 +335,40 @@ function openQtyModal(idx) {
 
   _process.currentQtyItem = { idx: idx, item: item };
 
-  document.getElementById('qtyModalItemCode').textContent = item.itemCode;
-  document.getElementById('qtyModalItemDesc').textContent = item.description || '—';
-  document.getElementById('qtyModalExpected').value = item.requestedQty + ' ' + item.unit;
-  document.getElementById('qtyModalInput').value = item.verified ? item.issuedQty : item.requestedQty;
-  document.getElementById('qtyModalRemarks').value = item.remarks === 'PENDING' || item.remarks === 'SERVED' || item.remarks === 'PARTIAL' ? '' : item.remarks;
+  var codeEl = document.getElementById('qtyModalItemCode');
+  var descEl = document.getElementById('qtyModalItemDesc');
+  var expEl = document.getElementById('qtyModalExpected');
+  var inpEl = document.getElementById('qtyModalInput');
+  var remEl = document.getElementById('qtyModalRemarks');
+
+  if (codeEl) codeEl.textContent = item.itemCode;
+  if (descEl) descEl.textContent = item.description || '—';
+  if (expEl) expEl.value = item.requestedQty + ' ' + item.unit;
+  if (inpEl) inpEl.value = item.verified ? item.issuedQty : item.requestedQty;
+  if (remEl) {
+    var remarksVal = (item.remarks === 'PENDING' || item.remarks === 'SERVED' || item.remarks === 'PARTIAL') ? '' : item.remarks;
+    remEl.value = remarksVal;
+  }
 
   var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('qtyModal'));
   modal.show();
 
   setTimeout(function() {
     var input = document.getElementById('qtyModalInput');
-    input.focus();
-    input.select();
+    if (input) {
+      input.focus();
+      input.select();
+    }
   }, 300);
 }
 
 function confirmQty() {
   if (!_process.currentQtyItem) return;
   var item = _process.currentQtyItem.item;
-  var qty = parseFloat(document.getElementById('qtyModalInput').value) || 0;
-  var remarks = (document.getElementById('qtyModalRemarks').value || '').trim();
+  var inputEl = document.getElementById('qtyModalInput');
+  var remEl = document.getElementById('qtyModalRemarks');
+  var qty = inputEl ? (parseFloat(inputEl.value) || 0) : 0;
+  var remarks = remEl ? (remEl.value || '').trim() : '';
 
   if (qty < 0) {
     erpShowToast('Quantity must be ≥ 0', 'warning');
@@ -341,7 +384,8 @@ function confirmQty() {
   item.verified = true;
   item.scanned = false;
 
-  bootstrap.Modal.getInstance(document.getElementById('qtyModal')).hide();
+  var modalEl = document.getElementById('qtyModal');
+  if (modalEl) bootstrap.Modal.getInstance(modalEl).hide();
   renderItems();
   erpShowToast('✓ ' + item.itemCode + ' verified', 'success');
 }
@@ -370,16 +414,19 @@ function openBatchVerify() {
     erpShowToast('Select at least one item', 'warning');
     return;
   }
-  document.getElementById('batchCount').textContent = selectedCount;
-  document.getElementById('batchQtyInput').value = '';
+  var countEl = document.getElementById('batchCount');
+  var inputEl = document.getElementById('batchQtyInput');
+  if (countEl) countEl.textContent = selectedCount;
+  if (inputEl) inputEl.value = '';
   bootstrap.Modal.getOrCreateInstance(document.getElementById('batchModal')).show();
   setTimeout(function() {
-    document.getElementById('batchQtyInput').focus();
+    if (inputEl) inputEl.focus();
   }, 300);
 }
 
 function confirmBatchVerify() {
-  var qty = parseFloat(document.getElementById('batchQtyInput').value) || 0;
+  var inputEl = document.getElementById('batchQtyInput');
+  var qty = inputEl ? (parseFloat(inputEl.value) || 0) : 0;
   if (qty < 0) {
     erpShowToast('Invalid quantity', 'warning');
     return;
@@ -393,7 +440,8 @@ function confirmBatchVerify() {
       applied++;
     }
   });
-  bootstrap.Modal.getInstance(document.getElementById('batchModal')).hide();
+  var modalEl = document.getElementById('batchModal');
+  if (modalEl) bootstrap.Modal.getInstance(modalEl).hide();
   renderItems();
   erpShowToast('✓ ' + applied + ' item(s) verified', 'success');
 }
@@ -405,9 +453,12 @@ function updateProgress() {
   var total = _process.items.length;
   var verified = _process.items.filter(function(it) { return it.verified; }).length;
 
-  document.getElementById('progressLabel').textContent = verified + ' / ' + total + ' verified';
+  var progressLabel = document.getElementById('progressLabel');
+  if (progressLabel) progressLabel.textContent = verified + ' / ' + total + ' verified';
 
   var btn = document.getElementById('btnSubmitProcess');
+  if (!btn) return;
+
   if (verified === 0) {
     btn.disabled = true;
     btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Verify items first';
@@ -423,7 +474,7 @@ function updateProgress() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT — v2.2: ITEMS FIRST, document last + rollback
+// SUBMIT — v2.3
 // ═══════════════════════════════════════════════════════════
 async function submitProcess() {
   if (_process.isSubmitting) return;
@@ -438,12 +489,13 @@ async function submitProcess() {
 
   _process.isSubmitting = true;
   var btn = document.getElementById('btnSubmitProcess');
-  var originalHtml = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
+  var originalHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
+  }
 
   try {
-    // ═══ STEP 1: PREPARE UPDATES ═══
     var allComplete = true;
     var anyReturned = false;
     var preparedItems = [];
@@ -476,15 +528,10 @@ async function submitProcess() {
                       localStorage.getItem('ivm_username') || 
                       'WAREHOUSE';
 
-    console.log('[submitProcess] ============================================');
-    console.log('[submitProcess] v2.2 MRS SUBMIT — ITEMS FIRST, DOCUMENT LAST');
     console.log('[submitProcess] Items to update:', preparedItems.length);
     console.log('[submitProcess] Target status:', newStatus);
-    console.log('[submitProcess] ============================================');
 
-    // ═══ STEP 2: UPDATE ITEMS FIRST ═══
-    console.log('[submitProcess] STEP 1: Updating items FIRST...');
-
+    // ═══ STEP 1: UPDATE ITEMS FIRST ═══
     var itemsUpdated = 0;
     var itemErrors = [];
 
@@ -515,15 +562,11 @@ async function submitProcess() {
       }
     }
 
-    console.log('[submitProcess] Items updated:', itemsUpdated, '/', preparedItems.length);
-
     if (itemErrors.length > 0) {
       throw new Error('Failed to update items: ' + itemErrors.join(', '));
     }
 
-    // ═══ STEP 3: UPDATE DOCUMENT STATUS (triggers stock validation) ═══
-    console.log('[submitProcess] STEP 2: Updating document (trigger will validate stock)...');
-
+    // ═══ STEP 2: UPDATE DOCUMENT STATUS ═══
     var docRes = await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(_process.docNo)), {
       method: 'PATCH',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
@@ -535,14 +578,13 @@ async function submitProcess() {
       })
     });
 
-    // ═══ IF DOCUMENT FAILS — ROLLBACK ITEMS ═══
     if (!docRes.ok) {
       var errText = await docRes.text();
       console.error('[submitProcess] ❌ Document update FAILED:', docRes.status, errText);
       
-      console.warn('[submitProcess] ⏪ Rolling back', itemsUpdated, 'item updates...');
+      // ═══ ROLLBACK ═══
+      console.warn('[submitProcess] ⏪ Rolling back', itemsUpdated, 'items...');
       
-      var rollbackCount = 0;
       for (var k = 0; k < preparedItems.length; k++) {
         var pi2 = preparedItems[k];
         try {
@@ -554,71 +596,38 @@ async function submitProcess() {
               remarks: pi2.originalRemarks
             })
           });
-          rollbackCount++;
         } catch(e) {
           console.warn('[submitProcess] Rollback failed for:', pi2.itemCode);
         }
       }
       
-      console.log('[submitProcess] ✅ Rollback complete:', rollbackCount, 'items reverted');
-      
       var userFriendlyMsg = 'Failed to update document status';
-      
       try {
         var errJson = JSON.parse(errText);
-        var pgMessage = errJson.message || '';
-        var pgCode = errJson.code || '';
-        
-        if (pgMessage.indexOf('Insufficient stock') !== -1) {
-          var itemMatch = pgMessage.match(/item (\S+?)\./);
-          var itemCode = itemMatch ? itemMatch[1] : 'unknown';
-          var currentMatch = pgMessage.match(/Current: ([\d.]+)/);
-          var attemptedMatch = pgMessage.match(/Attempted: (-?[\d.]+)/);
-          
-          userFriendlyMsg = '❌ Insufficient stock for ' + itemCode + '.\n\n' +
-                            'Current on-hand: ' + (currentMatch ? currentMatch[1] : '0') + '\n' +
-                            'Required: ' + (attemptedMatch ? Math.abs(parseFloat(attemptedMatch[1])) : 'unknown') + '\n\n' +
-                            'Please add stock in Stock Monitor before processing.\n\n' +
-                            '(Items have been reverted automatically)';
-        }
-        else if (pgCode === '23502') {
-          var colMatch = pgMessage.match(/column "(\w+)"/);
-          userFriendlyMsg = '⚠️ Database error: missing required field "' + (colMatch ? colMatch[1] : 'unknown') + '"';
-        }
-        else if (pgCode === '23503') {
-          userFriendlyMsg = '⚠️ Reference error: item code not found in inventory master';
-        }
-        else if (pgCode === '23505') {
-          userFriendlyMsg = '⚠️ Duplicate entry: this document may already be processed';
-        }
-        else if (pgMessage) {
-          userFriendlyMsg = '❌ ' + pgMessage;
-        }
-      } catch(parseErr) {
-        userFriendlyMsg = '❌ Error: ' + errText.substring(0, 150);
-      }
+        if (errJson.message) userFriendlyMsg = '❌ ' + errJson.message;
+      } catch(parseErr) {}
       
       throw new Error(userFriendlyMsg);
     }
 
     // ═══ Success ═══
-    console.log('[submitProcess] ============================================');
-    console.log('[submitProcess] ✅ v2.2 MRS SUBMIT COMPLETE');
-    console.log('[submitProcess] Document:', _process.docNo);
-    console.log('[submitProcess] Status:', newStatus);
-    console.log('[submitProcess] Items:', itemsUpdated);
-    console.log('[submitProcess] ============================================');
+    console.log('[submitProcess] ✅ MRS SUBMIT COMPLETE:', newStatus);
 
-    document.getElementById('successDocNo').textContent = _process.docNo;
-    document.getElementById('successStatus').textContent = newStatus;
+    var successDocNo = document.getElementById('successDocNo');
+    var successStatus = document.getElementById('successStatus');
+    if (successDocNo) successDocNo.textContent = _process.docNo;
+    if (successStatus) successStatus.textContent = newStatus;
 
-    new bootstrap.Modal(document.getElementById('successModal')).show();
+    var successModal = document.getElementById('successModal');
+    if (successModal) new bootstrap.Modal(successModal).show();
 
   } catch(err) {
     console.error('[submitProcess] ❌ SUBMIT FAILED:', err);
     erpShowToast('Submit failed: ' + err.message, 'danger');
-    btn.disabled = false;
-    btn.innerHTML = originalHtml;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
   } finally {
     _process.isSubmitting = false;
   }
@@ -688,4 +697,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4000 }).show();
 }
 
-console.log('✅ process-mrs.js v2.2 loaded (ITEMS FIRST + ROLLBACK)');
+console.log('✅ process-mrs.js v2.3 loaded (null-safe + items first + rollback)');
