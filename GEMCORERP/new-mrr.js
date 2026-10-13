@@ -616,7 +616,7 @@ async function submitMrr() {
     console.log('[Submit MRR] Final status will be:', overallStatus);
 
     // ─── Step 3: Insert document ───
-    var docRes = await fetch(erpUrl('documents'), {
+        var docRes = await fetch(erpUrl('documents'), {
       method: 'POST',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify({
@@ -633,6 +633,7 @@ async function submitMrr() {
         dr_no: _mrrState.drNo,
         receiving_site: _mrrState.receivingSite,
         receiving_date: _mrrState.receivingDate,
+        date_prepared: new Date().toISOString().split('T')[0],  // ✅ ITO!
         prepared_by: _mrrState.preparedBy,
         item_count: validItems.length,
         created_at: new Date().toISOString(),
