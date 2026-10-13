@@ -390,11 +390,11 @@ async function submitMrs() {
     console.log('[Submit MRS] Doc No:', docNo);
     
     // Step 2: Insert document (auto COMPLETED for MRS)
-    var docRes = await fetch(erpUrl('documents'), {
+       var docRes = await fetch(erpUrl('documents'), {
       method: 'POST',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify({
-               doc_no: docNo,
+        doc_no: docNo,
         doc_type: 'MRS',
         status: 'PENDING',
         is_bal: false,
@@ -404,6 +404,7 @@ async function submitMrs() {
         gem_so_no: _mrsState.gemSoNo,
         client_name: _mrsState.clientName,
         project: _mrsState.project,
+        date_prepared: new Date().toISOString().split('T')[0],  // ✅ IDAGDAG ITO
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
