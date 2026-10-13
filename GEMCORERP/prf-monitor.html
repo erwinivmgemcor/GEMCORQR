@@ -311,6 +311,11 @@
       <select id="prfRequestorFilter" class="erp-select" onchange="prfMonitorLoad()">
         <option value="">All Requestors</option>
       </select>
+             <!-- ✅ NEW: Version Filter -->
+      <select id="prfVersionFilter" class="erp-select" onchange="prfToggleVersionFilter(this.value)">
+        <option value="latest" selected>Latest Version Only</option>
+        <option value="all">Show All Versions</option>
+      </select>
       <input type="date" id="prfDateFrom" class="erp-select" style="min-width:150px;" onchange="prfMonitorLoad()" title="From date">
       <input type="date" id="prfDateTo" class="erp-select" style="min-width:150px;" onchange="prfMonitorLoad()" title="To date">
       <button class="erp-btn-clear" onclick="prfMonitorClearFilters()">
