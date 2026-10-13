@@ -176,10 +176,10 @@ async function loginUser() {
     console.log('[Auth] Verifying user:', username, '/', role);
     
     // ═══ Query users table ═══
-    var url = erpUrl('users') + 
+        var url = erpUrl('users') + 
               '?username=eq.' + encodeURIComponent(username) +
               '&password=eq.' + encodeURIComponent(password) +
-              '&select=username,fullname,roles,department' +
+              '&select=username,fullname,roles,department,is_admin' +
               '&limit=1';
     
     var res = await fetch(url, {
@@ -221,13 +221,20 @@ async function loginUser() {
       return;
     }
     
-    // ═══ Success — Save session ═══
+        // ═══ Success — Save session ═══
     console.log('[Auth] ✅ Login successful');
     
     localStorage.setItem('ivm_username', user.username);
     localStorage.setItem('ivm_userFullname', user.fullname || user.username);
     localStorage.setItem('ivm_userRole', role);
     localStorage.setItem('ivm_allowedRoles', JSON.stringify(userRoles));
+    
+    // ✅ Save is_admin flag
+    if (user.is_admin === true) {
+      localStorage.setItem('ivm_isAdmin', 'true');
+    } else {
+      localStorage.removeItem('ivm_isAdmin');
+    }
     
     if (user.department) {
       localStorage.setItem('ivm_userDepartment', user.department);
@@ -318,7 +325,8 @@ function clearSession() {
     'ivm_userDepartment',
     'ivm_requestorName',
     'ivm_chatUnread',
-    'ivm_editReqCount'
+    'ivm_editReqCount',
+    'ivm_isAdmin'                // ✅ NEW
   ];
   
   keys.forEach(function(k) {
