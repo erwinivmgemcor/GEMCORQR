@@ -1,9 +1,10 @@
 // ============================================================
-// GEMCOR ERP — Navigation & Layout System v8.3
+// GEMCOR ERP — Navigation & Layout System v8.4
 // Professional Enterprise Design
 // Clean, Minimal, Self-Contained
 // v8.2 — Added Edit Requests nav item
 // v8.3 — FIXED: Duplicate items: [ in inventory section
+// v8.4 — Added Supabase Admin Console (admin-only)
 // ============================================================
 
 (function() {
@@ -40,7 +41,15 @@
           roles: ['warehouse'],
           adminOnly: true
         },
-                {
+        {
+          id: 'admin-supabase',
+          label: 'Supabase Admin',
+          icon: 'bi-database-fill-gear',
+          href: 'admin-supabase.html',
+          roles: ['warehouse'],
+          adminOnly: true
+        },
+        {
           id: 'system-health',
           label: 'System Health',
           icon: 'bi-activity',
@@ -262,6 +271,7 @@
     'management-dashboard': 'Management Dashboard',
     'stock-monitor': 'Stock Monitor',
     'admin-users': 'User Management',
+    'admin-supabase': 'Supabase Admin Console',
     'system-health': 'System Health',
     'inventory-count': 'Inventory Count',
     'replenishment': 'Replenishment Needs',
@@ -771,7 +781,7 @@
 
     setTimeout(_checkHealth, 500);
 
-    console.log('[Nav v8.3] Rendered. Page:', current, '| Role:', userRole, '| Collapsed:', _isCollapsed());
+    console.log('[Nav v8.4] Rendered. Page:', current, '| Role:', userRole, '| Admin:', localStorage.getItem('ivm_isAdmin') === 'true', '| Collapsed:', _isCollapsed());
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -890,5 +900,5 @@
     renderNav();
   }
 
-  console.log('✅ erp-nav.js v8.3 loaded (with Barcode Generator + Replenishment + Search)');
+  console.log('✅ erp-nav.js v8.4 loaded (with Supabase Admin Console)');
 })();
