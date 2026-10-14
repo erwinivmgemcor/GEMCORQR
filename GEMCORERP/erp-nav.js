@@ -734,6 +734,14 @@ topbar.innerHTML =
 
     // Remove any old nav
     _removeOldNav();
+        // ✅ Load global search if not yet loaded
+    if (!document.getElementById('globalSearchScript') && typeof window.erpOpenSearch !== 'function') {
+      var gsScript = document.createElement('script');
+      gsScript.id = 'globalSearchScript';
+      gsScript.src = 'global-search.js';
+      gsScript.defer = true;
+      document.head.appendChild(gsScript);
+    }
 
     // Build components
     var sidebar = _buildSidebar(userRole, current);
