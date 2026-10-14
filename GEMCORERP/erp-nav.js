@@ -39,6 +39,14 @@
           href: 'admin-users.html',
           roles: ['warehouse'],
           adminOnly: true
+        },
+                {
+          id: 'system-health',
+          label: 'System Health',
+          icon: 'bi-activity',
+          href: 'system-health.html',
+          roles: ['warehouse'],
+          adminOnly: true
         }
       ]
     },
@@ -254,6 +262,7 @@
     'management-dashboard': 'Management Dashboard',
     'stock-monitor': 'Stock Monitor',
     'admin-users': 'User Management',
+    'system-health': 'System Health',
     'inventory-count': 'Inventory Count',
     'replenishment': 'Replenishment Needs',
     'barcode-generator': 'Barcode Generator',
