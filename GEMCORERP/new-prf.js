@@ -91,12 +91,24 @@ function prfSwitchMode(mode) {
   if (hint) {
     hint.textContent = mode === 'reorder'
       ? 'Required — pinipili kung anong category ng PRF.'
-      : 'Required — parehong category ang gagamitin sa submission.';
+      : 'Required — parehong category gagamitin sa submission.';
+  }
+
+  // ✅ Toast alert kapag nag-switch sa reorder mode at may pending
+  if (mode === 'reorder' && _prf.items.length > 0) {
+    var pendingCount = _prf.items.filter(function(it) {
+      return computeSuggestedBreakdown(it).pendingQty > 0;
+    }).length;
+
+    if (pendingCount > 0) {
+      setTimeout(function() {
+        erpShowToast('⚠️ ' + pendingCount + ' item(s) have pending PRF — check the ⚠ PENDING column', 'warning');
+      }, 300);
+    }
   }
 
   updateSubmitButton();
 }
-
 window.prfSwitchMode = prfSwitchMode;
 
 // ═══════════════════════════════════════════════════════════
@@ -373,6 +385,9 @@ function onCategoryChange() {
 // ═══════════════════════════════════════════════════════════
 // RENDER REORDER ITEMS (with pending column)
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// RENDER REORDER ITEMS (v2.6 — Sort pending first + Filter)
+// ═══════════════════════════════════════════════════════════
 function renderReorderItems() {
   var container = document.getElementById('reorderItemsContainer');
   if (!container) return;
@@ -384,13 +399,65 @@ function renderReorderItems() {
       'No items found for this category in the reorder list. ' +
       'You can switch to <strong>Manual Entry</strong> to add items manually.</div>';
     updateSubmitButton();
+    updateReorderTabBadge(0);
     return;
   }
 
-  var allSelected = _prf.items.length > 0 && _prf.items.every(function(it) {
+  // ═══════════════════════════════════════════════════════════
+  // ✅ Filter: show only items with pending PRF (kung naka-check)
+  // ═══════════════════════════════════════════════════════════
+  var filterCheck = document.getElementById('filterPendingOnly');
+  var filterPendingOnly = filterCheck ? filterCheck.checked : false;
+
+  var itemsToRender = _prf.items.slice();
+
+  if (filterPendingOnly) {
+    itemsToRender = itemsToRender.filter(function(it) {
+      return computeSuggestedBreakdown(it).pendingQty > 0;
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ✅ Sort: pending items FIRST, then alphabetical by item_code
+  // ═══════════════════════════════════════════════════════════
+  itemsToRender.sort(function(a, b) {
+    var aPending = computeSuggestedBreakdown(a).pendingQty;
+    var bPending = computeSuggestedBreakdown(b).pendingQty;
+    
+    // Kung pareho (both may pending or both wala) → alphabetical
+    if ((aPending > 0) === (bPending > 0)) {
+      return String(a.item_code || '').localeCompare(String(b.item_code || ''));
+    }
+    
+    // May pending → mas priority (top)
+    return (bPending > 0 ? 1 : 0) - (aPending > 0 ? 1 : 0);
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // ✅ Update tab badge (B)
+  // ═══════════════════════════════════════════════════════════
+  var pendingCountInCategory = _prf.items.filter(function(it) {
+    return computeSuggestedBreakdown(it).pendingQty > 0;
+  }).length;
+  updateReorderTabBadge(pendingCountInCategory);
+
+  // ═══════════════════════════════════════════════════════════
+  // Empty state kapag na-filter lahat
+  // ═══════════════════════════════════════════════════════════
+  if (itemsToRender.length === 0) {
+    container.innerHTML = '<div class="alert alert-success mb-0">' +
+      '<i class="bi bi-check-circle-fill me-2"></i>' +
+      '<strong>Walang items na may pending PRF sa category na ito! 🎉</strong>' +
+      '<div class="small mt-1">Untick ang filter checkbox para makita lahat ng items.</div>' +
+      '</div>';
+    updateSubmitButton();
+    return;
+  }
+
+  var allSelected = itemsToRender.length > 0 && itemsToRender.every(function(it) {
     return it._selected === true;
   });
-  var someSelected = _prf.items.some(function(it) { return it._selected === true; });
+  var someSelected = itemsToRender.some(function(it) { return it._selected === true; });
 
   var html = '<div class="table-responsive">';
   html += '<table class="erp-table" style="font-size:0.82rem;">';
@@ -413,12 +480,15 @@ function renderReorderItems() {
     '<th style="width:17%">Remarks</th>' +
   '</tr></thead><tbody>';
 
-  _prf.items.forEach(function(it, idx) {
+  itemsToRender.forEach(function(it, idx) {
     var breakdown = computeSuggestedBreakdown(it);
     var suggested = breakdown.netNeed;
     var isSelected = it._selected === true;
     var qtyOrder = it._qtyOrder !== undefined ? it._qtyOrder : 0;
     var remarks = it._remarks || '';
+    
+    // ✅ Find original index para sa callbacks (toggle, update)
+    var originalIdx = _prf.items.indexOf(it);
 
     // ✅ Pending display
     var pendingDisplay = '<span class="text-muted">—</span>';
@@ -445,12 +515,20 @@ function renderReorderItems() {
     if (it.urgency === 'CRITICAL') urgencyBadge = ' <span class="badge bg-danger">CRIT</span>';
     else if (it.urgency === 'URGENT') urgencyBadge = ' <span class="badge bg-warning text-dark">URG</span>';
 
-    html += '<tr data-idx="' + idx + '"' +
-      (isSelected ? ' style="background:#ecfdf5;"' : '') +
+    // ✅ Highlight row kapag may pending
+    var rowStyle = '';
+    if (isSelected) {
+      rowStyle = ' style="background:#ecfdf5;"';
+    } else if (breakdown.pendingQty > 0) {
+      rowStyle = ' style="background:#fffbeb;"';
+    }
+
+    html += '<tr data-idx="' + originalIdx + '"' +
+      rowStyle +
       (breakdown.pendingQty > 0 ? ' data-has-pending="true"' : '') + '>' +
-      '<td><input type="checkbox" class="item-select-chk" data-idx="' + idx + '"' +
+      '<td><input type="checkbox" class="item-select-chk" data-idx="' + originalIdx + '"' +
         (isSelected ? ' checked' : '') +
-        ' onchange="toggleItemSelect(' + idx + ', this.checked)"></td>' +
+        ' onchange="toggleItemSelect(' + originalIdx + ', this.checked)"></td>' +
       '<td>' + (idx + 1) + '</td>' +
       '<td><code>' + erpEsc(it.item_code) + '</code>' + urgencyBadge + '</td>' +
       '<td>' + erpEsc(it.description || '—') + '</td>' +
@@ -461,18 +539,18 @@ function renderReorderItems() {
       '<td class="text-center">' + netNeedDisplay + '</td>' +
       '<td class="text-center">' +
         '<input type="number" class="form-control form-control-sm qty-order-input" ' +
-        'data-idx="' + idx + '" value="' + qtyOrder + '" min="0" step="1" ' +
-        'placeholder="' + Math.ceil(suggested) + '" onchange="updateQty(' + idx + ', this.value)">' +
+        'data-idx="' + originalIdx + '" value="' + qtyOrder + '" min="0" step="1" ' +
+        'placeholder="' + Math.ceil(suggested) + '" onchange="updateQty(' + originalIdx + ', this.value)">' +
       '</td>' +
       '<td class="text-center">' +
-        '<select class="form-select form-select-sm unit-select" data-idx="' + idx + '" onchange="updateUnit(' + idx + ', this.value)" style="font-size:0.75rem;padding:2px 4px;">' +
+        '<select class="form-select form-select-sm unit-select" data-idx="' + originalIdx + '" onchange="updateUnit(' + originalIdx + ', this.value)" style="font-size:0.75rem;padding:2px 4px;">' +
           buildUnitOptions(it.base_unit || 'PIECE') +
         '</select>' +
       '</td>' +
       '<td>' +
         '<input type="text" class="form-control form-control-sm remarks-input" ' +
-        'data-idx="' + idx + '" value="' + erpEsc(remarks) + '" placeholder="Optional" ' +
-        'onchange="updateRemarks(' + idx + ', this.value)">' +
+        'data-idx="' + originalIdx + '" value="' + erpEsc(remarks) + '" placeholder="Optional" ' +
+        'onchange="updateRemarks(' + originalIdx + ', this.value)">' +
       '</td>' +
     '</tr>';
   });
@@ -515,6 +593,99 @@ function renderReorderItems() {
   updateSubmitButton();
 }
 
+// ═══════════════════════════════════════════════════════════
+// ✅ NEW: Update Reorder Tab Badge
+// ═══════════════════════════════════════════════════════════
+function updateReorderTabBadge(pendingCount) {
+  var badge = document.getElementById('reorderPendingBadge');
+  if (!badge) return;
+  
+  if (pendingCount > 0) {
+    badge.textContent = pendingCount + ' ⚠';
+    badge.style.display = 'inline-block';
+    badge.className = 'badge bg-warning text-dark ms-1';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+window.updateReorderTabBadge = updateReorderTabBadge;
+
+// ═══════════════════════════════════════════════════════════
+// ✅ NEW: Show Pending Reorder List (from current category)
+// ═══════════════════════════════════════════════════════════
+function showPendingReorderList() {
+  // Collect items with pending from current reorder list
+  var pendingItems = _prf.items.filter(function(it) {
+    return computeSuggestedBreakdown(it).pendingQty > 0;
+  });
+
+  if (pendingItems.length === 0) {
+    erpShowToast('Walang pending items sa category na ito', 'info');
+    return;
+  }
+
+  var html = '<div style="padding:10px;">';
+  html += '<div class="alert alert-warning small mb-3">' +
+    '<i class="bi bi-exclamation-triangle-fill me-1"></i>' +
+    '<strong>' + pendingItems.length + ' item(s)</strong> sa category na ito ang may pending PRF. ' +
+    'Ang <strong>Net Need</strong> ay awtomatikong naka-deduct sa pending qty.' +
+    '</div>';
+  
+  html += '<div class="table-responsive" style="max-height:500px;overflow-y:auto;">';
+  html += '<table class="table table-sm table-bordered" style="font-size:0.82rem;">';
+  html += '<thead class="table-light sticky-top"><tr>' +
+    '<th>Item Code</th>' +
+    '<th>Description</th>' +
+    '<th class="text-center">On-Hand</th>' +
+    '<th class="text-center">Buffer</th>' +
+    '<th class="text-center">⚠ Pending</th>' +
+    '<th class="text-center">Net Need</th>' +
+    '<th class="text-center">Pending PRF(s)</th>' +
+    '</tr></thead><tbody>';
+
+  pendingItems.forEach(function(it) {
+    var breakdown = computeSuggestedBreakdown(it);
+    
+    html += '<tr style="background:#fffbeb;">' +
+      '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
+      '<td>' + erpEsc(it.description || '—') + '</td>' +
+      '<td class="text-center">' + erpNum(it.on_hand || 0) + '</td>' +
+      '<td class="text-center">' + erpNum(it.buffer_stock || 0) + '</td>' +
+      '<td class="text-center"><strong class="text-warning">' + erpNum(breakdown.pendingQty) + '</strong></td>' +
+      '<td class="text-center"><strong class="text-success">' + erpNum(breakdown.netNeed) + '</strong></td>' +
+      '<td><small>' + erpEsc(breakdown.prfNos) + '</small></td>' +
+    '</tr>';
+  });
+
+  html += '</tbody></table></div></div>';
+
+  // Create/reuse modal
+  var modalEl = document.getElementById('pendingReorderListModal');
+  if (modalEl) modalEl.remove();
+
+  var wrapper = document.createElement('div');
+  wrapper.innerHTML = '<div class="modal fade" id="pendingReorderListModal" tabindex="-1">' +
+    '<div class="modal-dialog modal-lg modal-dialog-scrollable">' +
+      '<div class="modal-content">' +
+        '<div class="modal-header" style="background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);color:#fff;">' +
+          '<h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>Pending Items (Current Category)</h5>' +
+          '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>' +
+        '</div>' +
+        '<div class="modal-body p-0">' + html + '</div>' +
+        '<div class="modal-footer">' +
+          '<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(wrapper.firstChild);
+
+  var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('pendingReorderListModal'));
+  modal.show();
+}
+
+window.showPendingReorderList = showPendingReorderList;
 // ═══════════════════════════════════════════════════════════
 // SELECTION
 // ═══════════════════════════════════════════════════════════
