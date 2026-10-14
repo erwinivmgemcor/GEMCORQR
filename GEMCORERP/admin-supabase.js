@@ -223,15 +223,22 @@ function ascReopenSettingsIfNeeded() {
 window.ascSetMode = ascSetMode;
 
 function ascApplyModeIndicator() {
+  // Part 1: Topbar indicator
   var indicator = document.getElementById('adminModeIndicator');
   var text = document.getElementById('adminModeText');
-  if (!indicator || !text) return;
   
-  indicator.className = 'admin-mode-indicator ' + _asc.accessMode;
+  if (indicator && text) {
+    indicator.className = 'admin-mode-indicator ' + _asc.accessMode;
+    
+    var labels = { 
+      readonly: 'Read-Only', 
+      write: 'Read + Write', 
+      full: 'Full Access' 
+    };
+    text.textContent = labels[_asc.accessMode] || _asc.accessMode;
+  }
   
-  var labels = { readonly: 'Read-Only', write: 'Read + Write', full: 'Full Access' };
-  text.textContent = labels[_asc.accessMode] || _asc.accessMode;
-  
+  // Part 2: Dashboard banner
   var banner = document.getElementById('ascModeBanner');
   var icon = document.getElementById('ascModeIcon');
   var title = document.getElementById('ascModeTitle');
@@ -252,8 +259,26 @@ function ascApplyModeIndicator() {
     if (title) title.textContent = '⚠️ FULL ACCESS MODE';
     if (desc) desc.textContent = 'Lahat kasama Raw SQL at Hard Delete. Naka-log lahat ng actions.';
   }
+  
+  // Part 3: Highlight quick button
+  ['readonly', 'write', 'full'].forEach(function(mode) {
+    var btnId = 'ascQuickBtn' + mode.charAt(0).toUpperCase() + mode.slice(1);
+    var btn = document.getElementById(btnId);
+    
+    if (!btn) return;
+    
+    var isActive = (_asc.accessMode === mode);
+    btn.classList.toggle('active', isActive);
+    
+    if (isActive) {
+      btn.style.fontWeight = '700';
+      btn.style.boxShadow = '0 0 0 3px rgba(0,0,0,0.15)';
+    } else {
+      btn.style.fontWeight = '';
+      btn.style.boxShadow = '';
+    }
+  });
 }
-
 function ascUpdateUIForMode() {
   var isReadOnly = (_asc.accessMode === 'readonly');
   var isFull = (_asc.accessMode === 'full');
@@ -283,7 +308,7 @@ function ascUpdateUIForMode() {
 // ═══════════════════════════════════════════════════════════
 function ascRequestPin(reason, onSuccess, onCancel) {
   _asc.pendingPinAction = onSuccess;
-  _asc.pendingPinCancel = onCancel || null;  // ✅ Store cancel callback
+  _asc.pendingPinCancel = onCancel || null;
   
   var reasonEl = document.getElementById('ascPinPromptReason');
   if (reasonEl) reasonEl.textContent = reason || 'Enter Admin PIN para ma-access ito.';
@@ -314,7 +339,7 @@ function ascSubmitPinPrompt() {
     
     var callback = _asc.pendingPinAction;
     _asc.pendingPinAction = null;
-    _asc.pendingPinCancel = null;  // ✅ Clear cancel callback
+    _asc.pendingPinCancel = null;
     
     if (typeof callback === 'function') callback();
     return;
@@ -329,13 +354,11 @@ function ascSubmitPinPrompt() {
     inputEl.focus();
   }
 }
-
 window.ascSubmitPinPrompt = ascSubmitPinPrompt;
 
 function ascClosePinPrompt() {
   if (_asc.pinPromptModal) _asc.pinPromptModal.hide();
   
-  // ✅ Call cancel callback kung meron
   var cancelCallback = _asc.pendingPinCancel;
   _asc.pendingPinAction = null;
   _asc.pendingPinCancel = null;
