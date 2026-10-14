@@ -36,6 +36,7 @@ var _asc = {
   deleteModal: null,
   
   pendingPinAction: null,
+  pendingPinCancel: null,
   pendingDeleteInfo: null
 };
 
@@ -165,17 +166,40 @@ function ascSaveSettings() {
 function ascSetMode(newMode) {
   if (['readonly', 'write', 'full'].indexOf(newMode) === -1) return;
   
+  // ✅ FIX: Store current mode para ma-revert kapag nag-cancel ang user
+  var previousMode = _asc.accessMode;
+  
   if (newMode === 'full') {
-    ascRequestPin('Enable FULL ACCESS mode (Raw SQL + Hard Delete)', function() {
-      _asc.accessMode = newMode;
-      ascSaveSettings();
-      ascApplyModeIndicator();
-      ascUpdateUIForMode();
-      erpShowToast('✅ Full Access mode enabled', 'success');
-    });
+    // ✅ FIX: Close Settings modal muna para makita yung PIN prompt
+    if (_asc.settingsModal) _asc.settingsModal.hide();
+    
+    // Small delay para matapos ang modal animation
+    setTimeout(function() {
+      ascRequestPin('Enable FULL ACCESS mode (Raw SQL + Hard Delete)', 
+        // ✅ onSuccess callback
+        function() {
+          _asc.accessMode = newMode;
+          ascSaveSettings();
+          ascApplyModeIndicator();
+          ascUpdateUIForMode();
+          ascReopenSettingsIfNeeded();
+          erpShowToast('🔓 Full Access mode enabled', 'success');
+        },
+        // ✅ onCancel callback (para sa revert)
+        function() {
+          // Revert radio button sa previous mode
+          document.querySelectorAll('input[name="ascMode"]').forEach(function(radio) {
+            radio.checked = (radio.value === previousMode);
+          });
+          ascReopenSettingsIfNeeded();
+          erpShowToast('Cancelled — staying on ' + previousMode + ' mode', 'info');
+        }
+      );
+    }, 300);
     return;
   }
   
+  // Normal mode change (readonly / write)
   _asc.accessMode = newMode;
   ascSaveSettings();
   ascApplyModeIndicator();
@@ -187,6 +211,13 @@ function ascSetMode(newMode) {
     full: '🔓 Full Access mode'
   };
   erpShowToast(labels[newMode] || 'Mode changed', 'info');
+}
+
+// ✅ Helper: Reopen Settings modal kung nasa loob tayo ng flow
+function ascReopenSettingsIfNeeded() {
+  // Kung may "Change Mode" button na pinindot from Dashboard banner,
+  // hindi natin kailangan i-reopen. Pero kung from Settings modal, oo.
+  // Sa ngayon, hindi natin i-reopen — let the user manually reopen kung gusto.
 }
 
 window.ascSetMode = ascSetMode;
@@ -250,8 +281,9 @@ function ascUpdateUIForMode() {
 // ═══════════════════════════════════════════════════════════
 // PIN PROMPT
 // ═══════════════════════════════════════════════════════════
-function ascRequestPin(reason, onSuccess) {
+function ascRequestPin(reason, onSuccess, onCancel) {
   _asc.pendingPinAction = onSuccess;
+  _asc.pendingPinCancel = onCancel || null;  // ✅ Store cancel callback
   
   var reasonEl = document.getElementById('ascPinPromptReason');
   if (reasonEl) reasonEl.textContent = reason || 'Enter Admin PIN para ma-access ito.';
@@ -282,6 +314,7 @@ function ascSubmitPinPrompt() {
     
     var callback = _asc.pendingPinAction;
     _asc.pendingPinAction = null;
+    _asc.pendingPinCancel = null;  // ✅ Clear cancel callback
     
     if (typeof callback === 'function') callback();
     return;
@@ -301,9 +334,16 @@ window.ascSubmitPinPrompt = ascSubmitPinPrompt;
 
 function ascClosePinPrompt() {
   if (_asc.pinPromptModal) _asc.pinPromptModal.hide();
+  
+  // ✅ Call cancel callback kung meron
+  var cancelCallback = _asc.pendingPinCancel;
   _asc.pendingPinAction = null;
+  _asc.pendingPinCancel = null;
+  
+  if (typeof cancelCallback === 'function') {
+    cancelCallback();
+  }
 }
-
 window.ascClosePinPrompt = ascClosePinPrompt;
 
 // ═══════════════════════════════════════════════════════════
