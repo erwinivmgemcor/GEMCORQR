@@ -1,5 +1,6 @@
 /* ============================================================
    GEMCOR ERP — Supabase Admin Console Styles
+   v1.1 — With backup table category + toggle styles
    ============================================================ */
 
 .admin-badge {
@@ -316,6 +317,17 @@
   text-transform: uppercase;
 }
 
+/* ✅ Backup table category badge */
+.asc-cat-backup {
+  background: #e5e7eb;
+  color: #4b5563;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 /* ═══ Action Buttons ═══ */
 .asc-action-btn {
   display: inline-flex;
@@ -412,10 +424,6 @@
   flex-shrink: 0;
 }
 
-.asc-radio-card input[type="radio"]:checked + .asc-radio-content {
-  color: #1e3a5f;
-}
-
 .asc-radio-card:has(input[type="radio"]:checked) {
   border-color: #1e3a5f;
   background: #eef2f8;
@@ -465,6 +473,27 @@
 #ascPinPromptInput:focus {
   border-color: #dc2626;
   box-shadow: 0 0 0 3px rgba(220,38,38,0.15);
+}
+
+/* ═══ Form Switch (Toggle) ═══ */
+.form-check-input:checked {
+  background-color: #1e3a5f;
+  border-color: #1e3a5f;
+}
+
+/* ═══ Dropdown Optgroup ═══ */
+select optgroup {
+  font-weight: 700;
+  font-style: normal;
+  color: #1e3a5f;
+  background: #f8fafc;
+  padding: 4px 0;
+}
+
+select optgroup option {
+  font-weight: 400;
+  color: #334155;
+  padding-left: 8px;
 }
 
 /* ═══ Responsive ═══ */
@@ -541,34 +570,8 @@
   background: #253449;
   border-color: #334155;
 }
-/* ═══ Backup Table Category Badge ═══ */
-.asc-cat-backup {
-  background: #e5e7eb;
-  color: #4b5563;
-  padding: 3px 10px;
-  border-radius: 10px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
 
-/* ═══ Form Switch (Toggle) ═══ */
-.form-check-input:checked {
-  background-color: #1e3a5f;
-  border-color: #1e3a5f;
-}
-
-/* ═══ Dropdown Optgroup ═══ */
-select optgroup {
-  font-weight: 700;
-  font-style: normal;
-  color: #1e3a5f;
-  background: #f8fafc;
-  padding: 4px 0;
-}
-
-select optgroup option {
-  font-weight: 400;
-  color: #334155;
-  padding-left: 8px;
+[data-theme="dark"] .asc-cat-backup {
+  background: #334155;
+  color: #94a3b8;
 }
