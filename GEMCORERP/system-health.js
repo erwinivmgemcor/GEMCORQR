@@ -7,7 +7,7 @@ var _sh = {
   pingHistory: [],
   maxPingHistory: 10,
   refreshTimer: null,
-  REFRESH_INTERVAL: 30000,  // 30s
+  REFRESH_INTERVAL: 120000,  // 2mins lang baka bumagal system para lang jan eh
   errorLog: [],
   lastCheck: null
 };
