@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Offline — GEMCOR ERP</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1e3a5f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: linear-gradient(135deg, #1e3a5f 0%, #152a47 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  padding: 20px;
+}
+
+.offline-container {
+  text-align: center;
+  max-width: 480px;
+  padding: 40px 32px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.logo {
+  height: 60px;
+  background: #fff;
+  padding: 8px 16px;
+  border-radius: 10px;
+  margin-bottom: 24px;
+  display: inline-block;
+}
+
+.icon {
+  font-size: 4rem;
+  color: #fbbf24;
+  margin-bottom: 16px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.05); }
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin-bottom: 12px;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  font-size: 0.9rem;
+  opacity: 0.8;
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.info-box {
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.info-box strong {
+  color: #fbbf24;
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.85rem;
+}
+
+.info-box p {
+  font-size: 0.82rem;
+  opacity: 0.9;
+  line-height: 1.5;
+}
+
+.btn {
+  display: inline-block;
+  padding: 14px 32px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff;
+  text-decoration: none;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  transition: all 0.15s;
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  margin: 4px;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(16, 185, 129, 0.4);
+  color: #fff;
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  box-shadow: none;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+
+.status {
+  margin-top: 20px;
+  font-size: 0.78rem;
+  opacity: 0.7;
+}
+
+.status strong {
+  color: #fbbf24;
+}
+</style>
+</head>
+<body>
+
+<div class="offline-container">
+  <img src="../gemcor-logo.png" alt="GEMCOR" class="logo" onerror="this.style.display='none'">
+  
+  <div class="icon">
+    <i class="bi bi-wifi-off"></i>
+  </div>
+  
+  <div class="title">Walang Internet Connection</div>
+  
+  <div class="subtitle">
+    Hindi ma-reach ang GEMCOR ERP server. Pwede mo pa ring gamitin ang <strong>cached pages</strong>.
+  </div>
+  
+  <div class="info-box">
+    <strong><i class="bi bi-info-circle me-1"></i>Anong Pwede Mong Gawin?</strong>
+    <p>
+      • <strong>Read-only access</strong> sa cached data<br>
+      • <strong>Hindi pwede mag-submit</strong> ng bagong request habang offline<br>
+      • <strong>Auto-sync</strong> kapag bumalik ang internet<br>
+      • Ang bawat <strong>write action</strong> ay kailangan ng connection
+    </p>
+  </div>
+  
+  <div>
+    <button class="btn" onclick="window.location.reload()">
+      <i class="bi bi-arrow-clockwise me-1"></i>Subukan Ulit
+    </button>
+    <a href="stock-monitor.html" class="btn btn-secondary">
+      <i class="bi bi-box-seam me-1"></i>Stock Monitor
+    </a>
+  </div>
+  
+  <div class="status">
+    Status: <strong id="offlineStatus">Offline</strong> · 
+    Auto-retry in <strong id="retryCount">30</strong>s
+  </div>
+</div>
+
+<script>
+// Auto-retry every 30s
+var retry = 30;
+var retryEl = document.getElementById('retryCount');
+var statusEl = document.getElementById('offlineStatus');
+
+// Check online status
+function checkOnline() {
+  if (navigator.onLine) {
+    statusEl.textContent = 'Online! Redirecting...';
+    setTimeout(function() {
+      window.location.href = 'index.html';
+    }, 1000);
+  }
+}
+
+setInterval(function() {
+  retry--;
+  if (retryEl) retryEl.textContent = retry;
+  
+  if (retry <= 0) {
+    retry = 30;
+    if (navigator.onLine) {
+      checkOnline();
+    } else {
+      window.location.reload();
+    }
+  }
+}, 1000);
+
+window.addEventListener('online', checkOnline);
+</script>
+
+</body>
+</html>
