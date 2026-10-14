@@ -60,13 +60,38 @@ async function bgLoad() {
 
   try {
     var t0 = Date.now();
-    var rows = await erpFetch('erp_items',
-      'select=item_code,description,category,location,base_unit' +
-      '&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false' +
-      '&order=item_code.asc&limit=5000');
 
-    _bg.allItems = rows || [];
-    console.log('[BarcodeGen] Loaded ' + _bg.allItems.length + ' items in ' + (Date.now() - t0) + 'ms');
+    // ✅ PAGINATED FETCH — bypass PostgREST 1000-row default limit
+    var allRows = [];
+    var pageSize = 1000;
+    var offset = 0;
+    var hasMore = true;
+    var maxPages = 20;
+    var pageNum = 0;
+
+    while (hasMore && pageNum < maxPages) {
+      pageNum++;
+      var rows = await erpFetch('erp_items',
+        'select=item_code,description,category,location,base_unit' +
+        '&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false' +
+        '&order=item_code.asc&limit=' + pageSize + '&offset=' + offset);
+
+      if (!rows || rows.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      allRows = allRows.concat(rows);
+      offset += rows.length;
+
+      console.log('[BarcodeGen] Page ' + pageNum + ': fetched ' + rows.length + ' (total: ' + allRows.length + ')');
+
+      if (rows.length < pageSize) hasMore = false;
+      if (hasMore) await new Promise(function(r) { setTimeout(r, 100); });
+    }
+
+    _bg.allItems = allRows;
+    console.log('[BarcodeGen] ✅ Loaded ' + _bg.allItems.length + ' items in ' + (Date.now() - t0) + 'ms');
 
     bgPopulateFilters();
     bgRender();
@@ -81,7 +106,6 @@ async function bgLoad() {
     }
   }
 }
-
 // ═══════════════════════════════════════════════════════════
 // POPULATE FILTERS
 // ═══════════════════════════════════════════════════════════
