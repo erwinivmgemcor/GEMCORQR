@@ -251,15 +251,27 @@ function bgSelectAllFiltered() {
     return;
   }
 
-  var limit = Math.min(_bg.filteredItems.length, 500);
+  // ✅ NEW: Warning kung sobrang dami (pero puwede pa rin)
+  var totalFiltered = _bg.filteredItems.length;
+  
+  if (totalFiltered > 500) {
+    var proceed = confirm(
+      'You are about to select ' + totalFiltered + ' items.\n\n' +
+      '⚠️ Warning: Printing ' + totalFiltered + ' labels will use a lot of paper.\n' +
+      'Estimated sheets: ' + Math.ceil(totalFiltered / 40) + ' (Avery 5163)\n\n' +
+      'Continue?'
+    );
+    if (!proceed) return;
+  }
+
+  // ✅ Walang limit — select lahat ng filtered
   var count = 0;
-  for (var i = 0; i < limit; i++) {
-    var code = _bg.filteredItems[i].item_code;
-    if (!_bg.selectedItems[code]) {
-      _bg.selectedItems[code] = true;
+  _bg.filteredItems.forEach(function(it) {
+    if (!_bg.selectedItems[it.item_code]) {
+      _bg.selectedItems[it.item_code] = true;
       count++;
     }
-  }
+  });
 
   bgRender();
   erpShowToast('✓ Selected ' + count + ' item(s)', 'success');
@@ -357,11 +369,15 @@ function bgOpenPreviewModal() {
     return;
   }
 
-  if (selectedCodes.length > 500) {
-    if (!confirm('You have ' + selectedCodes.length + ' items selected. ' +
-                 'Printing more than 500 labels may take a while. Continue?')) {
-      return;
-    }
+   // ✅ Better warning with estimated sheets
+  if (selectedCodes.length > 100) {
+    var sheets = Math.ceil(selectedCodes.length / 40);
+    var msg = 'You have ' + selectedCodes.length + ' labels selected.\n\n' +
+              '📄 Estimated sheets needed: ' + sheets + ' (Avery 5163, 40 labels/sheet)\n' +
+              '📋 Estimated print time: ' + Math.ceil(selectedCodes.length / 50) + ' seconds\n\n' +
+              '⚠️ Tip: I-split sa batches para hindi masyadong mabigat sa browser.\n\n' +
+              'Continue?';
+    if (!confirm(msg)) return;
   }
 
   var selectedItems = _bg.allItems.filter(function(it) {
