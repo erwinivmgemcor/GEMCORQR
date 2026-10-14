@@ -192,25 +192,29 @@ async function shCheckDatabase() {
   var countBadge = document.getElementById('shTableCount');
 
   // Tables to monitor
-  var tables = [
-    { name: 'erp_items', label: 'Items (ERP)' },
-    { name: 'documents', label: 'Documents' },
-    { name: 'doc_items', label: 'Doc Items' },
-    { name: 'prf_documents', label: 'PRF Documents' },
-    { name: 'prf_items', label: 'PRF Items' },
-    { name: 'users', label: 'Users' },
-    { name: 'vendors', label: 'Vendors' },
-    { name: 'erp_sof_cache', label: 'SOF Cache' },
-    { name: 'erp_prf_po_cache', label: 'PRF PO Cache' },
-    { name: 'partial_items', label: 'Partial Items' }
+    var tables = [
+    { name: 'erp_items', label: 'Items (ERP)', critical: true },
+    { name: 'documents', label: 'Documents', critical: true },
+    { name: 'doc_items', label: 'Doc Items', critical: false },
+    { name: 'prf_documents', label: 'PRF Documents', critical: false },
+    { name: 'prf_items', label: 'PRF Items', critical: false },
+    { name: 'users', label: 'Users', critical: true },
+    { name: 'vendors', label: 'Vendors', critical: false },
+    { name: 'erp_sof_cache', label: 'SOF Cache', critical: false },
+    { name: 'erp_prf_po_cache', label: 'PRF PO Cache', critical: false },
+    { name: 'partial_items', label: 'Partial Items', critical: false }
   ];
 
   var results = [];
   var totalRows = 0;
 
+  // ✅ Fetch with 10-second timeout per table
   await Promise.all(tables.map(async function(t) {
     try {
       var t0 = Date.now();
+      var ctrl = new AbortController();
+      var timeoutId = setTimeout(function() { ctrl.abort(); }, 10000);
+      
       var res = await fetch(erpUrl(t.name) + '?select=id&limit=1', {
         method: 'HEAD',
         headers: {
@@ -218,8 +222,12 @@ async function shCheckDatabase() {
           'Prefer': 'count=exact',
           'Range': '0-0'
         },
-        cache: 'no-store'
+        cache: 'no-store',
+        signal: ctrl.signal
       });
+      
+      clearTimeout(timeoutId);
+      
       var range = res.headers.get('content-range') || '';
       var m = range.match(/\/(\d+)/);
       var count = m ? parseInt(m[1], 10) : 0;
@@ -483,14 +491,25 @@ function shLoadClientInfo() {
     onlineEl.textContent = onlineText;
     onlineEl.className = 'fw-bold ' + (navigator.onLine ? 'text-success' : 'text-danger');
     
-    // Connection
+       // Connection
     var connEl = document.getElementById('shClientConnection');
     if (navigator.connection) {
       var c = navigator.connection;
-      connEl.textContent = (c.effectiveType || 'unknown') + ' · ' +
-        (c.downlink ? c.downlink + ' Mbps' : '—');
+      var connInfo = (c.effectiveType || 'unknown');
+      if (c.downlink) connInfo += ' · ' + c.downlink + ' Mbps';
+      if (c.rtt) connInfo += ' · ' + c.rtt + 'ms RTT';
+      connEl.textContent = connInfo;
     } else {
-      connEl.textContent = 'Not available';
+      // Fallback: use API latency
+      connEl.textContent = 'Detecting...';
+      setTimeout(function() {
+        if (_sh.pingHistory.length > 0) {
+          var lastPing = _sh.pingHistory[_sh.pingHistory.length - 1];
+          connEl.textContent = '~' + lastPing.latency + 'ms (API)';
+        } else {
+          connEl.textContent = 'Not available';
+        }
+      }, 1000);
     }
     
     // Timezone
