@@ -757,12 +757,34 @@
   // MAIN RENDER
   // ═══════════════════════════════════════════════════════════
 
-  function renderNav() {
+    function renderNav() {
     var current = _getCurrentPage();
     var userRole = _getUserRole();
     var userInfo = _getUserInfo();
 
     _removeOldNav();
+    
+    // ═══════════════════════════════════════════════════════════
+    // ✅ AUTO-INJECT THEME CSS (kung wala pa)
+    // ═══════════════════════════════════════════════════════════
+    if (!document.querySelector('link[href*="erp-theme.css"]')) {
+      var themeCss = document.createElement('link');
+      themeCss.rel = 'stylesheet';
+      themeCss.href = 'erp-theme.css';
+      document.head.insertBefore(themeCss, document.head.firstChild);
+      console.log('[Nav] Auto-injected erp-theme.css');
+    }
+    
+    // ═══════════════════════════════════════════════════════════
+    // ✅ AUTO-INJECT THEME JS (kung wala pa)
+    // ═══════════════════════════════════════════════════════════
+    if (typeof window.erpToggleTheme !== 'function') {
+      var themeJs = document.createElement('script');
+      themeJs.src = 'erp-theme.js';
+      themeJs.async = false;
+      document.head.appendChild(themeJs);
+      console.log('[Nav] Auto-injected erp-theme.js');
+    }
 
     // ✅ Load global search if not yet loaded
     if (!document.getElementById('globalSearchScript') && typeof window.erpOpenSearch !== 'function') {
