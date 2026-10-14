@@ -297,6 +297,17 @@
         <i class="bi bi-info-circle me-1"></i>
         Manually search and add items that are <strong>not in the reorder list</strong>. Type item code or description to search.
       </div>
+         <!-- ✅ NEW: Pending PRF Banner -->
+  <div id="pendingPrfBanner" class="alert alert-warning small py-2 mb-3" style="display:none;">
+    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+    <strong>⚠️ May <span id="pendingPrfCount">0</span> item(s) na may pending UNSERVED PRF</strong>
+    <div class="mt-1 small">Ang Net Need ay awtomatikong naka-deduct sa pending qty.</div>
+    <div class="mt-1">
+      <button type="button" class="btn btn-sm btn-outline-dark py-0" onclick="showPendingPrfList()">
+        <i class="bi bi-list-ul me-1"></i>View List
+      </button>
+    </div>
+  </div>
 
       <div class="d-flex justify-content-between align-items-center mb-3">
         <small class="text-muted" id="manualItemsCount">0 manual item(s)</small>
