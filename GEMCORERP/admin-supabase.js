@@ -1,7 +1,6 @@
 // ============================================================
 // GEMCOR ERP — Supabase Admin Console
-// Phase 1: Dashboard + Table Browser (View-Only) + Settings + PIN
-// v1.0 — Base structure with safe read-only browsing
+// v1.1 — Phase 1 + Phase 2 + Backup Table Filter
 // ============================================================
 
 // ═══════════════════════════════════════════════════════════
@@ -10,16 +9,14 @@
 var _asc = {
   currentUser: '',
   currentFullname: '',
-  accessMode: 'write',          // 'readonly' | 'write' | 'full'
+  accessMode: 'write',
   adminPin: '9999',
   pinVerified: false,
   
-  // Tables
   allTables: [],
   tableStats: [],
-  tableCategories: {},          // { table_name: 'green'|'yellow'|'red' }
+  tableCategories: {},
   
-  // Current browsing
   currentTable: '',
   currentData: [],
   currentColumns: [],
@@ -28,11 +25,9 @@ var _asc = {
   totalRows: 0,
   searchTerm: '',
   
-  // Timers
   searchTimer: null,
   refreshTimer: null,
   
-  // Modals
   settingsModal: null,
   pinPromptModal: null,
   rowDetailsModal: null,
@@ -40,8 +35,7 @@ var _asc = {
   auditDetailModal: null,
   deleteModal: null,
   
-  // Modal state
-  pendingPinAction: null,       // callback kapag na-verify ang PIN
+  pendingPinAction: null,
   pendingDeleteInfo: null
 };
 
@@ -49,21 +43,16 @@ var _asc = {
 // TABLE CATEGORIZATION (🟢 🟡 🔴 ⚫)
 // ═══════════════════════════════════════════════════════════
 var ASC_TABLE_CATEGORIES = {
-  // 🟢 GREEN — Safe to manage directly
   green: [
     'erp_items', 'vendors', 'requestors',
     'erp_sof_cache', 'erp_prf_po_cache',
     'erp_item_usage', 'erp_v_reorder_list'
   ],
-  
-  // 🟡 YELLOW — Careful (may dependencies)
   yellow: [
     'documents', 'prf_documents', 'users',
     'erp_stock_ledger', 'messages', 'edit_requests',
     'erp_inventory_counts'
   ],
-  
-  // 🔴 RED — Danger (bawal i-delete, edit lang, view lang)
   red: [
     'doc_items', 'prf_items',
     'user_audit_log', 'erp_manual_edits_audit',
@@ -99,7 +88,7 @@ window.ascIsBackupTable = ascIsBackupTable;
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Admin Console v1.0] Initializing...');
+  console.log('[Admin Console v1.1] Initializing...');
   
   // ✅ Load backup visibility preference
   try {
@@ -113,31 +102,21 @@ document.addEventListener('DOMContentLoaded', function() {
   _asc.currentUser = localStorage.getItem('ivm_username') || '';
   _asc.currentFullname = localStorage.getItem('ivm_userFullname') || _asc.currentUser;
   
-  // Double-check admin access
   if (localStorage.getItem('ivm_isAdmin') !== 'true') {
     console.warn('[Admin Console] Access denied');
     window.location.replace('management-dashboard.html');
     return;
   }
   
-  // Load settings from localStorage
   ascLoadSettings();
-  
-  // Init table categories
   ascInitTableCategories();
-  
-  // Check health
   ascCheckHealth();
-  
-  // Load dashboard data
   ascLoadDashboard();
   
-  // Setup modals
   _asc.settingsModal = new bootstrap.Modal(document.getElementById('ascSettingsModal'));
   _asc.pinPromptModal = new bootstrap.Modal(document.getElementById('ascPinPromptModal'));
   _asc.rowDetailsModal = new bootstrap.Modal(document.getElementById('ascRowDetailsModal'));
   
-  // Show PIN change reminder kung default pa
   if (_asc.adminPin === '9999') {
     setTimeout(function() {
       if (confirm('🔐 Security Reminder:\n\nNaka-default pa ang Admin PIN (9999).\nGusto mo bang palitan na ngayon?')) {
@@ -146,14 +125,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 2000);
   }
   
-  // Apply mode indicator
   ascApplyModeIndicator();
   
   console.log('[Admin Console] ✅ Ready. Mode:', _asc.accessMode);
 });
 
 // ═══════════════════════════════════════════════════════════
-// SETTINGS MANAGEMENT
+// SETTINGS
 // ═══════════════════════════════════════════════════════════
 function ascLoadSettings() {
   try {
@@ -169,8 +147,6 @@ function ascLoadSettings() {
       _asc.adminPin = '9999';
       localStorage.setItem('ivm_adminPin', '9999');
     }
-    
-    console.log('[Admin Console] Settings loaded. Mode:', _asc.accessMode);
   } catch(e) {
     console.warn('[Admin Console] Settings load failed:', e);
   }
@@ -180,9 +156,7 @@ function ascSaveSettings() {
   try {
     localStorage.setItem('ivm_admin_accessMode', _asc.accessMode);
     localStorage.setItem('ivm_adminPin', _asc.adminPin);
-  } catch(e) {
-    console.warn('[Admin Console] Settings save failed:', e);
-  }
+  } catch(e) {}
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -191,7 +165,6 @@ function ascSaveSettings() {
 function ascSetMode(newMode) {
   if (['readonly', 'write', 'full'].indexOf(newMode) === -1) return;
   
-  // Kapag mag-full access, need PIN verification
   if (newMode === 'full') {
     ascRequestPin('Enable FULL ACCESS mode (Raw SQL + Hard Delete)', function() {
       _asc.accessMode = newMode;
@@ -225,14 +198,9 @@ function ascApplyModeIndicator() {
   
   indicator.className = 'admin-mode-indicator ' + _asc.accessMode;
   
-  var labels = {
-    readonly: 'Read-Only',
-    write: 'Read + Write',
-    full: 'Full Access'
-  };
+  var labels = { readonly: 'Read-Only', write: 'Read + Write', full: 'Full Access' };
   text.textContent = labels[_asc.accessMode] || _asc.accessMode;
   
-  // Update mode banner sa dashboard
   var banner = document.getElementById('ascModeBanner');
   var icon = document.getElementById('ascModeIcon');
   var title = document.getElementById('ascModeTitle');
@@ -259,26 +227,21 @@ function ascUpdateUIForMode() {
   var isReadOnly = (_asc.accessMode === 'readonly');
   var isFull = (_asc.accessMode === 'full');
   
-  // Insert button
   var insertBtn = document.getElementById('ascInsertBtn');
   if (insertBtn) {
     insertBtn.disabled = isReadOnly;
     insertBtn.title = isReadOnly ? 'Hindi available sa Read-Only mode' : '';
   }
   
-  // SQL tab lock badge
   var sqlLockBadge = document.getElementById('sqlLockBadge');
-  if (sqlLockBadge) {
-    sqlLockBadge.style.display = isFull ? 'none' : 'inline-block';
-  }
+  if (sqlLockBadge) sqlLockBadge.style.display = isFull ? 'none' : 'inline-block';
   
-  // SQL textarea
   var sqlInput = document.getElementById('ascSqlInput');
   var runSqlBtn = document.getElementById('ascRunSqlBtn');
   var unlockSqlBtn = document.getElementById('ascUnlockSqlBtn');
   var sqlLocked = document.getElementById('ascSqlLocked');
   
-  if (sqlInput) sqlInput.disabled = true;       // Always locked until PIN unlock
+  if (sqlInput) sqlInput.disabled = true;
   if (runSqlBtn) runSqlBtn.disabled = true;
   if (unlockSqlBtn) unlockSqlBtn.style.display = isFull ? 'inline-block' : 'none';
   if (sqlLocked) sqlLocked.style.display = _asc.pinVerified ? 'none' : 'inline-block';
@@ -324,7 +287,6 @@ function ascSubmitPinPrompt() {
     return;
   }
   
-  // Wrong PIN
   if (errEl) {
     errEl.textContent = '❌ Incorrect PIN. Try again.';
     errEl.style.display = 'block';
@@ -348,12 +310,10 @@ window.ascClosePinPrompt = ascClosePinPrompt;
 // OPEN SETTINGS
 // ═══════════════════════════════════════════════════════════
 function ascOpenSettings() {
-  // Sync radio buttons sa current mode
   document.querySelectorAll('input[name="ascMode"]').forEach(function(radio) {
     radio.checked = (radio.value === _asc.accessMode);
   });
   
-  // Clear PIN fields
   var curPin = document.getElementById('ascPinCurrent');
   var newPin = document.getElementById('ascPinNew');
   var msg = document.getElementById('ascPinMsg');
@@ -412,8 +372,6 @@ function ascChangePin() {
   if (newEl) newEl.value = '';
   
   erpShowToast('✅ Admin PIN updated', 'success');
-  
-  // Log sa audit
   ascLogAction('PIN_CHANGED', 'system', null, null, null, 'Admin PIN changed');
 }
 
@@ -438,13 +396,7 @@ async function ascCheckHealth() {
       if (dot) dot.className = 'dot dot-error';
       if (text) text.textContent = 'Offline';
     }
-  } catch(err) {
-    var badge2 = document.getElementById('erpHealthBadge');
-    if (badge2) {
-      var dot2 = badge2.querySelector('.dot');
-      if (dot2) dot2.className = 'dot dot-error';
-    }
-  }
+  } catch(err) {}
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -453,24 +405,13 @@ async function ascCheckHealth() {
 function ascInitTableCategories() {
   _asc.tableCategories = {};
   
-  ASC_TABLE_CATEGORIES.green.forEach(function(t) {
-    _asc.tableCategories[t] = 'green';
-  });
-  
-  ASC_TABLE_CATEGORIES.yellow.forEach(function(t) {
-    _asc.tableCategories[t] = 'yellow';
-  });
-  
-  ASC_TABLE_CATEGORIES.red.forEach(function(t) {
-    _asc.tableCategories[t] = 'red';
-  });
+  ASC_TABLE_CATEGORIES.green.forEach(function(t) { _asc.tableCategories[t] = 'green'; });
+  ASC_TABLE_CATEGORIES.yellow.forEach(function(t) { _asc.tableCategories[t] = 'yellow'; });
+  ASC_TABLE_CATEGORIES.red.forEach(function(t) { _asc.tableCategories[t] = 'red'; });
 }
 
 function ascGetTableCategory(tableName) {
-  // ✅ Backup tables get special 'backup' category
-  if (ascIsBackupTable(tableName)) {
-    return 'backup';
-  }
+  if (ascIsBackupTable(tableName)) return 'backup';
   return _asc.tableCategories[tableName] || 'yellow';
 }
 
@@ -495,10 +436,9 @@ function ascGetCategoryBadge(tableName) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// LOAD DASHBOARD
+// DASHBOARD
 // ═══════════════════════════════════════════════════════════
 async function ascLoadDashboard() {
-  console.log('[Admin Console] Loading dashboard...');
   await ascRefreshStats();
   await ascLoadRecentActions();
 }
@@ -523,7 +463,6 @@ async function ascRefreshStats() {
     var data = await res.json();
     
     _asc.tableStats = data || [];
-    
     console.log('[Admin Console] Stats loaded in ' + (Date.now() - t0) + 'ms. Tables:', _asc.tableStats.length);
     
     ascRenderStats();
@@ -554,6 +493,10 @@ function ascRenderStats() {
   var showBackups = document.getElementById('ascShowBackupTables');
   var includeBackups = showBackups ? showBackups.checked : false;
   
+  var backupCount = _asc.tableStats.filter(function(t) {
+    return ascIsBackupTable(t.table_name);
+  }).length;
+  
   var filtered = _asc.tableStats.filter(function(t) {
     if (includeBackups) return true;
     return !ascIsBackupTable(t.table_name);
@@ -562,10 +505,6 @@ function ascRenderStats() {
   // Update count badge
   var countEl = document.getElementById('ascTableStatsCount');
   if (countEl) {
-    var backupCount = _asc.tableStats.length - _asc.tableStats.filter(function(t) {
-      return !ascIsBackupTable(t.table_name);
-    }).length;
-    
     if (includeBackups) {
       countEl.textContent = _asc.tableStats.length + ' total (' + backupCount + ' backups)';
     } else {
@@ -573,7 +512,6 @@ function ascRenderStats() {
     }
   }
   
-  // Sort by row_count desc
   var sorted = filtered.slice().sort(function(a, b) {
     return Number(b.row_count) - Number(a.row_count);
   });
@@ -589,8 +527,6 @@ function ascRenderStats() {
     var rowCount = Number(t.row_count || 0);
     var sizeBytes = Number(t.size_bytes || 0);
     var sizeStr = ascFormatBytes(sizeBytes);
-    
-    var cat = ascGetTableCategory(t.table_name);
     var catBadge = ascGetCategoryBadge(t.table_name);
     
     html += '<tr>' +
@@ -609,7 +545,6 @@ function ascRenderStats() {
   tbody.innerHTML = html;
 }
 
-// ✅ Toggle backup tables visibility
 function ascToggleBackupTables(show) {
   try {
     localStorage.setItem('ivm_admin_showBackups', show ? '1' : '0');
@@ -637,15 +572,11 @@ function ascComputeKPIs() {
   
   var elSize = document.getElementById('ascKpiSize');
   if (elSize) elSize.textContent = ascFormatBytes(totalSize);
-  
-  var elTablesSub = document.getElementById('ascKpiTablesSub');
-  if (elTablesSub) elTablesSub.textContent = 'Sa public schema';
 }
 
 async function ascLoadRecentActions() {
   try {
-    var res = await erpFetch('admin_audit_log',
-      'select=id&order=created_at.desc&limit=100');
+    var res = await erpFetch('admin_audit_log', 'select=id&order=created_at.desc&limit=100');
     
     var count = (res || []).length;
     var el = document.getElementById('ascKpiActions');
@@ -673,7 +604,6 @@ function ascSwitchTab(tabName) {
   var target = document.getElementById('tab-' + tabName);
   if (target) target.classList.add('active');
   
-  // Lazy load per tab
   if (tabName === 'tables' && _asc.allTables.length === 0) {
     ascLoadTableList();
   } else if (tabName === 'audit') {
@@ -699,7 +629,6 @@ async function ascLoadTableList() {
     
     _asc.allTables.sort();
     
-    // ✅ Filter: hide backup tables unless toggle is on
     var showBackups = document.getElementById('ascShowBackupTables');
     var includeBackups = showBackups ? showBackups.checked : false;
     
@@ -708,12 +637,10 @@ async function ascLoadTableList() {
       return !ascIsBackupTable(t);
     });
     
-    // Populate dropdown
     var sel = document.getElementById('ascTableSelect');
     if (sel) {
       sel.innerHTML = '<option value="">-- Select Table --</option>';
       
-      // ✅ Separate regular tables from backups sa dropdown
       var regularTables = filteredTables.filter(function(t) { return !ascIsBackupTable(t); });
       var backupTables = includeBackups ? filteredTables.filter(function(t) { return ascIsBackupTable(t); }) : [];
       
@@ -747,16 +674,16 @@ async function ascLoadTableList() {
     console.error('[ascLoadTableList]', e);
   }
 }
+
 // ═══════════════════════════════════════════════════════════
-// LOAD TABLE DATA (VIEW-ONLY)
+// LOAD TABLE DATA
 // ═══════════════════════════════════════════════════════════
 async function ascLoadTable(tableName) {
   if (!tableName) {
     document.getElementById('ascTableContainer').innerHTML =
       '<div class="text-center text-muted py-5">' +
       '<i class="bi bi-inbox" style="font-size:3rem;opacity:0.3;"></i>' +
-      '<div class="mt-2">Select a table above to browse</div>' +
-      '</div>';
+      '<div class="mt-2">Select a table above to browse</div></div>';
     document.getElementById('ascTableFooter').style.display = 'none';
     return;
   }
@@ -768,14 +695,12 @@ async function ascLoadTable(tableName) {
   var searchInput = document.getElementById('ascTableSearch');
   if (searchInput) searchInput.value = '';
   
-  // Show category badge
   var badge = document.getElementById('ascTableCategoryBadge');
   if (badge) {
     badge.innerHTML = ascGetCategoryBadge(tableName);
     badge.style.display = 'inline-block';
   }
   
-  // Enable buttons based on mode
   var isReadOnly = (_asc.accessMode === 'readonly');
   var insertBtn = document.getElementById('ascInsertBtn');
   var exportBtn = document.getElementById('ascExportBtn');
@@ -799,7 +724,6 @@ async function ascFetchTableData() {
   }
   
   try {
-    // Step 1: Get total count
     var countRes = await fetch(erpUrl(_asc.currentTable) + '?select=id&limit=1', {
       method: 'HEAD',
       headers: Object.assign({}, erpHeaders(), {
@@ -813,14 +737,12 @@ async function ascFetchTableData() {
     var m = range.match(/\/(\d+)/);
     _asc.totalRows = m ? parseInt(m[1], 10) : 0;
     
-    // Step 2: Get page data
     var offset = (_asc.currentPage - 1) * _asc.pageSize;
     var query = 'select=*&limit=' + _asc.pageSize + '&offset=' + offset;
     
     var data = await erpFetch(_asc.currentTable, query);
     _asc.currentData = data || [];
     
-    // Infer columns from first row
     if (_asc.currentData.length > 0) {
       _asc.currentColumns = Object.keys(_asc.currentData[0]);
     } else {
@@ -856,20 +778,19 @@ function ascRenderTableData() {
   }
   
   var cols = _asc.currentColumns;
+  var canWrite = _asc.accessMode !== 'readonly';
   
   var html = '<div class="table-responsive" style="max-height:600px;overflow-y:auto;">';
   html += '<table class="asc-table">';
   
-  // Header
   html += '<thead><tr>';
   html += '<th style="width:50px;">#</th>';
   cols.forEach(function(c) {
     html += '<th>' + ascEsc(c) + '</th>';
   });
-  html += '<th style="width:80px;" class="text-center">Actions</th>';
+  html += '<th style="width:120px;" class="text-center">Actions</th>';
   html += '</tr></thead>';
   
-  // Body
   html += '<tbody>';
   _asc.currentData.forEach(function(row, idx) {
     html += '<tr>';
@@ -881,23 +802,31 @@ function ascRenderTableData() {
       html += '<td title="' + ascEsc(String(val == null ? '' : val)) + '">' + displayVal + '</td>';
     });
     
-    // Actions
     var rowId = row.id || row.item_code || row.doc_no || '';
     var safeRowId = ascJsEsc(String(rowId));
     
     html += '<td class="text-center">' +
-      '<button class="asc-action-btn" onclick="ascViewRow(\'' + safeRowId + '\')" title="View details">' +
+      '<button class="asc-action-btn" onclick="ascViewRow(\'' + safeRowId + '\')" title="View">' +
         '<i class="bi bi-eye"></i>' +
-      '</button>' +
-      // Edit/Delete buttons — Phase 2 (disabled for now)
-      '<button class="asc-action-btn" disabled title="Edit (Phase 2)">' +
+      '</button>';
+    
+    if (canWrite) {
+      html += '<button class="asc-action-btn success" onclick="ascOpenEditModal(\'' + safeRowId + '\')" title="Edit">' +
         '<i class="bi bi-pencil"></i>' +
       '</button>' +
-      '<button class="asc-action-btn danger" disabled title="Delete (Phase 2)">' +
+      '<button class="asc-action-btn danger" onclick="ascOpenDeleteModal(\'' + safeRowId + '\')" title="Delete">' +
         '<i class="bi bi-trash"></i>' +
+      '</button>';
+    } else {
+      html += '<button class="asc-action-btn" disabled title="Edit (read-only)">' +
+        '<i class="bi bi-pencil"></i>' +
       '</button>' +
-      '</td>';
+      '<button class="asc-action-btn danger" disabled title="Delete (read-only)">' +
+        '<i class="bi bi-trash"></i>' +
+      '</button>';
+    }
     
+    html += '</td>';
     html += '</tr>';
   });
   html += '</tbody>';
@@ -905,7 +834,6 @@ function ascRenderTableData() {
   html += '</table></div>';
   
   container.innerHTML = html;
-  
   ascUpdatePagination();
 }
 
@@ -926,12 +854,10 @@ function ascFormatCellValue(val, colName) {
   
   var str = String(val);
   
-  // Truncate long strings
   if (str.length > 60) {
     return ascEsc(str.substring(0, 60)) + '…';
   }
   
-  // Highlight IDs
   if (colName === 'id' || colName === 'item_code' || colName === 'doc_no' || colName === 'prf_no') {
     return '<code>' + ascEsc(str) + '</code>';
   }
@@ -944,15 +870,10 @@ function ascUpdatePagination() {
   var start = (_asc.currentPage - 1) * _asc.pageSize + 1;
   var end = Math.min(_asc.currentPage * _asc.pageSize, total);
   
-  if (total === 0) {
-    start = 0;
-    end = 0;
-  }
+  if (total === 0) { start = 0; end = 0; }
   
   var infoEl = document.getElementById('ascTablePaginationInfo');
-  if (infoEl) {
-    infoEl.textContent = 'Showing ' + start + '–' + end + ' of ' + ascNum(total);
-  }
+  if (infoEl) infoEl.textContent = 'Showing ' + start + '–' + end + ' of ' + ascNum(total);
   
   var labelEl = document.getElementById('ascPageLabel');
   var maxPage = Math.ceil(total / _asc.pageSize) || 1;
@@ -984,16 +905,13 @@ function ascPageNext() {
 window.ascPageNext = ascPageNext;
 
 // ═══════════════════════════════════════════════════════════
-// SEARCH (Debounced)
+// SEARCH
 // ═══════════════════════════════════════════════════════════
 function ascDebouncedSearch() {
   clearTimeout(_asc.searchTimer);
   _asc.searchTimer = setTimeout(function() {
     var input = document.getElementById('ascTableSearch');
     _asc.searchTerm = (input ? input.value : '').trim();
-    
-    // Simple client-side filter sa current page
-    // (Server-side search per column ay para sa Phase 2)
     ascFilterCurrentPage();
   }, 300);
 }
@@ -1018,7 +936,6 @@ function ascFilterCurrentPage() {
     });
   });
   
-  // Temporarily render filtered (visual only)
   var originalData = _asc.currentData;
   _asc.currentData = filtered;
   ascRenderTableData();
@@ -1026,7 +943,7 @@ function ascFilterCurrentPage() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// VIEW ROW DETAILS
+// VIEW ROW
 // ═══════════════════════════════════════════════════════════
 function ascViewRow(rowId) {
   if (!rowId) return;
@@ -1210,7 +1127,7 @@ async function ascViewAuditDetail(logId) {
 window.ascViewAuditDetail = ascViewAuditDetail;
 
 // ═══════════════════════════════════════════════════════════
-// LOG ACTION (to audit)
+// LOG ACTION
 // ═══════════════════════════════════════════════════════════
 async function ascLogAction(action, table, targetId, oldData, newData, reason) {
   try {
@@ -1249,6 +1166,7 @@ function ascClearLocalCache() {
     'ivm_username', 'ivm_userFullname', 'ivm_userRole', 'ivm_isAdmin',
     'ivm_allowedRoles', 'ivm_userDepartment',
     'ivm_adminPin', 'ivm_admin_accessMode',
+    'ivm_admin_showBackups',
     'ivm_theme', 'erp_theme'
   ];
   
@@ -1301,7 +1219,7 @@ async function ascRefreshAll() {
 window.ascRefreshAll = ascRefreshAll;
 
 // ═══════════════════════════════════════════════════════════
-// CSV TOOLS — PLACEHOLDER (Phase 2)
+// CSV TOOLS
 // ═══════════════════════════════════════════════════════════
 function ascPopulateCsvTableDropdowns() {
   var exportSel = document.getElementById('ascCsvExportTable');
@@ -1318,7 +1236,7 @@ function ascPopulateCsvTableDropdowns() {
     sel.innerHTML = '<option value="">-- Select Table --</option>';
     sorted.forEach(function(t) {
       var cat = ascGetTableCategory(t);
-      var icon = cat === 'green' ? '🟢' : (cat === 'yellow' ? '🟡' : '🔴');
+      var icon = cat === 'green' ? '🟢' : (cat === 'yellow' ? '🟡' : (cat === 'backup' ? '⚫' : '🔴'));
       var opt = document.createElement('option');
       opt.value = t;
       opt.textContent = icon + ' ' + t;
@@ -1329,786 +1247,8 @@ function ascPopulateCsvTableDropdowns() {
 
 window.ascPopulateCsvTableDropdowns = ascPopulateCsvTableDropdowns;
 
-// Placeholders (Phase 2)
-function ascCsvExport() {
-  erpShowToast('📤 CSV Export — coming in Phase 2', 'info');
-}
-window.ascCsvExport = ascCsvExport;
-
-function ascCsvPreview(event) {
-  erpShowToast('📥 CSV Import — coming in Phase 2', 'info');
-}
-window.ascCsvPreview = ascCsvPreview;
-
-function ascExportCurrentTable() {
-  if (!_asc.currentTable || _asc.currentData.length === 0) {
-    erpShowToast('Walang data to export', 'warning');
-    return;
-  }
-  
-  erpShowToast('📤 CSV Export — coming in Phase 2', 'info');
-}
-window.ascExportCurrentTable = ascExportCurrentTable;
-
 // ═══════════════════════════════════════════════════════════
-// SQL RUNNER — PLACEHOLDER (Phase 2)
-// ═══════════════════════════════════════════════════════════
-function ascUnlockSql() {
-  erpShowToast('🔍 SQL Runner — coming in Phase 2', 'info');
-}
-window.ascUnlockSql = ascUnlockSql;
-
-function ascRunSql() {
-  erpShowToast('🔍 SQL Runner — coming in Phase 2', 'info');
-}
-window.ascRunSql = ascRunSql;
-
-function ascSqlClear() {
-  var input = document.getElementById('ascSqlInput');
-  if (input) input.value = '';
-}
-window.ascSqlClear = ascSqlClear;
-
-function ascSqlLoadTemplate() {
-  var input = document.getElementById('ascSqlInput');
-  if (input) {
-    input.value = '-- Template queries\n\n-- 1. Count all items\nSELECT COUNT(*) FROM erp_items;\n\n-- 2. View recent PRFs\nSELECT prf_no, category, requestor, created_at\nFROM prf_documents\nORDER BY created_at DESC\nLIMIT 10;\n\n-- 3. UNSERVED PRF items\nSELECT prf_no, item_code, qty_for_order, status\nFROM prf_items\nWHERE status = \'UNSERVED\'\nLIMIT 20;';
-  }
-}
-window.ascSqlLoadTemplate = ascSqlLoadTemplate;
-
-// ═══════════════════════════════════════════════════════════
-// RPC RUNNER — PLACEHOLDER (Phase 2)
-// ═══════════════════════════════════════════════════════════
-function ascRpcChange() {
-  // Phase 2
-}
-window.ascRpcChange = ascRpcChange;
-
-function ascRunRpc() {
-  erpShowToast('⚡ RPC Runner — coming in Phase 2', 'info');
-}
-window.ascRunRpc = ascRunRpc;
-
-// ═══════════════════════════════════════════════════════════
-// INSERT/EDIT/DELETE — PLACEHOLDER (Phase 2)
-// ═══════════════════════════════════════════════════════════
-function ascOpenInsertModal() {
-  erpShowToast('➕ Insert — coming in Phase 2', 'info');
-}
-window.ascOpenInsertModal = ascOpenInsertModal;
-
-function ascCloseEditRow() {
-  if (_asc.editRowModal) _asc.editRowModal.hide();
-}
-window.ascCloseEditRow = ascCloseEditRow;
-
-function ascSaveRow() {
-  erpShowToast('💾 Save — coming in Phase 2', 'info');
-}
-window.ascSaveRow = ascSaveRow;
-
-function ascCloseDelete() {
-  if (_asc.deleteModal) _asc.deleteModal.hide();
-}
-window.ascCloseDelete = ascCloseDelete;
-
-function ascConfirmDelete() {
-  erpShowToast('🗑️ Delete — coming in Phase 2', 'info');
-}
-window.ascConfirmDelete = ascConfirmDelete;
-
-// ═══════════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════════
-function ascNum(n) {
-  if (n === null || n === undefined || isNaN(n)) return '0';
-  return Number(n).toLocaleString('en-US');
-}
-
-function ascEsc(s) {
-  if (s === null || s === undefined) return '';
-  return String(s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
-function ascJsEsc(s) {
-  if (s === null || s === undefined) return '';
-  return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
-}
-
-function ascFormatBytes(bytes) {
-  if (bytes === 0 || bytes === null || bytes === undefined) return '0 B';
-  var k = 1024;
-  var sizes = ['B', 'KB', 'MB', 'GB'];
-  var i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-function erpShowToast(msg, type) {
-  var toastEl = document.getElementById('erpToast');
-  if (!toastEl) { console.log('[Toast]', type, msg); return; }
-  document.getElementById('erpToastBody').textContent = msg;
-  bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3500 }).show();
-}
-
-// ═══════════════════════════════════════════════════════════
-// AUTO-REFRESH DASHBOARD (every 60s)
-// ═══════════════════════════════════════════════════════════
-setInterval(function() {
-  if (document.hidden) return;
-  if (_asc.accessMode && document.getElementById('tab-dashboard').classList.contains('active')) {
-    ascLoadRecentActions();
-  }
-}, 60000);
-
-console.log('✅ admin-supabase.js Phase 1 loaded (Dashboard + Tables + Settings + PIN)');
-console.log('📌 Phase 2 features (Insert/Edit/Delete/SQL/RPC/CSV) will be added next.');
-
-// ═══════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════
-// ═══ PHASE 2 — WRITE OPERATIONS, SQL RUNNER, CSV TOOLS ═══
-// ═══════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════
-
-console.log('📌 Loading Phase 2 (write ops + SQL + CSV)...');
-
-// ═══════════════════════════════════════════════════════════
-// SCHEMA CACHE — Get column info per table
-// ═══════════════════════════════════════════════════════════
-var _ascSchemaCache = {};
-
-async function ascGetTableSchema(tableName) {
-  if (_ascSchemaCache[tableName]) {
-    return _ascSchemaCache[tableName];
-  }
-  
-  try {
-    // Sample 1 row to infer columns
-    var sample = await erpFetch(tableName, 'select=*&limit=1');
-    
-    if (!sample || sample.length === 0) {
-      // Walang data — try to get from information_schema via RPC
-      try {
-        var res = await fetch(erpUrl('rpc/admin_get_table_columns'), {
-          method: 'POST',
-          headers: erpHeaders(),
-          body: JSON.stringify({ p_table_name: tableName })
-        });
-        
-        if (res.ok) {
-          var cols = await res.json();
-          _ascSchemaCache[tableName] = cols;
-          return cols;
-        }
-      } catch(e) {}
-      
-      // Fallback: return empty
-      _ascSchemaCache[tableName] = [];
-      return [];
-    }
-    
-    // Infer from sample
-    var columns = Object.keys(sample[0]).map(function(col) {
-      var val = sample[0][col];
-      var type = 'text';
-      
-      if (typeof val === 'number') type = 'number';
-      else if (typeof val === 'boolean') type = 'boolean';
-      else if (val instanceof Object) type = 'json';
-      else if (col === 'id') type = 'id';
-      else if (col.indexOf('_at') !== -1 || col.indexOf('date') !== -1) type = 'date';
-      else if (col.indexOf('email') !== -1) type = 'email';
-      
-      return {
-        name: col,
-        type: type,
-        isId: col === 'id',
-        isTimestamp: col.indexOf('_at') !== -1,
-        sample: val
-      };
-    });
-    
-    _ascSchemaCache[tableName] = columns;
-    return columns;
-    
-  } catch(err) {
-    console.warn('[ascGetTableSchema]', tableName, err.message);
-    return [];
-  }
-}
-
-// ═══════════════════════════════════════════════════════════
-// ═══ 1. INSERT ROW ═══
-// ═══════════════════════════════════════════════════════════
-function ascOpenInsertModal() {
-  if (_asc.accessMode === 'readonly') {
-    erpShowToast('Read-Only mode — hindi pwedeng mag-insert', 'warning');
-    return;
-  }
-  
-  if (!_asc.currentTable) {
-    erpShowToast('Pumili muna ng table', 'warning');
-    return;
-  }
-  
-  _asc.editRowModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('ascEditRowModal'));
-  
-  document.getElementById('ascEditRowTitle').innerHTML = 
-    '<i class="bi bi-plus-circle me-2"></i>Insert Row — ' + ascEsc(_asc.currentTable);
-  
-  document.getElementById('ascEditRowBody').innerHTML = 
-    '<div class="text-center py-4">' +
-      '<div class="erp-spinner" style="margin:0 auto;"></div>' +
-      '<div class="mt-2">Loading schema...</div>' +
-    '</div>';
-  
-  _asc.editRowModal.show();
-  
-  ascGetTableSchema(_asc.currentTable).then(function(columns) {
-    ascRenderEditRowForm(columns, null, 'insert');
-  });
-}
-
-window.ascOpenInsertModal = ascOpenInsertModal;
-
-// ═══════════════════════════════════════════════════════════
-// ═══ 2. EDIT ROW ═══
-// ═══════════════════════════════════════════════════════════
-function ascOpenEditModal(rowId) {
-  if (_asc.accessMode === 'readonly') {
-    erpShowToast('Read-Only mode — hindi pwedeng mag-edit', 'warning');
-    return;
-  }
-  
-  if (!_asc.currentTable) return;
-  
-  var row = _asc.currentData.find(function(r) {
-    var id = r.id || r.item_code || r.doc_no || '';
-    return String(id) === String(rowId);
-  });
-  
-  if (!row) {
-    erpShowToast('Row not found', 'warning');
-    return;
-  }
-  
-  _asc.editRowModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('ascEditRowModal'));
-  
-  document.getElementById('ascEditRowTitle').innerHTML = 
-    '<i class="bi bi-pencil-square me-2"></i>Edit Row — ' + ascEsc(_asc.currentTable);
-  
-  _asc.editRowModal.show();
-  
-  ascGetTableSchema(_asc.currentTable).then(function(columns) {
-    ascRenderEditRowForm(columns, row, 'edit');
-  });
-}
-
-window.ascOpenEditModal = ascOpenEditModal;
-
-// ═══════════════════════════════════════════════════════════
-// RENDER EDIT/INSERT FORM
-// ═══════════════════════════════════════════════════════════
-var _ascEditState = {
-  mode: 'insert',
-  originalRow: null,
-  tableName: '',
-  columns: []
-};
-
-function ascRenderEditRowForm(columns, row, mode) {
-  var body = document.getElementById('ascEditRowBody');
-  if (!body) return;
-  
-  _ascEditState.mode = mode;
-  _ascEditState.originalRow = row;
-  _ascEditState.tableName = _asc.currentTable;
-  _ascEditState.columns = columns;
-  
-  if (columns.length === 0) {
-    body.innerHTML = '<div class="alert alert-warning">' +
-      'Walang makitang schema. Siguraduhing may data ang table na ito.</div>';
-    return;
-  }
-  
-  var html = '';
-  
-  html += '<div class="alert alert-info small py-2 mb-3">' +
-    '<i class="bi bi-info-circle me-1"></i>' +
-    'Table: <code>' + ascEsc(_asc.currentTable) + '</code>' +
-    ' · Mode: <strong>' + (mode === 'insert' ? 'Insert New Row' : 'Edit Existing Row') + '</strong>' +
-    '</div>';
-  
-  html += '<div class="row g-3">';
-  
-  columns.forEach(function(col) {
-    var val = row ? row[col.name] : '';
-    var valStr = '';
-    
-    if (val !== null && val !== undefined) {
-      if (typeof val === 'object') {
-        valStr = JSON.stringify(val, null, 2);
-      } else {
-        valStr = String(val);
-      }
-    }
-    
-    // Skip auto-managed fields sa insert mode
-    var isAutoManaged = (
-      (col.name === 'id' && mode === 'insert') ||
-      (col.name === 'created_at' && mode === 'insert') ||
-      (col.name === 'updated_at' && mode === 'insert') ||
-      (col.name === 'updated_by' && mode === 'insert')
-    );
-    
-    var disabledAttr = isAutoManaged ? ' disabled' : '';
-    var readonlyAttr = col.isId ? ' readonly' : '';
-    var labelExtra = isAutoManaged 
-      ? ' <span class="badge bg-secondary ms-1" style="font-size:0.6rem;">auto</span>' 
-      : '';
-    if (col.isId) labelExtra = ' <span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem;">read-only</span>';
-    
-    html += '<div class="col-md-6">' +
-      '<label class="form-label small fw-bold">' +
-        ascEsc(col.name) + labelExtra +
-      '</label>';
-    
-    // Render per type
-    if (col.type === 'boolean') {
-      html += '<select class="form-select form-select-sm asc-edit-field" data-col="' + ascEsc(col.name) + '"' + disabledAttr + '>' +
-        '<option value="">-- Select --</option>' +
-        '<option value="true"' + (valStr === 'true' ? ' selected' : '') + '>true</option>' +
-        '<option value="false"' + (valStr === 'false' ? ' selected' : '') + '>false</option>' +
-        '</select>';
-    } else if (col.type === 'json') {
-      html += '<textarea class="form-control form-control-sm asc-edit-field font-monospace" ' +
-        'data-col="' + ascEsc(col.name) + '" rows="3" style="font-size:0.78rem;"' + disabledAttr + readonlyAttr + '>' +
-        ascEsc(valStr) + '</textarea>';
-    } else if (col.type === 'number' || col.type === 'id') {
-      html += '<input type="number" step="any" class="form-control form-control-sm asc-edit-field" ' +
-        'data-col="' + ascEsc(col.name) + '" value="' + ascEsc(valStr) + '"' + disabledAttr + readonlyAttr + '>';
-    } else if (col.type === 'email') {
-      html += '<input type="email" class="form-control form-control-sm asc-edit-field" ' +
-        'data-col="' + ascEsc(col.name) + '" value="' + ascEsc(valStr) + '"' + disabledAttr + readonlyAttr + '>';
-    } else if (col.type === 'date') {
-      var dateVal = '';
-      if (valStr) {
-        try {
-          var d = new Date(valStr);
-          if (!isNaN(d.getTime())) dateVal = d.toISOString().slice(0, 16);
-        } catch(e) {}
-      }
-      html += '<input type="datetime-local" class="form-control form-control-sm asc-edit-field" ' +
-        'data-col="' + ascEsc(col.name) + '" value="' + ascEsc(dateVal) + '"' + disabledAttr + readonlyAttr + '>';
-    } else {
-      html += '<input type="text" class="form-control form-control-sm asc-edit-field" ' +
-        'data-col="' + ascEsc(col.name) + '" value="' + ascEsc(valStr) + '"' + disabledAttr + readonlyAttr + '>';
-    }
-    
-    html += '</div>';
-  });
-  
-  html += '</div>';
-  
-  // Reason field
-  html += '<div class="mt-4 p-3" style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:8px;">' +
-    '<label class="form-label fw-bold" style="color:#92400e;">' +
-      '<i class="bi bi-chat-left-text me-1"></i>' +
-      'Reason for change <span class="text-danger">*</span>' +
-    '</label>' +
-    '<input type="text" class="form-control" id="ascEditReason" ' +
-      'placeholder="e.g., Data correction, Update from physical count" maxlength="300">' +
-    '<div class="form-text"><i class="bi bi-info-circle me-1"></i>Required for audit trail.</div>' +
-    '</div>';
-  
-  body.innerHTML = html;
-  
-  // Update save button
-  var saveBtn = document.getElementById('ascSaveRowBtn');
-  if (saveBtn) {
-    saveBtn.innerHTML = mode === 'insert' 
-      ? '<i class="bi bi-plus-circle me-1"></i>Insert Row'
-      : '<i class="bi bi-check-circle me-1"></i>Save Changes';
-    
-    saveBtn.className = 'btn ' + (mode === 'insert' ? 'btn-success' : 'btn-primary');
-  }
-}
-
-// ═══════════════════════════════════════════════════════════
-// SAVE ROW (Insert or Update)
-// ═══════════════════════════════════════════════════════════
-async function ascSaveRow() {
-  if (_asc.accessMode === 'readonly') {
-    erpShowToast('Read-Only mode — hindi pwedeng mag-save', 'warning');
-    return;
-  }
-  
-  var reasonEl = document.getElementById('ascEditReason');
-  var reason = reasonEl ? reasonEl.value.trim() : '';
-  
-  if (!reason) {
-    erpShowToast('Reason is required', 'warning');
-    if (reasonEl) reasonEl.focus();
-    return;
-  }
-  
-  // Collect values
-  var fields = {};
-  document.querySelectorAll('.asc-edit-field').forEach(function(el) {
-    var col = el.getAttribute('data-col');
-    if (!col) return;
-    if (el.disabled) return;  // Skip auto-managed
-    
-    var val = el.value;
-    var colType = _ascEditState.columns.find(function(c) { return c.name === col; });
-    
-    if (!colType) return;
-    
-    // Type conversion
-    if (colType.type === 'number' || colType.type === 'id') {
-      val = val === '' ? null : Number(val);
-    } else if (colType.type === 'boolean') {
-      val = val === '' ? null : (val === 'true');
-    } else if (colType.type === 'json') {
-      if (val.trim()) {
-        try { val = JSON.parse(val); } catch(e) {
-          erpShowToast('Invalid JSON sa ' + col, 'danger');
-          return;
-        }
-      } else {
-        val = null;
-      }
-    } else if (colType.type === 'date') {
-      if (val) {
-        try { val = new Date(val).toISOString(); } catch(e) {}
-      } else {
-        val = null;
-      }
-    } else {
-      val = val === '' ? null : val;
-    }
-    
-    fields[col] = val;
-  });
-  
-  // Update timestamp/audit fields
-  var now = new Date().toISOString();
-  if (_ascEditState.mode === 'edit') {
-    if (_ascEditState.columns.find(function(c) { return c.name === 'updated_at'; })) {
-      fields.updated_at = now;
-    }
-    if (_ascEditState.columns.find(function(c) { return c.name === 'updated_by'; })) {
-      fields.updated_by = _asc.currentFullname;
-    }
-  } else {
-    // Insert mode
-    if (_ascEditState.columns.find(function(c) { return c.name === 'created_at'; })) {
-      fields.created_at = now;
-    }
-    if (_ascEditState.columns.find(function(c) { return c.name === 'updated_at'; })) {
-      fields.updated_at = now;
-    }
-  }
-  
-  // Confirm
-  if (!confirm((_ascEditState.mode === 'insert' ? 'Insert new row?' : 'Save changes?') + '\n\nReason: ' + reason)) {
-    return;
-  }
-  
-  var btn = document.getElementById('ascSaveRowBtn');
-  var origHtml = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
-  
-  try {
-    var res;
-    
-    if (_ascEditState.mode === 'insert') {
-      // INSERT
-      res = await fetch(erpUrl(_ascEditState.tableName), {
-        method: 'POST',
-        headers: erpHeaders({ 'Prefer': 'return=representation' }),
-        body: JSON.stringify(fields)
-      });
-    } else {
-      // UPDATE
-      var rowId = _ascEditState.originalRow.id;
-      
-      // Build filter — prefer `id`, fallback to primary key
-      var filter = 'id=eq.' + rowId;
-      
-      res = await fetch(erpUrl(_ascEditState.tableName + '?' + filter), {
-        method: 'PATCH',
-        headers: erpHeaders({ 'Prefer': 'return=representation' }),
-        body: JSON.stringify(fields)
-      });
-    }
-    
-    if (!res.ok) {
-      var errText = await res.text();
-      throw new Error('HTTP ' + res.status + ' — ' + errText.substring(0, 200));
-    }
-    
-    var result = await res.json();
-    
-    // Log audit
-    await ascLogAction(
-      _ascEditState.mode === 'insert' ? 'INSERT' : 'UPDATE',
-      _ascEditState.tableName,
-      _ascEditState.mode === 'edit' ? _ascEditState.originalRow.id : (result[0] && result[0].id),
-      _ascEditState.mode === 'edit' ? _ascEditState.originalRow : null,
-      fields,
-      reason
-    );
-    
-    erpShowToast(
-      _ascEditState.mode === 'insert' 
-        ? '✅ Row inserted' 
-        : '✅ Row updated',
-      'success'
-    );
-    
-    ascCloseEditRow();
-    
-    // Reload data
-    await ascFetchTableData();
-    await ascLoadRecentActions();
-    
-  } catch(err) {
-    console.error('[ascSaveRow]', err);
-    erpShowToast('Failed: ' + err.message, 'danger');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = origHtml;
-  }
-}
-
-window.ascSaveRow = ascSaveRow;
-
-// ═══════════════════════════════════════════════════════════
-// ═══ 3. DELETE ROW (Soft + Hard) ═══
-// ═══════════════════════════════════════════════════════════
-var _ascDeleteInfo = {
-  rowId: null,
-  rowData: null,
-  tableName: ''
-};
-
-function ascOpenDeleteModal(rowId) {
-  if (_asc.accessMode === 'readonly') {
-    erpShowToast('Read-Only mode — hindi pwedeng mag-delete', 'warning');
-    return;
-  }
-  
-  if (!_asc.currentTable) return;
-  
-  var row = _asc.currentData.find(function(r) {
-    var id = r.id || r.item_code || r.doc_no || '';
-    return String(id) === String(rowId);
-  });
-  
-  if (!row) {
-    erpShowToast('Row not found', 'warning');
-    return;
-  }
-  
-  // Check FK dependencies
-  ascCheckDependencies(_asc.currentTable, row).then(function(deps) {
-    _ascDeleteInfo = {
-      rowId: rowId,
-      rowData: row,
-      tableName: _asc.currentTable,
-      dependencies: deps
-    };
-    
-    var msgEl = document.getElementById('ascDeleteMessage');
-    if (msgEl) {
-      var html = 'Delete <code>' + ascEsc(String(rowId)) + '</code> from <code>' + ascEsc(_asc.currentTable) + '</code>?';
-      
-      if (deps.length > 0) {
-        html += '<div class="alert alert-danger small mt-2 mb-0">' +
-          '<strong>⚠️ May dependencies:</strong>' +
-          '<ul class="mb-0 mt-1 ps-3">';
-        deps.forEach(function(d) {
-          html += '<li>' + d.count + ' related row(s) sa <code>' + ascEsc(d.table) + '</code> (via ' + ascEsc(d.column) + ')</li>';
-        });
-        html += '</ul>' +
-          '<div class="mt-2 small">Ang related rows ay <strong>hindi</strong> awtomatikong mabubura. Manual mo silang i-delete kung kinakailangan.</div>' +
-          '</div>';
-      }
-      
-      msgEl.innerHTML = html;
-    }
-    
-    var reasonEl = document.getElementById('ascDeleteReason');
-    if (reasonEl) reasonEl.value = '';
-    
-    _asc.deleteModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('ascDeleteModal'));
-    _asc.deleteModal.show();
-  });
-}
-
-window.ascOpenDeleteModal = ascOpenDeleteModal;
-
-// ═══════════════════════════════════════════════════════════
-// CHECK FK DEPENDENCIES
-// ═══════════════════════════════════════════════════════════
-async function ascCheckDependencies(tableName, row) {
-  var deps = [];
-  
-  // Map of FK relationships
-  var FK_MAP = {
-    'documents': [
-      { table: 'doc_items', column: 'doc_no', rowCol: 'doc_no' }
-    ],
-    'prf_documents': [
-      { table: 'prf_items', column: 'prf_no', rowCol: 'prf_no' }
-    ],
-    'users': [
-      { table: 'edit_requests', column: 'requested_by', rowCol: 'username' }
-    ],
-    'erp_items': [
-      { table: 'doc_items', column: 'item_code', rowCol: 'item_code' },
-      { table: 'prf_items', column: 'item_code', rowCol: 'item_code' }
-    ]
-  };
-  
-  var checks = FK_MAP[tableName] || [];
-  
-  for (var i = 0; i < checks.length; i++) {
-    var check = checks[i];
-    var val = row[check.rowCol];
-    
-    if (!val) continue;
-    
-    try {
-      var res = await fetch(erpUrl(check.table) + 
-        '?select=id&' + check.column + '=eq.' + encodeURIComponent(val) + '&limit=1',
-        {
-          method: 'HEAD',
-          headers: Object.assign({}, erpHeaders(), {
-            'Prefer': 'count=exact',
-            'Range': '0-0'
-          })
-        });
-      
-      var range = res.headers.get('content-range') || '';
-      var m = range.match(/\/(\d+)/);
-      var count = m ? parseInt(m[1], 10) : 0;
-      
-      if (count > 0) {
-        deps.push({
-          table: check.table,
-          column: check.column,
-          count: count
-        });
-      }
-    } catch(e) {
-      console.warn('[ascCheckDependencies]', check.table, e.message);
-    }
-  }
-  
-  return deps;
-}
-
-// ═══════════════════════════════════════════════════════════
-// CONFIRM SOFT DELETE
-// ═══════════════════════════════════════════════════════════
-async function ascConfirmDelete() {
-  var reasonEl = document.getElementById('ascDeleteReason');
-  var reason = reasonEl ? reasonEl.value.trim() : '';
-  
-  if (!reason) {
-    erpShowToast('Reason is required', 'warning');
-    return;
-  }
-  
-  var info = _ascDeleteInfo;
-  if (!info.tableName || !info.rowId) return;
-  
-  var doHardDelete = confirm(
-    'Soft delete this row?\n\n' +
-    'Click OK = Soft Delete (recoverable via is_deleted = true)\n' +
-    'Click Cancel = Cancel'
-  );
-  
-  if (!doHardDelete) return;
-  
-  try {
-    // SOFT DELETE — set is_deleted = true
-    var patchBody = {
-      is_deleted: true,
-      deleted_at: new Date().toISOString(),
-      deleted_by: _asc.currentFullname
-    };
-    
-    // Remove fields kung hindi existing sa table
-    var columns = _ascEditState.columns.length ? _ascEditState.columns : await ascGetTableSchema(info.tableName);
-    var hasIsDeleted = columns.some(function(c) { return c.name === 'is_deleted'; });
-    var hasDeletedAt = columns.some(function(c) { return c.name === 'deleted_at'; });
-    var hasDeletedBy = columns.some(function(c) { return c.name === 'deleted_by'; });
-    
-    if (!hasIsDeleted) {
-      // Walang is_deleted column — hard delete na lang or block
-      var proceed = confirm(
-        '⚠️ Walang `is_deleted` column sa ' + info.tableName + '.\n\n' +
-        'Options:\n' +
-        '- Click OK = HARD DELETE (permanent)\n' +
-        '- Click Cancel = cancel'
-      );
-      
-      if (!proceed) return;
-      
-      // Hard delete
-      var delRes = await fetch(erpUrl(info.tableName + '?id=eq.' + info.rowId), {
-        method: 'DELETE',
-        headers: erpHeaders()
-      });
-      
-      if (!delRes.ok) throw new Error('HTTP ' + delRes.status);
-      
-      await ascLogAction('HARD_DELETE', info.tableName, info.rowId, info.rowData, null, reason);
-      erpShowToast('✅ Row permanently deleted', 'success');
-    } else {
-      // Soft delete
-      if (hasDeletedAt) patchBody.deleted_at = new Date().toISOString();
-      if (hasDeletedBy) patchBody.deleted_by = _asc.currentFullname;
-      
-      var res = await fetch(erpUrl(info.tableName + '?id=eq.' + info.rowId), {
-        method: 'PATCH',
-        headers: erpHeaders(),
-        body: JSON.stringify(patchBody)
-      });
-      
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      
-      await ascLogAction('SOFT_DELETE', info.tableName, info.rowId, info.rowData, patchBody, reason);
-      erpShowToast('✅ Row soft-deleted', 'success');
-    }
-    
-    ascCloseDelete();
-    
-    await ascFetchTableData();
-    await ascLoadRecentActions();
-    
-  } catch(err) {
-    console.error('[ascConfirmDelete]', err);
-    erpShowToast('Failed: ' + err.message, 'danger');
-  }
-}
-
-window.ascConfirmDelete = ascConfirmDelete;
-
-// Update existing close function
-window.ascCloseDelete = function() {
-  if (_asc.deleteModal) _asc.deleteModal.hide();
-  _ascDeleteInfo = { rowId: null, rowData: null, tableName: '' };
-};
-
-// ═══════════════════════════════════════════════════════════
-// ═══ 4. SQL RUNNER ═══
+// SQL RUNNER
 // ═══════════════════════════════════════════════════════════
 function ascUnlockSql() {
   if (_asc.accessMode !== 'full') {
@@ -2130,7 +1270,6 @@ function ascUnlockSql() {
     if (unlockBtn) unlockBtn.style.display = 'none';
     
     erpShowToast('🔓 SQL Runner unlocked', 'success');
-    
     if (input) input.focus();
   });
 }
@@ -2151,7 +1290,6 @@ async function ascRunSql() {
     return;
   }
   
-  // Extra safety checks
   var upperSql = sql.toUpperCase();
   var isDangerous = (
     upperSql.indexOf('DROP TABLE') !== -1 ||
@@ -2167,14 +1305,8 @@ async function ascRunSql() {
       'Type reason para i-execute:'
     );
     
-    if (!reason || !reason.trim()) {
-      erpShowToast('Cancelled', 'info');
-      return;
-    }
-    
-    if (!confirm('FINAL CONFIRMATION:\n\nI-execute ang DANGEROUS SQL?\n\nReason: ' + reason)) {
-      return;
-    }
+    if (!reason || !reason.trim()) return;
+    if (!confirm('FINAL CONFIRMATION:\n\nI-execute ang DANGEROUS SQL?\n\nReason: ' + reason)) return;
     
     await ascLogAction('RAW_SQL', 'raw', null, null, { sql: sql }, reason + ' (DANGEROUS)');
   } else {
@@ -2193,99 +1325,63 @@ async function ascRunSql() {
   
   try {
     var t0 = Date.now();
-    
-    // Detect query type
     var isSelect = upperSql.trim().indexOf('SELECT') === 0 || upperSql.trim().indexOf('WITH') === 0;
     
-    if (isSelect) {
-      // Use RPC to execute SELECT
-      var res = await fetch(erpUrl('rpc/execute_sql_query'), {
-        method: 'POST',
-        headers: erpHeaders(),
-        body: JSON.stringify({ p_sql: sql })
-      });
+    var rpcName = isSelect ? 'execute_sql_query' : 'execute_sql_mutation';
+    
+    var res = await fetch(erpUrl('rpc/' + rpcName), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({ p_sql: sql })
+    });
+    
+    if (!res.ok) {
+      var errText = await res.text();
+      throw new Error('HTTP ' + res.status + ' — ' + errText.substring(0, 200));
+    }
+    
+    var data = await res.json();
+    var elapsed = Date.now() - t0;
+    
+    if (resultEl) {
+      var html = '<div class="alert alert-success small py-2 mb-2">' +
+        '✅ Query OK (' + elapsed + 'ms)</div>';
       
-      if (!res.ok) {
-        var errText = await res.text();
-        throw new Error('HTTP ' + res.status + ' — ' + errText.substring(0, 200));
-      }
-      
-      var data = await res.json();
-      var elapsed = Date.now() - t0;
-      
-      var rows = Array.isArray(data) ? data : (data.result || data.rows || []);
-      
-      if (resultEl) {
-        if (rows.length === 0) {
-          resultEl.innerHTML = '<div class="alert alert-success small">' +
-            '✅ Query OK — 0 rows returned. (' + elapsed + 'ms)</div>';
-        } else {
-          var html = '<div class="alert alert-success small py-2 mb-2">' +
-            '✅ ' + rows.length + ' row(s) returned. (' + elapsed + 'ms)</div>';
-          
-          html += '<div class="table-responsive" style="max-height:400px;overflow-y:auto;">';
-          html += '<table class="asc-table" style="font-size:0.8rem;">';
-          html += '<thead><tr>';
-          Object.keys(rows[0]).forEach(function(k) {
-            html += '<th>' + ascEsc(k) + '</th>';
+      if (Array.isArray(data) && data.length > 0) {
+        html += '<div class="table-responsive" style="max-height:400px;overflow-y:auto;">';
+        html += '<table class="asc-table" style="font-size:0.8rem;">';
+        html += '<thead><tr>';
+        Object.keys(data[0]).forEach(function(k) { html += '<th>' + ascEsc(k) + '</th>'; });
+        html += '</tr></thead><tbody>';
+        
+        data.slice(0, 200).forEach(function(row) {
+          html += '<tr>';
+          Object.keys(row).forEach(function(k) {
+            var v = row[k];
+            if (v === null) v = '<span class="text-muted">null</span>';
+            else if (typeof v === 'object') v = '<code>' + ascEsc(JSON.stringify(v).substring(0, 100)) + '</code>';
+            else v = ascEsc(String(v).substring(0, 200));
+            html += '<td>' + v + '</td>';
           });
-          html += '</tr></thead><tbody>';
-          
-          rows.slice(0, 200).forEach(function(row) {
-            html += '<tr>';
-            Object.keys(row).forEach(function(k) {
-              var v = row[k];
-              if (v === null) v = '<span class="text-muted">null</span>';
-              else if (typeof v === 'object') v = '<code>' + ascEsc(JSON.stringify(v).substring(0, 100)) + '</code>';
-              else v = ascEsc(String(v).substring(0, 200));
-              html += '<td>' + v + '</td>';
-            });
-            html += '</tr>';
-          });
-          
-          html += '</tbody></table></div>';
-          
-          if (rows.length > 200) {
-            html += '<div class="text-muted small mt-2">Showing first 200 of ' + rows.length + ' rows</div>';
-          }
-          
-          resultEl.innerHTML = html;
+          html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        
+        if (data.length > 200) {
+          html += '<div class="text-muted small mt-2">Showing first 200 of ' + data.length + ' rows</div>';
         }
+      } else {
+        html += '<pre style="background:#f8fafc;padding:12px;border-radius:8px;font-size:0.78rem;overflow-x:auto;">' +
+          ascEsc(JSON.stringify(data, null, 2)) + '</pre>';
       }
       
-    } else {
-      // Non-SELECT — need special RPC
-      var res2 = await fetch(erpUrl('rpc/execute_sql_mutation'), {
-        method: 'POST',
-        headers: erpHeaders(),
-        body: JSON.stringify({ p_sql: sql })
-      });
-      
-      if (!res2.ok) {
-        var errText2 = await res2.text();
-        throw new Error('HTTP ' + res2.status + ' — ' + errText2.substring(0, 200));
-      }
-      
-      var data2 = await res2.json();
-      var elapsed2 = Date.now() - t0;
-      
-      if (resultEl) {
-        resultEl.innerHTML = '<div class="alert alert-success small">' +
-          '✅ Query executed. (' + elapsed2 + 'ms)<br>' +
-          '<small>Result: ' + ascEsc(JSON.stringify(data2).substring(0, 300)) + '</small></div>';
-      }
-      
-      // Refresh data after mutation
-      if (_asc.currentTable) {
-        setTimeout(ascFetchTableData, 500);
-      }
+      resultEl.innerHTML = html;
     }
     
   } catch(err) {
     console.error('[ascRunSql]', err);
     
     var errMsg = err.message || 'Unknown error';
-    
     if (errMsg.indexOf('function') !== -1 && errMsg.indexOf('does not exist') !== -1) {
       errMsg = '⚠️ Ang `execute_sql_query` / `execute_sql_mutation` RPC functions ay hindi pa naka-install. ' +
                 'I-run mo muna ang SQL migration para sa Phase 2.';
@@ -2294,8 +1390,7 @@ async function ascRunSql() {
     if (resultEl) {
       resultEl.innerHTML = '<div class="alert alert-danger">' +
         '<i class="bi bi-exclamation-triangle-fill me-1"></i>' +
-        '<strong>Error:</strong><br><small>' + ascEsc(errMsg) + '</small>' +
-        '</div>';
+        '<strong>Error:</strong><br><small>' + ascEsc(errMsg) + '</small></div>';
     }
   } finally {
     btn.disabled = false;
@@ -2305,8 +1400,24 @@ async function ascRunSql() {
 
 window.ascRunSql = ascRunSql;
 
+function ascSqlClear() {
+  var input = document.getElementById('ascSqlInput');
+  if (input) input.value = '';
+}
+
+window.ascSqlClear = ascSqlClear;
+
+function ascSqlLoadTemplate() {
+  var input = document.getElementById('ascSqlInput');
+  if (input) {
+    input.value = '-- Template queries\n\n-- 1. Count all items\nSELECT COUNT(*) FROM erp_items;\n\n-- 2. View recent PRFs\nSELECT prf_no, category, requestor, created_at\nFROM prf_documents\nORDER BY created_at DESC\nLIMIT 10;\n\n-- 3. UNSERVED PRF items\nSELECT prf_no, item_code, qty_for_order, status\nFROM prf_items\nWHERE status = \'UNSERVED\'\nLIMIT 20;';
+  }
+}
+
+window.ascSqlLoadTemplate = ascSqlLoadTemplate;
+
 // ═══════════════════════════════════════════════════════════
-// ═══ 5. RPC RUNNER ═══
+// RPC RUNNER
 // ═══════════════════════════════════════════════════════════
 function ascRpcChange() {
   var sel = document.getElementById('ascRpcSelect');
@@ -2326,7 +1437,6 @@ function ascRpcChange() {
   
   if (btn) btn.disabled = false;
   
-  // Templates
   var templates = {
     'admin_get_table_stats': '{}',
     'get_next_doc_number': '{"p_prefix": "MRIF"}',
@@ -2368,7 +1478,6 @@ async function ascRunRpc() {
   
   try {
     var t0 = Date.now();
-    
     var res = await fetch(erpUrl('rpc/' + rpc), {
       method: 'POST',
       headers: erpHeaders(),
@@ -2385,16 +1494,13 @@ async function ascRunRpc() {
     
     await ascLogAction('RPC', rpc, null, null, { params: params, result: data }, 'RPC call');
     
-    var html = '<div class="alert alert-success small py-2 mb-2">' +
-      '✅ RPC OK (' + elapsed + 'ms)</div>';
+    var html = '<div class="alert alert-success small py-2 mb-2">✅ RPC OK (' + elapsed + 'ms)</div>';
     
     if (Array.isArray(data) && data.length > 0) {
       html += '<div class="table-responsive" style="max-height:400px;overflow-y:auto;">';
       html += '<table class="asc-table" style="font-size:0.8rem;">';
       html += '<thead><tr>';
-      Object.keys(data[0]).forEach(function(k) {
-        html += '<th>' + ascEsc(k) + '</th>';
-      });
+      Object.keys(data[0]).forEach(function(k) { html += '<th>' + ascEsc(k) + '</th>'; });
       html += '</tr></thead><tbody>';
       
       data.slice(0, 100).forEach(function(row) {
@@ -2408,7 +1514,6 @@ async function ascRunRpc() {
         });
         html += '</tr>';
       });
-      
       html += '</tbody></table></div>';
     } else {
       html += '<pre style="background:#f8fafc;padding:12px;border-radius:8px;font-size:0.78rem;overflow-x:auto;">' +
@@ -2431,7 +1536,531 @@ async function ascRunRpc() {
 window.ascRunRpc = ascRunRpc;
 
 // ═══════════════════════════════════════════════════════════
-// ═══ 6. CSV EXPORT ═══
+// SCHEMA CACHE
+// ═══════════════════════════════════════════════════════════
+var _ascSchemaCache = {};
+
+async function ascGetTableSchema(tableName) {
+  if (_ascSchemaCache[tableName]) return _ascSchemaCache[tableName];
+  
+  try {
+    var sample = await erpFetch(tableName, 'select=*&limit=1');
+    
+    if (!sample || sample.length === 0) {
+      try {
+        var res = await fetch(erpUrl('rpc/admin_get_table_columns'), {
+          method: 'POST',
+          headers: erpHeaders(),
+          body: JSON.stringify({ p_table_name: tableName })
+        });
+        
+        if (res.ok) {
+          var cols = await res.json();
+          _ascSchemaCache[tableName] = cols;
+          return cols;
+        }
+      } catch(e) {}
+      
+      _ascSchemaCache[tableName] = [];
+      return [];
+    }
+    
+    var columns = Object.keys(sample[0]).map(function(col) {
+      var val = sample[0][col];
+      var type = 'text';
+      
+      if (typeof val === 'number') type = 'number';
+      else if (typeof val === 'boolean') type = 'boolean';
+      else if (val instanceof Object) type = 'json';
+      else if (col === 'id') type = 'id';
+      else if (col.indexOf('_at') !== -1 || col.indexOf('date') !== -1) type = 'date';
+      else if (col.indexOf('email') !== -1) type = 'email';
+      
+      return {
+        name: col,
+        type: type,
+        isId: col === 'id',
+        isTimestamp: col.indexOf('_at') !== -1,
+        sample: val
+      };
+    });
+    
+    _ascSchemaCache[tableName] = columns;
+    return columns;
+    
+  } catch(err) {
+    console.warn('[ascGetTableSchema]', tableName, err.message);
+    return [];
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// INSERT / EDIT
+// ═══════════════════════════════════════════════════════════
+function ascOpenInsertModal() {
+  if (_asc.accessMode === 'readonly') {
+    erpShowToast('Read-Only mode — hindi pwedeng mag-insert', 'warning');
+    return;
+  }
+  
+  if (!_asc.currentTable) {
+    erpShowToast('Pumili muna ng table', 'warning');
+    return;
+  }
+  
+  _asc.editRowModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('ascEditRowModal'));
+  
+  document.getElementById('ascEditRowTitle').innerHTML = 
+    '<i class="bi bi-plus-circle me-2"></i>Insert Row — ' + ascEsc(_asc.currentTable);
+  
+  document.getElementById('ascEditRowBody').innerHTML = 
+    '<div class="text-center py-4">' +
+      '<div class="erp-spinner" style="margin:0 auto;"></div>' +
+      '<div class="mt-2">Loading schema...</div>' +
+    '</div>';
+  
+  _asc.editRowModal.show();
+  
+  ascGetTableSchema(_asc.currentTable).then(function(columns) {
+    ascRenderEditRowForm(columns, null, 'insert');
+  });
+}
+
+window.ascOpenInsertModal = ascOpenInsertModal;
+
+function ascOpenEditModal(rowId) {
+  if (_asc.accessMode === 'readonly') {
+    erpShowToast('Read-Only mode — hindi pwedeng mag-edit', 'warning');
+    return;
+  }
+  
+  if (!_asc.currentTable) return;
+  
+  var row = _asc.currentData.find(function(r) {
+    var id = r.id || r.item_code || r.doc_no || '';
+    return String(id) === String(rowId);
+  });
+  
+  if (!row) {
+    erpShowToast('Row not found', 'warning');
+    return;
+  }
+  
+  _asc.editRowModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('ascEditRowModal'));
+  
+  document.getElementById('ascEditRowTitle').innerHTML = 
+    '<i class="bi bi-pencil-square me-2"></i>Edit Row — ' + ascEsc(_asc.currentTable);
+  
+  _asc.editRowModal.show();
+  
+  ascGetTableSchema(_asc.currentTable).then(function(columns) {
+    ascRenderEditRowForm(columns, row, 'edit');
+  });
+}
+
+window.ascOpenEditModal = ascOpenEditModal;
+
+var _ascEditState = {
+  mode: 'insert',
+  originalRow: null,
+  tableName: '',
+  columns: []
+};
+
+function ascRenderEditRowForm(columns, row, mode) {
+  var body = document.getElementById('ascEditRowBody');
+  if (!body) return;
+  
+  _ascEditState.mode = mode;
+  _ascEditState.originalRow = row;
+  _ascEditState.tableName = _asc.currentTable;
+  _ascEditState.columns = columns;
+  
+  if (columns.length === 0) {
+    body.innerHTML = '<div class="alert alert-warning">' +
+      'Walang makitang schema. Siguraduhing may data ang table na ito.</div>';
+    return;
+  }
+  
+  var html = '';
+  
+  html += '<div class="alert alert-info small py-2 mb-3">' +
+    '<i class="bi bi-info-circle me-1"></i>' +
+    'Table: <code>' + ascEsc(_asc.currentTable) + '</code>' +
+    ' · Mode: <strong>' + (mode === 'insert' ? 'Insert New Row' : 'Edit Existing Row') + '</strong>' +
+    '</div>';
+  
+  html += '<div class="row g-3">';
+  
+  columns.forEach(function(col) {
+    var val = row ? row[col.name] : '';
+    var valStr = '';
+    
+    if (val !== null && val !== undefined) {
+      if (typeof val === 'object') valStr = JSON.stringify(val, null, 2);
+      else valStr = String(val);
+    }
+    
+    var isAutoManaged = (
+      (col.name === 'id' && mode === 'insert') ||
+      (col.name === 'created_at' && mode === 'insert') ||
+      (col.name === 'updated_at' && mode === 'insert') ||
+      (col.name === 'updated_by' && mode === 'insert')
+    );
+    
+    var disabledAttr = isAutoManaged ? ' disabled' : '';
+    var readonlyAttr = col.isId ? ' readonly' : '';
+    var labelExtra = isAutoManaged 
+      ? ' <span class="badge bg-secondary ms-1" style="font-size:0.6rem;">auto</span>' 
+      : '';
+    if (col.isId) labelExtra = ' <span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem;">read-only</span>';
+    
+    html += '<div class="col-md-6">' +
+      '<label class="form-label small fw-bold">' + ascEsc(col.name) + labelExtra + '</label>';
+    
+    if (col.type === 'boolean') {
+      html += '<select class="form-select form-select-sm asc-edit-field" data-col="' + ascEsc(col.name) + '"' + disabledAttr + '>' +
+        '<option value="">-- Select --</option>' +
+        '<option value="true"' + (valStr === 'true' ? ' selected' : '') + '>true</option>' +
+        '<option value="false"' + (valStr === 'false' ? ' selected' : '') + '>false</option>' +
+        '</select>';
+    } else if (col.type === 'json') {
+      html += '<textarea class="form-control form-control-sm asc-edit-field font-monospace" ' +
+        'data-col="' + ascEsc(col.name) + '" rows="3" style="font-size:0.78rem;"' + disabledAttr + readonlyAttr + '>' +
+        ascEsc(valStr) + '</textarea>';
+    } else if (col.type === 'number' || col.type === 'id') {
+      html += '<input type="number" step="any" class="form-control form-control-sm asc-edit-field" ' +
+        'data-col="' + ascEsc(col.name) + '" value="' + ascEsc(valStr) + '"' + disabledAttr + readonlyAttr + '>';
+    } else if (col.type === 'email') {
+      html += '<input type="email" class="form-control form-control-sm asc-edit-field" ' +
+        'data-col="' + ascEsc(col.name) + '" value="' + ascEsc(valStr) + '"' + disabledAttr + readonlyAttr + '>';
+    } else if (col.type === 'date') {
+      var dateVal = '';
+      if (valStr) {
+        try {
+          var d = new Date(valStr);
+          if (!isNaN(d.getTime())) dateVal = d.toISOString().slice(0, 16);
+        } catch(e) {}
+      }
+      html += '<input type="datetime-local" class="form-control form-control-sm asc-edit-field" ' +
+        'data-col="' + ascEsc(col.name) + '" value="' + ascEsc(dateVal) + '"' + disabledAttr + readonlyAttr + '>';
+    } else {
+      html += '<input type="text" class="form-control form-control-sm asc-edit-field" ' +
+        'data-col="' + ascEsc(col.name) + '" value="' + ascEsc(valStr) + '"' + disabledAttr + readonlyAttr + '>';
+    }
+    
+    html += '</div>';
+  });
+  
+  html += '</div>';
+  
+  html += '<div class="mt-4 p-3" style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:8px;">' +
+    '<label class="form-label fw-bold" style="color:#92400e;">' +
+      '<i class="bi bi-chat-left-text me-1"></i>Reason for change <span class="text-danger">*</span>' +
+    '</label>' +
+    '<input type="text" class="form-control" id="ascEditReason" ' +
+      'placeholder="e.g., Data correction, Update from physical count" maxlength="300">' +
+    '<div class="form-text"><i class="bi bi-info-circle me-1"></i>Required for audit trail.</div>' +
+    '</div>';
+  
+  body.innerHTML = html;
+  
+  var saveBtn = document.getElementById('ascSaveRowBtn');
+  if (saveBtn) {
+    saveBtn.innerHTML = mode === 'insert' 
+      ? '<i class="bi bi-plus-circle me-1"></i>Insert Row'
+      : '<i class="bi bi-check-circle me-1"></i>Save Changes';
+    saveBtn.className = 'btn ' + (mode === 'insert' ? 'btn-success' : 'btn-primary');
+  }
+}
+
+async function ascSaveRow() {
+  if (_asc.accessMode === 'readonly') {
+    erpShowToast('Read-Only mode', 'warning');
+    return;
+  }
+  
+  var reasonEl = document.getElementById('ascEditReason');
+  var reason = reasonEl ? reasonEl.value.trim() : '';
+  
+  if (!reason) {
+    erpShowToast('Reason is required', 'warning');
+    if (reasonEl) reasonEl.focus();
+    return;
+  }
+  
+  var fields = {};
+  document.querySelectorAll('.asc-edit-field').forEach(function(el) {
+    var col = el.getAttribute('data-col');
+    if (!col || el.disabled) return;
+    
+    var val = el.value;
+    var colType = _ascEditState.columns.find(function(c) { return c.name === col; });
+    if (!colType) return;
+    
+    if (colType.type === 'number' || colType.type === 'id') {
+      val = val === '' ? null : Number(val);
+    } else if (colType.type === 'boolean') {
+      val = val === '' ? null : (val === 'true');
+    } else if (colType.type === 'json') {
+      if (val.trim()) {
+        try { val = JSON.parse(val); } catch(e) {
+          erpShowToast('Invalid JSON sa ' + col, 'danger');
+          return;
+        }
+      } else val = null;
+    } else if (colType.type === 'date') {
+      if (val) {
+        try { val = new Date(val).toISOString(); } catch(e) {}
+      } else val = null;
+    } else {
+      val = val === '' ? null : val;
+    }
+    
+    fields[col] = val;
+  });
+  
+  var now = new Date().toISOString();
+  if (_ascEditState.mode === 'edit') {
+    if (_ascEditState.columns.find(function(c) { return c.name === 'updated_at'; })) fields.updated_at = now;
+    if (_ascEditState.columns.find(function(c) { return c.name === 'updated_by'; })) fields.updated_by = _asc.currentFullname;
+  } else {
+    if (_ascEditState.columns.find(function(c) { return c.name === 'created_at'; })) fields.created_at = now;
+    if (_ascEditState.columns.find(function(c) { return c.name === 'updated_at'; })) fields.updated_at = now;
+  }
+  
+  if (!confirm((_ascEditState.mode === 'insert' ? 'Insert new row?' : 'Save changes?') + '\n\nReason: ' + reason)) return;
+  
+  var btn = document.getElementById('ascSaveRowBtn');
+  var origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+  
+  try {
+    var res;
+    
+    if (_ascEditState.mode === 'insert') {
+      res = await fetch(erpUrl(_ascEditState.tableName), {
+        method: 'POST',
+        headers: erpHeaders({ 'Prefer': 'return=representation' }),
+        body: JSON.stringify(fields)
+      });
+    } else {
+      var rowId = _ascEditState.originalRow.id;
+      res = await fetch(erpUrl(_ascEditState.tableName + '?id=eq.' + rowId), {
+        method: 'PATCH',
+        headers: erpHeaders({ 'Prefer': 'return=representation' }),
+        body: JSON.stringify(fields)
+      });
+    }
+    
+    if (!res.ok) {
+      var errText = await res.text();
+      throw new Error('HTTP ' + res.status + ' — ' + errText.substring(0, 200));
+    }
+    
+    var result = await res.json();
+    
+    await ascLogAction(
+      _ascEditState.mode === 'insert' ? 'INSERT' : 'UPDATE',
+      _ascEditState.tableName,
+      _ascEditState.mode === 'edit' ? _ascEditState.originalRow.id : (result[0] && result[0].id),
+      _ascEditState.mode === 'edit' ? _ascEditState.originalRow : null,
+      fields,
+      reason
+    );
+    
+    erpShowToast(_ascEditState.mode === 'insert' ? '✅ Row inserted' : '✅ Row updated', 'success');
+    
+    ascCloseEditRow();
+    await ascFetchTableData();
+    await ascLoadRecentActions();
+    
+  } catch(err) {
+    console.error('[ascSaveRow]', err);
+    erpShowToast('Failed: ' + err.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+  }
+}
+
+window.ascSaveRow = ascSaveRow;
+
+function ascCloseEditRow() {
+  if (_asc.editRowModal) _asc.editRowModal.hide();
+}
+
+window.ascCloseEditRow = ascCloseEditRow;
+
+// ═══════════════════════════════════════════════════════════
+// DELETE
+// ═══════════════════════════════════════════════════════════
+var _ascDeleteInfo = { rowId: null, rowData: null, tableName: '' };
+
+function ascOpenDeleteModal(rowId) {
+  if (_asc.accessMode === 'readonly') {
+    erpShowToast('Read-Only mode', 'warning');
+    return;
+  }
+  
+  if (!_asc.currentTable) return;
+  
+  var row = _asc.currentData.find(function(r) {
+    var id = r.id || r.item_code || r.doc_no || '';
+    return String(id) === String(rowId);
+  });
+  
+  if (!row) {
+    erpShowToast('Row not found', 'warning');
+    return;
+  }
+  
+  ascCheckDependencies(_asc.currentTable, row).then(function(deps) {
+    _ascDeleteInfo = { rowId: rowId, rowData: row, tableName: _asc.currentTable, dependencies: deps };
+    
+    var msgEl = document.getElementById('ascDeleteMessage');
+    if (msgEl) {
+      var html = 'Delete <code>' + ascEsc(String(rowId)) + '</code> from <code>' + ascEsc(_asc.currentTable) + '</code>?';
+      
+      if (deps.length > 0) {
+        html += '<div class="alert alert-danger small mt-2 mb-0">' +
+          '<strong>⚠️ May dependencies:</strong>' +
+          '<ul class="mb-0 mt-1 ps-3">';
+        deps.forEach(function(d) {
+          html += '<li>' + d.count + ' related row(s) sa <code>' + ascEsc(d.table) + '</code></li>';
+        });
+        html += '</ul>' +
+          '<div class="mt-2 small">Ang related rows ay <strong>hindi</strong> awtomatikong mabubura.</div>' +
+          '</div>';
+      }
+      
+      msgEl.innerHTML = html;
+    }
+    
+    var reasonEl = document.getElementById('ascDeleteReason');
+    if (reasonEl) reasonEl.value = '';
+    
+    _asc.deleteModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('ascDeleteModal'));
+    _asc.deleteModal.show();
+  });
+}
+
+window.ascOpenDeleteModal = ascOpenDeleteModal;
+
+async function ascCheckDependencies(tableName, row) {
+  var deps = [];
+  
+  var FK_MAP = {
+    'documents': [{ table: 'doc_items', column: 'doc_no', rowCol: 'doc_no' }],
+    'prf_documents': [{ table: 'prf_items', column: 'prf_no', rowCol: 'prf_no' }],
+    'users': [{ table: 'edit_requests', column: 'requested_by', rowCol: 'username' }],
+    'erp_items': [
+      { table: 'doc_items', column: 'item_code', rowCol: 'item_code' },
+      { table: 'prf_items', column: 'item_code', rowCol: 'item_code' }
+    ]
+  };
+  
+  var checks = FK_MAP[tableName] || [];
+  
+  for (var i = 0; i < checks.length; i++) {
+    var check = checks[i];
+    var val = row[check.rowCol];
+    if (!val) continue;
+    
+    try {
+      var res = await fetch(erpUrl(check.table) + 
+        '?select=id&' + check.column + '=eq.' + encodeURIComponent(val) + '&limit=1',
+        {
+          method: 'HEAD',
+          headers: Object.assign({}, erpHeaders(), {
+            'Prefer': 'count=exact',
+            'Range': '0-0'
+          })
+        });
+      
+      var range = res.headers.get('content-range') || '';
+      var m = range.match(/\/(\d+)/);
+      var count = m ? parseInt(m[1], 10) : 0;
+      
+      if (count > 0) deps.push({ table: check.table, column: check.column, count: count });
+    } catch(e) {}
+  }
+  
+  return deps;
+}
+
+async function ascConfirmDelete() {
+  var reasonEl = document.getElementById('ascDeleteReason');
+  var reason = reasonEl ? reasonEl.value.trim() : '';
+  
+  if (!reason) {
+    erpShowToast('Reason is required', 'warning');
+    return;
+  }
+  
+  var info = _ascDeleteInfo;
+  if (!info.tableName || !info.rowId) return;
+  
+  if (!confirm('Soft delete this row?\n\nClick OK to proceed (recoverable via is_deleted = true)')) return;
+  
+  try {
+    var patchBody = {
+      is_deleted: true,
+      deleted_at: new Date().toISOString(),
+      deleted_by: _asc.currentFullname
+    };
+    
+    var columns = _ascEditState.columns.length ? _ascEditState.columns : await ascGetTableSchema(info.tableName);
+    var hasIsDeleted = columns.some(function(c) { return c.name === 'is_deleted'; });
+    
+    if (!hasIsDeleted) {
+      var proceed = confirm('⚠️ Walang `is_deleted` column sa ' + info.tableName + '.\n\nClick OK = HARD DELETE (permanent)\nClick Cancel = cancel');
+      if (!proceed) return;
+      
+      var delRes = await fetch(erpUrl(info.tableName + '?id=eq.' + info.rowId), {
+        method: 'DELETE',
+        headers: erpHeaders()
+      });
+      
+      if (!delRes.ok) throw new Error('HTTP ' + delRes.status);
+      
+      await ascLogAction('HARD_DELETE', info.tableName, info.rowId, info.rowData, null, reason);
+      erpShowToast('✅ Row permanently deleted', 'success');
+    } else {
+      var res = await fetch(erpUrl(info.tableName + '?id=eq.' + info.rowId), {
+        method: 'PATCH',
+        headers: erpHeaders(),
+        body: JSON.stringify(patchBody)
+      });
+      
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      
+      await ascLogAction('SOFT_DELETE', info.tableName, info.rowId, info.rowData, patchBody, reason);
+      erpShowToast('✅ Row soft-deleted', 'success');
+    }
+    
+    ascCloseDelete();
+    await ascFetchTableData();
+    await ascLoadRecentActions();
+    
+  } catch(err) {
+    console.error('[ascConfirmDelete]', err);
+    erpShowToast('Failed: ' + err.message, 'danger');
+  }
+}
+
+window.ascConfirmDelete = ascConfirmDelete;
+
+function ascCloseDelete() {
+  if (_asc.deleteModal) _asc.deleteModal.hide();
+  _ascDeleteInfo = { rowId: null, rowData: null, tableName: '' };
+}
+
+window.ascCloseDelete = ascCloseDelete;
+
+// ═══════════════════════════════════════════════════════════
+// CSV EXPORT
 // ═══════════════════════════════════════════════════════════
 async function ascCsvExport() {
   var sel = document.getElementById('ascCsvExportTable');
@@ -2446,7 +2075,6 @@ async function ascCsvExport() {
   erpShowToast('📤 Exporting ' + table + '...', 'info');
   
   try {
-    // Fetch all rows (chunked)
     var allRows = [];
     var pageSize = 1000;
     var offset = 0;
@@ -2454,12 +2082,9 @@ async function ascCsvExport() {
     
     while (hasMore) {
       var rows = await erpFetch(table, 'select=*&limit=' + pageSize + '&offset=' + offset);
-      
       if (!rows || rows.length === 0) break;
-      
       allRows = allRows.concat(rows);
       offset += rows.length;
-      
       if (rows.length < pageSize) hasMore = false;
     }
     
@@ -2468,14 +2093,11 @@ async function ascCsvExport() {
       return;
     }
     
-    // Build CSV
     var headers = Object.keys(allRows[0]);
     var csv = headers.map(ascCsvEscape).join(',') + '\n';
     
     allRows.forEach(function(row) {
-      csv += headers.map(function(h) {
-        return ascCsvEscape(row[h]);
-      }).join(',') + '\n';
+      csv += headers.map(function(h) { return ascCsvEscape(row[h]); }).join(',') + '\n';
     });
     
     var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -2503,13 +2125,13 @@ function ascCsvEscape(val) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ═══ 7. CSV IMPORT (with preview) ═══
+// CSV IMPORT
 // ═══════════════════════════════════════════════════════════
 var _ascCsvImportData = null;
 
 async function ascCsvPreview(event) {
   if (_asc.accessMode === 'readonly') {
-    erpShowToast('Read-Only mode — hindi pwedeng mag-import', 'warning');
+    erpShowToast('Read-Only mode', 'warning');
     event.target.value = '';
     return;
   }
@@ -2535,11 +2157,8 @@ async function ascCsvPreview(event) {
     var text = await file.text();
     var lines = text.split('\n').filter(function(l) { return l.trim(); });
     
-    if (lines.length < 2) {
-      throw new Error('CSV needs header + at least 1 data row');
-    }
+    if (lines.length < 2) throw new Error('CSV needs header + at least 1 data row');
     
-    // Parse header + rows (simple CSV parse, no quoted commas handling)
     var headers = ascCsvParseLine(lines[0]);
     var rows = [];
     
@@ -2552,11 +2171,7 @@ async function ascCsvPreview(event) {
       rows.push(row);
     }
     
-    _ascCsvImportData = {
-      table: table,
-      headers: headers.map(function(h) { return h.trim(); }),
-      rows: rows
-    };
+    _ascCsvImportData = { table: table, headers: headers.map(function(h) { return h.trim(); }), rows: rows };
     
     ascRenderCsvPreview();
     
@@ -2582,15 +2197,11 @@ function ascCsvParseLine(line) {
       if (inQuotes && line[i+1] === '"') {
         current += '"';
         i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
+      } else inQuotes = !inQuotes;
     } else if (c === ',' && !inQuotes) {
       result.push(current);
       current = '';
-    } else {
-      current += c;
-    }
+    } else current += c;
   }
   
   result.push(current);
@@ -2609,11 +2220,8 @@ function ascRenderCsvPreview() {
   
   html += '<div class="table-responsive" style="max-height:300px;overflow-y:auto;margin-bottom:12px;">';
   html += '<table class="table table-sm table-bordered" style="font-size:0.78rem;">';
-  
   html += '<thead class="table-light"><tr>';
-  d.headers.forEach(function(h) {
-    html += '<th>' + ascEsc(h) + '</th>';
-  });
+  d.headers.forEach(function(h) { html += '<th>' + ascEsc(h) + '</th>'; });
   html += '</tr></thead><tbody>';
   
   d.rows.slice(0, 20).forEach(function(row) {
@@ -2648,24 +2256,20 @@ async function ascCsvImportConfirm() {
   var reason = prompt('Reason for this import:', 'CSV bulk import');
   if (!reason || !reason.trim()) return;
   
-  if (!confirm('Import ' + d.rows.length + ' rows to ' + d.table + '?\n\nReason: ' + reason)) {
-    return;
-  }
+  if (!confirm('Import ' + d.rows.length + ' rows to ' + d.table + '?\n\nReason: ' + reason)) return;
   
   var previewArea = document.getElementById('ascCsvPreviewArea');
   if (previewArea) {
     previewArea.innerHTML = '<div class="alert alert-info small py-2">' +
-      '<span class="spinner-border spinner-border-sm me-1"></span>' +
-      'Importing...</div>';
+      '<span class="spinner-border spinner-border-sm me-1"></span>Importing...</div>';
   }
   
   try {
     var success = 0;
     var failed = 0;
     var errors = [];
-    
-    // Batch insert
     var batchSize = 100;
+    
     for (var i = 0; i < d.rows.length; i += batchSize) {
       var batch = d.rows.slice(i, i + batchSize);
       
@@ -2676,9 +2280,8 @@ async function ascCsvImportConfirm() {
           body: JSON.stringify(batch)
         });
         
-        if (res.ok) {
-          success += batch.length;
-        } else {
+        if (res.ok) success += batch.length;
+        else {
           failed += batch.length;
           var errText = await res.text();
           errors.push('Batch ' + Math.floor(i / batchSize) + ': ' + errText.substring(0, 100));
@@ -2689,29 +2292,21 @@ async function ascCsvImportConfirm() {
       }
     }
     
-    // Log
     await ascLogAction('INSERT', d.table, null, null, { 
-      rows_imported: success, 
-      rows_failed: failed 
+      rows_imported: success, rows_failed: failed 
     }, reason);
     
     var msg = '✅ Import complete: ' + success + ' success, ' + failed + ' failed.';
-    if (errors.length > 0) {
-      msg += '\n\nErrors:\n' + errors.slice(0, 3).join('\n');
-    }
+    if (errors.length > 0) msg += '\n\nErrors:\n' + errors.slice(0, 3).join('\n');
     
     alert(msg);
     
     _ascCsvImportData = null;
-    
     if (previewArea) previewArea.innerHTML = '';
-    
     var fileInput = document.getElementById('ascCsvFile');
     if (fileInput) fileInput.value = '';
     
-    if (_asc.currentTable === d.table) {
-      await ascFetchTableData();
-    }
+    if (_asc.currentTable === d.table) await ascFetchTableData();
     
   } catch(err) {
     erpShowToast('Import failed: ' + err.message, 'danger');
@@ -2730,9 +2325,6 @@ function ascCsvImportCancel() {
 
 window.ascCsvImportCancel = ascCsvImportCancel;
 
-// ═══════════════════════════════════════════════════════════
-// ═══ 8. EXPORT CURRENT TABLE ═══
-// ═══════════════════════════════════════════════════════════
 async function ascExportCurrentTable() {
   if (!_asc.currentTable) {
     erpShowToast('Pumili muna ng table', 'warning');
@@ -2743,92 +2335,55 @@ async function ascExportCurrentTable() {
   if (sel) sel.value = _asc.currentTable;
   
   ascSwitchTab('csv');
-  
-  setTimeout(function() {
-    ascCsvExport();
-  }, 300);
+  setTimeout(function() { ascCsvExport(); }, 300);
 }
 
 window.ascExportCurrentTable = ascExportCurrentTable;
 
 // ═══════════════════════════════════════════════════════════
-// ═══ 9. UPDATE TABLE ROW ACTION BUTTONS (Enable Edit/Delete) ═══
+// HELPERS
 // ═══════════════════════════════════════════════════════════
-// Override ascRenderTableData para i-enable ang edit/delete buttons
-var _originalAscRenderTableData = ascRenderTableData;
+function ascNum(n) {
+  if (n === null || n === undefined || isNaN(n)) return '0';
+  return Number(n).toLocaleString('en-US');
+}
 
-ascRenderTableData = function() {
-  var container = document.getElementById('ascTableContainer');
-  if (!container) return;
-  
-  if (_asc.currentData.length === 0) {
-    container.innerHTML = '<div class="text-center text-muted py-5">' +
-      '<i class="bi bi-inbox" style="font-size:3rem;opacity:0.3;"></i>' +
-      '<div class="mt-2">No rows found</div></div>';
-    ascUpdatePagination();
-    return;
+function ascEsc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function ascJsEsc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
+}
+
+function ascFormatBytes(bytes) {
+  if (bytes === 0 || bytes === null || bytes === undefined) return '0 B';
+  var k = 1024;
+  var sizes = ['B', 'KB', 'MB', 'GB'];
+  var i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function erpShowToast(msg, type) {
+  var toastEl = document.getElementById('erpToast');
+  if (!toastEl) { console.log('[Toast]', type, msg); return; }
+  document.getElementById('erpToastBody').textContent = msg;
+  bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3500 }).show();
+}
+
+// ═══════════════════════════════════════════════════════════
+// AUTO-REFRESH
+// ═══════════════════════════════════════════════════════════
+setInterval(function() {
+  if (document.hidden) return;
+  var dashTab = document.getElementById('tab-dashboard');
+  if (dashTab && dashTab.classList.contains('active')) {
+    ascLoadRecentActions();
   }
-  
-  var cols = _asc.currentColumns;
-  var canWrite = _asc.accessMode !== 'readonly';
-  
-  var html = '<div class="table-responsive" style="max-height:600px;overflow-y:auto;">';
-  html += '<table class="asc-table">';
-  
-  html += '<thead><tr>';
-  html += '<th style="width:50px;">#</th>';
-  cols.forEach(function(c) {
-    html += '<th>' + ascEsc(c) + '</th>';
-  });
-  html += '<th style="width:120px;" class="text-center">Actions</th>';
-  html += '</tr></thead>';
-  
-  html += '<tbody>';
-  _asc.currentData.forEach(function(row, idx) {
-    html += '<tr>';
-    html += '<td class="text-muted small">' + ((_asc.currentPage - 1) * _asc.pageSize + idx + 1) + '</td>';
-    
-    cols.forEach(function(c) {
-      var val = row[c];
-      var displayVal = ascFormatCellValue(val, c);
-      html += '<td title="' + ascEsc(String(val == null ? '' : val)) + '">' + displayVal + '</td>';
-    });
-    
-    var rowId = row.id || row.item_code || row.doc_no || '';
-    var safeRowId = ascJsEsc(String(rowId));
-    
-    html += '<td class="text-center">' +
-      '<button class="asc-action-btn" onclick="ascViewRow(\'' + safeRowId + '\')" title="View">' +
-        '<i class="bi bi-eye"></i>' +
-      '</button>';
-    
-    if (canWrite) {
-      html += '<button class="asc-action-btn success" onclick="ascOpenEditModal(\'' + safeRowId + '\')" title="Edit">' +
-        '<i class="bi bi-pencil"></i>' +
-      '</button>' +
-      '<button class="asc-action-btn danger" onclick="ascOpenDeleteModal(\'' + safeRowId + '\')" title="Delete">' +
-        '<i class="bi bi-trash"></i>' +
-      '</button>';
-    } else {
-      html += '<button class="asc-action-btn" disabled title="Edit (read-only mode)">' +
-        '<i class="bi bi-pencil"></i>' +
-      '</button>' +
-      '<button class="asc-action-btn danger" disabled title="Delete (read-only mode)">' +
-        '<i class="bi bi-trash"></i>' +
-      '</button>';
-    }
-    
-    html += '</td>';
-    
-    html += '</tr>';
-  });
-  html += '</tbody>';
-  
-  html += '</table></div>';
-  
-  container.innerHTML = html;
-  
-  ascUpdatePagination();
-};
+}, 60000);
 
-console.log('✅ admin-supabase.js Phase 2 loaded (writes + SQL + RPC + CSV)');
+console.log('✅ admin-supabase.js v1.1 loaded (Phase 1 + 2 + Backup Filter)');
