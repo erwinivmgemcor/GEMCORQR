@@ -267,10 +267,11 @@
     </h5>
 
     <div class="prf-mode-tabs">
-      <button class="prf-mode-tab active" data-mode="reorder" onclick="prfSwitchMode('reorder')">
-        <i class="bi bi-list-check"></i>
-        <span>From Reorder List</span>
-      </button>
+     <button class="prf-mode-tab active" data-mode="reorder" onclick="prfSwitchMode('reorder')">
+  <i class="bi bi-list-check"></i>
+  <span>From Reorder List</span>
+  <span id="reorderPendingBadge" class="badge bg-warning text-dark ms-1" style="display:none;">0 ⚠</span>
+</button>
       <button class="prf-mode-tab" data-mode="manual" onclick="prfSwitchMode('manual')">
         <i class="bi bi-search"></i>
         <span>Manual Entry</span>
@@ -278,18 +279,34 @@
     </div>
 
     <!-- MODE 1: FROM REORDER LIST -->
-    <div id="modeReorder" class="prf-mode-content active">
-      <div class="alert alert-info small py-2 mb-3">
-        <i class="bi bi-info-circle me-1"></i>
-        Select a category above then click items from the reorder list.
-      </div>
-      <div id="reorderItemsContainer">
-        <div class="text-center text-muted py-4">
-          <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-          <div>Select a category above to load items from the Reorder List.</div>
-        </div>
-      </div>
+<div id="modeReorder" class="prf-mode-content active">
+  <div class="alert alert-info small py-2 mb-3">
+    <i class="bi bi-info-circle me-1"></i>
+    Select a category above then click items from the reorder list.
+    <strong>Items with pending PRF ay naka-top at may yellow highlight.</strong>
+  </div>
+
+  <!-- ✅ NEW: Filter + View Pending Actions -->
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div class="form-check mb-0">
+      <input class="form-check-input" type="checkbox" id="filterPendingOnly" onchange="renderReorderItems()">
+      <label class="form-check-label small fw-bold" for="filterPendingOnly" style="cursor:pointer;">
+        <i class="bi bi-funnel-fill me-1 text-warning"></i>
+        Show only items with <strong>pending PRF</strong>
+      </label>
     </div>
+    <button type="button" class="btn btn-sm btn-outline-warning" onclick="showPendingReorderList()" title="View items with pending PRF sa current category">
+      <i class="bi bi-list-ul me-1"></i>View Pending List
+    </button>
+  </div>
+
+  <div id="reorderItemsContainer">
+    <div class="text-center text-muted py-4">
+      <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+      <div>Select a category above to load items from the Reorder List.</div>
+    </div>
+  </div>
+</div>
 
     <!-- MODE 2: MANUAL ENTRY -->
     <div id="modeManual" class="prf-mode-content">
