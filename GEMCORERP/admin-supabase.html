@@ -199,16 +199,26 @@
       </div>
     </div>
 
-    <!-- Table Stats Grid -->
+       <!-- Table Stats Grid -->
     <div class="asc-card">
       <div class="asc-card-header">
         <div class="asc-card-title">
           <i class="bi bi-bar-chart-fill"></i>
           <span>Table Overview</span>
+          <span class="badge bg-secondary ms-2" id="ascTableStatsCount">0</span>
         </div>
-        <button class="btn btn-sm btn-outline-secondary" onclick="ascRefreshStats()">
-          <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-        </button>
+        <div class="d-flex gap-2 align-items-center">
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" id="ascShowBackupTables" 
+              onchange="ascToggleBackupTables(this.checked)">
+            <label class="form-check-label small fw-bold" for="ascShowBackupTables" style="cursor:pointer;">
+              <i class="bi bi-archive me-1"></i>Show Backup Tables
+            </label>
+          </div>
+          <button class="btn btn-sm btn-outline-secondary" onclick="ascRefreshStats()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+          </button>
+        </div>
       </div>
       <div class="asc-card-body p-0">
         <div class="table-responsive" style="max-height:600px;overflow-y:auto;">
