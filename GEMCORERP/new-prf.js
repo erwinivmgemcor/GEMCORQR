@@ -140,6 +140,7 @@ async function loadReorderList() {
 
 async function loadPendingPrfItems() {
   try {
+    // ✅ Step 1: Load detailed items (per PRF)
     var rows = await erpFetch('erp_v_prf_pending_items', 'select=*');
     _prf.pendingPrfItems = {};
     (rows || []).forEach(function(r) {
@@ -149,10 +150,55 @@ async function loadPendingPrfItems() {
       _prf.pendingPrfItems[code].push({
         prf_no: r.prf_no,
         status: r.status,
-        qty: Number(r.qty_for_order || 0)
+        qty: Number(r.qty_for_order || 0),
+        version: r.version_number || 1
       });
     });
-    console.log('[PRF] Pending items:', Object.keys(_prf.pendingPrfItems).length);
+    
+    // ✅ Step 2: Load summary (total qty per item)
+    _prf.pendingSummary = {};
+    try {
+      var summaryRows = await erpFetch('erp_v_prf_pending_summary', 'select=*');
+      (summaryRows || []).forEach(function(s) {
+        var code = String(s.item_code || '').trim();
+        if (!code) return;
+        _prf.pendingSummary[code] = {
+          count: Number(s.pending_prf_count || 0),
+          totalQty: Number(s.total_pending_qty || 0),
+          prfNos: s.prf_nos || ''
+        };
+      });
+      console.log('[PRF] Pending summary:', Object.keys(_prf.pendingSummary).length, 'items');
+    } catch(e) {
+      console.warn('[PRF] Summary load failed, falling back to detail:', e.message);
+      // Fallback: compute from pendingPrfItems
+      Object.keys(_prf.pendingPrfItems).forEach(function(code) {
+        var items = _prf.pendingPrfItems[code];
+        _prf.pendingSummary[code] = {
+          count: items.length,
+          totalQty: items.reduce(function(s, p) { return s + p.qty; }, 0),
+          prfNos: items.map(function(p) { return p.prf_no; }).join(', ')
+        };
+      });
+    }
+    
+    window._prfPending = _prf.pendingPrfItems;
+    window._prfPendingSummary = _prf.pendingSummary;
+    
+    var pendingCount = Object.keys(_prf.pendingSummary).length;
+    console.log('[PRF] Pending items:', pendingCount);
+    
+    // Update UI banner
+    var banner = document.getElementById('pendingPrfBanner');
+    var countEl = document.getElementById('pendingPrfCount');
+    if (banner && countEl) {
+      if (pendingCount > 0) {
+        countEl.textContent = pendingCount;
+        banner.style.display = 'block';
+      } else {
+        banner.style.display = 'none';
+      }
+    }
   } catch(err) {
     console.warn('[PRF] Pending items load failed:', err.message);
   }
