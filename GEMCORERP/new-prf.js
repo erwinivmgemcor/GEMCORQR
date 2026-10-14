@@ -1,7 +1,8 @@
 // ============================================================
-// GEMCOR ERP — Create PRF (v2.4)
+// GEMCOR ERP — Create PRF (v2.5)
 // Two Modes: "From Reorder List" + "Manual Entry"
-// ✅ FIXED v2.4: Select All / Deselect All checkbox bug
+// ✅ v2.4: Select All / Deselect All checkbox bug
+// ✅ v2.5: Pending PRF detection + Net Need auto-adjust
 // ============================================================
 
 var MAX_ITEMS_PER_PRF = 30;
@@ -13,6 +14,7 @@ var _prf = {
   manualItems: [],
   reorderList: [],
   pendingPrfItems: {},
+  pendingSummary: {},          // ✅ NEW: Aggregated pending per item
   inventoryList: [],
   inventoryLoaded: false,
   erpItemsMap: {},
@@ -23,7 +25,7 @@ var _prf = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Create PRF v2.4] Initializing...');
+  console.log('[Create PRF v2.5] Initializing...');
 
   prfCheckHealth();
   initUserInfo();
@@ -140,22 +142,24 @@ async function loadReorderList() {
 
 async function loadPendingPrfItems() {
   try {
-    // ✅ Step 1: Load detailed items (per PRF)
+    // ═══ Step 1: Load detailed items (per PRF line) ═══
     var rows = await erpFetch('erp_v_prf_pending_items', 'select=*');
     _prf.pendingPrfItems = {};
+    
     (rows || []).forEach(function(r) {
       var code = String(r.item_code || '').trim();
       if (!code) return;
       if (!_prf.pendingPrfItems[code]) _prf.pendingPrfItems[code] = [];
       _prf.pendingPrfItems[code].push({
         prf_no: r.prf_no,
+        base_prf_no: r.base_prf_no || r.prf_no,
         status: r.status,
         qty: Number(r.qty_for_order || 0),
-        version: r.version_number || 1
+        description: r.description || ''
       });
     });
     
-    // ✅ Step 2: Load summary (total qty per item)
+    // ═══ Step 2: Load summary (aggregated per item) ═══
     _prf.pendingSummary = {};
     try {
       var summaryRows = await erpFetch('erp_v_prf_pending_summary', 'select=*');
@@ -165,28 +169,38 @@ async function loadPendingPrfItems() {
         _prf.pendingSummary[code] = {
           count: Number(s.pending_prf_count || 0),
           totalQty: Number(s.total_pending_qty || 0),
-          prfNos: s.prf_nos || ''
+          prfNos: s.prf_nos || '',
+          firstDate: s.first_prf_date,
+          latestDate: s.latest_prf_date
         };
       });
-      console.log('[PRF] Pending summary:', Object.keys(_prf.pendingSummary).length, 'items');
+      console.log('[PRF] Pending summary loaded:', Object.keys(_prf.pendingSummary).length, 'items');
     } catch(e) {
-      console.warn('[PRF] Summary load failed, falling back to detail:', e.message);
+      console.warn('[PRF] Summary load failed, computing from detail:', e.message);
       // Fallback: compute from pendingPrfItems
       Object.keys(_prf.pendingPrfItems).forEach(function(code) {
         var items = _prf.pendingPrfItems[code];
+        var uniquePrfs = {};
+        var totalQty = 0;
+        items.forEach(function(p) {
+          var key = p.base_prf_no || p.prf_no;
+          if (!uniquePrfs[key]) uniquePrfs[key] = true;
+          totalQty += p.qty;
+        });
         _prf.pendingSummary[code] = {
-          count: items.length,
-          totalQty: items.reduce(function(s, p) { return s + p.qty; }, 0),
-          prfNos: items.map(function(p) { return p.prf_no; }).join(', ')
+          count: Object.keys(uniquePrfs).length,
+          totalQty: totalQty,
+          prfNos: Object.keys(uniquePrfs).join(', ')
         };
       });
     }
     
+    // Update global refs
     window._prfPending = _prf.pendingPrfItems;
     window._prfPendingSummary = _prf.pendingSummary;
     
     var pendingCount = Object.keys(_prf.pendingSummary).length;
-    console.log('[PRF] Pending items:', pendingCount);
+    console.log('[PRF] Pending items loaded:', pendingCount);
     
     // Update UI banner
     var banner = document.getElementById('pendingPrfBanner');
@@ -203,6 +217,19 @@ async function loadPendingPrfItems() {
     console.warn('[PRF] Pending items load failed:', err.message);
   }
 }
+
+// ═══════════════════════════════════════════════════════════
+// PENDING CHECK HELPERS
+// ═══════════════════════════════════════════════════════════
+function checkItemPendingPrf(itemCode) {
+  if (!itemCode) return null;
+  var code = String(itemCode).trim();
+  var summary = _prf.pendingSummary[code];
+  if (!summary || summary.totalQty === 0) return null;
+  return summary;
+}
+
+window.checkItemPendingPrf = checkItemPendingPrf;
 
 // ═══════════════════════════════════════════════════════════
 // LOAD SEARCH CATALOG (erp_items — PAGINATED)
@@ -231,20 +258,16 @@ async function preloadInventoryForSearch() {
 
       allRows = allRows.concat(rows);
       offset += rows.length;
-
-      console.log('[PRF] Page ' + pageNum + ': fetched ' + rows.length + ' items (total: ' + allRows.length + ')');
+      console.log('[PRF] Page ' + pageNum + ': ' + rows.length + ' items (total: ' + allRows.length + ')');
       pageNum++;
 
-      if (rows.length < pageSize) {
-        hasMore = false;
-      }
-
+      if (rows.length < pageSize) hasMore = false;
       if (hasMore) await new Promise(function(r) { setTimeout(r, 100); });
     }
 
     console.log('[PRF] ✅ Total items fetched:', allRows.length);
 
-    var items = allRows.map(function(r) {
+    _prf.inventoryList = allRows.map(function(r) {
       return {
         code: r.item_code,
         description: r.description || '',
@@ -254,8 +277,6 @@ async function preloadInventoryForSearch() {
         location: r.location || ''
       };
     });
-
-    _prf.inventoryList = items;
 
     _prf.erpItemsMap = {};
     allRows.forEach(function(r) {
@@ -270,31 +291,11 @@ async function preloadInventoryForSearch() {
     });
 
     _prf.inventoryLoaded = true;
-    console.log('[PRF] ✅ Search catalog loaded:', items.length, 'items');
-    console.log('[PRF] ✅ ERP items map built:', Object.keys(_prf.erpItemsMap).length, 'entries');
+    console.log('[PRF] ✅ Search catalog loaded:', _prf.inventoryList.length, 'items');
 
   } catch(err) {
-    console.warn('[PRF] erp_items load failed, trying fallback inventory:', err.message);
-
-    try {
-      var rows2 = await erpFetch('inventory',
-        'select=item_code,description,unit,item_class&order=item_code.asc&limit=10000');
-      _prf.inventoryList = (rows2 || []).map(function(r) {
-        return {
-          code: r.item_code,
-          description: r.description || '',
-          unit: r.unit || 'PCS',
-          itemClass: r.item_class || '',
-          category: '',
-          location: ''
-        };
-      });
-      _prf.inventoryLoaded = true;
-      console.log('[PRF] ⚠️ Fallback: loaded from inventory:', _prf.inventoryList.length);
-    } catch(err2) {
-      console.error('[PRF] ❌ Both loads failed:', err2.message);
-      _prf.inventoryList = [];
-    }
+    console.warn('[PRF] erp_items load failed:', err.message);
+    _prf.inventoryList = [];
   }
 }
 
@@ -305,6 +306,43 @@ function getSuggestedQty(itemCode) {
   if (diff > 0) return Math.ceil(diff);
   return 0;
 }
+
+// ═══════════════════════════════════════════════════════════
+// COMPUTE SUGGESTED (with pending deduction)
+// ═══════════════════════════════════════════════════════════
+function computeSuggested(it) {
+  var breakdown = computeSuggestedBreakdown(it);
+  return breakdown.netNeed;
+}
+
+function computeSuggestedBreakdown(it) {
+  var itemCode = it.item_code || it.code || '';
+  
+  var buffer = Number(it.buffer_stock || 0);
+  var onHand = Number(it.on_hand || 0);
+  var baseNeed = buffer - onHand;
+  if (baseNeed < 0) baseNeed = 0;
+  
+  var pendingInfo = _prf.pendingSummary[itemCode];
+  var pendingQty = pendingInfo ? Number(pendingInfo.totalQty || 0) : 0;
+  var pendingCount = pendingInfo ? Number(pendingInfo.count || 0) : 0;
+  var prfNos = pendingInfo ? pendingInfo.prfNos : '';
+  
+  var netNeed = baseNeed - pendingQty;
+  if (netNeed < 0) netNeed = 0;
+  
+  return {
+    buffer: buffer,
+    onHand: onHand,
+    baseNeed: baseNeed,
+    pendingQty: pendingQty,
+    pendingCount: pendingCount,
+    prfNos: prfNos,
+    netNeed: Math.ceil(netNeed)
+  };
+}
+
+window.computeSuggestedBreakdown = computeSuggestedBreakdown;
 
 // ═══════════════════════════════════════════════════════════
 // CATEGORY CHANGE (Reorder mode)
@@ -333,7 +371,7 @@ function onCategoryChange() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER REORDER ITEMS (✅ v2.4 FIXED: Select All bug)
+// RENDER REORDER ITEMS (with pending column)
 // ═══════════════════════════════════════════════════════════
 function renderReorderItems() {
   var container = document.getElementById('reorderItemsContainer');
@@ -349,7 +387,6 @@ function renderReorderItems() {
     return;
   }
 
-  // ═══ ✅ v2.4 FIX: Compute selection state para sa header checkbox ═══
   var allSelected = _prf.items.length > 0 && _prf.items.every(function(it) {
     return it._selected === true;
   });
@@ -364,48 +401,64 @@ function renderReorderItems() {
         ' onchange="toggleSelectAll(this.checked)" title="Select/Deselect All">' +
     '</th>' +
     '<th style="width:4%">#</th>' +
-    '<th style="width:10%">Item Code</th>' +
-    '<th style="width:20%">Description</th>' +
-    '<th style="width:7%" class="text-center">Location</th>' +
-    '<th style="width:6%" class="text-center">On-Hand</th>' +
-    '<th style="width:6%" class="text-center">Buffer</th>' +
-    '<th style="width:6%" class="text-center">Ave/Mo</th>' +
-    '<th style="width:7%" class="text-center">Suggested</th>' +
+    '<th style="width:9%">Item Code</th>' +
+    '<th style="width:16%">Description</th>' +
+    '<th style="width:6%" class="text-center">Location</th>' +
+    '<th style="width:5%" class="text-center">On-Hand</th>' +
+    '<th style="width:5%" class="text-center">Buffer</th>' +
+    '<th style="width:7%" class="text-center" title="Existing Pending UNSERVED PRF Qty">⚠ Pending</th>' +
+    '<th style="width:6%" class="text-center" title="Net need = Buffer - On-Hand - Pending">Net Need</th>' +
     '<th style="width:8%" class="text-center">Qty For Order</th>' +
     '<th style="width:5%" class="text-center">Unit</th>' +
-    '<th style="width:14%">Remarks</th>' +
+    '<th style="width:17%">Remarks</th>' +
   '</tr></thead><tbody>';
 
   _prf.items.forEach(function(it, idx) {
-    var suggested = computeSuggested(it);
+    var breakdown = computeSuggestedBreakdown(it);
+    var suggested = breakdown.netNeed;
     var isSelected = it._selected === true;
     var qtyOrder = it._qtyOrder !== undefined ? it._qtyOrder : 0;
     var remarks = it._remarks || '';
 
-    var pendingInfo = _prf.pendingPrfItems[it.item_code] || [];
-    var pendingWarning = '';
-    if (pendingInfo.length > 0) {
-      var pendingText = pendingInfo.map(function(p) {
-        return p.prf_no + ' (' + p.status + ')';
-      }).join(', ');
-      pendingWarning = ' <span class="badge bg-warning text-dark" title="Already in: ' +
-        erpEsc(pendingText) + '">⚠ PENDING</span>';
+    // ✅ Pending display
+    var pendingDisplay = '<span class="text-muted">—</span>';
+    if (breakdown.pendingQty > 0) {
+      var tooltipText = 'PRF Nos:\n' + String(breakdown.prfNos).replace(/, /g, '\n');
+      pendingDisplay = '<span title="' + erpEsc(tooltipText) + '" style="cursor:help;">' +
+        '<strong class="text-warning">' + erpNum(breakdown.pendingQty) + '</strong>' +
+        '<div style="font-size:0.65rem;color:#6b7280;">' +
+        breakdown.pendingCount + ' PRF' + (breakdown.pendingCount > 1 ? 's' : '') +
+        '</div></span>';
+    }
+
+    // ✅ Net Need display
+    var netNeedDisplay = '';
+    if (breakdown.pendingQty > 0) {
+      netNeedDisplay = '<div style="text-decoration:line-through;color:#9ca3af;font-size:0.72rem;">' +
+        erpNum(breakdown.baseNeed) + '</div>' +
+        '<div><strong class="text-success">' + erpNum(suggested) + '</strong></div>';
+    } else {
+      netNeedDisplay = '<span class="text-muted" style="font-style:italic;">' + erpNum(suggested) + '</span>';
     }
 
     var urgencyBadge = '';
     if (it.urgency === 'CRITICAL') urgencyBadge = ' <span class="badge bg-danger">CRIT</span>';
     else if (it.urgency === 'URGENT') urgencyBadge = ' <span class="badge bg-warning text-dark">URG</span>';
 
-    html += '<tr data-idx="' + idx + '"' + (isSelected ? ' style="background:#ecfdf5;"' : '') + '>' +
-      '<td><input type="checkbox" class="item-select-chk" data-idx="' + idx + '"' + (isSelected ? ' checked' : '') + ' onchange="toggleItemSelect(' + idx + ', this.checked)"></td>' +
+    html += '<tr data-idx="' + idx + '"' +
+      (isSelected ? ' style="background:#ecfdf5;"' : '') +
+      (breakdown.pendingQty > 0 ? ' data-has-pending="true"' : '') + '>' +
+      '<td><input type="checkbox" class="item-select-chk" data-idx="' + idx + '"' +
+        (isSelected ? ' checked' : '') +
+        ' onchange="toggleItemSelect(' + idx + ', this.checked)"></td>' +
       '<td>' + (idx + 1) + '</td>' +
-      '<td><code>' + erpEsc(it.item_code) + '</code>' + urgencyBadge + pendingWarning + '</td>' +
+      '<td><code>' + erpEsc(it.item_code) + '</code>' + urgencyBadge + '</td>' +
       '<td>' + erpEsc(it.description || '—') + '</td>' +
       '<td class="text-center">' + erpEsc(it.location || '—') + '</td>' +
       '<td class="text-center">' + erpNum(it.on_hand || 0) + '</td>' +
       '<td class="text-center">' + erpNum(it.buffer_stock || 0) + '</td>' +
-      '<td class="text-center">' + erpNum(it.ave_monthly_consumption || 0) + '</td>' +
-      '<td class="text-center" style="color:#6b7280;font-style:italic;">' + erpNum(suggested) + '</td>' +
+      '<td class="text-center">' + pendingDisplay + '</td>' +
+      '<td class="text-center">' + netNeedDisplay + '</td>' +
       '<td class="text-center">' +
         '<input type="number" class="form-control form-control-sm qty-order-input" ' +
         'data-idx="' + idx + '" value="' + qtyOrder + '" min="0" step="1" ' +
@@ -441,7 +494,7 @@ function renderReorderItems() {
   html += '<div class="mt-3 d-flex justify-content-between align-items-center flex-wrap gap-2">';
   html += '<div class="small text-muted">' +
     '<i class="bi bi-info-circle me-1"></i>' +
-    'Suggested qty = (Buffer − On-Hand)' +
+    'Net Need = (Buffer − On-Hand − Pending PRF)' +
     batchingInfo + '</div>';
   html += '<div class="d-flex align-items-center gap-3">';
   html += '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllItems()" title="Clear all selections">' +
@@ -453,7 +506,6 @@ function renderReorderItems() {
 
   container.innerHTML = html;
 
-  // ✅ v2.4 FIX: Set indeterminate state sa header checkbox
   var headerChk = document.getElementById('selectAllChk');
   if (headerChk && someSelected && !allSelected) {
     headerChk.indeterminate = true;
@@ -461,14 +513,6 @@ function renderReorderItems() {
 
   updateItemsCount();
   updateSubmitButton();
-}
-
-function computeSuggested(it) {
-  var buffer = Number(it.buffer_stock || 0);
-  var onHand = Number(it.on_hand || 0);
-  var diff = buffer - onHand;
-  if (diff > 0) return Math.ceil(diff);
-  return Number(it.suggested_order_qty || 0);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -489,7 +533,6 @@ function toggleItemSelect(idx, checked) {
 
 window.toggleItemSelect = toggleItemSelect;
 
-// ✅ v2.4 FIXED: Toggle Select All with proper deselection
 function toggleSelectAll(checked) {
   console.log('[PRF] Toggle Select All:', checked, '| Items:', _prf.items.length);
 
@@ -504,13 +547,10 @@ function toggleSelectAll(checked) {
 
   recomputeSelected();
   renderReorderItems();
-
-  console.log('[PRF] After toggle — Selected:', _prf.selectedItems.length);
 }
 
 window.toggleSelectAll = toggleSelectAll;
 
-// ✅ NEW: Deselect All helper
 function deselectAllItems() {
   console.log('[PRF] Deselect All');
   _prf.items.forEach(function(it) {
@@ -597,7 +637,43 @@ function renderManualItems() {
 
   var html = '';
   _prf.manualItems.forEach(function(it, idx) {
-    var suggestedQty = getSuggestedQty(it.inventoryId);
+    var erpItem = _prf.erpItemsMap[it.inventoryId] || {};
+    var breakdown = it.inventoryId ? computeSuggestedBreakdown({
+      item_code: it.inventoryId,
+      buffer_stock: erpItem.buffer_stock || 0,
+      on_hand: erpItem.on_hand || 0
+    }) : null;
+    
+    var suggestedQty = breakdown ? breakdown.netNeed : 0;
+    
+    // ✅ Pending warning
+    var warningHtml = '';
+    if (breakdown && breakdown.pendingQty > 0 && it.inventoryId) {
+      var warningClass = breakdown.pendingCount >= 2 ? 'alert-danger' : 'alert-warning';
+      warningHtml = '<div class="alert ' + warningClass + ' py-2 px-3 mt-2 mb-0 small">' +
+        '<i class="bi bi-exclamation-triangle-fill me-1"></i>' +
+        '<strong>May existing pending PRF!</strong> ' +
+        '<code>' + erpEsc(breakdown.prfNos) + '</code>' +
+        '<div class="mt-1" style="font-size:0.78rem;">' +
+        'Pending qty: <strong class="text-danger">' + erpNum(breakdown.pendingQty) + '</strong> · ' +
+        'Original need: ' + erpNum(breakdown.baseNeed) + ' · ' +
+        '<strong class="text-success">Net: ' + erpNum(breakdown.netNeed) + '</strong>' +
+        '</div>' +
+        '</div>';
+    }
+    
+    // ✅ Breakdown display
+    var breakdownHtml = '';
+    if (breakdown && it.inventoryId && breakdown.buffer > 0) {
+      breakdownHtml = '<div class="small text-muted mt-1" style="font-size:0.75rem;">' +
+        'Buffer: <strong>' + erpNum(breakdown.buffer) + '</strong> · ' +
+        'On-Hand: ' + erpNum(breakdown.onHand) + ' · ' +
+        (breakdown.pendingQty > 0 
+          ? 'Pending: <strong class="text-warning">' + erpNum(breakdown.pendingQty) + '</strong> · ' 
+          : '') +
+        'Net Need: <strong class="text-success">' + erpNum(breakdown.netNeed) + '</strong>' +
+        '</div>';
+    }
 
     html += '<div class="manual-item-row" data-idx="' + idx + '">' +
       '<div class="row g-2 align-items-end">' +
@@ -628,7 +704,7 @@ function renderManualItems() {
             'value="' + (it.qty || '') + '" ' +
             'min="1" step="1" ' +
             'oninput="onManualQtyChange(' + idx + ', this.value)">' +
-          (suggestedQty > 0 ? '<div class="suggested-qty-hint">Suggested: <strong>' + suggestedQty + '</strong></div>' : '') +
+          (suggestedQty > 0 ? '<div class="suggested-qty-hint">Net: <strong>' + suggestedQty + '</strong></div>' : '') +
         '</div>' +
         '<div class="col-md-1">' +
           '<label class="form-label small fw-bold mb-1">Unit</label>' +
@@ -651,6 +727,8 @@ function renderManualItems() {
           '</button>' +
         '</div>' +
       '</div>' +
+      warningHtml +
+      breakdownHtml +
     '</div>';
   });
 
@@ -695,7 +773,19 @@ function onManualItemSearch(idx, value) {
   var html = '';
   matches.forEach(function(it) {
     var erpItem = _prf.erpItemsMap[it.code] || {};
-    var suggested = getSuggestedQty(it.code);
+    var breakdown = computeSuggestedBreakdown({
+      item_code: it.code,
+      buffer_stock: erpItem.buffer_stock || 0,
+      on_hand: erpItem.on_hand || 0
+    });
+    
+    var pendingBadge = '';
+    if (breakdown.pendingQty > 0) {
+      var pendingClass = breakdown.pendingCount >= 2 ? 'bg-danger' : 'bg-warning text-dark';
+      pendingBadge = '<span class="badge ' + pendingClass + '" title="Pending: ' + 
+        erpEsc(breakdown.prfNos) + '">' +
+        '⚠ ' + breakdown.pendingQty + ' pending</span>';
+    }
 
     html += '<div class="item-search-item" onclick="selectManualItem(' + idx + ', \'' +
       erpJsEsc(it.code) + '\', \'' + erpJsEsc(it.description) + '\', \'' + erpJsEsc(it.unit) + '\')">' +
@@ -703,9 +793,10 @@ function onManualItemSearch(idx, value) {
       '<div class="item-desc">' + erpEsc(it.description.substring(0, 100)) + '</div>' +
       '<div class="item-meta">' +
         '<span class="badge bg-light text-dark">' + erpEsc(it.unit || 'PCS') + '</span>' +
-        (erpItem.on_hand !== undefined ? '<span>On-Hand: <strong>' + erpNum(erpItem.on_hand) + '</strong></span>' : '') +
-        (erpItem.buffer_stock !== undefined ? '<span>Buffer: ' + erpNum(erpItem.buffer_stock) + '</span>' : '') +
-        (suggested > 0 ? '<span class="text-warning">Suggested: <strong>' + suggested + '</strong></span>' : '') +
+        (breakdown.onHand !== undefined ? '<span>On-Hand: <strong>' + erpNum(breakdown.onHand) + '</strong></span>' : '') +
+        (breakdown.buffer > 0 ? '<span>Buffer: ' + erpNum(breakdown.buffer) + '</span>' : '') +
+        (breakdown.netNeed > 0 ? '<span class="text-success">Net: <strong>' + breakdown.netNeed + '</strong></span>' : '') +
+        pendingBadge +
       '</div>' +
     '</div>';
   });
@@ -751,8 +842,33 @@ function selectManualItem(idx, code, description, unit) {
   item.description = description;
   item.unit = unit || 'PIECE';
 
+  // ✅ Auto-set qty based sa net need
+  var erpItem = _prf.erpItemsMap[code] || {};
+  var breakdown = computeSuggestedBreakdown({
+    item_code: code,
+    buffer_stock: erpItem.buffer_stock || 0,
+    on_hand: erpItem.on_hand || 0
+  });
+  
   if (!item.qty || item.qty === 0) {
-    item.qty = getSuggestedQty(code) || 1;
+    item.qty = breakdown.netNeed || 1;
+  }
+
+  // ✅ Confirm kung may pending
+  if (breakdown.pendingQty > 0) {
+    var msg = '⚠️ ATTENTION: Item ' + code + ' has existing pending PRF(s):\n\n';
+    msg += '📋 ' + breakdown.prfNos + '\n';
+    msg += '📊 Total pending qty: ' + breakdown.pendingQty + '\n\n';
+    msg += '💡 Net Need (auto-computed): ' + breakdown.netNeed + '\n\n';
+    msg += 'Do you want to proceed?';
+    
+    if (!confirm(msg)) {
+      _prf.manualItems.splice(idx, 1);
+      renderManualItems();
+      updateSubmitButton();
+      erpShowToast('Item removed', 'info');
+      return;
+    }
   }
 
   renderManualItems();
@@ -856,6 +972,65 @@ function updateItemsCount() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// SHOW PENDING PRF LIST
+// ═══════════════════════════════════════════════════════════
+function showPendingPrfList() {
+  var pending = _prf.pendingSummary;
+  var keys = Object.keys(pending);
+  
+  if (keys.length === 0) {
+    erpShowToast('No pending PRF items', 'info');
+    return;
+  }
+  
+  var html = '<div style="padding:10px;">';
+  html += '<h6 class="mb-3">Items with Pending UNSERVED PRF (' + keys.length + ')</h6>';
+  html += '<div class="table-responsive" style="max-height:400px;overflow-y:auto;">';
+  html += '<table class="table table-sm table-bordered" style="font-size:0.82rem;">';
+  html += '<thead class="table-light sticky-top"><tr>' +
+    '<th>Item Code</th>' +
+    '<th>Pending PRF(s)</th>' +
+    '<th class="text-end">Total Qty</th>' +
+    '</tr></thead><tbody>';
+  
+  keys.sort().forEach(function(code) {
+    var s = pending[code];
+    html += '<tr>' +
+      '<td><code>' + erpEsc(code) + '</code></td>' +
+      '<td><small>' + erpEsc(s.prfNos) + '</small></td>' +
+      '<td class="text-end fw-bold text-danger">' + erpNum(s.totalQty) + '</td>' +
+    '</tr>';
+  });
+  
+  html += '</tbody></table></div></div>';
+  
+  var modalEl = document.getElementById('pendingPrfListModal');
+  if (modalEl) modalEl.remove();
+  
+  var wrapper = document.createElement('div');
+  wrapper.innerHTML = '<div class="modal fade" id="pendingPrfListModal" tabindex="-1">' +
+    '<div class="modal-dialog modal-lg modal-dialog-scrollable">' +
+      '<div class="modal-content">' +
+        '<div class="modal-header" style="background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);color:#fff;">' +
+          '<h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>Pending PRF Items</h5>' +
+          '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>' +
+        '</div>' +
+        '<div class="modal-body p-0">' + html + '</div>' +
+        '<div class="modal-footer">' +
+          '<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(wrapper.firstChild);
+  
+  var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('pendingPrfListModal'));
+  modal.show();
+}
+
+window.showPendingPrfList = showPendingPrfList;
+
+// ═══════════════════════════════════════════════════════════
 // SUBMIT PRF
 // ═══════════════════════════════════════════════════════════
 async function submitPrf() {
@@ -916,6 +1091,18 @@ async function submitPrf() {
     return;
   }
 
+  // ✅ Detect duplicates bago mag-submit
+  var duplicateItems = [];
+  allItems.forEach(function(it) {
+    var pendingInfo = _prf.pendingSummary[it.item_code];
+    if (pendingInfo && pendingInfo.totalQty > 0) {
+      duplicateItems.push({
+        item: it,
+        pending: pendingInfo
+      });
+    }
+  });
+
   var batches = [];
   if (allItems.length > MAX_ITEMS_PER_PRF) {
     for (var i = 0; i < allItems.length; i += MAX_ITEMS_PER_PRF) {
@@ -949,6 +1136,7 @@ async function submitPrf() {
     }
   }
 
+  // ✅ Build confirmation message
   var confirmMsg = 'Create PRF with ' + allItems.length + ' item(s)?\n\n';
   if (batches.length > 1) {
     confirmMsg += 'Will be split into ' + batches.length + ' batches:\n';
@@ -959,6 +1147,19 @@ async function submitPrf() {
   }
   confirmMsg += 'Base PRF No.: ' + prfNo;
   confirmMsg += '\nTotal qty: ' + allItems.reduce(function(s, it) { return s + (it.qty_for_order || 0); }, 0);
+
+  if (duplicateItems.length > 0) {
+    confirmMsg += '\n\n⚠️ WARNING: ' + duplicateItems.length + ' item(s) may duplicate existing PRF:\n\n';
+    duplicateItems.slice(0, 5).forEach(function(d) {
+      confirmMsg += '• ' + d.item.item_code + '\n';
+      confirmMsg += '  Pending: ' + d.pending.prfNos + '\n';
+      confirmMsg += '  Pending Qty: ' + d.pending.totalQty + ' · New Qty: ' + d.item.qty_for_order + '\n';
+    });
+    if (duplicateItems.length > 5) {
+      confirmMsg += '\n... and ' + (duplicateItems.length - 5) + ' more\n';
+    }
+    confirmMsg += '\nAre you SURE you want to proceed?';
+  }
 
   if (!confirm(confirmMsg)) return;
 
@@ -1027,7 +1228,7 @@ async function createSinglePrf(prfNo, basePrfNo, batchNumber, items, category, p
 
   if (!docRes.ok) {
     var errText = await docRes.text();
-    throw new Error('Insert PRF failed: ' + docRes.status + ' ' + errText.substring(0, 200));
+    throw new Error('Insert PRF failed: ' + docRes.status);
   }
 
   var docArr = await docRes.json();
@@ -1061,7 +1262,7 @@ async function createSinglePrf(prfNo, basePrfNo, batchNumber, items, category, p
 
   if (!itemsRes.ok) {
     var itemsErrText = await itemsRes.text();
-    throw new Error('Insert items failed: ' + itemsRes.status + ' ' + itemsErrText.substring(0, 200));
+    throw new Error('Insert items failed: ' + itemsRes.status);
   }
 
   return { prf_no: prfNo, items: items.length };
@@ -1143,4 +1344,4 @@ window.addEventListener('resize', function() {
   });
 });
 
-console.log('✅ new-prf.js v2.4 loaded (Select All fix + Deselect All button)');
+console.log('✅ new-prf.js v2.5 loaded (pending PRF + net need)');
