@@ -403,12 +403,71 @@
         <button type="button" class="btn-close btn-close-white" onclick="bgClosePreview()"></button>
       </div>
       
-      <div class="modal-body" style="background:#e5e5e5;padding:20px;">
+           <div class="modal-body" style="background:#e5e5e5;padding:20px;">
         <div class="alert alert-info small py-2 mb-3 d-print-none">
           <i class="bi bi-info-circle me-1"></i>
           <strong>Print settings:</strong> 
           Letter/A4 · Margins: <strong>0.25in</strong> · Scale: <strong>100%</strong> · 
           Background graphics: <strong>ON</strong> (para sa QR codes)
+        </div>
+
+        <!-- ✅ BATCH CONTROLS -->
+        <div class="card mb-3 d-print-none" style="border:1.5px solid #cbd5e1;">
+          <div class="card-body py-3">
+            <div class="row g-2 align-items-end">
+              <div class="col-md-3">
+                <label class="form-label fw-bold mb-1 small">
+                  <i class="bi bi-layers me-1"></i>Print Mode:
+                </label>
+                <select id="bgBatchMode" class="form-select form-select-sm" onchange="bgOnBatchModeChange()">
+                  <option value="all">Print All at Once</option>
+                  <option value="batched" selected>Print in Batches (Recommended)</option>
+                  <option value="custom">Custom Range</option>
+                </select>
+              </div>
+              <div class="col-md-2" id="bgBatchSizeWrap">
+                <label class="form-label fw-bold mb-1 small">Batch Size:</label>
+                <select id="bgBatchSize" class="form-select form-select-sm" onchange="bgOnBatchSizeChange()">
+                  <option value="100">100 labels</option>
+                  <option value="200">200 labels</option>
+                  <option value="300" selected>300 labels</option>
+                  <option value="500">500 labels</option>
+                </select>
+              </div>
+              <div class="col-md-2 d-none" id="bgCustomFromWrap">
+                <label class="form-label fw-bold mb-1 small">From:</label>
+                <input type="number" id="bgCustomFrom" class="form-control form-control-sm" value="1" min="1" onchange="bgOnCustomRangeChange()">
+              </div>
+              <div class="col-md-2 d-none" id="bgCustomToWrap">
+                <label class="form-label fw-bold mb-1 small">To:</label>
+                <input type="number" id="bgCustomTo" class="form-control form-control-sm" value="100" min="1" onchange="bgOnCustomRangeChange()">
+              </div>
+              <div class="col-md-5 text-end" id="bgBatchSummaryWrap">
+                <div class="small text-muted mb-1" id="bgBatchSummary">—</div>
+              </div>
+            </div>
+
+            <!-- ✅ BATCH NAVIGATION -->
+            <div id="bgBatchNav" class="d-none mt-3 pt-3" style="border-top:1px solid #e2e8f0;">
+              <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                  <strong style="font-size:0.9rem;">
+                    <i class="bi bi-file-earmark-text me-1"></i>
+                    Showing batch: <span id="bgCurrentBatchLabel" class="text-primary">1 of 5</span>
+                  </strong>
+                  <div class="small text-muted" id="bgBatchRange">Items 1–300 of 1438</div>
+                </div>
+                <div class="d-flex gap-2">
+                  <button class="btn btn-sm btn-outline-secondary" onclick="bgPrevBatch()" id="bgBtnPrevBatch">
+                    <i class="bi bi-chevron-left me-1"></i>Prev Batch
+                  </button>
+                  <button class="btn btn-sm btn-outline-primary" onclick="bgNextBatch()" id="bgBtnNextBatch">
+                    Next Batch<i class="bi bi-chevron-right ms-1"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="d-flex justify-content-between align-items-center mb-3 d-print-none" style="flex-wrap:wrap;gap:8px;">
@@ -432,15 +491,14 @@
           <div class="label-sheet-grid" id="bgLabelGrid"></div>
         </div>
       </div>
-
-      <div class="modal-footer">
+            <div class="modal-footer">
         <div class="me-auto small text-muted">
           <i class="bi bi-info-circle me-1"></i>
           Recommended paper: <strong>Avery 5163</strong> sticker sheet, o letter-size bond paper.
         </div>
         <button type="button" class="btn btn-outline-secondary" onclick="bgClosePreview()">Close</button>
-        <button type="button" class="btn btn-primary" onclick="bgPrintLabels()">
-          <i class="bi bi-printer me-1"></i>Print Labels
+        <button type="button" class="btn btn-primary" onclick="bgPrintLabels()" id="bgBtnPrintLabels">
+          <i class="bi bi-printer me-1"></i><span id="bgBtnPrintLabelsText">Print Labels</span>
         </button>
       </div>
     </div>
