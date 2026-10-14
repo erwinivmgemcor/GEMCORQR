@@ -101,6 +101,15 @@ window.ascIsBackupTable = ascIsBackupTable;
 document.addEventListener('DOMContentLoaded', function() {
   console.log('[Admin Console v1.0] Initializing...');
   
+  // ✅ Load backup visibility preference
+  try {
+    var savedShowBackups = localStorage.getItem('ivm_admin_showBackups');
+    var toggleEl = document.getElementById('ascShowBackupTables');
+    if (toggleEl && savedShowBackups === '1') {
+      toggleEl.checked = true;
+    }
+  } catch(e) {}
+  
   _asc.currentUser = localStorage.getItem('ivm_username') || '';
   _asc.currentFullname = localStorage.getItem('ivm_userFullname') || _asc.currentUser;
   
@@ -541,10 +550,39 @@ function ascRenderStats() {
     return;
   }
   
+  // ✅ Filter: hide backup tables unless toggle is on
+  var showBackups = document.getElementById('ascShowBackupTables');
+  var includeBackups = showBackups ? showBackups.checked : false;
+  
+  var filtered = _asc.tableStats.filter(function(t) {
+    if (includeBackups) return true;
+    return !ascIsBackupTable(t.table_name);
+  });
+  
+  // Update count badge
+  var countEl = document.getElementById('ascTableStatsCount');
+  if (countEl) {
+    var backupCount = _asc.tableStats.length - _asc.tableStats.filter(function(t) {
+      return !ascIsBackupTable(t.table_name);
+    }).length;
+    
+    if (includeBackups) {
+      countEl.textContent = _asc.tableStats.length + ' total (' + backupCount + ' backups)';
+    } else {
+      countEl.textContent = filtered.length + ' (hiding ' + backupCount + ' backups)';
+    }
+  }
+  
   // Sort by row_count desc
-  var sorted = _asc.tableStats.slice().sort(function(a, b) {
+  var sorted = filtered.slice().sort(function(a, b) {
     return Number(b.row_count) - Number(a.row_count);
   });
+  
+  if (sorted.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">' +
+      'No tables match filter</td></tr>';
+    return;
+  }
   
   var html = '';
   sorted.forEach(function(t) {
@@ -570,6 +608,16 @@ function ascRenderStats() {
   
   tbody.innerHTML = html;
 }
+
+// ✅ Toggle backup tables visibility
+function ascToggleBackupTables(show) {
+  try {
+    localStorage.setItem('ivm_admin_showBackups', show ? '1' : '0');
+  } catch(e) {}
+  ascRenderStats();
+}
+
+window.ascToggleBackupTables = ascToggleBackupTables;
 
 function ascComputeKPIs() {
   var totalTables = _asc.tableStats.length;
@@ -651,24 +699,54 @@ async function ascLoadTableList() {
     
     _asc.allTables.sort();
     
+    // ✅ Filter: hide backup tables unless toggle is on
+    var showBackups = document.getElementById('ascShowBackupTables');
+    var includeBackups = showBackups ? showBackups.checked : false;
+    
+    var filteredTables = _asc.allTables.filter(function(t) {
+      if (includeBackups) return true;
+      return !ascIsBackupTable(t);
+    });
+    
     // Populate dropdown
     var sel = document.getElementById('ascTableSelect');
     if (sel) {
       sel.innerHTML = '<option value="">-- Select Table --</option>';
-      _asc.allTables.forEach(function(t) {
-        var cat = ascGetTableCategory(t);
-        var icon = cat === 'green' ? '🟢' : (cat === 'yellow' ? '🟡' : '🔴');
-        var opt = document.createElement('option');
-        opt.value = t;
-        opt.textContent = icon + ' ' + t;
-        sel.appendChild(opt);
-      });
+      
+      // ✅ Separate regular tables from backups sa dropdown
+      var regularTables = filteredTables.filter(function(t) { return !ascIsBackupTable(t); });
+      var backupTables = includeBackups ? filteredTables.filter(function(t) { return ascIsBackupTable(t); }) : [];
+      
+      if (regularTables.length > 0) {
+        var optGroupReg = document.createElement('optgroup');
+        optGroupReg.label = '📊 Tables';
+        regularTables.forEach(function(t) {
+          var cat = ascGetTableCategory(t);
+          var icon = cat === 'green' ? '🟢' : (cat === 'yellow' ? '🟡' : '🔴');
+          var opt = document.createElement('option');
+          opt.value = t;
+          opt.textContent = icon + ' ' + t;
+          optGroupReg.appendChild(opt);
+        });
+        sel.appendChild(optGroupReg);
+      }
+      
+      if (backupTables.length > 0) {
+        var optGroupBk = document.createElement('optgroup');
+        optGroupBk.label = '⚫ Backup Tables';
+        backupTables.forEach(function(t) {
+          var opt = document.createElement('option');
+          opt.value = t;
+          opt.textContent = '⚫ ' + t;
+          optGroupBk.appendChild(opt);
+        });
+        sel.appendChild(optGroupBk);
+      }
     }
   } catch(e) {
     console.error('[ascLoadTableList]', e);
   }
 }
-
 // ═══════════════════════════════════════════════════════════
 // LOAD TABLE DATA (VIEW-ONLY)
 // ═══════════════════════════════════════════════════════════
