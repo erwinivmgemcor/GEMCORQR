@@ -1,15 +1,15 @@
 /* ============================================================
-   GEMCOR ERP — Theme System v2.0
-   Centralized theme variables for Light + Dark mode
+   GEMCOR ERP — Theme System v3.0 (COMPLETE OVERHAUL)
+   Centralized theme variables + comprehensive overrides
    Single source of truth for ALL pages
    ============================================================ */
 
 /* ═══════════════════════════════════════════════════════════
-   LIGHT MODE (default fallback)
+   LIGHT MODE (default)
    ═══════════════════════════════════════════════════════════ */
 :root,
 [data-theme="light"] {
-  /* ─── Brand Colors (GEMCOR) ─── */
+  /* ─── Brand Colors ─── */
   --gem-navy: #1e3a5f;
   --gem-navy-dark: #152a47;
   --gem-navy-light: #2a4a73;
@@ -19,23 +19,26 @@
   --gem-red: #dc2626;
 
   /* ─── Backgrounds ─── */
-  --bg-page: #f8fafc;
+  --bg-page: #f0f2f5;
   --bg-surface: #ffffff;
   --bg-elevated: #ffffff;
   --bg-hover: #f1f5f9;
-  --bg-subtle: #f1f5f9;
+  --bg-subtle: #f8fafc;
   --bg-code: #eef2f7;
   --bg-overlay: rgba(15, 23, 42, 0.5);
+  --bg-dark-card: #ffffff;  /* KPI cards bg */
+  --bg-hero: linear-gradient(135deg, #1e3a5f 0%, #152a47 100%);
 
   /* ─── Text ─── */
-  --fg: #0f172a;
-  --fg-muted: #64748b;
+  --fg: #1f2937;
+  --fg-muted: #6c757d;
   --fg-subtle: #94a3b8;
   --fg-inverse: #ffffff;
   --fg-brand: #1e3a5f;
+  --fg-on-dark: #ffffff;
 
   /* ─── Borders ─── */
-  --bd: #e2e8f0;
+  --bd: #e5e7eb;
   --bd-strong: #cbd5e1;
   --bd-light: #f1f5f9;
 
@@ -46,38 +49,40 @@
 
   /* ─── Semantic ─── */
   --success: #10b981;
-  --success-soft: #ecfdf5;
+  --success-soft: #d1fae5;
   --success-border: #a7f3d0;
   --success-fg: #065f46;
   
   --warning: #f59e0b;
-  --warning-soft: #fffbeb;
+  --warning-soft: #fef3c7;
   --warning-border: #fde68a;
   --warning-fg: #92400e;
   
-  --danger: #ef4444;
-  --danger-soft: #fef2f2;
+  --danger: #dc2626;
+  --danger-soft: #fee2e2;
   --danger-border: #fecaca;
   --danger-fg: #991b1b;
   
   --info: #3b82f6;
-  --info-soft: #eff6ff;
+  --info-soft: #dbeafe;
   --info-border: #bfdbfe;
   --info-fg: #1e40af;
 
   /* ─── Shadows ─── */
-  --sh-xs: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
-  --sh-sm: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
-  --sh-md: 0 4px 6px -1px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
-  --sh-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
-  --sh-xl: 0 20px 25px -5px rgba(15, 23, 42, 0.10), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+  --sh-sm: 0 1px 3px 0 rgba(15, 23, 42, 0.06);
+  --sh-md: 0 4px 6px -1px rgba(15, 23, 42, 0.06);
+  --sh-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08);
+  --sh-xl: 0 20px 25px -5px rgba(15, 23, 42, 0.10);
 
-  /* ─── Table ─── */
+  /* ─── Tables ─── */
+  --table-bg: #ffffff;
   --table-header-bg: #f8fafc;
   --table-row-hover: #f8fafc;
   --table-border: #f1f5f9;
+  --table-code-bg: #eef2f7;
+  --table-code-fg: #1e3a5f;
 
-  /* ─── Sidebar (specific) ─── */
+  /* ─── Sidebar ─── */
   --sidebar-bg: #1e3a5f;
   --sidebar-bg-hover: rgba(255, 255, 255, 0.08);
   --sidebar-bg-active: rgba(255, 255, 255, 0.12);
@@ -86,13 +91,25 @@
   --sidebar-fg-muted: rgba(255, 255, 255, 0.45);
   --sidebar-border: rgba(255, 255, 255, 0.08);
   --sidebar-accent: #10b981;
+
+  /* ─── Charts ─── */
+  --chart-grid: #e5e7eb;
+  --chart-text: #6c757d;
+  --chart-tooltip-bg: #1e3a5f;
+  --chart-tooltip-fg: #ffffff;
+
+  /* ─── Inputs ─── */
+  --input-bg: #ffffff;
+  --input-bd: #e5e7eb;
+  --input-fg: #1f2937;
+  --input-placeholder: #94a3b8;
 }
 
 /* ═══════════════════════════════════════════════════════════
-   DARK MODE
+   DARK MODE — COMPREHENSIVE
    ═══════════════════════════════════════════════════════════ */
 [data-theme="dark"] {
-  /* ─── Brand Colors (adjusted for dark) ─── */
+  /* ─── Brand Colors (adjusted) ─── */
   --gem-navy: #4a6d99;
   --gem-navy-dark: #2a4a73;
   --gem-navy-light: #5a7ba3;
@@ -102,25 +119,28 @@
   --gem-red: #f87171;
 
   /* ─── Backgrounds ─── */
-  --bg-page: #070a0f;
-  --bg-surface: #0f141c;
-  --bg-elevated: #141b25;
-  --bg-hover: #1a2230;
-  --bg-subtle: #0f141c;
+  --bg-page: #0a0e17;
+  --bg-surface: #151b26;
+  --bg-elevated: #1a2230;
+  --bg-hover: #202a3b;
+  --bg-subtle: #1a2230;
   --bg-code: #1f2937;
-  --bg-overlay: rgba(0, 0, 0, 0.7);
+  --bg-overlay: rgba(0, 0, 0, 0.8);
+  --bg-dark-card: #151b26;  /* KPI cards */
+  --bg-hero: linear-gradient(135deg, #0f1d33 0%, #0a1628 100%);
 
   /* ─── Text ─── */
-  --fg: #f1f5f9;
-  --fg-muted: #94a3b8;
-  --fg-subtle: #64748b;
-  --fg-inverse: #0f172a;
+  --fg: #e5e7eb;
+  --fg-muted: #9ca3af;
+  --fg-subtle: #6b7280;
+  --fg-inverse: #0a0e17;
   --fg-brand: #93c5fd;
+  --fg-on-dark: #e5e7eb;
 
   /* ─── Borders ─── */
-  --bd: #1f2937;
-  --bd-strong: #334155;
-  --bd-light: #1a2230;
+  --bd: #2d3748;
+  --bd-strong: #4b5563;
+  --bd-light: #1f2937;
 
   /* ─── Accent ─── */
   --accent: #818cf8;
@@ -149,18 +169,20 @@
   --info-fg: #93c5fd;
 
   /* ─── Shadows ─── */
-  --sh-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
   --sh-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
   --sh-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
   --sh-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.6);
   --sh-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
 
-  /* ─── Table ─── */
+  /* ─── Tables ─── */
+  --table-bg: #151b26;
   --table-header-bg: #1a2230;
-  --table-row-hover: #1a2230;
-  --table-border: #1f2937;
+  --table-row-hover: #1f2937;
+  --table-border: #2d3748;
+  --table-code-bg: #1f2937;
+  --table-code-fg: #93c5fd;
 
-  /* ─── Sidebar (darker navy) ─── */
+  /* ─── Sidebar (darker) ─── */
   --sidebar-bg: #0a1628;
   --sidebar-bg-hover: rgba(255, 255, 255, 0.06);
   --sidebar-bg-active: rgba(255, 255, 255, 0.10);
@@ -169,142 +191,155 @@
   --sidebar-fg-muted: rgba(255, 255, 255, 0.4);
   --sidebar-border: rgba(255, 255, 255, 0.06);
   --sidebar-accent: #34d399;
+
+  /* ─── Charts ─── */
+  --chart-grid: #2d3748;
+  --chart-text: #9ca3af;
+  --chart-tooltip-bg: #1f2937;
+  --chart-tooltip-fg: #e5e7eb;
+
+  /* ─── Inputs ─── */
+  --input-bg: #1a2230;
+  --input-bd: #2d3748;
+  --input-fg: #e5e7eb;
+  --input-placeholder: #6b7280;
 }
 
 /* ═══════════════════════════════════════════════════════════
-   GLOBAL TRANSITIONS (smooth theme switch)
+   GLOBAL TRANSITIONS
    ═══════════════════════════════════════════════════════════ */
 html {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+html.theme-loading *,
+html.theme-loading *::before,
+html.theme-loading *::after {
+  transition: none !important;
+}
+
 body {
-  background: var(--bg-page);
-  color: var(--fg);
+  background: var(--bg-page) !important;
+  color: var(--fg) !important;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* ═══════════════════════════════════════════════════════════
-   AUTO-APPLY: Common Elements
+   COMPREHENSIVE OVERRIDES
+   Force ALL elements to use theme variables
    ═══════════════════════════════════════════════════════════ */
 
-/* Cards */
-.card,
+/* ─── Cards & Containers ─── */
 .erp-card,
+.card,
 .asc-card,
 .mdash-chart-card,
 .mdash-table-card,
+.mdash-kpi,
 .analytics-card,
-.section-card {
+.section-card,
+.health-card,
+.erp-chart-card,
+.erp-kpi-card,
+.erp-filters-card,
+.erp-table-card,
+.erp-item-row,
+.manual-item-row,
+.erp-doc-type-card,
+.erp-role-card {
   background: var(--bg-surface) !important;
   border-color: var(--bd) !important;
-  color: var(--fg);
+  color: var(--fg) !important;
 }
 
-/* Inputs */
-input:not([type="checkbox"]):not([type="radio"]),
-select,
-textarea,
-.form-control,
-.form-select {
-  background: var(--bg-surface);
-  color: var(--fg);
-  border-color: var(--bd);
-  transition: all 0.15s ease;
+.erp-card-header,
+.card-header,
+.asc-card-header,
+.erp-chart-header,
+.mdash-chart-header,
+.mdash-table-header,
+.erp-table-header,
+.section-card-header {
+  background: var(--bg-subtle) !important;
+  border-color: var(--bd) !important;
+  color: var(--fg) !important;
 }
 
-input:focus,
-select:focus,
-textarea:focus,
-.form-control:focus,
-.form-select:focus {
-  background: var(--bg-surface);
-  color: var(--fg);
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+.erp-card-body,
+.card-body,
+.asc-card-body,
+.erp-chart-body {
+  background: var(--bg-surface) !important;
+  color: var(--fg) !important;
 }
 
-input::placeholder,
-textarea::placeholder {
-  color: var(--fg-subtle);
+/* ─── KPI Cards (special handling) ─── */
+.erp-kpi-card,
+.mdash-kpi,
+.kpi-card {
+  background: var(--bg-surface) !important;
+  border-color: var(--bd) !important;
 }
 
-/* Buttons */
-.btn-outline-secondary {
-  color: var(--fg-muted);
-  border-color: var(--bd);
+.erp-kpi-card .kpi-label,
+.mdash-kpi-label,
+.kpi-label {
+  color: var(--fg-muted) !important;
 }
 
-.btn-outline-secondary:hover {
-  background: var(--bg-hover);
-  color: var(--fg);
-  border-color: var(--bd-strong);
+.erp-kpi-card .kpi-value,
+.mdash-kpi-value,
+.kpi-value {
+  color: var(--fg) !important;
 }
 
-/* Tables */
-table thead th {
-  background: var(--table-header-bg);
-  color: var(--fg-muted);
-  border-color: var(--bd);
+.erp-kpi-card .kpi-sub,
+.mdash-kpi-sub,
+.kpi-sub {
+  color: var(--fg-muted) !important;
 }
 
-table tbody td {
-  border-color: var(--table-border);
-  color: var(--fg);
+/* ─── Dashboard Hero ─── */
+.mdash-hero,
+.erp-hero {
+  background: var(--bg-hero) !important;
+  color: #ffffff !important;
 }
 
-table tbody tr:hover {
-  background: var(--table-row-hover);
+.mdash-hero-title,
+.mdash-hero-sub,
+.mdash-asof-label,
+.mdash-asof-date {
+  color: #ffffff !important;
 }
 
-table code {
-  background: var(--bg-code);
-  color: var(--fg-brand);
+.mdash-asof-date {
+  color: #fbbf24 !important;
 }
 
-/* Modals */
-.modal-content {
-  background: var(--bg-surface);
-  color: var(--fg);
-  border-color: var(--bd);
+/* ─── Text Colors ─── */
+.text-muted,
+small.text-muted {
+  color: var(--fg-muted) !important;
 }
 
-.modal-header {
-  border-color: var(--bd);
+.text-dark {
+  color: var(--fg) !important;
 }
 
-.modal-footer {
-  border-color: var(--bd);
+.text-body {
+  color: var(--fg) !important;
 }
 
-/* Toast */
-.toast {
-  background: var(--bg-elevated);
-  color: var(--fg);
-  border-color: var(--bd);
-}
-
-/* Dropdowns */
-.dropdown-menu {
-  background: var(--bg-elevated);
-  border-color: var(--bd);
-}
-
-.dropdown-item {
-  color: var(--fg);
-}
-
-.dropdown-item:hover {
-  background: var(--bg-hover);
-  color: var(--fg-brand);
-}
-
-/* Headings */
 h1, h2, h3, h4, h5, h6 {
   color: var(--fg);
 }
 
-/* Links */
+p, span, div, label {
+  color: inherit;
+}
+
+/* ─── Links ─── */
 a {
   color: var(--fg-brand);
 }
@@ -313,57 +348,177 @@ a:hover {
   color: var(--accent);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   DARK MODE SPECIFIC OVERRIDES
-   ═══════════════════════════════════════════════════════════ */
-
-/* Bootstrap overrides */
-[data-theme="dark"] .bg-light {
-  background-color: var(--bg-subtle) !important;
+/* ─── Inputs ─── */
+input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]),
+select,
+textarea,
+.form-control,
+.form-select {
+  background: var(--input-bg) !important;
+  color: var(--input-fg) !important;
+  border-color: var(--input-bd) !important;
 }
 
-[data-theme="dark"] .bg-white {
-  background-color: var(--bg-surface) !important;
+input:focus,
+select:focus,
+textarea:focus,
+.form-control:focus,
+.form-select:focus {
+  background: var(--input-bg) !important;
+  color: var(--input-fg) !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-soft) !important;
 }
 
-[data-theme="dark"] .text-dark {
-  color: var(--fg) !important;
+input::placeholder,
+textarea::placeholder,
+.form-control::placeholder {
+  color: var(--input-placeholder) !important;
 }
 
-[data-theme="dark"] .text-muted {
+input[readonly],
+input[disabled],
+select[disabled],
+textarea[readonly],
+.form-control[readonly],
+.form-control:disabled {
+  background: var(--bg-subtle) !important;
   color: var(--fg-muted) !important;
+  cursor: not-allowed;
 }
 
-[data-theme="dark"] .border {
-  border-color: var(--bd) !important;
-}
-
-[data-theme="dark"] .table {
-  color: var(--fg);
-}
-
-[data-theme="dark"] .table-light {
-  background-color: var(--bg-subtle);
-  color: var(--fg);
-}
-
-[data-theme="dark"] .table-light th {
-  background-color: var(--bg-subtle);
-  color: var(--fg);
-}
-
-[data-theme="dark"] .form-control-plaintext {
-  color: var(--fg);
-}
-
-[data-theme="dark"] .form-check-input {
-  background-color: var(--bg-subtle);
+/* ─── Checkbox & Radio ─── */
+input[type="checkbox"],
+input[type="radio"] {
+  background-color: var(--input-bg);
   border-color: var(--bd-strong);
 }
 
-[data-theme="dark"] .form-check-input:checked {
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
   background-color: var(--accent);
   border-color: var(--accent);
+}
+
+/* ─── Tables ─── */
+table,
+.table,
+.erp-table,
+.asc-table,
+.mdash-table {
+  color: var(--fg) !important;
+  background: var(--table-bg) !important;
+}
+
+table thead th,
+.table thead th,
+.erp-table thead th,
+.asc-table thead th {
+  background: var(--table-header-bg) !important;
+  color: var(--fg-muted) !important;
+  border-color: var(--bd) !important;
+}
+
+table tbody td,
+.table tbody td,
+.erp-table tbody td,
+.asc-table tbody td {
+  border-color: var(--table-border) !important;
+  color: var(--fg) !important;
+  background: transparent !important;
+}
+
+table tbody tr:hover,
+.table tbody tr:hover,
+.erp-table tbody tr:hover,
+.asc-table tbody tr:hover {
+  background: var(--table-row-hover) !important;
+}
+
+table code,
+.erp-table code,
+.asc-table code {
+  background: var(--table-code-bg) !important;
+  color: var(--table-code-fg) !important;
+}
+
+.table-light,
+.table-light th,
+.table-light td {
+  background: var(--bg-subtle) !important;
+  color: var(--fg) !important;
+  border-color: var(--bd) !important;
+}
+
+.table-striped tbody tr:nth-of-type(odd) {
+  background-color: var(--bg-subtle) !important;
+}
+
+/* ─── Buttons ─── */
+.btn-outline-secondary {
+  color: var(--fg-muted) !important;
+  border-color: var(--bd) !important;
+  background: transparent !important;
+}
+
+.btn-outline-secondary:hover {
+  background: var(--bg-hover) !important;
+  color: var(--fg) !important;
+  border-color: var(--bd-strong) !important;
+}
+
+.btn-outline-primary {
+  color: var(--accent) !important;
+  border-color: var(--accent) !important;
+  background: transparent !important;
+}
+
+.btn-outline-primary:hover {
+  background: var(--accent) !important;
+  color: #ffffff !important;
+}
+
+.btn-link {
+  color: var(--fg-brand) !important;
+}
+
+.btn-link:hover {
+  color: var(--accent) !important;
+}
+
+/* ─── Modals ─── */
+.modal-content {
+  background: var(--bg-surface) !important;
+  color: var(--fg) !important;
+  border-color: var(--bd) !important;
+}
+
+.modal-header {
+  border-color: var(--bd) !important;
+  background: var(--bg-subtle) !important;
+  color: var(--fg) !important;
+}
+
+.modal-body {
+  background: var(--bg-surface) !important;
+  color: var(--fg) !important;
+}
+
+.modal-footer {
+  border-color: var(--bd) !important;
+  background: var(--bg-subtle) !important;
+}
+
+.modal-header.bg-success,
+.modal-header.bg-danger,
+.modal-header.bg-primary,
+.modal-header.bg-warning,
+.modal-header[style*="background"] {
+  background: inherit;
+}
+
+.btn-close {
+  filter: none;
 }
 
 [data-theme="dark"] .btn-close {
@@ -374,33 +529,434 @@ a:hover {
   filter: none;
 }
 
-[data-theme="dark"] .alert-info {
-  background-color: var(--info-soft);
-  border-color: var(--info-border);
-  color: var(--info-fg);
+/* ─── Dropdowns ─── */
+.dropdown-menu {
+  background: var(--bg-elevated) !important;
+  border-color: var(--bd) !important;
+  box-shadow: var(--sh-xl) !important;
 }
 
-[data-theme="dark"] .alert-success {
-  background-color: var(--success-soft);
-  border-color: var(--success-border);
-  color: var(--success-fg);
+.dropdown-item {
+  color: var(--fg) !important;
 }
 
-[data-theme="dark"] .alert-warning {
-  background-color: var(--warning-soft);
-  border-color: var(--warning-border);
-  color: var(--warning-fg);
+.dropdown-item:hover,
+.dropdown-item:focus {
+  background: var(--bg-hover) !important;
+  color: var(--fg-brand) !important;
 }
 
-[data-theme="dark"] .alert-danger {
-  background-color: var(--danger-soft);
-  border-color: var(--danger-border);
-  color: var(--danger-fg);
+.dropdown-divider {
+  border-color: var(--bd) !important;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   THEME TOGGLE BUTTON
-   ═══════════════════════════════════════════════════════════ */
+/* ─── List Group ─── */
+.list-group-item {
+  background: var(--bg-surface) !important;
+  color: var(--fg) !important;
+  border-color: var(--bd) !important;
+}
+
+.list-group-item:hover {
+  background: var(--bg-hover) !important;
+}
+
+.list-group-item.active {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #ffffff !important;
+}
+
+/* ─── Alerts ─── */
+.alert {
+  border-width: 1px;
+}
+
+.alert-info {
+  background: var(--info-soft) !important;
+  border-color: var(--info-border) !important;
+  color: var(--info-fg) !important;
+}
+
+.alert-success {
+  background: var(--success-soft) !important;
+  border-color: var(--success-border) !important;
+  color: var(--success-fg) !important;
+}
+
+.alert-warning {
+  background: var(--warning-soft) !important;
+  border-color: var(--warning-border) !important;
+  color: var(--warning-fg) !important;
+}
+
+.alert-danger {
+  background: var(--danger-soft) !important;
+  border-color: var(--danger-border) !important;
+  color: var(--danger-fg) !important;
+}
+
+.alert-secondary {
+  background: var(--bg-subtle) !important;
+  border-color: var(--bd) !important;
+  color: var(--fg-muted) !important;
+}
+
+/* ─── Badges ─── */
+.badge.bg-light {
+  background: var(--bg-subtle) !important;
+  color: var(--fg) !important;
+}
+
+.badge.bg-secondary {
+  background: var(--fg-subtle) !important;
+}
+
+/* ─── Navbar / Topbar ─── */
+.erp-thin-topbar,
+.erp-topbar {
+  background: var(--bg-surface) !important;
+  border-color: var(--bd) !important;
+  color: var(--fg) !important;
+}
+
+.erp-thin-page-title {
+  color: var(--fg) !important;
+}
+
+.erp-search-bar {
+  background: var(--bg-subtle) !important;
+  border-color: var(--bd) !important;
+  color: var(--fg-muted) !important;
+}
+
+.erp-search-bar:hover {
+  background: var(--bg-surface) !important;
+  border-color: var(--bd-strong) !important;
+}
+
+.erp-search-bar i,
+.erp-search-bar span {
+  color: var(--fg-muted) !important;
+}
+
+.erp-search-kbd {
+  background: var(--bg-surface) !important;
+  border-color: var(--bd) !important;
+  color: var(--fg-muted) !important;
+}
+
+/* ─── User Menu ─── */
+.erp-user-toggle {
+  color: var(--fg) !important;
+}
+
+.erp-user-toggle:hover {
+  background: var(--bg-hover) !important;
+}
+
+.erp-user-name {
+  color: var(--fg) !important;
+}
+
+.erp-user-role {
+  color: var(--fg-subtle) !important;
+}
+
+.erp-user-dropdown {
+  background: var(--bg-elevated) !important;
+  border-color: var(--bd) !important;
+}
+
+.erp-user-dropdown-header .fullname {
+  color: var(--fg) !important;
+}
+
+.erp-user-dropdown-header .meta {
+  color: var(--fg-muted) !important;
+}
+
+.erp-user-dropdown-item {
+  color: var(--fg) !important;
+}
+
+.erp-user-dropdown-item:hover {
+  background: var(--bg-hover) !important;
+  color: var(--fg-brand) !important;
+}
+
+.erp-user-dropdown-item i {
+  color: var(--fg-subtle) !important;
+}
+
+.erp-user-dropdown-item:hover i {
+  color: var(--fg-brand) !important;
+}
+
+.erp-user-dropdown-divider {
+  background: var(--bd) !important;
+}
+
+.erp-user-dropdown-item.danger {
+  color: var(--danger) !important;
+}
+
+.erp-user-dropdown-item.danger:hover {
+  background: var(--danger-soft) !important;
+}
+
+/* ─── Health Dot ─── */
+.erp-health-dot {
+  background: var(--success-soft) !important;
+  border-color: var(--success-border) !important;
+  color: var(--success-fg) !important;
+}
+
+/* ─── Icon Buttons ─── */
+.erp-btn-icon,
+.erp-icon-btn {
+  color: var(--fg-muted) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+.erp-btn-icon:hover,
+.erp-icon-btn:hover {
+  background: var(--bg-hover) !important;
+  color: var(--fg) !important;
+}
+
+.erp-btn-outline {
+  color: var(--fg) !important;
+  border-color: var(--bd-strong) !important;
+  background: transparent !important;
+}
+
+.erp-btn-outline:hover {
+  background: var(--bg-hover) !important;
+  color: var(--fg-brand) !important;
+  border-color: var(--fg-brand) !important;
+}
+
+.erp-btn-outline-dark {
+  color: var(--fg) !important;
+  border-color: var(--bd-strong) !important;
+  background: transparent !important;
+}
+
+.erp-btn-outline-dark:hover {
+  background: var(--bg-hover) !important;
+  color: var(--fg-brand) !important;
+}
+
+/* ─── Page Header ─── */
+.erp-page-title {
+  color: var(--fg) !important;
+}
+
+.erp-page-title i {
+  color: var(--fg-brand) !important;
+}
+
+.erp-breadcrumb {
+  color: var(--fg-subtle) !important;
+}
+
+.erp-breadcrumb a {
+  color: var(--fg-muted) !important;
+}
+
+.erp-breadcrumb a:hover {
+  color: var(--fg-brand) !important;
+}
+
+/* ─── Pagination ─── */
+.erp-pagination button,
+.pagination button {
+  background: var(--bg-surface) !important;
+  color: var(--fg) !important;
+  border-color: var(--bd) !important;
+}
+
+.erp-pagination button:hover:not(:disabled),
+.pagination button:hover:not(:disabled) {
+  background: var(--accent) !important;
+  color: #ffffff !important;
+  border-color: var(--accent) !important;
+}
+
+.erp-pagination button:disabled,
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── Forms ─── */
+.form-label {
+  color: var(--fg) !important;
+}
+
+.form-text {
+  color: var(--fg-muted) !important;
+}
+
+.form-check-label {
+  color: var(--fg) !important;
+}
+
+/* ─── KPI Values (special sizes) ─── */
+.kpi-value,
+.mdash-kpi-value {
+  color: var(--fg) !important;
+}
+
+/* ─── Stats/Counter displays ─── */
+.stat-value,
+.counter-value,
+.total-value {
+  color: var(--fg) !important;
+}
+
+/* ─── Tooltip (Bootstrap) ─── */
+.tooltip-inner {
+  background: var(--bg-elevated) !important;
+  color: var(--fg) !important;
+  border: 1px solid var(--bd) !important;
+}
+
+/* ─── Toast ─── */
+.toast,
+.erp-toast {
+  background: var(--bg-elevated) !important;
+  color: var(--fg) !important;
+  border-color: var(--bd) !important;
+}
+
+/* ─── Dashboard Specific ─── */
+.mdash-filters,
+.erp-filters-card {
+  background: var(--bg-surface) !important;
+  border-color: var(--bd) !important;
+}
+
+.mdash-filter-select,
+.erp-select {
+  background: var(--input-bg) !important;
+  color: var(--input-fg) !important;
+  border-color: var(--input-bd) !important;
+}
+
+.mdash-search-input,
+.erp-search {
+  background: var(--input-bg) !important;
+  color: var(--input-fg) !important;
+  border-color: var(--input-bd) !important;
+}
+
+/* ─── Empty States ─── */
+.erp-empty,
+.mdash-empty {
+  color: var(--fg-muted) !important;
+}
+
+.erp-empty i,
+.mdash-empty i {
+  color: var(--fg-subtle) !important;
+}
+
+/* ─── Charts (Canvas fallback) ─── */
+canvas {
+  background: transparent;
+}
+
+/* ─── Section Titles ─── */
+.erp-section-title,
+.mdash-table-title {
+  color: var(--fg) !important;
+  border-color: var(--bd) !important;
+}
+
+/* ─── Tabs ─── */
+.asc-tab,
+.prf-tab,
+.io-tab,
+.nav-tabs .nav-link {
+  color: var(--fg-muted) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+.asc-tab:hover,
+.prf-tab:hover,
+.io-tab:hover,
+.nav-tabs .nav-link:hover {
+  color: var(--fg-brand) !important;
+  background: var(--bg-hover) !important;
+}
+
+.asc-tab.active,
+.prf-tab.active,
+.io-tab.active,
+.nav-tabs .nav-link.active {
+  color: var(--fg-brand) !important;
+  border-bottom-color: var(--fg-brand) !important;
+  background: transparent !important;
+}
+
+/* ─── Dark mode specific overrides ─── */
+[data-theme="dark"] {
+  /* Force images to be dimmer in dark mode */
+  img:not(.no-dark-filter) {
+    opacity: 0.95;
+  }
+  
+  /* Logo backgrounds sa dark mode */
+  .erp-logo,
+  .erp-sidebar-logo,
+  .mdash-hero-logo,
+  .login-logo,
+  .loading-logo {
+    background: #ffffff !important;
+    padding: 4px 8px;
+    border-radius: 6px;
+  }
+}
+
+/* ─── Print styles (override dark) ─── */
+@media print {
+  html,
+  [data-theme="dark"] {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  
+  * {
+    background: transparent !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+  }
+}
+
+/* ─── Scrollbar ─── */
+[data-theme="dark"] ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: var(--bg-page);
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: var(--bd-strong);
+  border-radius: 5px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-subtle);
+}
+
+/* ─── Theme Toggle Button ─── */
 .theme-toggle-btn {
   background: transparent;
   border: 1.5px solid var(--bd);
@@ -424,10 +980,6 @@ a:hover {
   transform: translateY(-1px);
 }
 
-.theme-toggle-btn:active {
-  transform: translateY(0);
-}
-
 [data-theme="dark"] .theme-toggle-btn {
   color: #fbbf24;
 }
@@ -438,9 +990,7 @@ a:hover {
   border-color: rgba(251, 191, 36, 0.3);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   THEME MENU (dropdown for 3 modes)
-   ═══════════════════════════════════════════════════════════ */
+/* ─── Theme Menu (3 modes) ─── */
 .theme-menu {
   position: relative;
   display: inline-block;
@@ -502,43 +1052,4 @@ a:hover {
   font-size: 1rem;
   width: 20px;
   text-align: center;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   SMOOTH TRANSITIONS FOR ALL THEMED ELEMENTS
-   ═══════════════════════════════════════════════════════════ */
-*,
-*::before,
-*::after {
-  transition-property: background-color, border-color, color;
-  transition-duration: 0.2s;
-  transition-timing-function: ease;
-}
-
-/* But disable transition sa initial load para walang flash */
-html.theme-loading *,
-html.theme-loading *::before,
-html.theme-loading *::after {
-  transition: none !important;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   SCROLLBAR (dark mode)
-   ═══════════════════════════════════════════════════════════ */
-[data-theme="dark"] ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-[data-theme="dark"] ::-webkit-scrollbar-track {
-  background: var(--bg-subtle);
-}
-
-[data-theme="dark"] ::-webkit-scrollbar-thumb {
-  background: var(--bd-strong);
-  border-radius: 5px;
-}
-
-[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
-  background: var(--fg-subtle);
 }
