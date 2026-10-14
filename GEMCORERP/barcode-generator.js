@@ -13,7 +13,16 @@ var _bg = {
   searchTimer: null,
   previewModal: null,
   showCutLines: true,
-  qrCache: {}
+  qrCache: {},
+  
+  // ✅ BATCH PRINT STATE
+  printItems: [],         // All items to print
+  batchMode: 'batched',   // 'all' | 'batched' | 'custom'
+  batchSize: 300,
+  currentBatch: 0,        // 0-indexed
+  totalBatches: 1,
+  customFrom: 1,
+  customTo: 100
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -369,29 +378,30 @@ function bgOpenPreviewModal() {
     return;
   }
 
-   // ✅ Better warning with estimated sheets
-  if (selectedCodes.length > 100) {
-    var sheets = Math.ceil(selectedCodes.length / 40);
-    var msg = 'You have ' + selectedCodes.length + ' labels selected.\n\n' +
-              '📄 Estimated sheets needed: ' + sheets + ' (Avery 5163, 40 labels/sheet)\n' +
-              '📋 Estimated print time: ' + Math.ceil(selectedCodes.length / 50) + ' seconds\n\n' +
-              '⚠️ Tip: I-split sa batches para hindi masyadong mabigat sa browser.\n\n' +
-              'Continue?';
-    if (!confirm(msg)) return;
-  }
-
+  // Gather selected items
   var selectedItems = _bg.allItems.filter(function(it) {
     return _bg.selectedItems[it.item_code];
   });
 
+  // ✅ Store items for batch processing
+  _bg.printItems = selectedItems;
+  _bg.currentBatch = 0;
+  _bg.customFrom = 1;
+  _bg.customTo = Math.min(selectedItems.length, _bg.batchSize);
+
+  // ✅ Auto-suggest batch mode kung > 100 items
+  if (selectedItems.length > 100 && _bg.batchMode === 'all') {
+    _bg.batchMode = 'batched';
+  }
+
   // Update modal
   document.getElementById('bgPreviewCount').textContent = selectedItems.length + ' labels';
 
-  // Render label grid
-  bgRenderLabelGrid('bgLabelGrid', selectedItems);
+  // Update batch controls
+  bgUpdateBatchControls();
 
-  // Also render for print
-  bgRenderLabelGrid('bgPrintGrid', selectedItems);
+  // Render initial batch
+  bgRenderCurrentBatch();
 
   // Show modal
   if (!_bg.previewModal) {
@@ -400,6 +410,215 @@ function bgOpenPreviewModal() {
     });
   }
   _bg.previewModal.show();
+}
+
+// ✅ Compute total batches
+function bgComputeBatches() {
+  var total = _bg.printItems.length;
+  var mode = _bg.batchMode;
+  var batchSize = _bg.batchSize;
+
+  if (mode === 'all') {
+    _bg.totalBatches = 1;
+    return;
+  }
+
+  if (mode === 'custom') {
+    var range = _bg.customTo - _bg.customFrom + 1;
+    if (range < 1) range = 1;
+    _bg.totalBatches = Math.ceil(range / batchSize);
+    return;
+  }
+
+  // batched mode
+  _bg.totalBatches = Math.ceil(total / batchSize);
+}
+
+// ✅ Get items for current batch
+function bgGetCurrentBatchItems() {
+  var total = _bg.printItems.length;
+  var mode = _bg.batchMode;
+  var batchSize = _bg.batchSize;
+
+  if (mode === 'all') {
+    return _bg.printItems;
+  }
+
+  if (mode === 'custom') {
+    var from = Math.max(1, _bg.customFrom) - 1;  // 0-indexed
+    var to = Math.min(total, _bg.customTo);       // exclusive
+    var subset = _bg.printItems.slice(from, to);
+    var batchStart = _bg.currentBatch * batchSize;
+    var batchEnd = Math.min(batchStart + batchSize, subset.length);
+    return subset.slice(batchStart, batchEnd);
+  }
+
+  // batched mode
+  var start = _bg.currentBatch * batchSize;
+  var end = Math.min(start + batchSize, total);
+  return _bg.printItems.slice(start, end);
+}
+
+// ✅ Render current batch
+function bgRenderCurrentBatch() {
+  var batchItems = bgGetCurrentBatchItems();
+
+  // Render sa preview
+  bgRenderLabelGrid('bgLabelGrid', batchItems);
+
+  // Render sa print area
+  bgRenderLabelGrid('bgPrintGrid', batchItems);
+
+  // Update nav info
+  var total = _bg.printItems.length;
+  var mode = _bg.batchMode;
+  var batchSize = _bg.batchSize;
+
+  var labelEl = document.getElementById('bgCurrentBatchLabel');
+  var rangeEl = document.getElementById('bgBatchRange');
+
+  if (mode === 'all') {
+    if (labelEl) labelEl.textContent = 'All items';
+    if (rangeEl) rangeEl.textContent = total + ' labels total';
+  } else if (mode === 'custom') {
+    var from = Math.max(1, _bg.customFrom);
+    var to = Math.min(total, _bg.customTo);
+    var subsetSize = to - from + 1;
+    var batchStart = _bg.currentBatch * batchSize;
+    var batchEnd = Math.min(batchStart + batchSize, subsetSize);
+
+    if (labelEl) labelEl.textContent = (_bg.currentBatch + 1) + ' of ' + _bg.totalBatches;
+    if (rangeEl) rangeEl.textContent = 'Items ' + (from + batchStart) + '–' + (from + batchEnd - 1) + ' of ' + total;
+  } else {
+    var start = _bg.currentBatch * batchSize;
+    var end = Math.min(start + batchSize, total);
+    if (labelEl) labelEl.textContent = (_bg.currentBatch + 1) + ' of ' + _bg.totalBatches;
+    if (rangeEl) rangeEl.textContent = 'Items ' + (start + 1) + '–' + end + ' of ' + total;
+  }
+
+  // Update print button label
+  var printBtnText = document.getElementById('bgBtnPrintLabelsText');
+  if (printBtnText) {
+    if (mode === 'all') {
+      printBtnText.textContent = 'Print All (' + total + ' labels)';
+    } else {
+      var count = batchItems.length;
+      printBtnText.textContent = 'Print Batch ' + (_bg.currentBatch + 1) + ' (' + count + ' labels)';
+    }
+  }
+
+  // Update nav buttons
+  var btnPrev = document.getElementById('bgBtnPrevBatch');
+  var btnNext = document.getElementById('bgBtnNextBatch');
+
+  if (btnPrev) btnPrev.disabled = (_bg.currentBatch <= 0);
+  if (btnNext) btnNext.disabled = (_bg.currentBatch >= _bg.totalBatches - 1);
+}
+
+// ✅ Update batch controls visibility
+function bgUpdateBatchControls() {
+  var modeSelect = document.getElementById('bgBatchMode');
+  var batchSizeWrap = document.getElementById('bgBatchSizeWrap');
+  var customFromWrap = document.getElementById('bgCustomFromWrap');
+  var customToWrap = document.getElementById('bgCustomToWrap');
+  var batchNav = document.getElementById('bgBatchNav');
+  var summary = document.getElementById('bgBatchSummary');
+
+  if (modeSelect) modeSelect.value = _bg.batchMode;
+
+  // Show/hide batch size
+  if (batchSizeWrap) {
+    batchSizeWrap.classList.toggle('d-none', _bg.batchMode === 'all');
+  }
+
+  // Show/hide custom range
+  if (customFromWrap) customFromWrap.classList.toggle('d-none', _bg.batchMode !== 'custom');
+  if (customToWrap) customToWrap.classList.toggle('d-none', _bg.batchMode !== 'custom');
+
+  // Show/hide batch nav
+  if (batchNav) {
+    batchNav.classList.toggle('d-none', _bg.batchMode === 'all' || _bg.totalBatches <= 1);
+  }
+
+  // Set custom inputs
+  var fromInput = document.getElementById('bgCustomFrom');
+  var toInput = document.getElementById('bgCustomTo');
+  var total = _bg.printItems.length;
+  if (fromInput) fromInput.max = total;
+  if (toInput) toInput.max = total;
+  if (fromInput) fromInput.value = _bg.customFrom;
+  if (toInput) toInput.value = _bg.customTo;
+
+  // Summary
+  if (summary) {
+    var sheets = Math.ceil(total / 40);
+    var msg = '<i class="bi bi-printer me-1"></i>';
+    msg += '<strong>' + total + '</strong> labels total';
+    if (_bg.batchMode === 'batched') {
+      msg += ' · Will print in <strong>' + _bg.totalBatches + '</strong> batches';
+      msg += ' · <strong>' + sheets + '</strong> sheets';
+    } else if (_bg.batchMode === 'custom') {
+      var range = _bg.customTo - _bg.customFrom + 1;
+      msg += ' · Printing <strong>' + range + '</strong> (custom range)';
+    } else {
+      msg += ' · <strong>' + sheets + '</strong> sheets';
+    }
+    summary.innerHTML = msg;
+  }
+}
+
+// ✅ Batch mode change
+function bgOnBatchModeChange() {
+  _bg.batchMode = document.getElementById('bgBatchMode').value;
+  _bg.currentBatch = 0;
+
+  bgComputeBatches();
+  bgUpdateBatchControls();
+  bgRenderCurrentBatch();
+}
+
+// ✅ Batch size change
+function bgOnBatchSizeChange() {
+  _bg.batchSize = parseInt(document.getElementById('bgBatchSize').value, 10) || 300;
+  _bg.currentBatch = 0;
+
+  bgComputeBatches();
+  bgUpdateBatchControls();
+  bgRenderCurrentBatch();
+}
+
+// ✅ Custom range change
+function bgOnCustomRangeChange() {
+  var from = parseInt(document.getElementById('bgCustomFrom').value, 10) || 1;
+  var to = parseInt(document.getElementById('bgCustomTo').value, 10) || 100;
+
+  if (from < 1) from = 1;
+  if (to < from) to = from;
+  if (to > _bg.printItems.length) to = _bg.printItems.length;
+
+  _bg.customFrom = from;
+  _bg.customTo = to;
+  _bg.currentBatch = 0;
+
+  bgComputeBatches();
+  bgUpdateBatchControls();
+  bgRenderCurrentBatch();
+}
+
+// ✅ Next batch
+function bgNextBatch() {
+  if (_bg.currentBatch < _bg.totalBatches - 1) {
+    _bg.currentBatch++;
+    bgRenderCurrentBatch();
+  }
+}
+
+// ✅ Prev batch
+function bgPrevBatch() {
+  if (_bg.currentBatch > 0) {
+    _bg.currentBatch--;
+    bgRenderCurrentBatch();
+  }
 }
 
 function bgClosePreview() {
@@ -477,20 +696,58 @@ function bgPrintLabels() {
     return;
   }
 
+  var batchItems = bgGetCurrentBatchItems();
+  var batchCount = batchItems.length;
+  var isBatch = _bg.batchMode !== 'all' && _bg.totalBatches > 1;
+
+  // ✅ Warning for printing
+  var msg = '';
+  if (_bg.batchMode === 'all') {
+    msg = 'Print ALL ' + batchCount + ' labels?\n\n' +
+          '📄 Sheets needed: ~' + Math.ceil(batchCount / 40) + '\n' +
+          '⏱️ Estimated time: ' + Math.ceil(batchCount / 50) + ' seconds';
+  } else {
+    msg = 'Print Batch ' + (_bg.currentBatch + 1) + ' of ' + _bg.totalBatches + '?\n\n' +
+          '📄 Labels in this batch: ' + batchCount + '\n' +
+          '📄 Sheets needed: ~' + Math.ceil(batchCount / 40) + '\n' +
+          '⏱️ Estimated time: ' + Math.ceil(batchCount / 50) + ' seconds';
+  }
+
+  if (!confirm(msg)) return;
+
   // Make sure QR images are loaded bago mag-print
   var images = printArea.querySelectorAll('img');
   var loaded = 0;
   var total = images.length;
 
-  if (total === 0) {
+  var printBtn = document.getElementById('bgBtnPrintLabels');
+  var originalHtml = printBtn ? printBtn.innerHTML : '';
+  if (printBtn) {
+    printBtn.disabled = true;
+    printBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Preparing...';
+  }
+
+  var doPrint = function() {
+    if (printBtn) {
+      printBtn.disabled = false;
+      printBtn.innerHTML = originalHtml;
+    }
     _triggerPrint(printArea);
+  };
+
+  if (total === 0) {
+    doPrint();
     return;
   }
 
   var checkDone = function() {
     loaded++;
+    if (printBtn) {
+      printBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' +
+        'Loading ' + loaded + '/' + total;
+    }
     if (loaded >= total) {
-      _triggerPrint(printArea);
+      doPrint();
     }
   };
 
@@ -503,15 +760,14 @@ function bgPrintLabels() {
     }
   });
 
-  // Fallback timeout — just print after 2 seconds
+  // Fallback timeout
   setTimeout(function() {
     if (loaded < total) {
       console.log('[BarcodeGen] Timeout waiting for images, printing anyway');
-      _triggerPrint(printArea);
+      doPrint();
     }
-  }, 2000);
+  }, 5000);
 }
-
 function _triggerPrint(printArea) {
   printArea.style.display = 'block';
 
@@ -562,5 +818,12 @@ window.bgOnSearch = bgOnSearch;
 window.bgPagePrev = bgPagePrev;
 window.bgPageNext = bgPageNext;
 window.bgRender = bgRender;
+
+// ✅ Batch print controls
+window.bgOnBatchModeChange = bgOnBatchModeChange;
+window.bgOnBatchSizeChange = bgOnBatchSizeChange;
+window.bgOnCustomRangeChange = bgOnCustomRangeChange;
+window.bgNextBatch = bgNextBatch;
+window.bgPrevBatch = bgPrevBatch;
 
 console.log('✅ barcode-generator.js v1.0 loaded');
