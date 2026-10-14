@@ -19,6 +19,17 @@ var _io = {
 document.addEventListener('DOMContentLoaded', function() {
   console.log('[Item In & Out v1.0] Initializing...');
   ioCheckHealth();
+
+  // ✅ Auto-load item from URL parameter
+  var params = new URLSearchParams(window.location.search);
+  var code = params.get('code');
+  if (code) {
+    console.log('[Item In & Out] Auto-loading from URL:', code);
+    setTimeout(function() {
+      document.getElementById('ioSearchInput').value = code;
+      ioLoadItem(code);
+    }, 500);
+  }
 });
 
 async function ioCheckHealth() {
