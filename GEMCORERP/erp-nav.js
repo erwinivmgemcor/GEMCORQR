@@ -45,6 +45,7 @@
       id: 'inventory',
       label: 'Inventory',
       items: [
+             items: [
         {
           id: 'inventory-count',
           label: 'Inventory Count',
@@ -57,6 +58,13 @@
           label: 'Replenishment Needs',
           icon: 'bi-cart-plus-fill',
           href: 'replenishment.html',
+          roles: ['warehouse']
+        },
+        {
+          id: 'barcode-generator',
+          label: 'Barcode Generator',
+          icon: 'bi-upc-scan',
+          href: 'barcode-generator.html',
           roles: ['warehouse']
         }
       ]
@@ -258,6 +266,7 @@
     'mrs-monitoring': 'MRS Monitoring',
     'item-in-out': 'Item In & Out',
     'replenishment': 'Replenishment Needs',
+    'barcode-generator': 'Barcode Generator',
     'weekly-monitor': 'Weekly Monitoring',
     'usage-trend': 'Usage Trend',
     'usage-entry': 'Usage Entry',
