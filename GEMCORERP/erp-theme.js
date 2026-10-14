@@ -1,14 +1,56 @@
 // ============================================================
-// GEMCOR ERP — Shared Theme Manager
-// Light / Dark / System toggle, shared across all ERP pages
+// GEMCOR ERP — Theme Manager v2.0
+// Single source of truth for Light/Dark/System themes
+// ✅ 3 modes: light | dark | system
+// ✅ Auto-detect system preference
+// ✅ Save preference sa localStorage
+// ✅ Apply before render (avoid flash)
+// ✅ Listen for system theme changes
 // ============================================================
 
 (function() {
   'use strict';
 
-  var THEME_KEY = 'erp_theme';  // 'light' | 'dark' | 'system'
+  var THEME_KEY = 'erp_theme_mode';           // 'light' | 'dark' | 'system'
+  var THEME_APPLIED_KEY = 'erp_theme_applied'; // resolved theme (for quick access)
 
-  function getStoredTheme() {
+  // ═══════════════════════════════════════════════════════════
+  // PREVENT FLASH — Apply theme ASAP before DOM renders
+  // ═══════════════════════════════════════════════════════════
+  (function preventFlash() {
+    try {
+      // Add loading class para walang transition sa initial load
+      document.documentElement.classList.add('theme-loading');
+
+      var savedMode = localStorage.getItem(THEME_KEY) || 'system';
+      var effective = savedMode;
+
+      // Kung system mode, detect OS preference
+      if (savedMode === 'system') {
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          effective = 'dark';
+        } else {
+          effective = 'light';
+        }
+      }
+
+      // Apply agad sa <html> bago mag-render ang body
+      document.documentElement.setAttribute('data-theme', effective);
+
+      // Update meta theme-color
+      var metaTheme = document.querySelector('meta[name="theme-color"]');
+      if (metaTheme) {
+        metaTheme.content = effective === 'dark' ? '#0a1628' : '#1e3a5f';
+      }
+    } catch(e) {
+      console.warn('[Theme] preventFlash error:', e);
+    }
+  })();
+
+  // ═══════════════════════════════════════════════════════════
+  // Get saved preference
+  // ═══════════════════════════════════════════════════════════
+  function getSavedMode() {
     try {
       return localStorage.getItem(THEME_KEY) || 'system';
     } catch(e) {
@@ -16,80 +58,226 @@
     }
   }
 
-  function getEffectiveTheme(theme) {
-    if (theme === 'system') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  // ═══════════════════════════════════════════════════════════
+  // Detect system preference
+  // ═══════════════════════════════════════════════════════════
+  function getSystemTheme() {
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
     }
-    return theme;
+    return 'light';
   }
 
-  function applyTheme(theme) {
-    var effective = getEffectiveTheme(theme);
+  // ═══════════════════════════════════════════════════════════
+  // Resolve effective theme from mode
+  // ═══════════════════════════════════════════════════════════
+  function resolveTheme(mode) {
+    if (mode === 'system') return getSystemTheme();
+    return mode;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // Apply theme to DOM
+  // ═══════════════════════════════════════════════════════════
+  function applyTheme(mode) {
+    var effective = resolveTheme(mode);
+    
+    // Set data-theme attribute sa <html>
     document.documentElement.setAttribute('data-theme', effective);
-    updateToggleButton(effective);
-  }
-
-  function updateToggleButton(effective) {
-    var icon = document.getElementById('themeIcon');
-    var btn = document.getElementById('themeToggleBtn');
-
-    if (icon) {
-      icon.className = effective === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
-    }
-    if (btn) {
-      btn.title = effective === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
-    }
-  }
-
-  function toggleTheme() {
-    var current = getStoredTheme();
-    var effective = getEffectiveTheme(current);
-    var next = effective === 'dark' ? 'light' : 'dark';
-
+    
+    // Save effective para sa quick access
     try {
-      localStorage.setItem(THEME_KEY, next);
+      localStorage.setItem(THEME_APPLIED_KEY, effective);
     } catch(e) {}
+    
+    // Update toggle icons
+    updateToggleIcons(effective);
+    
+    // Update meta theme-color (mobile browser address bar)
+    var metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) {
+      metaTheme.content = effective === 'dark' ? '#0a1628' : '#1e3a5f';
+    }
+    
+    // Update theme menu active state
+    updateThemeMenuActive(mode);
+  }
 
-    applyTheme(next);
+  // ═══════════════════════════════════════════════════════════
+  // Update all toggle button icons on page
+  // ═══════════════════════════════════════════════════════════
+  function updateToggleIcons(effective) {
+    // Update all theme icons
+    var icons = document.querySelectorAll('#themeIcon, .theme-icon');
+    icons.forEach(function(icon) {
+      icon.className = effective === 'dark' 
+        ? 'bi bi-sun-fill' 
+        : 'bi bi-moon-stars-fill';
+    });
+    
+    // Update toggle button tooltip
+    var btns = document.querySelectorAll('#themeToggleBtn, .theme-toggle-btn');
+    btns.forEach(function(btn) {
+      btn.title = effective === 'dark' 
+        ? 'Switch to Light Mode' 
+        : 'Switch to Dark Mode';
+    });
+  }
 
-    // Toast (kung may erpShowToast function sa page)
-    if (typeof window.erpShowToast === 'function') {
-      window.erpShowToast(next === 'dark' ? '🌙 Dark mode on' : '☀️ Light mode on');
-    } else if (typeof window.erpPrintShowToast === 'function') {
-      window.erpPrintShowToast(next === 'dark' ? '🌙 Dark mode on' : '☀️ Light mode on');
+  // ═══════════════════════════════════════════════════════════
+  // Update theme menu active state
+  // ═══════════════════════════════════════════════════════════
+  function updateThemeMenuActive(mode) {
+    var items = document.querySelectorAll('.theme-menu-item');
+    items.forEach(function(item) {
+      var itemMode = item.getAttribute('data-theme-mode');
+      item.classList.toggle('active', itemMode === mode);
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // Toggle theme (cycle: light ↔ dark)
+  // ═══════════════════════════════════════════════════════════
+  function toggleTheme() {
+    var currentMode = getSavedMode();
+    var currentEffective = resolveTheme(currentMode);
+    
+    // Cycle: light ↔ dark
+    var newMode = currentEffective === 'dark' ? 'light' : 'dark';
+    
+    try {
+      localStorage.setItem(THEME_KEY, newMode);
+    } catch(e) {}
+    
+    applyTheme(newMode);
+    
+    // Toast notification
+    if (typeof erpShowToast === 'function') {
+      erpShowToast(newMode === 'dark' ? '🌙 Dark mode' : '☀️ Light mode', 'info');
     }
   }
 
-  // ─── Initialize on load ───
-  function init() {
-    var saved = getStoredTheme();
-    applyTheme(saved);
+  // ═══════════════════════════════════════════════════════════
+  // Set specific mode
+  // ═══════════════════════════════════════════════════════════
+  function setTheme(mode) {
+    if (['light', 'dark', 'system'].indexOf(mode) === -1) return;
+    
+    try {
+      localStorage.setItem(THEME_KEY, mode);
+    } catch(e) {}
+    
+    applyTheme(mode);
+    
+    // Close theme menu kung bukas
+    closeThemeMenu();
+    
+    // Toast notification
+    if (typeof erpShowToast === 'function') {
+      var labels = {
+        light: '☀️ Light mode',
+        dark: '🌙 Dark mode',
+        system: '🖥️ System theme'
+      };
+      erpShowToast(labels[mode] || 'Theme changed', 'info');
+    }
+  }
 
-    // Watch OS theme changes (only if user chose 'system')
+  // ═══════════════════════════════════════════════════════════
+  // Theme Menu (3 modes dropdown)
+  // ═══════════════════════════════════════════════════════════
+  function toggleThemeMenu() {
+    var menu = document.getElementById('themeMenu');
+    if (!menu) return;
+    
+    var isOpen = menu.classList.contains('open');
+    
+    // Close other menus
+    document.querySelectorAll('.erp-user-menu.open').forEach(function(m) {
+      m.classList.remove('open');
+    });
+    document.querySelectorAll('#erpNotifContainer.open').forEach(function(c) {
+      c.classList.remove('open');
+    });
+    
+    if (!isOpen) {
+      menu.classList.add('open');
+      updateThemeMenuActive(getSavedMode());
+    } else {
+      menu.classList.remove('open');
+    }
+  }
+
+  function closeThemeMenu() {
+    var menu = document.getElementById('themeMenu');
+    if (menu) menu.classList.remove('open');
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // Initialize
+  // ═══════════════════════════════════════════════════════════
+  function init() {
+    var savedMode = getSavedMode();
+    applyTheme(savedMode);
+    
+    // Listen for system theme changes (kung naka-system mode)
     if (window.matchMedia) {
-      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
-        if (getStoredTheme() === 'system') {
+      var mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      
+      var handleChange = function() {
+        if (getSavedMode() === 'system') {
           applyTheme('system');
         }
-      });
+      };
+      
+      if (mediaQuery.addEventListener) {
+        mediaQuery.addEventListener('change', handleChange);
+      } else if (mediaQuery.addListener) {
+        mediaQuery.addListener(handleChange);
+      }
     }
+    
+    // Remove loading class pagkatapos ng delay
+    setTimeout(function() {
+      document.documentElement.classList.remove('theme-loading');
+    }, 100);
   }
 
-  // Apply ASAP (before render) to avoid flash
+  // Apply on init
   init();
 
-  // Re-apply after DOM loads (para ma-update yung icon kung existing)
+  // Re-apply pagkatapos ng DOM load
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function() {
-      applyTheme(getStoredTheme());
+      applyTheme(getSavedMode());
     });
   } else {
-    applyTheme(getStoredTheme());
+    applyTheme(getSavedMode());
   }
 
-  // Expose globally
-  window.erpToggleTheme = toggleTheme;
-  window.erpApplyTheme = applyTheme;
+  // Close theme menu kapag nag-click sa labas
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('#themeMenu') && !e.target.closest('.theme-toggle-btn')) {
+      closeThemeMenu();
+    }
+  });
 
-  console.log('✅ erp-theme.js loaded');
+  // Close sa ESC key
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      closeThemeMenu();
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // Expose globals
+  // ═══════════════════════════════════════════════════════════
+  window.erpToggleTheme = toggleTheme;
+  window.erpSetTheme = setTheme;
+  window.erpGetTheme = function() { return getSavedMode(); };
+  window.erpGetEffectiveTheme = function() { return resolveTheme(getSavedMode()); };
+  window.erpToggleThemeMenu = toggleThemeMenu;
+  window.erpCloseThemeMenu = closeThemeMenu;
+
+  console.log('✅ erp-theme.js v2.0 loaded (3 modes: light/dark/system)');
 })();
