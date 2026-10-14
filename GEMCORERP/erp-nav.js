@@ -584,7 +584,7 @@
         '</button>';
     }
 
-    topbar.innerHTML =
+        topbar.innerHTML =
       '<div class="erp-thin-topbar-left">' +
         '<h1 class="erp-thin-page-title">' + _escapeHtml(pageTitle) + '</h1>' +
         '<div class="erp-search-bar" onclick="if(window.erpOpenSearch)erpOpenSearch()">' +
@@ -597,6 +597,25 @@
         customButtons +
         '<div class="erp-health-dot" id="erpHealthDot" title="Checking...">' +
           '<span class="erp-health-text" id="erpHealthText">Checking...</span>' +
+        '</div>' +
+        '<div class="theme-menu" id="themeMenu">' +
+          '<button class="theme-toggle-btn" onclick="erpToggleThemeMenu()" title="Toggle theme">' +
+            '<i class="bi bi-moon-stars-fill" id="themeIcon"></i>' +
+          '</button>' +
+          '<div class="theme-menu-dropdown">' +
+            '<button class="theme-menu-item" onclick="erpSetTheme(\'light\')" data-theme-mode="light">' +
+              '<i class="bi bi-sun-fill"></i>' +
+              '<span>Light</span>' +
+            '</button>' +
+            '<button class="theme-menu-item" onclick="erpSetTheme(\'dark\')" data-theme-mode="dark">' +
+              '<i class="bi bi-moon-stars-fill"></i>' +
+              '<span>Dark</span>' +
+            '</button>' +
+            '<button class="theme-menu-item" onclick="erpSetTheme(\'system\')" data-theme-mode="system">' +
+              '<i class="bi bi-display"></i>' +
+              '<span>System</span>' +
+            '</button>' +
+          '</div>' +
         '</div>' +
         '<div id="erpBellContainer"></div>' +
         '<div class="erp-user-menu" id="erpUserMenu">' +
