@@ -76,18 +76,20 @@
     }
 
        // Production: only whitelisted pages
-    if (role === 'production') {
-      if (PRODUCTION_ALLOWED.indexOf(currentPage) !== -1) {
-        console.log('[ERP Guard] ✓ Production access: ' + currentPage);
-        return;
-      }
-      // Redirect production to their home page
-      console.warn('[ERP Guard] Production not allowed on ' + currentPage + ' — redirecting to My Requests');
-      window.location.replace('my-requests.html');
+      // Production: only whitelisted pages
+  if (role === 'production') {
+    if (PRODUCTION_ALLOWED.indexOf(currentPage) !== -1) {
+      console.log('[ERP Guard] ✓ Production access: ' + currentPage);
       return;
     }
+    // Redirect production to their home page
+    console.warn('[ERP Guard] Production not allowed on ' + currentPage + ' — redirecting to My Requests');
+    window.location.replace('my-requests.html');
+    return;
+  }
 
-    _redirectToLogin('Unknown role: ' + role);
+  _redirectToLogin('Unknown role: ' + role);
+}  // ✅ IDINAGDAG — closing brace para sa _checkAccess() function
 
   _checkAccess();
 })();
