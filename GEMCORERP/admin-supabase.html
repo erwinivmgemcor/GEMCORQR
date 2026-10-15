@@ -122,6 +122,12 @@
       <span>Full Cutover</span>
       <span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem;">NEW</span>
     </button>
+    <button class="asc-tab" data-tab="guide" onclick="ascSwitchTab('guide')">
+      <i class="bi bi-book-fill"></i>
+      <span>Admin Guide</span>
+      <span class="badge bg-success ms-1" style="font-size:0.6rem;">HELP</span>
+    </button>
+  </div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
@@ -148,6 +154,7 @@
           <button class="btn btn-sm btn-outline-warning" onclick="ascSetMode('write')" id="ascQuickBtnWrite">
             <i class="bi bi-pencil me-1"></i>Read + Write
           </button>
+          
           <button class="btn btn-sm btn-outline-danger" onclick="ascSetMode('full')" id="ascQuickBtnFull">
             <i class="bi bi-shield-fill-x me-1"></i>Full Access
           </button>
@@ -782,6 +789,577 @@
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+  </div>
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- TAB 8: ADMIN GUIDE -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="asc-tab-content" id="tab-guide">
+
+    <!-- Header -->
+    <div class="asc-card" style="padding:24px;margin-bottom:20px;background:linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);border-left:4px solid #6366f1;">
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <i class="bi bi-book-fill" style="font-size:2.5rem;color:#6366f1;"></i>
+        <div class="flex-grow-1">
+          <h4 style="margin-bottom:4px;font-weight:800;">📖 Admin Guide</h4>
+          <p style="margin:0;color:#4f46e5;font-size:0.9rem;">
+            Komprehensibong guide para sa lahat ng admin tasks. Hindi mo na kailangan pumunta sa Supabase para sa common operations.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="asc-card" style="padding:20px;margin-bottom:20px;">
+      <h5 style="margin-bottom:16px;font-weight:700;">
+        <i class="bi bi-lightning-charge-fill text-warning me-2"></i>Quick Actions
+      </h5>
+      <div class="guide-actions-grid">
+        <button class="guide-action-btn" onclick="ascGuideBackupNow()">
+          <i class="bi bi-hdd-fill text-primary"></i>
+          <span>💾 Backup Now</span>
+          <small>Create snapshot ng lahat ng data</small>
+        </button>
+        <button class="guide-action-btn" onclick="ascGuideRestoreSnapshot()">
+          <i class="bi bi-arrow-counterclockwise text-warning"></i>
+          <span>🔙 Restore Snapshot</span>
+          <small>I-restore sa previous state</small>
+        </button>
+        <button class="guide-action-btn" onclick="ascGuideRefreshCache()">
+          <i class="bi bi-arrow-clockwise text-info"></i>
+          <span>🔄 Refresh Cache</span>
+          <small>Clear browser cache at reload</small>
+        </button>
+        <button class="guide-action-btn" onclick="ascGuideHealthCheck()">
+          <i class="bi bi-activity text-success"></i>
+          <span>🏥 Health Check</span>
+          <small>Check system status</small>
+        </button>
+        <button class="guide-action-btn danger" onclick="ascGuideResetTransactions()">
+          <i class="bi bi-trash-fill text-danger"></i>
+          <span>⚠️ Reset Transactions</span>
+          <small>Delete lahat ng transactions</small>
+        </button>
+        <button class="guide-action-btn warning" onclick="ascGuideEmergencyStop()">
+          <i class="bi bi-shield-fill-x text-danger"></i>
+          <span>🚨 Emergency Stop</span>
+          <small>Set Read-Only mode</small>
+        </button>
+      </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="asc-card" style="padding:16px 20px;margin-bottom:20px;">
+      <div class="erp-search-wrap">
+        <i class="bi bi-search"></i>
+        <input type="text" id="ascGuideSearch" class="erp-search"
+          placeholder="Search guides... (e.g., 'restore', 'reset', 'error')"
+          oninput="ascGuideSearch(this.value)">
+      </div>
+      <div style="margin-top:12px;" id="ascGuideSearchResults"></div>
+    </div>
+
+    <!-- Guide Sections -->
+    <div id="ascGuideContent">
+
+      <!-- 🚀 GETTING STARTED -->
+      <div class="asc-card guide-section" data-category="getting-started" style="margin-bottom:20px;">
+        <div class="asc-card-header" style="cursor:pointer;" onclick="ascGuideToggle(this)">
+          <div class="asc-card-title">
+            <i class="bi bi-rocket-takeoff-fill text-primary"></i>
+            <span>🚀 Getting Started</span>
+          </div>
+          <i class="bi bi-chevron-down guide-caret"></i>
+        </div>
+        <div class="asc-card-body guide-body" style="display:none;">
+
+          <div class="guide-item">
+            <h6>Admin Console Overview</h6>
+            <p>Ang Supabase Admin Console ay para sa <strong>system administrators</strong>. Dito mo pwedeng gawin ang lahat ng data operations na hindi mo kailangan pumunta sa Supabase.</p>
+            <div class="guide-info-box">
+              <i class="bi bi-info-circle-fill me-1"></i>
+              <strong>Access:</strong> Kailangan mo ng <code>ivm_isAdmin = true</code> para makapasok.
+            </div>
+          </div>
+
+          <div class="guide-item">
+            <h6>Access Modes Explained</h6>
+            <table class="guide-table">
+              <thead>
+                <tr>
+                  <th>Mode</th>
+                  <th>Pwedeng Gawin</th>
+                  <th>Safe?</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>🔒 <strong>Read-Only</strong></td>
+                  <td>View lang, walang modifications</td>
+                  <td>✅ Pinaka-safe</td>
+                </tr>
+                <tr>
+                  <td>✏️ <strong>Read + Write</strong></td>
+                  <td>Insert, Update, Soft Delete (walang SQL/Hard Delete)</td>
+                  <td>✅ Safe para sa regular work</td>
+                </tr>
+                <tr>
+                  <td>🔓 <strong>Full Access</strong></td>
+                  <td>Lahat + Raw SQL + Hard Delete</td>
+                  <td>⚠️ Kailangan ng PIN</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-item">
+            <h6>Default PIN</h6>
+            <p>Ang default PIN ay <code>9999</code> — <strong>palitan mo agad</strong> para sa security.</p>
+            <button class="guide-btn primary" onclick="ascOpenSettings()">
+              <i class="bi bi-shield-lock me-1"></i>Change PIN Now
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 📊 DATA MANAGEMENT -->
+      <div class="asc-card guide-section" data-category="data-management" style="margin-bottom:20px;">
+        <div class="asc-card-header" style="cursor:pointer;" onclick="ascGuideToggle(this)">
+          <div class="asc-card-title">
+            <i class="bi bi-database-fill text-success"></i>
+            <span>📊 Data Management</span>
+          </div>
+          <i class="bi bi-chevron-down guide-caret"></i>
+        </div>
+        <div class="asc-card-body guide-body" style="display:none;">
+
+          <div class="guide-item">
+            <h6>Restore Unit Cost from Snapshot</h6>
+            <p>Gamitin ito kung <strong>nawala o naging zero</strong> ang unit costs ng items — kadalasan nangyayari pagkatapos ng cutover na may blank CSV.</p>
+            <ol class="guide-steps">
+              <li>Pumunta sa <strong>Supabase SQL Editor</strong></li>
+              <li>I-run ang SQL sa ibaba</li>
+              <li>Palitan ang <code>4</code> ng tamang snapshot ID (i-check sa Cutover History)</li>
+            </ol>
+            <div class="guide-sql-box">
+              <pre><code>WITH snapshot_data AS (
+  SELECT 
+    (item->>'item_code') AS item_code,
+    (item->>'unit_cost')::NUMERIC AS unit_cost
+  FROM erp_cutover_snapshots,
+       jsonb_array_elements(items_data) AS item
+  WHERE id = 4
+    AND (item->>'unit_cost')::NUMERIC > 0
+)
+UPDATE erp_items 
+SET unit_cost = sd.unit_cost, updated_at = NOW()
+FROM snapshot_data sd
+WHERE erp_items.item_code = sd.item_code
+  AND erp_items.is_deleted = false;</code></pre>
+              <button class="guide-btn-outline" onclick="ascGuideCopySql(this)">
+                <i class="bi bi-clipboard me-1"></i>Copy SQL
+              </button>
+            </div>
+          </div>
+
+          <div class="guide-item">
+            <h6>Fix Malformed Item Codes</h6>
+            <p>Kung may items na may <strong>weird na item_code</strong> (may commas, spaces, etc.), i-clean mo sila.</p>
+            <div class="guide-sql-box">
+              <pre><code>-- View malformed items
+SELECT item_code, description 
+FROM erp_items 
+WHERE item_code LIKE ',%'
+   OR item_code LIKE '% %'
+   OR item_code IS NULL
+   OR item_code = ''
+LIMIT 20;</code></pre>
+              <button class="guide-btn-outline" onclick="ascGuideCopySql(this)">
+                <i class="bi bi-clipboard me-1"></i>Copy SQL
+              </button>
+            </div>
+          </div>
+
+          <div class="guide-item">
+            <h6>Recalculate Stock Values</h6>
+            <p>Kung mali ang stock value na lumalabas, i-recompute mo:</p>
+            <div class="guide-info-box">
+              <i class="bi bi-info-circle-fill me-1"></i>
+              Ang stock value = <code>on_hand × unit_cost</code>. Automatic ito sa Stock Monitor, pero kailangan i-refresh.
+            </div>
+            <button class="guide-btn primary" onclick="ascGuideRefreshCache()">
+              <i class="bi bi-arrow-clockwise me-1"></i>Refresh Stock Monitor
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 🔧 TROUBLESHOOTING -->
+      <div class="asc-card guide-section" data-category="troubleshooting" style="margin-bottom:20px;">
+        <div class="asc-card-header" style="cursor:pointer;" onclick="ascGuideToggle(this)">
+          <div class="asc-card-title">
+            <i class="bi bi-tools text-warning"></i>
+            <span>🔧 Troubleshooting</span>
+          </div>
+          <i class="bi bi-chevron-down guide-caret"></i>
+        </div>
+        <div class="asc-card-body guide-body" style="display:none;">
+
+          <div class="guide-item">
+            <h6>❌ Stock Value = ₱0</h6>
+            <p><strong>Cause:</strong> Lahat ng <code>unit_cost</code> ay zero.</p>
+            <p><strong>Fix:</strong></p>
+            <ol class="guide-steps">
+              <li>Pumunta sa <strong>Cutover History</strong> — hanapin ang snapshot na may valid cost</li>
+              <li>I-restore via SQL (tingnan ang Data Management section)</li>
+              <li>I-refresh ang Stock Monitor</li>
+            </ol>
+          </div>
+
+          <div class="guide-item">
+            <h6>❌ Row Click Hindi Gumagana</h6>
+            <p><strong>Cause:</strong> Missing <code>onclick</code> sa table row.</p>
+            <p><strong>Fix:</strong> I-clear ang cache at i-refresh:</p>
+            <button class="guide-btn primary" onclick="ascGuideRefreshCache()">
+              <i class="bi bi-arrow-clockwise me-1"></i>Clear Cache & Reload
+            </button>
+          </div>
+
+          <div class="guide-item">
+            <h6>❌ Edit Button Not Working</h6>
+            <p><strong>Cause:</strong> Naka-Read-Only mode, o missing modal.</p>
+            <p><strong>Fix:</strong></p>
+            <ol class="guide-steps">
+              <li>Check mo kung <strong>Read + Write</strong> ang mode</li>
+              <li>Refresh ang browser</li>
+              <li>Check ang console (F12) for errors</li>
+            </ol>
+          </div>
+
+          <div class="guide-item">
+            <h6>❌ Cutover Failed: "column does not exist"</h6>
+            <p><strong>Cause:</strong> Luma ang SQL function sa Supabase.</p>
+            <p><strong>Fix:</strong> I-re-run ang latest SQL function — tingnan ang Full Cutover tab.</p>
+          </div>
+
+          <div class="guide-item">
+            <h6>❌ Only 1000 Items Loaded</h6>
+            <p><strong>Cause:</strong> Supabase 1000-row limit per request.</p>
+            <p><strong>Fix:</strong> Ang pagination loop ay naka-set na sa latest code. I-check kung may 2,389 items sa Stock Monitor.</p>
+          </div>
+
+          <div class="guide-item">
+            <h6>❌ Template Downloaded is Blank</h6>
+            <p><strong>Cause:</strong> Walang data sa <code>erp_items</code>, o wrong filter.</p>
+            <p><strong>Fix:</strong> I-check ang total items count sa Stock Monitor. Dapat 2,389.</p>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 🚨 EMERGENCY PROCEDURES -->
+      <div class="asc-card guide-section" data-category="emergency" style="margin-bottom:20px;">
+        <div class="asc-card-header" style="cursor:pointer;" onclick="ascGuideToggle(this)">
+          <div class="asc-card-title">
+            <i class="bi bi-exclamation-triangle-fill text-danger"></i>
+            <span>🚨 Emergency Procedures</span>
+          </div>
+          <i class="bi bi-chevron-down guide-caret"></i>
+        </div>
+        <div class="asc-card-body guide-body" style="display:none;">
+
+          <div class="guide-info-box danger">
+            <i class="bi bi-exclamation-octagon-fill me-1"></i>
+            <strong>ATTENTION:</strong> Ang mga procedures na ito ay <strong>destructive</strong>. Siguraduhin na may <strong>backup</strong> bago mag-execute.
+          </div>
+
+          <div class="guide-item">
+            <h6>🚨 Emergency Stop (Read-Only Mode)</h6>
+            <p>I-set ang system sa <strong>Read-Only</strong> para walang makapag-modify habang may issue.</p>
+            <button class="guide-btn danger" onclick="ascGuideEmergencyStop()">
+              <i class="bi bi-shield-fill-x me-1"></i>Activate Read-Only Mode
+            </button>
+          </div>
+
+          <div class="guide-item">
+            <h6>🔄 Reset All Transactions</h6>
+            <p>I-delete lahat ng <strong>transactions</strong> (documents, PRF, etc.) pero <strong>i-keep</strong> ang master data (items, users).</p>
+            <button class="guide-btn danger" onclick="ascGuideResetTransactions()">
+              <i class="bi bi-trash me-1"></i>Reset Transactions (PIN Required)
+            </button>
+          </div>
+
+          <div class="guide-item">
+            <h6>💾 Emergency Backup</h6>
+            <p>I-create ng immediate backup ng lahat ng data.</p>
+            <button class="guide-btn primary" onclick="ascGuideBackupNow()">
+              <i class="bi bi-hdd-fill me-1"></i>Backup Now
+            </button>
+          </div>
+
+          <div class="guide-item">
+            <h6>🔙 Rollback Last Cutover</h6>
+            <p>I-undo ang last cutover kung may issue.</p>
+            <button class="guide-btn warning" onclick="ascSwitchTab('cutover')">
+              <i class="bi bi-arrow-counterclockwise me-1"></i>Go to Cutover History
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 🗄️ TABLE REFERENCE -->
+      <div class="asc-card guide-section" data-category="tables" style="margin-bottom:20px;">
+        <div class="asc-card-header" style="cursor:pointer;" onclick="ascGuideToggle(this)">
+          <div class="asc-card-title">
+            <i class="bi bi-database text-info"></i>
+            <span>🗄️ Table Reference</span>
+          </div>
+          <i class="bi bi-chevron-down guide-caret"></i>
+        </div>
+        <div class="asc-card-body guide-body" style="display:none;">
+
+          <div class="guide-item">
+            <h6>Master Data Tables (KEEP) ✅</h6>
+            <table class="guide-table">
+              <thead>
+                <tr><th>Table</th><th>Description</th><th>Rows</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>erp_items</code></td><td>Lahat ng items (master list)</td><td>~2,389</td></tr>
+                <tr><td><code>users</code></td><td>User accounts</td><td>~5-10</td></tr>
+                <tr><td><code>vendors</code></td><td>Vendor list</td><td>~50-100</td></tr>
+                <tr><td><code>requestors</code></td><td>Requestor list</td><td>~20-30</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-item">
+            <h6>Transaction Tables (RESET) ❌</h6>
+            <table class="guide-table">
+              <thead>
+                <tr><th>Table</th><th>Description</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>documents</code></td><td>MRIF/MRR/MRS documents</td></tr>
+                <tr><td><code>doc_items</code></td><td>Line items ng documents</td></tr>
+                <tr><td><code>prf_documents</code></td><td>PRF headers</td></tr>
+                <tr><td><code>prf_items</code></td><td>PRF line items</td></tr>
+                <tr><td><code>messages</code></td><td>Chat messages</td></tr>
+                <tr><td><code>edit_requests</code></td><td>Edit permissions</td></tr>
+                <tr><td><code>erp_stock_ledger</code></td><td>Stock movements</td></tr>
+                <tr><td><code>erp_inventory_counts</code></td><td>Count sessions</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-item">
+            <h6>Audit Tables (OPTIONAL RESET) ⚠️</h6>
+            <table class="guide-table">
+              <thead>
+                <tr><th>Table</th><th>Description</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>user_audit_log</code></td><td>User actions</td></tr>
+                <tr><td><code>admin_audit_log</code></td><td>Admin actions</td></tr>
+                <tr><td><code>erp_manual_edits_audit</code></td><td>Manual edits</td></tr>
+                <tr><td><code>erp_cutover_log</code></td><td>Cutover log</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 📋 COMMON TASKS -->
+      <div class="asc-card guide-section" data-category="tasks" style="margin-bottom:20px;">
+        <div class="asc-card-header" style="cursor:pointer;" onclick="ascGuideToggle(this)">
+          <div class="asc-card-title">
+            <i class="bi bi-list-task text-primary"></i>
+            <span>📋 Common Tasks</span>
+          </div>
+          <i class="bi bi-chevron-down guide-caret"></i>
+        </div>
+        <div class="asc-card-body guide-body" style="display:none;">
+
+          <div class="guide-item">
+            <h6>📥 Paano Mag-Add Ng Bagong Item</h6>
+            <ol class="guide-steps">
+              <li>Pumunta sa <strong>Stock Monitor</strong></li>
+              <li>Click ang <strong>"+ Add New Item"</strong></li>
+              <li>Fill-in ang: Item Code, Description, Category, Location, Unit, Cost</li>
+              <li>Click <strong>"Save Item"</strong></li>
+            </ol>
+          </div>
+
+          <div class="guide-item">
+            <h6>📤 Paano Mag-Bulk Import Ng Items</h6>
+            <ol class="guide-steps">
+              <li>Pumunta sa <strong>Stock Monitor</strong></li>
+              <li>Click <strong>"Bulk Import"</strong></li>
+              <li>Download ang template</li>
+              <li>I-fill ang data</li>
+              <li>Upload at i-confirm</li>
+            </ol>
+          </div>
+
+          <div class="guide-item">
+            <h6>📊 Paano Mag-Run Ng Cutover</h6>
+            <ol class="guide-steps">
+              <li>Pumunta sa <strong>Full Cutover</strong> tab</li>
+              <li>Click <strong>"Download Current as Template"</strong></li>
+              <li>I-edit ang data (i-keep ang Unit Cost column!)</li>
+              <li>Upload ang CSV</li>
+              <li>Review ang diff (Add/Update/Remove)</li>
+              <li>Type <strong>"CUTOVER"</strong> para mag-execute</li>
+              <li>Auto-snapshot gagawin</li>
+            </ol>
+          </div>
+
+          <div class="guide-item">
+            <h6>🔙 Paano Mag-Rollback Ng Cutover</h6>
+            <ol class="guide-steps">
+              <li>Pumunta sa <strong>Full Cutover</strong> tab</li>
+              <li>Scroll down sa <strong>Cutover History</strong></li>
+              <li>Hanapin ang snapshot na gusto mong balikan</li>
+              <li>Click ang <strong>🔄 Rollback</strong> icon</li>
+              <li>Type <strong>"ROLLBACK"</strong> para mag-confirm</li>
+            </ol>
+          </div>
+
+          <div class="guide-item">
+            <h6>👥 Paano Mag-Add Ng Bagong User</h6>
+            <ol class="guide-steps">
+              <li>Pumunta sa <strong>User Management</strong></li>
+              <li>Click <strong>"Add User"</strong></li>
+              <li>Fill-in: Username, Password, Full Name, Department, Roles</li>
+              <li>Optional: Check <strong>"Grant Admin Access"</strong></li>
+              <li>Click <strong>"Create User"</strong></li>
+            </ol>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 🔐 ACCESS & SECURITY -->
+      <div class="asc-card guide-section" data-category="security" style="margin-bottom:20px;">
+        <div class="asc-card-header" style="cursor:pointer;" onclick="ascGuideToggle(this)">
+          <div class="asc-card-title">
+            <i class="bi bi-shield-lock-fill text-danger"></i>
+            <span>🔐 Access & Security</span>
+          </div>
+          <i class="bi bi-chevron-down guide-caret"></i>
+        </div>
+        <div class="asc-card-body guide-body" style="display:none;">
+
+          <div class="guide-item">
+            <h6>Access Modes</h6>
+            <table class="guide-table">
+              <thead>
+                <tr><th>Mode</th><th>Icon</th><th>Description</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Read-Only</strong></td><td>🔒</td><td>Safe browsing only</td></tr>
+                <tr><td><strong>Read + Write</strong></td><td>✏️</td><td>Insert, Update, Soft Delete</td></tr>
+                <tr><td><strong>Full Access</strong></td><td>🔓</td><td>Lahat + SQL + Hard Delete</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-item">
+            <h6>Admin PIN</h6>
+            <p>Ang PIN ay kailangan para sa <strong>Full Access</strong> mode at destructive actions.</p>
+            <ul class="guide-list">
+              <li>Default: <code>9999</code> (palitan agad!)</li>
+              <li>4-digit number lang</li>
+              <li>Naka-save sa browser localStorage</li>
+              <li>Hindi naka-share sa server</li>
+            </ul>
+          </div>
+
+          <div class="guide-item">
+            <h6>Audit Trail</h6>
+            <p>Lahat ng <strong>admin actions</strong> ay naka-log sa <code>admin_audit_log</code> table:</p>
+            <ul class="guide-list">
+              <li>INSERT, UPDATE, DELETE actions</li>
+              <li>Raw SQL executions</li>
+              <li>Cutover executions</li>
+              <li>Rollback operations</li>
+            </ul>
+            <button class="guide-btn-outline" onclick="ascSwitchTab('audit')">
+              <i class="bi bi-clock-history me-1"></i>View Audit Log
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 💡 BEST PRACTICES -->
+      <div class="asc-card guide-section" data-category="best-practices" style="margin-bottom:20px;">
+        <div class="asc-card-header" style="cursor:pointer;" onclick="ascGuideToggle(this)">
+          <div class="asc-card-title">
+            <i class="bi bi-lightbulb-fill text-warning"></i>
+            <span>💡 Best Practices</span>
+          </div>
+          <i class="bi bi-chevron-down guide-caret"></i>
+        </div>
+        <div class="asc-card-body guide-body" style="display:none;">
+
+          <div class="guide-item">
+            <h6>✅ DO's</h6>
+            <ul class="guide-list">
+              <li>✅ <strong>Backup bago mag-major operation</strong> (cutover, reset)</li>
+              <li>✅ <strong>I-check ang diff</strong> bago mag-execute ng cutover</li>
+              <li>✅ <strong>I-keep ang Unit Cost column</strong> sa CSV</li>
+              <li>✅ <strong>Regular backup</strong> — every Friday</li>
+              <li>✅ <strong>Use Read + Write mode</strong> for daily work</li>
+              <li>✅ <strong>Test sa ilang items muna</strong> bago mag-full cutover</li>
+            </ul>
+          </div>
+
+          <div class="guide-item">
+            <h6>❌ DON'Ts</h6>
+            <ul class="guide-list">
+              <li>❌ <strong>Huwag mag-delete ng items</strong> without backup</li>
+              <li>❌ <strong>Huwag i-blank ang Unit Cost</strong> sa CSV — maging 0</li>
+              <li>❌ <strong>Huwag mag-execute ng cutover</strong> kung may unresolved issue</li>
+              <li>❌ <strong>Huwag i-share ang admin PIN</strong></li>
+              <li>❌ <strong>Huwag mag-run ng Raw SQL</strong> kung hindi 100% sure</li>
+              <li>❌ <strong>Huwag mag-reset ng transactions</strong> without double-checking</li>
+            </ul>
+          </div>
+
+          <div class="guide-item">
+            <h6>📅 Regular Maintenance</h6>
+            <table class="guide-table">
+              <thead>
+                <tr><th>Frequency</th><th>Task</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Daily</td><td>Check notifications, process requests</td></tr>
+                <tr><td>Weekly</td><td>Backup database</td></tr>
+                <tr><td>Monthly</td><td>Month-end cutover, usage entry</td></tr>
+                <tr><td>Quarterly</td><td>Audit log review, user access review</td></tr>
+                <tr><td>Yearly</td><td>Full data audit, cleanup old snapshots</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="asc-card" style="padding:20px;text-align:center;background:#f8fafc;">
+      <div style="font-size:0.85rem;color:#64748b;">
+        <i class="bi bi-info-circle me-1"></i>
+        <strong>Hindi mo mahanap ang hinahanap mo?</strong>
+        I-search sa itaas o i-check ang <a href="https://supabase.com/docs" target="_blank" style="color:#6366f1;">Supabase Documentation</a>.
       </div>
     </div>
 
