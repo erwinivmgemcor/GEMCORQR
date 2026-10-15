@@ -2642,7 +2642,36 @@ async function ascCutoverComputeDiff() {
   
   // Fetch current items from DB
   try {
-    var currentItems = await erpFetch('erp_items', 'select=item_code,is_deleted&order=item_code.asc&limit=10000');
+   // ✅ PAGINATED FETCH — para makuha lahat ng existing items
+var currentItems = [];
+var cpPageSize = 1000;
+var cpOffset = 0;
+var cpHasMore = true;
+var cpMaxPages = 20;
+var cpPageNum = 0;
+
+while (cpHasMore && cpPageNum < cpMaxPages) {
+  cpPageNum++;
+  
+  var cpRows = await erpFetch('erp_items',
+    'select=item_code,is_deleted&order=item_code.asc' +
+    '&limit=' + cpPageSize + '&offset=' + cpOffset);
+  
+  if (!cpRows || cpRows.length === 0) {
+    cpHasMore = false;
+    break;
+  }
+  
+  currentItems = currentItems.concat(cpRows);
+  cpOffset += cpRows.length;
+  
+  console.log('[Cutover Diff] Page ' + cpPageNum + ': fetched ' + 
+              cpRows.length + ' (total: ' + currentItems.length + ')');
+  
+  if (cpRows.length < cpPageSize) cpHasMore = false;
+}
+
+console.log('[Cutover Diff] ✅ Total current items: ' + currentItems.length);
     
     var currentMap = {};
     (currentItems || []).forEach(function(it) {
@@ -3000,12 +3029,43 @@ async function ascCutoverDownloadTemplate() {
   erpShowToast('📥 Generating template from current data...', 'info');
   
   try {
-    var rows = await erpFetch('erp_items',
-      'select=item_code,description,category,location,on_hand,buffer_stock,base_unit,' +
-      'unit_cost,' +   // ✅ IDINAGDAG
-      'active_consumption_months,ave_monthly_consumption,ave_daily_consumption,' +
-      'abc_classification,inventory_movement' +
-      '&is_deleted=eq.false&order=item_code.asc&limit=10000');
+    // ✅ PAGINATED FETCH — para makuha lahat ng items (bypass 1000-row cap)
+    var allRows = [];
+    var pageSize = 1000;
+    var offset = 0;
+    var hasMore = true;
+    var maxPages = 20;  // Safety cap: 20,000 items max
+    var pageNum = 0;
+    
+    while (hasMore && pageNum < maxPages) {
+      pageNum++;
+      
+      var pageRows = await erpFetch('erp_items',
+        'select=item_code,description,category,location,on_hand,buffer_stock,base_unit,' +
+        'unit_cost,' +
+        'active_consumption_months,ave_monthly_consumption,ave_daily_consumption,' +
+        'abc_classification,inventory_movement' +
+        '&is_deleted=eq.false&order=item_code.asc' +
+        '&limit=' + pageSize + '&offset=' + offset);
+      
+      if (!pageRows || pageRows.length === 0) {
+        hasMore = false;
+        break;
+      }
+      
+      allRows = allRows.concat(pageRows);
+      offset += pageRows.length;
+      
+      console.log('[Cutover Template] Page ' + pageNum + ': fetched ' + 
+                  pageRows.length + ' (total: ' + allRows.length + ')');
+      
+      if (pageRows.length < pageSize) {
+        hasMore = false;
+      }
+    }
+    
+    var rows = allRows;
+    console.log('[Cutover Template] ✅ Total fetched: ' + rows.length + ' items');
     
     if (!rows || rows.length === 0) {
       erpShowToast('Walang items to export', 'warning');
@@ -3014,7 +3074,7 @@ async function ascCutoverDownloadTemplate() {
     
     var headers = [
       'Item Code', 'Description', 'Category', 'Location', 
-      'On-Hand', 'Buffer', 'Unit', 'Unit Cost',   // ✅ IDINAGDAG ang Unit Cost
+      'On-Hand', 'Buffer', 'Unit', 'Unit Cost',
       'Active Mo', 'Ave/Mo', 'Ave/Day', 'Reorder Status', 'ABC', 'Movement'
     ];
     
@@ -3030,7 +3090,7 @@ async function ascCutoverDownloadTemplate() {
         r.on_hand || 0,
         r.buffer_stock || 0,
         r.base_unit || 'PIECE',
-        r.unit_cost || 0,   // ✅ IDINAGDAG
+        r.unit_cost || 0,
         r.active_consumption_months || 0,
         r.ave_monthly_consumption || 0,
         r.ave_daily_consumption || 0,
