@@ -302,35 +302,36 @@ function erpRenderTable() {
     
     var safeCode = String(it.item_code || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     
-   html += '<tr data-item-code="' + erpEsc(it.item_code) + '" ' +
-  'onclick="erpRowClick(event, \'' + safeCode + '\')" ' +
-  'style="cursor:pointer;">' +
-      '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
-      '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
-      '<td>' + erpEsc(it.category || '—') + '</td>' +
-      '<td>' + erpEsc(it.location || '—') + '</td>' +
-     '<td class="text-end ' + qtyClass + '">' +
-  erpNum(onHand) +
-'</td>' +
-'<td class="text-end buffer-cell">' +
-  (isLocked ? '<i class="bi bi-lock-fill" style="color:#dc2626;font-size:0.7rem;margin-right:4px;" title="Locked (manual value)"></i>' : '') +
-  erpNum(buffer) +
-'</td>' +
-      '<td class="text-center">' + erpEsc(it.base_unit || '') + '</td>' +
-      '<td class="text-center usage-cell">' + activeMo + '</td>' +
-      '<td class="text-end usage-cell">' + erpNum(aveMo) + '</td>' +
-      '<td class="text-end usage-cell">' + erpNum(aveDay) + '</td>' +
-      '<td class="text-center">' + reorderStatus + '</td>' +
-      '<td class="text-center">' + abcBadge + '</td>' +
-      '<td class="text-center">' + movBadge + '</td>' +
-      '<td class="text-center">' +
-        '<button class="lock-toggle-btn ' + lockClass + '" ' +
-          'onclick="event.stopPropagation();erpToggleLock(\'' + safeCode + '\', ' + isLocked + ')" ' +
-          'title="' + (isLocked ? 'Unlock buffer (auto-recompute enabled)' : 'Lock buffer (manual value)') + '">' +
-          '<i class="bi ' + lockIcon + '"></i>' +
-        '</button>' +
-      '</td>' +
-      '</tr>';
+  var unitCost = Number(it.unit_cost || 0);
+var onHandCost = onHand * unitCost;
+
+html += '<tr>' +
+  '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
+  '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
+  '<td>' + erpEsc(it.category || '—') + '</td>' +
+  '<td>' + erpEsc(it.location || '—') + '</td>' +
+  '<td class="text-end ' + qtyClass + '">' + erpNum(onHand) + '</td>' +
+  '<td class="text-end buffer-cell">' + 
+    (isLocked ? '<i class="bi bi-lock-fill" style="color:#dc2626;font-size:0.7rem;margin-right:4px;" title="Locked (manual value)"></i>' : '') +
+    erpNum(buffer) + 
+  '</td>' +
+  '<td class="text-center">' + erpEsc(it.base_unit || '') + '</td>' +
+  '<td class="text-end" style="font-family:\'Courier New\',monospace;">₱' + erpNum(unitCost.toFixed(2)) + '</td>' +   // ✅ IDINAGDAG
+  '<td class="text-end fw-bold" style="font-family:\'Courier New\',monospace;color:#1e3a5f;">₱' + erpNum(onHandCost.toFixed(2)) + '</td>' +   // ✅ IDINAGDAG
+  '<td class="text-center usage-cell">' + activeMo + '</td>' +
+  '<td class="text-end usage-cell">' + erpNum(aveMo) + '</td>' +
+  '<td class="text-end usage-cell">' + erpNum(aveDay) + '</td>' +
+  '<td class="text-center">' + reorderStatus + '</td>' +
+  '<td class="text-center">' + abcBadge + '</td>' +
+  '<td class="text-center">' + movBadge + '</td>' +
+  '<td class="text-center">' +
+    '<button class="lock-toggle-btn ' + lockClass + '" ' +
+      'onclick="event.stopPropagation();erpToggleLock(\'' + safeCode + '\', ' + isLocked + ')" ' +
+      'title="' + (isLocked ? 'Unlock buffer (auto-recompute enabled)' : 'Lock buffer (manual value)') + '">' +
+      '<i class="bi ' + lockIcon + '"></i>' +
+    '</button>' +
+  '</td>' +
+  '</tr>';
   });
   tbody.innerHTML = html;
 }
