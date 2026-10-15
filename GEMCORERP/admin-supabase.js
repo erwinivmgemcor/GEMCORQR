@@ -3054,56 +3054,6 @@ async function ascCutoverDownloadTemplate() {
     erpShowToast('Failed: ' + err.message, 'danger');
   }
 }
-    
-    if (!rows || rows.length === 0) {
-      erpShowToast('Walang items to export', 'warning');
-      return;
-    }
-    
-    var headers = [
-      'Item Code', 'Description', 'Category', 'Location', 'On-Hand', 'Buffer',
-      'Unit', 'Active Mo', 'Ave/Mo', 'Ave/Day', 'Reorder Status', 'ABC', 'Movement'
-    ];
-    
-    // ✅ FIX: Comma separator + UTF-8 BOM para sa Excel
-    var csv = '\uFEFF';  // UTF-8 BOM
-    csv += headers.map(ascCutoverCsvEscape).join(',') + '\n';
-    
-    rows.forEach(function(r) {
-      var row = [
-        r.item_code || '',
-        r.description || '',
-        r.category || '',
-        r.location || '',
-        r.on_hand || 0,
-        r.buffer_stock || 0,
-        r.base_unit || 'PIECE',
-        r.active_consumption_months || 0,
-        r.ave_monthly_consumption || 0,
-        r.ave_daily_consumption || 0,
-        '',  // Reorder Status — blank (computed)
-        r.abc_classification || 'C',
-        r.inventory_movement || 'NO MOVEMENT'
-      ];
-      // ✅ FIX: Comma separator
-      csv += row.map(ascCutoverCsvEscape).join(',') + '\n';
-    });
-    
-    // ✅ FIX: Proper MIME type for CSV
-    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    var link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'inventory_template_' + new Date().toISOString().slice(0, 10) + '.csv';
-    link.click();
-    
-    erpShowToast('✅ Template downloaded (' + rows.length + ' items)', 'success');
-    
-  } catch (err) {
-    console.error('[Cutover Template]', err);
-    erpShowToast('Failed: ' + err.message, 'danger');
-  }
-}
-
 window.ascCutoverDownloadTemplate = ascCutoverDownloadTemplate;
 
 function ascCutoverCsvEscape(val) {
