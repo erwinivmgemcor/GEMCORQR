@@ -201,26 +201,28 @@
 
     <div class="erp-table-wrap">
       <table class="erp-table">
-        <thead>
-          <tr>
-            <th class="col-code">Item Code</th>
-            <th>Description</th>
-            <th class="col-cat">Category</th>
-            <th class="col-loc">Location</th>
-            <th class="col-qty text-end">On-Hand</th>
-            <th class="col-buffer text-end" title="Buffer Stock (Ave Monthly × 1.75)">Buffer</th>
-            <th class="col-unit text-center">Unit</th>
-            <th class="col-usage text-center" title="Active Consumption Months (4+ = STANDARD)">Active Mo</th>
-            <th class="col-usage text-end" title="Average Monthly Consumption">Ave/Mo</th>
-            <th class="col-usage text-end" title="Average Daily Consumption">Ave/Day</th>
-            <th class="col-status text-center">Reorder Status</th>
-            <th class="col-abc text-center">ABC</th>
-            <th class="col-mov text-center">Movement</th>
-          </tr>
-        </thead>
+       <thead>
+  <tr>
+    <th class="col-code">Item Code</th>
+    <th>Description</th>
+    <th class="col-cat">Category</th>
+    <th class="col-loc">Location</th>
+    <th class="col-qty text-end">On-Hand</th>
+    <th class="col-buffer text-end" title="Buffer Stock (Ave Monthly × 1.75)">Buffer</th>
+    <th class="col-unit text-center">Unit</th>
+    <th class="col-cost text-end" title="Unit Cost (₱)">Unit Cost</th>
+    <th class="col-value text-end" title="Total Value = On-Hand × Unit Cost">On-Hand Cost</th>
+    <th class="col-usage text-center" title="Active Consumption Months (4+ = STANDARD)">Active Mo</th>
+    <th class="col-usage text-end" title="Average Monthly Consumption">Ave/Mo</th>
+    <th class="col-usage text-end" title="Average Daily Consumption">Ave/Day</th>
+    <th class="col-status text-center">Reorder Status</th>
+    <th class="col-abc text-center">ABC</th>
+    <th class="col-mov text-center">Movement</th>
+  </tr>
+</thead>
         <tbody id="erpTableBody">
           <tr>
-            <td colspan="13" class="erp-empty">
+            <td colspan="15" class="erp-empty">
               <div class="erp-spinner"></div>
               <div class="mt-2">Loading inventory...</div>
             </td>
