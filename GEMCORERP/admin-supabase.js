@@ -3268,5 +3268,583 @@ ascSwitchTab = function(tabName) {
     setTimeout(ascCutoverLoadSnapshots, 200);
   }
 };
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// ═══ ADMIN GUIDE SYSTEM ═══
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 
+console.log('📌 Loading Admin Guide module...');
+
+// ═══════════════════════════════════════════════════════════
+// GUIDE STATE
+// ═══════════════════════════════════════════════════════════
+var _ascGuide = {
+  searchTerm: '',
+  openSections: {},
+  isExecuting: false
+};
+
+// ═══════════════════════════════════════════════════════════
+// TOGGLE SECTION (expand/collapse)
+// ═══════════════════════════════════════════════════════════
+function ascGuideToggle(headerEl) {
+  var section = headerEl.closest('.guide-section');
+  if (!section) return;
+
+  var body = section.querySelector('.guide-body');
+  if (!body) return;
+
+  var isOpen = section.classList.contains('open');
+
+  if (isOpen) {
+    section.classList.remove('open');
+    body.style.display = 'none';
+  } else {
+    section.classList.add('open');
+    body.style.display = 'block';
+  }
+
+  // Save state
+  var category = section.getAttribute('data-category') || '';
+  if (category) {
+    _ascGuide.openSections[category] = !isOpen;
+  }
+}
+
+window.ascGuideToggle = ascGuideToggle;
+
+// ═══════════════════════════════════════════════════════════
+// SEARCH
+// ═══════════════════════════════════════════════════════════
+function ascGuideSearch(term) {
+  _ascGuide.searchTerm = String(term || '').toLowerCase().trim();
+
+  var resultsEl = document.getElementById('ascGuideSearchResults');
+  var contentEl = document.getElementById('ascGuideContent');
+
+  if (!resultsEl || !contentEl) return;
+
+  // Kung walang search term, i-restore ang lahat
+  if (!_ascGuide.searchTerm || _ascGuide.searchTerm.length < 2) {
+    resultsEl.innerHTML = '';
+    contentEl.style.display = 'block';
+    return;
+  }
+
+  // Search sa lahat ng guide items
+  var results = [];
+  var sections = contentEl.querySelectorAll('.guide-section');
+
+  sections.forEach(function(section) {
+    var category = section.getAttribute('data-category') || '';
+    var categoryTitle = section.querySelector('.asc-card-title span') 
+      ? section.querySelector('.asc-card-title span').textContent 
+      : category;
+
+    var items = section.querySelectorAll('.guide-item');
+    items.forEach(function(item) {
+      var text = item.textContent.toLowerCase();
+      var title = item.querySelector('h6') ? item.querySelector('h6').textContent : '';
+
+      if (text.indexOf(_ascGuide.searchTerm) !== -1) {
+        // Get snippet
+        var snippet = item.textContent.trim().substring(0, 150);
+
+        results.push({
+          category: categoryTitle,
+          categoryId: category,
+          title: title,
+          snippet: snippet
+        });
+      }
+    });
+  });
+
+  // Render results
+  if (results.length === 0) {
+    resultsEl.innerHTML = '<div class="guide-empty-state">' +
+      '<i class="bi bi-search"></i>' +
+      '<div><strong>Walang nahanap para sa: "' + ascEsc(_ascGuide.searchTerm) + '"</strong></div>' +
+      '<div style="font-size:0.82rem;margin-top:8px;">Try different keywords.</div>' +
+      '</div>';
+    contentEl.style.display = 'none';
+    return;
+  }
+
+  var html = '<div style="font-size:0.82rem;color:#64748b;margin-bottom:12px;">' +
+    'Found <strong>' + results.length + '</strong> result(s):' +
+    '</div>';
+
+  results.forEach(function(r) {
+    html += '<div class="guide-search-result" onclick="ascGuideJumpTo(\'' + r.categoryId + '\')">' +
+      '<div class="result-section">' + ascEsc(r.category) + '</div>' +
+      '<div class="result-title">' + ascEsc(r.title) + '</div>' +
+      '<div class="result-snippet">' + ascEsc(r.snippet) + '…</div>' +
+      '</div>';
+  });
+
+  resultsEl.innerHTML = html;
+  contentEl.style.display = 'none';
+}
+
+window.ascGuideSearch = ascGuideSearch;
+
+// ═══════════════════════════════════════════════════════════
+// JUMP TO SECTION (from search result)
+// ═══════════════════════════════════════════════════════════
+function ascGuideJumpTo(categoryId) {
+  // Clear search
+  var searchInput = document.getElementById('ascGuideSearch');
+  if (searchInput) searchInput.value = '';
+  _ascGuide.searchTerm = '';
+
+  var resultsEl = document.getElementById('ascGuideSearchResults');
+  var contentEl = document.getElementById('ascGuideContent');
+  if (resultsEl) resultsEl.innerHTML = '';
+  if (contentEl) contentEl.style.display = 'block';
+
+  // Find target section
+  var target = document.querySelector('.guide-section[data-category="' + categoryId + '"]');
+  if (!target) return;
+
+  // Open target section
+  if (!target.classList.contains('open')) {
+    var header = target.querySelector('.asc-card-header');
+    ascGuideToggle(header);
+  }
+
+  // Scroll to section
+  setTimeout(function() {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 150);
+}
+
+window.ascGuideJumpTo = ascGuideJumpTo;
+
+// ═══════════════════════════════════════════════════════════
+// COPY SQL BUTTON
+// ═══════════════════════════════════════════════════════════
+function ascGuideCopySql(btn) {
+  var sqlBox = btn.closest('.guide-sql-box');
+  if (!sqlBox) return;
+
+  var pre = sqlBox.querySelector('pre');
+  if (!pre) return;
+
+  var sql = pre.textContent || '';
+
+  // Copy to clipboard
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(sql).then(function() {
+      _ascGuideCopyFeedback(btn);
+    }).catch(function() {
+      _ascGuideFallbackCopy(sql, btn);
+    });
+  } else {
+    _ascGuideFallbackCopy(sql, btn);
+  }
+}
+
+function _ascGuideFallbackCopy(text, btn) {
+  var textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    document.execCommand('copy');
+    _ascGuideCopyFeedback(btn);
+  } catch(e) {
+    erpShowToast('Failed to copy', 'danger');
+  }
+
+  document.body.removeChild(textarea);
+}
+
+function _ascGuideCopyFeedback(btn) {
+  var originalHtml = btn.innerHTML;
+  btn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i>Copied!';
+  btn.style.background = '#10b981';
+  btn.style.color = '#fff';
+  btn.style.borderColor = '#10b981';
+
+  setTimeout(function() {
+    btn.innerHTML = originalHtml;
+    btn.style.background = '';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+  }, 2000);
+
+  erpShowToast('✅ SQL copied to clipboard', 'success');
+}
+
+window.ascGuideCopySql = ascGuideCopySql;
+
+// ═══════════════════════════════════════════════════════════
+// QUICK ACTIONS
+// ═══════════════════════════════════════════════════════════
+
+// ─── 1. BACKUP NOW ───
+async function ascGuideBackupNow() {
+  if (_ascGuide.isExecuting) return;
+
+  var user = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'ADMIN';
+  var timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  var tableName = '_backup_' + timestamp;
+
+  var confirmMsg = '💾 CREATE BACKUP?\n\n' +
+    'Ito ay gagawa ng snapshot ng lahat ng data.\n\n' +
+    'Table name: ' + tableName + '\n' +
+    'Estimated: 2,389 items + transactions\n\n' +
+    'Continue?';
+
+  if (!confirm(confirmMsg)) return;
+
+  _ascGuide.isExecuting = true;
+  erpShowToast('💾 Creating backup...', 'info');
+
+  try {
+    var sql = "CREATE TABLE IF NOT EXISTS " + tableName + " AS " +
+      "SELECT " +
+      "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM erp_items WHERE is_deleted = false) AS items, " +
+      "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM users) AS users, " +
+      "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM vendors) AS vendors, " +
+      "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM requestors) AS requestors, " +
+      "NOW() AS backup_date";
+
+    var res = await fetch(erpUrl('rpc/execute_sql_mutation'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({ p_sql: sql })
+    });
+
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+
+    erpShowToast('✅ Backup created: ' + tableName, 'success');
+    await ascLogAction('GUIDE_BACKUP', 'system', null, null, { table: tableName }, 'Manual backup via guide');
+
+  } catch(err) {
+    console.error('[ascGuideBackupNow]', err);
+    erpShowToast('❌ Backup failed: ' + err.message, 'danger');
+  } finally {
+    _ascGuide.isExecuting = false;
+  }
+}
+
+window.ascGuideBackupNow = ascGuideBackupNow;
+
+// ─── 2. RESTORE SNAPSHOT ───
+async function ascGuideRestoreSnapshot() {
+  var confirmMsg = '🔙 RESTORE SNAPSHOT?\n\n' +
+    'Pumunta sa Full Cutover → Cutover History para pumili ng snapshot.\n\n' +
+    'Continue?';
+
+  if (!confirm(confirmMsg)) return;
+
+  // Switch to cutover tab
+  ascSwitchTab('cutover');
+
+  setTimeout(function() {
+    ascCutoverLoadSnapshots();
+    erpShowToast('📋 Select a snapshot to restore', 'info');
+  }, 300);
+}
+
+window.ascGuideRestoreSnapshot = ascGuideRestoreSnapshot;
+
+// ─── 3. REFRESH CACHE ───
+async function ascGuideRefreshCache() {
+  var confirmMsg = '🔄 REFRESH CACHE?\n\n' +
+    'Ito ay mag-clear ng browser cache at mag-reload ng page.\n\n' +
+    'Continue?';
+
+  if (!confirm(confirmMsg)) return;
+
+  erpShowToast('🔄 Clearing cache...', 'info');
+
+  try {
+    // Clear localStorage cache (keep settings)
+    var preserveKeys = [
+      'ivm_username', 'ivm_userFullname', 'ivm_userRole', 'ivm_isAdmin',
+      'ivm_allowedRoles', 'ivm_userDepartment',
+      'ivm_adminPin', 'ivm_admin_accessMode',
+      'ivm_admin_showBackups',
+      'ivm_theme', 'erp_theme'
+    ];
+
+    var preserved = {};
+    preserveKeys.forEach(function(k) {
+      var v = localStorage.getItem(k);
+      if (v !== null) preserved[k] = v;
+    });
+
+    localStorage.clear();
+
+    Object.keys(preserved).forEach(function(k) {
+      localStorage.setItem(k, preserved[k]);
+    });
+
+    // Clear session
+    try { sessionStorage.clear(); } catch(e) {}
+
+    // Clear caches API
+    if ('caches' in window) {
+      var keys = await caches.keys();
+      await Promise.all(keys.map(function(k) { return caches.delete(k); }));
+    }
+
+    await ascLogAction('GUIDE_CACHE_REFRESH', 'system', null, null, null, 'Cache refresh via guide');
+
+    erpShowToast('✅ Cache cleared. Reloading...', 'success');
+
+    setTimeout(function() {
+      window.location.reload();
+    }, 1500);
+
+  } catch(err) {
+    console.error('[ascGuideRefreshCache]', err);
+    erpShowToast('❌ Failed: ' + err.message, 'danger');
+  }
+}
+
+window.ascGuideRefreshCache = ascGuideRefreshCache;
+
+// ─── 4. HEALTH CHECK ───
+async function ascGuideHealthCheck() {
+  erpShowToast('🏥 Running health check...', 'info');
+
+  try {
+    // API Check
+    var t0 = Date.now();
+    var apiRes = await fetch(erpUrl('erp_items') + '?select=id&limit=1', {
+      headers: erpHeaders(),
+      cache: 'no-store'
+    });
+    var apiLatency = Date.now() - t0;
+    var apiOk = apiRes.ok;
+
+    // DB Check — count tables
+    var tablesRes = await fetch(erpUrl('rpc/admin_get_table_stats'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({})
+    });
+    var tables = tablesRes.ok ? await tablesRes.json() : [];
+    var tableCount = Array.isArray(tables) ? tables.length : 0;
+
+    // Items count
+    var itemsRes = await fetch(erpUrl('erp_items') + '?select=id&limit=1', {
+      method: 'HEAD',
+      headers: Object.assign({}, erpHeaders(), {
+        'Prefer': 'count=exact',
+        'Range': '0-0'
+      }),
+      cache: 'no-store'
+    });
+    var range = itemsRes.headers.get('content-range') || '';
+    var m = range.match(/\/(\d+)/);
+    var itemsCount = m ? parseInt(m[1], 10) : 0;
+
+    // Build report
+    var report = '🏥 HEALTH CHECK REPORT\n\n' +
+      '═══════════════════════════════════\n' +
+      '🌐 API Status: ' + (apiOk ? '✅ Connected' : '❌ Failed') + '\n' +
+      '⚡ Latency: ' + apiLatency + 'ms\n' +
+      '📊 Total Tables: ' + tableCount + '\n' +
+      '📦 Total Items: ' + itemsCount.toLocaleString() + '\n' +
+      '🌍 Online: ' + (navigator.onLine ? '✅' : '❌') + '\n' +
+      '💾 Storage: ' + (Object.keys(localStorage).length) + ' keys\n' +
+      '═══════════════════════════════════\n\n' +
+      '✅ System is ' + (apiOk && apiLatency < 2000 ? 'HEALTHY' : 'DEGRADED');
+
+    alert(report);
+
+    await ascLogAction('GUIDE_HEALTH_CHECK', 'system', null, null, {
+      api_ok: apiOk,
+      latency: apiLatency,
+      tables: tableCount,
+      items: itemsCount
+    }, 'Health check via guide');
+
+  } catch(err) {
+    console.error('[ascGuideHealthCheck]', err);
+    erpShowToast('❌ Health check failed: ' + err.message, 'danger');
+  }
+}
+
+window.ascGuideHealthCheck = ascGuideHealthCheck;
+
+// ─── 5. RESET TRANSACTIONS ───
+async function ascGuideResetTransactions() {
+  // Triple confirmation para sa destructive action
+  var confirm1 = confirm(
+    '⚠️ RESET ALL TRANSACTIONS?\n\n' +
+    'Ito ay mag-de-delete ng LAHAT ng:\n' +
+    '• Documents (MRIF, MRR, MRS)\n' +
+    '• PRF documents & items\n' +
+    '• Chat messages\n' +
+    '• Edit requests\n' +
+    '• Stock ledger\n' +
+    '• Inventory counts\n' +
+    '• Audit logs\n\n' +
+    '✅ Master data (items, users, vendors) ay HINDI maaapektuhan.\n\n' +
+    'Continue?'
+  );
+  if (!confirm1) return;
+
+  var confirm2 = prompt(
+    '🔴 FINAL CONFIRMATION\n\n' +
+    'Type "RESET" para i-confirm:'
+  );
+  if (confirm2 !== 'RESET') {
+    erpShowToast('Reset cancelled', 'info');
+    return;
+  }
+
+  // PIN verification
+  ascRequestPin('Reset All Transactions (DESTRUCTIVE)', function() {
+    _ascGuideExecuteReset();
+  });
+}
+
+async function _ascGuideExecuteReset() {
+  if (_ascGuide.isExecuting) return;
+  _ascGuide.isExecuting = true;
+
+  erpShowToast('⏳ Resetting transactions...', 'warning');
+
+  try {
+    var sql = 
+      "BEGIN; " +
+      "CREATE TABLE IF NOT EXISTS _reset_backup_" + Date.now() + " AS " +
+      "SELECT " +
+      "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM documents) AS docs, " +
+      "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM doc_items) AS doc_items, " +
+      "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM prf_documents) AS prfs, " +
+      "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM prf_items) AS prf_items, " +
+      "NOW() AS backup_date; " +
+      "DELETE FROM messages; " +
+      "DELETE FROM edit_requests; " +
+      "DELETE FROM partial_items; " +
+      "DELETE FROM doc_items; " +
+      "DELETE FROM documents; " +
+      "DELETE FROM prf_items; " +
+      "DELETE FROM prf_documents; " +
+      "DELETE FROM erp_stock_ledger; " +
+      "DELETE FROM erp_inventory_count_logs; " +
+      "DELETE FROM erp_inventory_count_items; " +
+      "DELETE FROM erp_inventory_counts; " +
+      "DELETE FROM user_audit_log; " +
+      "DELETE FROM admin_audit_log; " +
+      "DELETE FROM erp_manual_edits_audit; " +
+      "DELETE FROM erp_cutover_log; " +
+      "DELETE FROM erp_alerts; " +
+      "COMMIT;";
+
+    var res = await fetch(erpUrl('rpc/execute_sql_mutation'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({ p_sql: sql })
+    });
+
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+
+    // Log — pero hindi na sa admin_audit_log kasi dinelete natin
+    console.log('[Guide] Reset complete');
+
+    erpShowToast('✅ Reset complete! All transactions deleted.', 'success');
+
+    setTimeout(function() {
+      if (confirm('Reset complete. Reload page to see changes?')) {
+        window.location.reload();
+      }
+    }, 1500);
+
+  } catch(err) {
+    console.error('[ascGuideResetTransactions]', err);
+    erpShowToast('❌ Reset failed: ' + err.message, 'danger');
+  } finally {
+    _ascGuide.isExecuting = false;
+  }
+}
+
+window.ascGuideResetTransactions = ascGuideResetTransactions;
+
+// ─── 6. EMERGENCY STOP ───
+async function ascGuideEmergencyStop() {
+  var confirm1 = confirm(
+    '🚨 EMERGENCY STOP?\n\n' +
+    'Ito ay mag-set ng system sa READ-ONLY mode.\n\n' +
+    'Lahat ng write operations ay ma-disable.\n' +
+    'Ito ay hindi mag-e-execute ng cutover, edit, o delete.\n\n' +
+    'Continue?'
+  );
+  if (!confirm1) return;
+
+  ascRequestPin('Activate Emergency Read-Only Mode', function() {
+    _asc.accessMode = 'readonly';
+    ascSaveSettings();
+    ascApplyModeIndicator();
+    ascUpdateUIForMode();
+
+    erpShowToast('🚨 Emergency Stop: Read-Only mode activated', 'warning');
+
+    ascLogAction('GUIDE_EMERGENCY_STOP', 'system', null, null, null, 'Emergency stop activated');
+  });
+}
+
+window.ascGuideEmergencyStop = ascGuideEmergencyStop;
+
+// ═══════════════════════════════════════════════════════════
+// RESTORE SAVED SECTION STATES (on load)
+// ═══════════════════════════════════════════════════════════
+function ascGuideRestoreState() {
+  try {
+    var saved = localStorage.getItem('ivm_guide_openSections');
+    if (saved) {
+      var parsed = JSON.parse(saved);
+      Object.keys(parsed).forEach(function(cat) {
+        if (parsed[cat]) {
+          var section = document.querySelector('.guide-section[data-category="' + cat + '"]');
+          if (section && !section.classList.contains('open')) {
+            section.classList.add('open');
+            var body = section.querySelector('.guide-body');
+            if (body) body.style.display = 'block';
+          }
+        }
+      });
+    }
+  } catch(e) {}
+}
+
+// Save state when section toggles
+var _origAscGuideToggle = ascGuideToggle;
+ascGuideToggle = function(headerEl) {
+  _origAscGuideToggle(headerEl);
+
+  // Save state
+  try {
+    localStorage.setItem('ivm_guide_openSections', JSON.stringify(_ascGuide.openSections));
+  } catch(e) {}
+};
+
+window.ascGuideToggle = ascGuideToggle;
+
+// ═══════════════════════════════════════════════════════════
+// AUTO-LOAD GUIDE STATE WHEN TAB ACTIVATES
+// ═══════════════════════════════════════════════════════════
+// Hook sa ascSwitchTab
+var _origAscSwitchTabGuide = ascSwitchTab;
+ascSwitchTab = function(tabName) {
+  _origAscSwitchTabGuide(tabName);
+
+  if (tabName === 'guide') {
+    setTimeout(ascGuideRestoreState, 200);
+  }
+};
+
+console.log('✅ Admin Guide module loaded');
 console.log('✅ Full Cutover module loaded');
