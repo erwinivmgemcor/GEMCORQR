@@ -1725,3 +1725,28 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 console.log('✅ System Health Enhanced module loaded');
+
+// ═══════════════════════════════════════════════════════════
+// EXPOSE ALL FUNCTIONS TO WINDOW (FIX for undefined errors)
+// ═══════════════════════════════════════════════════════════
+window.shRefreshStorage = shRefreshStorage;
+window.shLoadStorage = shLoadStorage;
+window.shLoadCleanupCounts = shLoadCleanupCounts;
+window.shCleanupSnapshots = shCleanupSnapshots;
+window.shCleanupAuditLogs = shCleanupAuditLogs;
+window.shCleanupMessages = shCleanupMessages;
+window.shCleanupCompletedDocs = shCleanupCompletedDocs;
+window.shOpenCustomDelete = shOpenCustomDelete;
+window.shRunFullCleanup = shRunFullCleanup;
+window.shCreateBackup = shCreateBackup;
+window.shDownloadBackup = shDownloadBackup;
+window.shRestoreBackup = shRestoreBackup;
+window.shLoadBackups = shLoadBackups;
+window.shDownloadBackupItem = shDownloadBackupItem;
+window.shRestoreBackupItem = shRestoreBackupItem;
+window.shDeleteBackupItem = shDeleteBackupItem;
+window.shExportTable = shExportTable;
+window.shLoadExportButtons = shLoadExportButtons;
+window.shExecuteSql = shExecuteSql;
+
+console.log('✅ System Health — All functions exposed to window');  
