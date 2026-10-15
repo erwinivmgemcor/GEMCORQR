@@ -2555,7 +2555,9 @@ async function ascCutoverParseFile(event) {
   on_hand: colIdx.on_hand !== undefined ? (parseFloat(vals[colIdx.on_hand]) || 0) : 0,
   buffer_stock: colIdx.buffer_stock !== undefined ? (parseFloat(vals[colIdx.buffer_stock]) || 0) : 0,
   base_unit: colIdx.base_unit !== undefined ? String(vals[colIdx.base_unit] || '').trim() : 'PIECE',
-  unit_cost: colIdx.unit_cost !== undefined ? (parseFloat(vals[colIdx.unit_cost]) || 0) : 0,  // ✅ IDINAGDAG
+  unit_cost: (colIdx.unit_cost !== undefined && vals[colIdx.unit_cost] !== '') 
+  ? (parseFloat(vals[colIdx.unit_cost]) || null)   // null kung invalid, hindi 0
+  : null,   // null kung walang column o blank
   active_consumption_months: colIdx.active_consumption_months !== undefined ? (parseInt(vals[colIdx.active_consumption_months]) || 0) : 0,
   ave_monthly_consumption: colIdx.ave_monthly_consumption !== undefined ? (parseFloat(vals[colIdx.ave_monthly_consumption]) || 0) : 0,
   ave_daily_consumption: colIdx.ave_daily_consumption !== undefined ? (parseFloat(vals[colIdx.ave_daily_consumption]) || 0) : 0,
