@@ -305,7 +305,7 @@ function erpRenderTable() {
   var unitCost = Number(it.unit_cost || 0);
 var onHandCost = onHand * unitCost;
 
-html += '<tr>' +
+html += '<tr onclick="erpRowClick(event, \'' + safeCode + '\')" style="cursor:pointer;">' +
   '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
   '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
   '<td>' + erpEsc(it.category || '—') + '</td>' +
@@ -1102,9 +1102,9 @@ function erpRenderOutOfStock() {
       statusBadge = '<span class="reorder-badge reorder-none">NO USAGE</span>';
     }
     
-    html += '<tr>' +
-      '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
-      '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
+    html += '<tr onclick="erpRowClick(event, \'' + safeCode + '\')" style="cursor:pointer;">' +
+  '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
+  '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
       '<td>' + erpEsc(it.category || '—') + '</td>' +
       '<td>' + erpEsc(it.location || '—') + '</td>' +
       '<td class="text-center qty-zero">0</td>' +
