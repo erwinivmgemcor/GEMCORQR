@@ -2513,21 +2513,21 @@ async function ascCutoverParseFile(event) {
     });
     
     // Detect columns (flexible matching)
-    var colIdx = {
-      item_code: ascCutoverFindColumn(headerMap, ['item code', 'item_code', 'itemcode', 'code']),
-      description: ascCutoverFindColumn(headerMap, ['description', 'desc', 'item description']),
-      category: ascCutoverFindColumn(headerMap, ['category', 'cat']),
-      location: ascCutoverFindColumn(headerMap, ['location', 'loc']),
-      on_hand: ascCutoverFindColumn(headerMap, ['on-hand', 'on_hand', 'onhand', 'stock']),
-      buffer_stock: ascCutoverFindColumn(headerMap, ['buffer', 'buffer stock', 'buffer_stock']),
-      base_unit: ascCutoverFindColumn(headerMap, ['unit', 'base unit', 'base_unit', 'uom']),
-      active_consumption_months: ascCutoverFindColumn(headerMap, ['active mo', 'active_mo', 'active months']),
-      ave_monthly_consumption: ascCutoverFindColumn(headerMap, ['ave/mo', 'ave_mo', 'ave monthly', 'avg/mo']),
-      ave_daily_consumption: ascCutoverFindColumn(headerMap, ['ave/day', 'ave_day', 'ave daily', 'avg/day']),
-      abc_classification: ascCutoverFindColumn(headerMap, ['abc', 'abc classification', 'abc_classification']),
-      inventory_movement: ascCutoverFindColumn(headerMap, ['movement', 'inventory movement', 'inventory_movement'])
-      // "Reorder Status" is skipped — derived field
-    };
+   var colIdx = {
+  item_code: ascCutoverFindColumn(headerMap, ['item code', 'item_code', 'itemcode', 'code']),
+  description: ascCutoverFindColumn(headerMap, ['description', 'desc', 'item description']),
+  category: ascCutoverFindColumn(headerMap, ['category', 'cat']),
+  location: ascCutoverFindColumn(headerMap, ['location', 'loc']),
+  on_hand: ascCutoverFindColumn(headerMap, ['on-hand', 'on_hand', 'onhand', 'stock']),
+  buffer_stock: ascCutoverFindColumn(headerMap, ['buffer', 'buffer stock', 'buffer_stock']),
+  base_unit: ascCutoverFindColumn(headerMap, ['unit', 'base unit', 'base_unit', 'uom']),
+  unit_cost: ascCutoverFindColumn(headerMap, ['unit cost', 'unit_cost', 'unitcost', 'cost', 'price']),  // ✅ IDINAGDAG
+  active_consumption_months: ascCutoverFindColumn(headerMap, ['active mo', 'active_mo', 'active months']),
+  ave_monthly_consumption: ascCutoverFindColumn(headerMap, ['ave/mo', 'ave_mo', 'ave monthly', 'avg/mo']),
+  ave_daily_consumption: ascCutoverFindColumn(headerMap, ['ave/day', 'ave_day', 'ave daily', 'avg/day']),
+  abc_classification: ascCutoverFindColumn(headerMap, ['abc', 'abc classification', 'abc_classification']),
+  inventory_movement: ascCutoverFindColumn(headerMap, ['movement', 'inventory movement', 'inventory_movement'])
+};
     
     // Validate required columns
     if (colIdx.item_code === undefined) {
@@ -2547,20 +2547,21 @@ async function ascCutoverParseFile(event) {
       var itemCode = String(vals[colIdx.item_code] || '').trim();
       if (!itemCode) continue;
       
-      var item = {
-        item_code: itemCode,
-        description: colIdx.description !== undefined ? String(vals[colIdx.description] || '').trim() : '',
-        category: colIdx.category !== undefined ? String(vals[colIdx.category] || '').trim() : '',
-        location: colIdx.location !== undefined ? String(vals[colIdx.location] || '').trim() : '',
-        on_hand: colIdx.on_hand !== undefined ? (parseFloat(vals[colIdx.on_hand]) || 0) : 0,
-        buffer_stock: colIdx.buffer_stock !== undefined ? (parseFloat(vals[colIdx.buffer_stock]) || 0) : 0,
-        base_unit: colIdx.base_unit !== undefined ? String(vals[colIdx.base_unit] || '').trim() : 'PIECE',
-        active_consumption_months: colIdx.active_consumption_months !== undefined ? (parseInt(vals[colIdx.active_consumption_months]) || 0) : 0,
-        ave_monthly_consumption: colIdx.ave_monthly_consumption !== undefined ? (parseFloat(vals[colIdx.ave_monthly_consumption]) || 0) : 0,
-        ave_daily_consumption: colIdx.ave_daily_consumption !== undefined ? (parseFloat(vals[colIdx.ave_daily_consumption]) || 0) : 0,
-        abc_classification: colIdx.abc_classification !== undefined ? String(vals[colIdx.abc_classification] || 'C').trim() : 'C',
-        inventory_movement: colIdx.inventory_movement !== undefined ? String(vals[colIdx.inventory_movement] || 'NO MOVEMENT').trim().toUpperCase() : 'NO MOVEMENT'
-      };
+    var item = {
+  item_code: itemCode,
+  description: colIdx.description !== undefined ? String(vals[colIdx.description] || '').trim() : '',
+  category: colIdx.category !== undefined ? String(vals[colIdx.category] || '').trim() : '',
+  location: colIdx.location !== undefined ? String(vals[colIdx.location] || '').trim() : '',
+  on_hand: colIdx.on_hand !== undefined ? (parseFloat(vals[colIdx.on_hand]) || 0) : 0,
+  buffer_stock: colIdx.buffer_stock !== undefined ? (parseFloat(vals[colIdx.buffer_stock]) || 0) : 0,
+  base_unit: colIdx.base_unit !== undefined ? String(vals[colIdx.base_unit] || '').trim() : 'PIECE',
+  unit_cost: colIdx.unit_cost !== undefined ? (parseFloat(vals[colIdx.unit_cost]) || 0) : 0,  // ✅ IDINAGDAG
+  active_consumption_months: colIdx.active_consumption_months !== undefined ? (parseInt(vals[colIdx.active_consumption_months]) || 0) : 0,
+  ave_monthly_consumption: colIdx.ave_monthly_consumption !== undefined ? (parseFloat(vals[colIdx.ave_monthly_consumption]) || 0) : 0,
+  ave_daily_consumption: colIdx.ave_daily_consumption !== undefined ? (parseFloat(vals[colIdx.ave_daily_consumption]) || 0) : 0,
+  abc_classification: colIdx.abc_classification !== undefined ? String(vals[colIdx.abc_classification] || 'C').trim() : 'C',
+  inventory_movement: colIdx.inventory_movement !== undefined ? String(vals[colIdx.inventory_movement] || 'NO MOVEMENT').trim().toUpperCase() : 'NO MOVEMENT'
+};
       
       parsedItems.push(item);
     }
@@ -2767,33 +2768,35 @@ function ascCutoverShowDiff(tab) {
   
   // Render table
   var html = '<div class="table-responsive"><table class="asc-table" style="font-size:0.82rem;">';
-  html += '<thead><tr>' +
-    '<th style="width:5%">#</th>' +
-    '<th style="width:15%">Item Code</th>' +
-    '<th style="width:25%">Description</th>' +
-    '<th style="width:12%">Category</th>' +
-    '<th style="width:10%">Location</th>' +
-    '<th style="width:8%" class="text-end">On-Hand</th>' +
-    '<th style="width:8%" class="text-end">Buffer</th>' +
-    '<th style="width:7%">Unit</th>' +
-    '<th style="width:10%" class="text-center">ABC/Movement</th>' +
-    '</tr></thead><tbody>';
+html += '<thead><tr>' +
+  '<th style="width:5%">#</th>' +
+  '<th style="width:12%">Item Code</th>' +
+  '<th style="width:20%">Description</th>' +
+  '<th style="width:9%">Category</th>' +
+  '<th style="width:8%">Location</th>' +
+  '<th style="width:6%" class="text-end">On-Hand</th>' +
+  '<th style="width:6%" class="text-end">Buffer</th>' +
+  '<th style="width:5%">Unit</th>' +
+  '<th style="width:8%" class="text-end">Unit Cost</th>' +   // ✅ IDINAGDAG
+  '<th style="width:11%" class="text-center">ABC/Movement</th>' +
+  '</tr></thead><tbody>';
   
   items.slice(0, 500).forEach(function(it, idx) {
-    html += '<tr>' +
-      '<td class="text-muted">' + (idx + 1) + '</td>' +
-      '<td><code>' + ascEsc(it.item_code) + '</code></td>' +
-      '<td>' + ascEsc(String(it.description || '').substring(0, 60)) + '</td>' +
-      '<td>' + ascEsc(it.category || '—') + '</td>' +
-      '<td>' + ascEsc(it.location || '—') + '</td>' +
-      '<td class="text-end">' + ascEsc(String(it.on_hand || 0)) + '</td>' +
-      '<td class="text-end">' + ascEsc(String(it.buffer_stock || 0)) + '</td>' +
-      '<td>' + ascEsc(it.base_unit || '—') + '</td>' +
-      '<td class="text-center">' +
-        '<span class="badge bg-secondary" style="font-size:0.65rem;">' + ascEsc(it.abc_classification || '—') + '</span> ' +
-        '<span class="badge bg-info text-dark" style="font-size:0.65rem;">' + ascEsc(it.inventory_movement || '—') + '</span>' +
-      '</td>' +
-    '</tr>';
+   html += '<tr>' +
+  '<td class="text-muted">' + (idx + 1) + '</td>' +
+  '<td><code>' + ascEsc(it.item_code) + '</code></td>' +
+  '<td>' + ascEsc(String(it.description || '').substring(0, 60)) + '</td>' +
+  '<td>' + ascEsc(it.category || '—') + '</td>' +
+  '<td>' + ascEsc(it.location || '—') + '</td>' +
+  '<td class="text-end">' + ascEsc(String(it.on_hand || 0)) + '</td>' +
+  '<td class="text-end">' + ascEsc(String(it.buffer_stock || 0)) + '</td>' +
+  '<td>' + ascEsc(it.base_unit || '—') + '</td>' +
+  '<td class="text-end fw-bold">₱' + ascNum(Number(it.unit_cost || 0).toFixed(2)) + '</td>' +   // ✅ IDINAGDAG
+  '<td class="text-center">' +
+    '<span class="badge bg-secondary" style="font-size:0.65rem;">' + ascEsc(it.abc_classification || '—') + '</span> ' +
+    '<span class="badge bg-info text-dark" style="font-size:0.65rem;">' + ascEsc(it.inventory_movement || '—') + '</span>' +
+  '</td>' +
+'</tr>';
   });
   
   html += '</tbody></table></div>';
@@ -2999,9 +3002,58 @@ async function ascCutoverDownloadTemplate() {
   try {
     var rows = await erpFetch('erp_items',
       'select=item_code,description,category,location,on_hand,buffer_stock,base_unit,' +
+      'unit_cost,' +   // ✅ IDINAGDAG
       'active_consumption_months,ave_monthly_consumption,ave_daily_consumption,' +
       'abc_classification,inventory_movement' +
       '&is_deleted=eq.false&order=item_code.asc&limit=10000');
+    
+    if (!rows || rows.length === 0) {
+      erpShowToast('Walang items to export', 'warning');
+      return;
+    }
+    
+    var headers = [
+      'Item Code', 'Description', 'Category', 'Location', 
+      'On-Hand', 'Buffer', 'Unit', 'Unit Cost',   // ✅ IDINAGDAG ang Unit Cost
+      'Active Mo', 'Ave/Mo', 'Ave/Day', 'Reorder Status', 'ABC', 'Movement'
+    ];
+    
+    var csv = '\uFEFF';
+    csv += headers.map(ascCutoverCsvEscape).join(',') + '\n';
+    
+    rows.forEach(function(r) {
+      var row = [
+        r.item_code || '',
+        r.description || '',
+        r.category || '',
+        r.location || '',
+        r.on_hand || 0,
+        r.buffer_stock || 0,
+        r.base_unit || 'PIECE',
+        r.unit_cost || 0,   // ✅ IDINAGDAG
+        r.active_consumption_months || 0,
+        r.ave_monthly_consumption || 0,
+        r.ave_daily_consumption || 0,
+        '',
+        r.abc_classification || 'C',
+        r.inventory_movement || 'NO MOVEMENT'
+      ];
+      csv += row.map(ascCutoverCsvEscape).join(',') + '\n';
+    });
+    
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'inventory_template_' + new Date().toISOString().slice(0, 10) + '.csv';
+    link.click();
+    
+    erpShowToast('✅ Template downloaded (' + rows.length + ' items)', 'success');
+    
+  } catch (err) {
+    console.error('[Cutover Template]', err);
+    erpShowToast('Failed: ' + err.message, 'danger');
+  }
+}
     
     if (!rows || rows.length === 0) {
       erpShowToast('Walang items to export', 'warning');
