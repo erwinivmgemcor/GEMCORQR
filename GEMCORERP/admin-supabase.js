@@ -2450,3 +2450,755 @@ setInterval(function() {
 }, 60000);
 
 console.log('✅ admin-supabase.js v1.1 loaded (Phase 1 + 2 + Backup Filter)');
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// ═══ FULL CUTOVER SYSTEM ═══
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+
+console.log('📌 Loading Full Cutover module...');
+
+// ═══════════════════════════════════════════════════════════
+// CUTOVER STATE
+// ═══════════════════════════════════════════════════════════
+var _ascCutover = {
+  csvFilename: '',
+  parsedItems: [],       // { item_code, description, category, location, on_hand, buffer_stock, base_unit, active_consumption_months, ave_monthly_consumption, ave_daily_consumption, abc_classification, inventory_movement }
+  addedItems: [],
+  updatedItems: [],
+  removedItems: [],
+  errorItems: [],
+  currentDiffTab: 'added',
+  isExecuting: false
+};
+
+// ═══════════════════════════════════════════════════════════
+// STEP 1: PARSE CSV FILE
+// ═══════════════════════════════════════════════════════════
+async function ascCutoverParseFile(event) {
+  var file = event.target.files[0];
+  if (!file) return;
+  
+  if (_asc.accessMode === 'readonly') {
+    erpShowToast('Read-Only mode — hindi pwedeng mag-cutover', 'warning');
+    event.target.value = '';
+    return;
+  }
+  
+  _ascCutover.csvFilename = file.name;
+  
+  var statusEl = document.getElementById('cutoverUploadStatus');
+  if (statusEl) {
+    statusEl.innerHTML = '<div class="alert alert-info small py-2">' +
+      '<span class="spinner-border spinner-border-sm me-1"></span>Parsing CSV...</div>';
+  }
+  
+  try {
+    var text = await file.text();
+    var lines = text.split('\n').filter(function(l) { return l.trim(); });
+    
+    if (lines.length < 2) {
+      throw new Error('CSV needs header + at least 1 data row');
+    }
+    
+    // Parse header
+    var headers = ascCutoverParseCSVLine(lines[0]);
+    console.log('[Cutover] Headers:', headers);
+    
+    // Normalize header names (trim + lowercase for matching)
+    var headerMap = {};
+    headers.forEach(function(h, idx) {
+      var normalized = String(h).trim().toLowerCase();
+      headerMap[normalized] = idx;
+    });
+    
+    // Detect columns (flexible matching)
+    var colIdx = {
+      item_code: ascCutoverFindColumn(headerMap, ['item code', 'item_code', 'itemcode', 'code']),
+      description: ascCutoverFindColumn(headerMap, ['description', 'desc', 'item description']),
+      category: ascCutoverFindColumn(headerMap, ['category', 'cat']),
+      location: ascCutoverFindColumn(headerMap, ['location', 'loc']),
+      on_hand: ascCutoverFindColumn(headerMap, ['on-hand', 'on_hand', 'onhand', 'stock']),
+      buffer_stock: ascCutoverFindColumn(headerMap, ['buffer', 'buffer stock', 'buffer_stock']),
+      base_unit: ascCutoverFindColumn(headerMap, ['unit', 'base unit', 'base_unit', 'uom']),
+      active_consumption_months: ascCutoverFindColumn(headerMap, ['active mo', 'active_mo', 'active months']),
+      ave_monthly_consumption: ascCutoverFindColumn(headerMap, ['ave/mo', 'ave_mo', 'ave monthly', 'avg/mo']),
+      ave_daily_consumption: ascCutoverFindColumn(headerMap, ['ave/day', 'ave_day', 'ave daily', 'avg/day']),
+      abc_classification: ascCutoverFindColumn(headerMap, ['abc', 'abc classification', 'abc_classification']),
+      inventory_movement: ascCutoverFindColumn(headerMap, ['movement', 'inventory movement', 'inventory_movement'])
+      // "Reorder Status" is skipped — derived field
+    };
+    
+    // Validate required columns
+    if (colIdx.item_code === undefined) {
+      throw new Error('Missing required column: "Item Code"');
+    }
+    
+    console.log('[Cutover] Column mapping:', colIdx);
+    
+    // Parse data rows
+    var parsedItems = [];
+    var errors = [];
+    
+    for (var i = 1; i < lines.length; i++) {
+      var vals = ascCutoverParseCSVLine(lines[i]);
+      if (vals.length === 0 || !vals[colIdx.item_code]) continue;
+      
+      var itemCode = String(vals[colIdx.item_code] || '').trim();
+      if (!itemCode) continue;
+      
+      var item = {
+        item_code: itemCode,
+        description: colIdx.description !== undefined ? String(vals[colIdx.description] || '').trim() : '',
+        category: colIdx.category !== undefined ? String(vals[colIdx.category] || '').trim() : '',
+        location: colIdx.location !== undefined ? String(vals[colIdx.location] || '').trim() : '',
+        on_hand: colIdx.on_hand !== undefined ? (parseFloat(vals[colIdx.on_hand]) || 0) : 0,
+        buffer_stock: colIdx.buffer_stock !== undefined ? (parseFloat(vals[colIdx.buffer_stock]) || 0) : 0,
+        base_unit: colIdx.base_unit !== undefined ? String(vals[colIdx.base_unit] || '').trim() : 'PIECE',
+        active_consumption_months: colIdx.active_consumption_months !== undefined ? (parseInt(vals[colIdx.active_consumption_months]) || 0) : 0,
+        ave_monthly_consumption: colIdx.ave_monthly_consumption !== undefined ? (parseFloat(vals[colIdx.ave_monthly_consumption]) || 0) : 0,
+        ave_daily_consumption: colIdx.ave_daily_consumption !== undefined ? (parseFloat(vals[colIdx.ave_daily_consumption]) || 0) : 0,
+        abc_classification: colIdx.abc_classification !== undefined ? String(vals[colIdx.abc_classification] || 'C').trim() : 'C',
+        inventory_movement: colIdx.inventory_movement !== undefined ? String(vals[colIdx.inventory_movement] || 'NO MOVEMENT').trim().toUpperCase() : 'NO MOVEMENT'
+      };
+      
+      parsedItems.push(item);
+    }
+    
+    _ascCutover.parsedItems = parsedItems;
+    
+    console.log('[Cutover] Parsed', parsedItems.length, 'items');
+    
+    if (statusEl) {
+      statusEl.innerHTML = '<div class="alert alert-success small py-2">' +
+        '<i class="bi bi-check-circle-fill me-1"></i>' +
+        '<strong>' + parsedItems.length + '</strong> items parsed successfully' +
+        '</div>';
+    }
+    
+    // Move to Step 2: compute diff
+    await ascCutoverComputeDiff();
+    
+  } catch (err) {
+    console.error('[Cutover] Parse error:', err);
+    if (statusEl) {
+      statusEl.innerHTML = '<div class="alert alert-danger small py-2">' +
+        '<i class="bi bi-x-circle-fill me-1"></i>' +
+        'Error: ' + ascEsc(err.message) + '</div>';
+    }
+  }
+}
+
+window.ascCutoverParseFile = ascCutoverParseFile;
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+function ascCutoverParseCSVLine(line) {
+  var result = [];
+  var current = '';
+  var inQuotes = false;
+  
+  for (var i = 0; i < line.length; i++) {
+    var c = line[i];
+    
+    if (c === '"') {
+      if (inQuotes && line[i+1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if ((c === ',' || c === '\t') && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += c;
+    }
+  }
+  result.push(current);
+  
+  // Trim lahat
+  return result.map(function(v) { return String(v).trim(); });
+}
+
+function ascCutoverFindColumn(headerMap, aliases) {
+  for (var i = 0; i < aliases.length; i++) {
+    if (headerMap[aliases[i]] !== undefined) return headerMap[aliases[i]];
+  }
+  return undefined;
+}
+
+// ═══════════════════════════════════════════════════════════
+// STEP 2: COMPUTE DIFF
+// ═══════════════════════════════════════════════════════════
+async function ascCutoverComputeDiff() {
+  var step2 = document.getElementById('cutoverStep2');
+  if (step2) step2.style.display = 'block';
+  
+  // Scroll sa step 2
+  step2.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  
+  // Fetch current items from DB
+  try {
+    var currentItems = await erpFetch('erp_items', 'select=item_code,is_deleted&order=item_code.asc&limit=10000');
+    
+    var currentMap = {};
+    (currentItems || []).forEach(function(it) {
+      currentMap[it.item_code] = it;
+    });
+    
+    console.log('[Cutover] Current items:', Object.keys(currentMap).length);
+    
+    // Compute diff
+    var added = [];
+    var updated = [];
+    var removed = [];
+    var errors = [];
+    
+    var incomingCodes = {};
+    
+    _ascCutover.parsedItems.forEach(function(newItem) {
+      incomingCodes[newItem.item_code] = true;
+      var existing = currentMap[newItem.item_code];
+      
+      if (!existing) {
+        added.push(newItem);
+      } else if (existing.is_deleted === true) {
+        // Existing pero deleted — treat as re-activate (update)
+        updated.push(newItem);
+      } else {
+        // Existing — update
+        updated.push(newItem);
+      }
+    });
+    
+    // Removed items
+    Object.keys(currentMap).forEach(function(code) {
+      if (!incomingCodes[code] && currentMap[code].is_deleted === false) {
+        removed.push({ item_code: code });
+      }
+    });
+    
+    _ascCutover.addedItems = added;
+    _ascCutover.updatedItems = updated;
+    _ascCutover.removedItems = removed;
+    _ascCutover.errorItems = errors;
+    
+    // Update KPIs
+    ascCutoverUpdateKPIs();
+    
+    // Render diff default tab
+    ascCutoverShowDiff('added');
+    
+    console.log('[Cutover] Diff computed:', {
+      added: added.length,
+      updated: updated.length,
+      removed: removed.length
+    });
+    
+  } catch (err) {
+    console.error('[Cutover] Diff error:', err);
+    erpShowToast('Failed to compute diff: ' + err.message, 'danger');
+  }
+}
+
+function ascCutoverUpdateKPIs() {
+  var el;
+  el = document.getElementById('cutoverKpiAdd');
+  if (el) el.textContent = _ascCutover.addedItems.length;
+  
+  el = document.getElementById('cutoverKpiUpdate');
+  if (el) el.textContent = _ascCutover.updatedItems.length;
+  
+  el = document.getElementById('cutoverKpiRemove');
+  if (el) el.textContent = _ascCutover.removedItems.length;
+  
+  el = document.getElementById('cutoverKpiTotal');
+  if (el) el.textContent = _ascCutover.parsedItems.length;
+  
+  // Update tab counts
+  el = document.getElementById('cutoverCountAdded');
+  if (el) el.textContent = _ascCutover.addedItems.length;
+  
+  el = document.getElementById('cutoverCountUpdated');
+  if (el) el.textContent = _ascCutover.updatedItems.length;
+  
+  el = document.getElementById('cutoverCountRemoved');
+  if (el) el.textContent = _ascCutover.removedItems.length;
+  
+  el = document.getElementById('cutoverCountErrors');
+  if (el) el.textContent = _ascCutover.errorItems.length;
+}
+
+// ═══════════════════════════════════════════════════════════
+// DIFF TABS
+// ═══════════════════════════════════════════════════════════
+function ascCutoverShowDiff(tab) {
+  _ascCutover.currentDiffTab = tab;
+  
+  // Update active tab
+  ['added', 'updated', 'removed', 'errors'].forEach(function(t) {
+    var btn = document.getElementById('cutoverDiffTab-' + t);
+    if (btn) btn.classList.toggle('active', t === tab);
+  });
+  
+  var content = document.getElementById('cutoverDiffContent');
+  if (!content) return;
+  
+  var items = [];
+  if (tab === 'added') items = _ascCutover.addedItems;
+  else if (tab === 'updated') items = _ascCutover.updatedItems;
+  else if (tab === 'removed') items = _ascCutover.removedItems;
+  else if (tab === 'errors') items = _ascCutover.errorItems;
+  
+  if (items.length === 0) {
+    var emptyMsg = {
+      added: 'Walang bagong items.',
+      updated: 'Walang updated items.',
+      removed: 'Walang items na tatanggalin.',
+      errors: 'Walang errors. ✅'
+    };
+    content.innerHTML = '<div class="text-center text-muted py-4">' +
+      '<i class="bi bi-inbox" style="font-size:3rem;opacity:0.3;"></i>' +
+      '<div class="mt-2">' + emptyMsg[tab] + '</div></div>';
+    return;
+  }
+  
+  // Render table
+  var html = '<div class="table-responsive"><table class="asc-table" style="font-size:0.82rem;">';
+  html += '<thead><tr>' +
+    '<th style="width:5%">#</th>' +
+    '<th style="width:15%">Item Code</th>' +
+    '<th style="width:25%">Description</th>' +
+    '<th style="width:12%">Category</th>' +
+    '<th style="width:10%">Location</th>' +
+    '<th style="width:8%" class="text-end">On-Hand</th>' +
+    '<th style="width:8%" class="text-end">Buffer</th>' +
+    '<th style="width:7%">Unit</th>' +
+    '<th style="width:10%" class="text-center">ABC/Movement</th>' +
+    '</tr></thead><tbody>';
+  
+  items.slice(0, 500).forEach(function(it, idx) {
+    html += '<tr>' +
+      '<td class="text-muted">' + (idx + 1) + '</td>' +
+      '<td><code>' + ascEsc(it.item_code) + '</code></td>' +
+      '<td>' + ascEsc(String(it.description || '').substring(0, 60)) + '</td>' +
+      '<td>' + ascEsc(it.category || '—') + '</td>' +
+      '<td>' + ascEsc(it.location || '—') + '</td>' +
+      '<td class="text-end">' + ascEsc(String(it.on_hand || 0)) + '</td>' +
+      '<td class="text-end">' + ascEsc(String(it.buffer_stock || 0)) + '</td>' +
+      '<td>' + ascEsc(it.base_unit || '—') + '</td>' +
+      '<td class="text-center">' +
+        '<span class="badge bg-secondary" style="font-size:0.65rem;">' + ascEsc(it.abc_classification || '—') + '</span> ' +
+        '<span class="badge bg-info text-dark" style="font-size:0.65rem;">' + ascEsc(it.inventory_movement || '—') + '</span>' +
+      '</td>' +
+    '</tr>';
+  });
+  
+  html += '</tbody></table></div>';
+  
+  if (items.length > 500) {
+    html += '<div class="text-muted small mt-2 text-center">Showing first 500 of ' + items.length + ' items</div>';
+  }
+  
+  content.innerHTML = html;
+}
+
+window.ascCutoverShowDiff = ascCutoverShowDiff;
+
+// ═══════════════════════════════════════════════════════════
+// STEP 3: EXECUTE CUTOVER
+// ═══════════════════════════════════════════════════════════
+async function ascCutoverConfirm() {
+  if (_ascCutover.isExecuting) return;
+  
+  var notes = (document.getElementById('cutoverNotes').value || '').trim();
+  
+  if (!notes) {
+    erpShowToast('Notes/Reason is required', 'warning');
+    document.getElementById('cutoverNotes').focus();
+    return;
+  }
+  
+  // Final confirmation
+  var confirmMsg = '⚠️ EXECUTE FULL CUTOVER?\n\n' +
+    '═══════════════════════════════════\n' +
+    '📊 Summary:\n' +
+    '  ✅ Will ADD:     ' + _ascCutover.addedItems.length + ' items\n' +
+    '  ✏️  Will UPDATE: ' + _ascCutover.updatedItems.length + ' items\n' +
+    '  🗑️  Will REMOVE: ' + _ascCutover.removedItems.length + ' items (soft-delete)\n' +
+    '  📁 Total CSV:    ' + _ascCutover.parsedItems.length + ' rows\n' +
+    '═══════════════════════════════════\n\n' +
+    '📸 Auto-snapshot will be created.\n' +
+    '🔙 Rollback available sa Cutover History.\n\n' +
+    '⚠️ This action is REVERSIBLE via rollback.\n' +
+    '⚠️ Removed items will be SOFT-DELETED.\n\n' +
+    'Notes: ' + notes + '\n\n' +
+    'Type "CUTOVER" to confirm:';
+  
+  var confirmInput = prompt(confirmMsg);
+  
+  if (confirmInput !== 'CUTOVER') {
+    erpShowToast('Cutover cancelled — confirmation text did not match', 'info');
+    return;
+  }
+  
+  _ascCutover.isExecuting = true;
+  
+  // Show loading
+  var content = document.getElementById('cutoverDiffContent');
+  if (content) {
+    content.innerHTML = '<div class="text-center py-5">' +
+      '<div class="erp-spinner" style="margin:0 auto;"></div>' +
+      '<div class="mt-3"><strong>Executing Cutover...</strong></div>' +
+      '<div class="small text-muted mt-1">Creating snapshot + updating items</div>' +
+      '</div>';
+  }
+  
+  try {
+    var user = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'ADMIN';
+    var t0 = Date.now();
+    
+    // Call RPC
+    var res = await fetch(erpUrl('rpc/erp_execute_cutover'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({
+        p_items: _ascCutover.parsedItems,
+        p_performed_by: user,
+        p_csv_filename: _ascCutover.csvFilename,
+        p_notes: notes
+      })
+    });
+    
+    if (!res.ok) {
+      var errText = await res.text();
+      throw new Error('HTTP ' + res.status + ' — ' + errText.substring(0, 200));
+    }
+    
+    var data = await res.json();
+    var elapsed = Date.now() - t0;
+    
+    console.log('[Cutover] Executed in ' + elapsed + 'ms:', data);
+    
+    if (!data || !data.success) {
+      throw new Error((data && data.error) || 'Unknown error');
+    }
+    
+    // Show results
+    ascCutoverShowResult(data);
+    
+    // Log to admin_audit_log
+    await ascLogAction('FULL_CUTOVER', 'erp_items', null, null, {
+      added: data.added,
+      updated: data.updated,
+      removed: data.removed,
+      snapshot_id: data.snapshot_id
+    }, notes);
+    
+    erpShowToast('✅ Full cutover complete!', 'success');
+    
+    // Reload snapshots
+    ascCutoverLoadSnapshots();
+    
+  } catch (err) {
+    console.error('[Cutover] Execute failed:', err);
+    erpShowToast('Cutover failed: ' + err.message, 'danger');
+    
+    if (content) {
+      content.innerHTML = '<div class="alert alert-danger">' +
+        '<i class="bi bi-exclamation-triangle-fill me-1"></i>' +
+        '<strong>Cutover Failed</strong><br>' +
+        '<small>' + ascEsc(err.message) + '</small>' +
+        '</div>';
+    }
+  } finally {
+    _ascCutover.isExecuting = false;
+  }
+}
+
+window.ascCutoverConfirm = ascCutoverConfirm;
+
+function ascCutoverShowResult(data) {
+  // Hide Step 1 & 2
+  var step1 = document.getElementById('cutoverStep1');
+  var step2 = document.getElementById('cutoverStep2');
+  if (step1) step1.style.display = 'none';
+  if (step2) step2.style.display = 'none';
+  
+  // Show Step 3
+  var step3 = document.getElementById('cutoverStep3');
+  if (step3) step3.style.display = 'block';
+  
+  // Fill result
+  var el;
+  el = document.getElementById('cutoverResultAdd');
+  if (el) el.textContent = data.added || 0;
+  
+  el = document.getElementById('cutoverResultUpdate');
+  if (el) el.textContent = data.updated || 0;
+  
+  el = document.getElementById('cutoverResultRemove');
+  if (el) el.textContent = data.removed || 0;
+  
+  el = document.getElementById('cutoverResultSnapshot');
+  if (el) el.textContent = data.snapshot_name || '—';
+  
+  el = document.getElementById('cutoverResultSnapshotId');
+  if (el) el.textContent = data.snapshot_id || '—';
+  
+  step3.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ═══════════════════════════════════════════════════════════
+// CANCEL / RESET
+// ═══════════════════════════════════════════════════════════
+function ascCutoverCancel() {
+  if (!confirm('Cancel cutover? Walang mababago sa database.')) return;
+  ascCutoverReset();
+}
+
+window.ascCutoverCancel = ascCutoverCancel;
+
+function ascCutoverReset() {
+  _ascCutover.csvFilename = '';
+  _ascCutover.parsedItems = [];
+  _ascCutover.addedItems = [];
+  _ascCutover.updatedItems = [];
+  _ascCutover.removedItems = [];
+  _ascCutover.errorItems = [];
+  
+  var step1 = document.getElementById('cutoverStep1');
+  var step2 = document.getElementById('cutoverStep2');
+  var step3 = document.getElementById('cutoverStep3');
+  if (step1) step1.style.display = 'block';
+  if (step2) step2.style.display = 'none';
+  if (step3) step3.style.display = 'none';
+  
+  var fileInput = document.getElementById('cutoverCsvFile');
+  if (fileInput) fileInput.value = '';
+  
+  var notesInput = document.getElementById('cutoverNotes');
+  if (notesInput) notesInput.value = '';
+  
+  var statusEl = document.getElementById('cutoverUploadStatus');
+  if (statusEl) statusEl.innerHTML = '';
+  
+  step1.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+window.ascCutoverReset = ascCutoverReset;
+
+// ═══════════════════════════════════════════════════════════
+// DOWNLOAD TEMPLATE
+// ═══════════════════════════════════════════════════════════
+async function ascCutoverDownloadTemplate() {
+  erpShowToast('📥 Generating template from current data...', 'info');
+  
+  try {
+    var rows = await erpFetch('erp_items',
+      'select=item_code,description,category,location,on_hand,buffer_stock,base_unit,' +
+      'active_consumption_months,ave_monthly_consumption,ave_daily_consumption,' +
+      'abc_classification,inventory_movement' +
+      '&is_deleted=eq.false&order=item_code.asc&limit=10000');
+    
+    if (!rows || rows.length === 0) {
+      erpShowToast('Walang items to export', 'warning');
+      return;
+    }
+    
+    // Header matching sa CSV format
+    var headers = [
+      'Item Code', 'Description', 'Category', 'Location', 'On-Hand', 'Buffer',
+      'Unit', 'Active Mo', 'Ave/Mo', 'Ave/Day', 'Reorder Status', 'ABC', 'Movement'
+    ];
+    
+    var csv = headers.map(ascCutoverCsvEscape).join('\t') + '\n';
+    
+    rows.forEach(function(r) {
+      var row = [
+        r.item_code || '',
+        r.description || '',
+        r.category || '',
+        r.location || '',
+        r.on_hand || 0,
+        r.buffer_stock || 0,
+        r.base_unit || 'PIECE',
+        r.active_consumption_months || 0,
+        r.ave_monthly_consumption || 0,
+        r.ave_daily_consumption || 0,
+        '',  // Reorder Status — blank (computed)
+        r.abc_classification || 'C',
+        r.inventory_movement || 'NO MOVEMENT'
+      ];
+      csv += row.map(ascCutoverCsvEscape).join('\t') + '\n';
+    });
+    
+    var blob = new Blob([csv], { type: 'text/tab-separated-values;charset=utf-8;' });
+    var link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'inventory_template_' + new Date().toISOString().slice(0, 10) + '.csv';
+    link.click();
+    
+    erpShowToast('✅ Template downloaded (' + rows.length + ' items)', 'success');
+    
+  } catch (err) {
+    console.error('[Cutover Template]', err);
+    erpShowToast('Failed: ' + err.message, 'danger');
+  }
+}
+
+window.ascCutoverDownloadTemplate = ascCutoverDownloadTemplate;
+
+function ascCutoverCsvEscape(val) {
+  if (val === null || val === undefined) return '';
+  var s = String(val);
+  if (s.indexOf('\t') !== -1 || s.indexOf('\n') !== -1 || s.indexOf('"') !== -1) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+// ═══════════════════════════════════════════════════════════
+// SNAPSHOTS LIST + ROLLBACK
+// ═══════════════════════════════════════════════════════════
+async function ascCutoverLoadSnapshots() {
+  var tbody = document.getElementById('ascSnapshotsBody');
+  if (!tbody) return;
+  
+  tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">' +
+    '<div class="erp-spinner" style="margin:0 auto;"></div>' +
+    '<div class="mt-2">Loading snapshots...</div></td></tr>';
+  
+  try {
+    var res = await fetch(erpUrl('rpc/erp_get_cutover_snapshots'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({})
+    });
+    
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    
+    if (!data || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">' +
+        '<i class="bi bi-inbox" style="font-size:2rem;opacity:0.3;"></i>' +
+        '<div class="mt-2">Wala pang cutover snapshots</div></td></tr>';
+      return;
+    }
+    
+    var html = '';
+    data.forEach(function(s) {
+      var dateStr = s.snapshot_date ? new Date(s.snapshot_date).toLocaleString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      }) : '—';
+      
+      var rollbackBadge = s.has_rollback
+        ? '<span class="badge bg-info text-dark"><i class="bi bi-arrow-counterclockwise me-1"></i>Rolled back</span>'
+        : '<span class="badge bg-success"><i class="bi bi-shield-check me-1"></i>Active</span>';
+      
+      html += '<tr>' +
+        '<td><code style="font-size:0.75rem;">' + ascEsc(s.snapshot_name) + '</code></td>' +
+        '<td style="font-size:0.78rem;">' + ascEsc(dateStr) + '</td>' +
+        '<td class="text-end fw-bold">' + ascNum(s.total_items || 0) + '</td>' +
+        '<td class="text-end text-success">+' + ascNum(s.total_added || 0) + '</td>' +
+        '<td class="text-end text-warning">' + ascNum(s.total_updated || 0) + '</td>' +
+        '<td class="text-end text-danger">-' + ascNum(s.total_removed || 0) + '</td>' +
+        '<td>' + ascEsc(s.performed_by || '—') + '</td>' +
+        '<td class="text-center">' +
+          rollbackBadge + ' ' +
+          (!s.has_rollback 
+            ? '<button class="btn btn-sm btn-outline-danger ms-1" onclick="ascCutoverRollback(' + s.id + ', \'' + ascJsEsc(s.snapshot_name) + '\')" title="Rollback to this snapshot">' +
+                '<i class="bi bi-arrow-counterclockwise"></i>' +
+              '</button>'
+            : '') +
+        '</td>' +
+      '</tr>';
+    });
+    
+    tbody.innerHTML = html;
+    
+  } catch (err) {
+    console.error('[ascCutoverLoadSnapshots]', err);
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">' +
+      'Failed: ' + ascEsc(err.message) + '</td></tr>';
+  }
+}
+
+window.ascCutoverLoadSnapshots = ascCutoverLoadSnapshots;
+
+// ═══════════════════════════════════════════════════════════
+// ROLLBACK
+// ═══════════════════════════════════════════════════════════
+async function ascCutoverRollback(snapshotId, snapshotName) {
+  var confirmMsg = '⚠️ ROLLBACK TO SNAPSHOT?\n\n' +
+    'Snapshot: ' + snapshotName + '\n\n' +
+    'Ang gagawin:\n' +
+    '• I-restore ang inventory sa previous state\n' +
+    '• I-delete ang mga bagong items na naidagdag after snapshot\n' +
+    '• I-restore ang deleted items\n\n' +
+    'Type "ROLLBACK" to confirm:';
+  
+  var input = prompt(confirmMsg);
+  if (input !== 'ROLLBACK') {
+    erpShowToast('Rollback cancelled', 'info');
+    return;
+  }
+  
+  try {
+    erpShowToast('⏪ Rolling back...', 'info');
+    
+    var user = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'ADMIN';
+    
+    var res = await fetch(erpUrl('rpc/erp_rollback_cutover'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({
+        p_snapshot_id: snapshotId,
+        p_performed_by: user
+      })
+    });
+    
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    
+    if (!data || !data.success) {
+      throw new Error((data && data.error) || 'Rollback failed');
+    }
+    
+    erpShowToast('✅ Rollback complete! Restored ' + data.restored + ' items', 'success');
+    
+    // Log
+    await ascLogAction('CUTOVER_ROLLBACK', 'erp_items', null, null, {
+      snapshot_id: snapshotId,
+      restored: data.restored,
+      cleaned: data.cleaned
+    }, 'Rollback to ' + snapshotName);
+    
+    // Reload
+    ascCutoverLoadSnapshots();
+    
+  } catch (err) {
+    console.error('[Rollback]', err);
+    erpShowToast('Rollback failed: ' + err.message, 'danger');
+  }
+}
+
+window.ascCutoverRollback = ascCutoverRollback;
+
+// ═══════════════════════════════════════════════════════════
+// AUTO-LOAD SNAPSHOTS WHEN TAB ACTIVATES
+// ═══════════════════════════════════════════════════════════
+// Hook sa existing ascSwitchTab
+var _origAscSwitchTab = ascSwitchTab;
+ascSwitchTab = function(tabName) {
+  _origAscSwitchTab(tabName);
+  
+  if (tabName === 'cutover') {
+    setTimeout(ascCutoverLoadSnapshots, 200);
+  }
+};
+
+console.log('✅ Full Cutover module loaded');
