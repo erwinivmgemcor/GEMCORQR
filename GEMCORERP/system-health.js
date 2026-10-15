@@ -1345,17 +1345,12 @@ async function shRestoreBackup() {
     var file = event.target.files[0];
     if (!file) return;
 
-    var confirm2 = confirm(
-      '🚨 FINAL CONFIRMATION\n\n' +
-      'File: ' + file.name + '\n\n' +
-      'I-restore ang backup? Overwrite current data?\n\n' +
-      'Type "RESTORE" to confirm:'
-    );
-    if (!prompt('Type RESTORE:') === 'RESTORE') {
-      // Actually, simpler:
-    }
-
-    var confirmText = prompt('Type "RESTORE" to confirm:');
+   var confirmText = prompt(
+  '🚨 FINAL CONFIRMATION\n\n' +
+  'File: ' + file.name + '\n\n' +
+  'I-restore ang backup? Overwrite current data?\n\n' +
+  'Type "RESTORE" to confirm:'
+);
     if (confirmText !== 'RESTORE') {
       erpShowToast('Cancelled', 'info');
       return;
