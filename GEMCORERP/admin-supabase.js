@@ -3008,13 +3008,14 @@ async function ascCutoverDownloadTemplate() {
       return;
     }
     
-    // Header matching sa CSV format
     var headers = [
       'Item Code', 'Description', 'Category', 'Location', 'On-Hand', 'Buffer',
       'Unit', 'Active Mo', 'Ave/Mo', 'Ave/Day', 'Reorder Status', 'ABC', 'Movement'
     ];
     
-    var csv = headers.map(ascCutoverCsvEscape).join('\t') + '\n';
+    // ✅ FIX: Comma separator + UTF-8 BOM para sa Excel
+    var csv = '\uFEFF';  // UTF-8 BOM
+    csv += headers.map(ascCutoverCsvEscape).join(',') + '\n';
     
     rows.forEach(function(r) {
       var row = [
@@ -3032,10 +3033,12 @@ async function ascCutoverDownloadTemplate() {
         r.abc_classification || 'C',
         r.inventory_movement || 'NO MOVEMENT'
       ];
-      csv += row.map(ascCutoverCsvEscape).join('\t') + '\n';
+      // ✅ FIX: Comma separator
+      csv += row.map(ascCutoverCsvEscape).join(',') + '\n';
     });
     
-    var blob = new Blob([csv], { type: 'text/tab-separated-values;charset=utf-8;' });
+    // ✅ FIX: Proper MIME type for CSV
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     var link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = 'inventory_template_' + new Date().toISOString().slice(0, 10) + '.csv';
@@ -3054,7 +3057,8 @@ window.ascCutoverDownloadTemplate = ascCutoverDownloadTemplate;
 function ascCutoverCsvEscape(val) {
   if (val === null || val === undefined) return '';
   var s = String(val);
-  if (s.indexOf('\t') !== -1 || s.indexOf('\n') !== -1 || s.indexOf('"') !== -1) {
+  // ✅ FIX: I-check din ang comma para sa proper escaping
+  if (s.indexOf(',') !== -1 || s.indexOf('\n') !== -1 || s.indexOf('"') !== -1) {
     return '"' + s.replace(/"/g, '""') + '"';
   }
   return s;
