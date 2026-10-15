@@ -243,7 +243,115 @@
       </div>
     </div>
   </div>
+  <!-- OVERALL STATUS BANNER -->
+  <div class="erp-card" id="shOverallBanner" style="padding:20px 24px;margin-bottom:20px;background:linear-gradient(135deg,#f0fdf4 0%,#d1fae5 100%);border-left:4px solid #10b981;">
+    <div class="d-flex align-items-center gap-3">
+      <i class="bi bi-shield-check" id="shOverallIcon" style="font-size:2.5rem;color:#10b981;"></i>
+      <div class="flex-grow-1">
+        <div style="font-size:1.3rem;font-weight:800;color:#065f46;" id="shOverallTitle">
+          All Systems Operational
+        </div>
+        <div style="font-size:0.85rem;color:#047857;" id="shOverallSubtitle">
+          Running smoothly · Last check: —
+        </div>
+      </div>
+      <div class="text-end">
+        <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#059669;font-weight:700;">
+          Uptime
+        </div>
+        <div style="font-size:1.5rem;font-weight:800;color:#065f46;font-variant-numeric:tabular-nums;" id="shUptime">
+          100%
+        </div>
+      </div>
+    </div>
+  </div>
 
+    <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- DATABASE STORAGE OVERVIEW (NEW!) -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="section-card mb-3" style="border-left:4px solid #3b82f6;">
+    <div class="section-card-header">
+      <div class="section-card-title">
+        <i class="bi bi-hdd-stack-fill text-primary"></i>
+        <span>💾 Database Storage</span>
+      </div>
+      <div class="d-flex gap-2 align-items-center">
+        <span class="badge bg-info" id="shDbSizeTrend">— loading —</span>
+        <button class="btn btn-sm btn-outline-secondary" onclick="shRefreshStorage()">
+          <i class="bi bi-arrow-clockwise"></i>
+        </button>
+      </div>
+    </div>
+    <div class="section-card-body" style="padding:20px;">
+
+      <!-- Size Bar -->
+      <div class="row g-3 mb-3">
+        <div class="col-md-3">
+          <div class="health-card ok" id="shStorageCard">
+            <div class="health-card-label">
+              <span class="status-dot ok" id="shStorageDot"></span>Total Size
+            </div>
+            <div class="health-card-value ok" id="shDbSize">—</div>
+            <div class="health-card-sub" id="shDbSizePercent">— of 500 MB</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="health-card ok">
+            <div class="health-card-label">
+              <i class="bi bi-arrow-down-circle text-success me-1"></i>Available
+            </div>
+            <div class="health-card-value ok" id="shDbAvailable">—</div>
+            <div class="health-card-sub">Remaining space</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="health-card ok">
+            <div class="health-card-label">
+              <i class="bi bi-graph-up-arrow text-warning me-1"></i>Growth Rate
+            </div>
+            <div class="health-card-value" id="shDbGrowth">—</div>
+            <div class="health-card-sub">Estimated per week</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="health-card ok">
+            <div class="health-card-label">
+              <i class="bi bi-hourglass-split text-info me-1"></i>Est. Full In
+            </div>
+            <div class="health-card-value" id="shDbFullEstimate">—</div>
+            <div class="health-card-sub">At current rate</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Visual Progress Bar -->
+      <div style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;font-size:0.75rem;font-weight:600;color:#64748b;margin-bottom:6px;">
+          <span>0 MB</span>
+          <span id="shDbBarLabel">— MB used</span>
+          <span>500 MB (Free Tier Limit)</span>
+        </div>
+        <div style="height:16px;background:#f1f5f9;border-radius:8px;overflow:hidden;position:relative;">
+          <div id="shDbBar" style="height:100%;width:0%;background:linear-gradient(90deg,#10b981 0%,#059669 100%);transition:width 0.5s ease;border-radius:8px;"></div>
+          <div style="position:absolute;top:0;left:70%;height:100%;width:2px;background:#f59e0b;opacity:0.5;" title="Warning threshold (70%)"></div>
+          <div style="position:absolute;top:0;left:90%;height:100%;width:2px;background:#dc2626;opacity:0.5;" title="Critical threshold (90%)"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.68rem;color:#94a3b8;margin-top:4px;">
+          <span></span>
+          <span>⚠️ 70% warning</span>
+          <span>🔴 90% critical</span>
+        </div>
+      </div>
+
+      <!-- Warning Box (auto-show kapag 70%+) -->
+      <div id="shStorageWarning" style="display:none;padding:12px 16px;background:#fffbeb;border-left:3px solid #f59e0b;border-radius:6px;font-size:0.85rem;color:#92400e;margin-top:12px;">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <strong id="shStorageWarningTitle">Storage Warning</strong>
+        <div id="shStorageWarningText" style="margin-top:4px;"></div>
+      </div>
+
+    </div>
+  </div>
   <!-- KPI GRID -->
   <div class="row g-3 mb-3">
 
@@ -287,7 +395,261 @@
       </div>
     </div>
   </div>
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- CLEANUP TOOLS (NEW!) -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="section-card mb-3" style="border-left:4px solid #f59e0b;">
+    <div class="section-card-header">
+      <div class="section-card-title">
+        <i class="bi bi-broom-fill text-warning"></i>
+        <span>🧹 Cleanup Tools</span>
+      </div>
+      <div class="small text-muted">
+        <i class="bi bi-info-circle me-1"></i>
+        Backup muna bago mag-delete
+      </div>
+    </div>
+    <div class="section-card-body" style="padding:20px;">
 
+      <div class="guide-info-box warning mb-3">
+        <i class="bi bi-shield-check me-1"></i>
+        <strong>Safe cleanup:</strong> Auto-backup bago mag-delete. Pwede i-restore kung may issue.
+      </div>
+
+      <div class="row g-3">
+
+        <!-- Cleanup: Snapshots -->
+        <div class="col-md-4">
+          <div style="padding:16px;background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <div>
+                <div style="font-weight:700;font-size:0.9rem;color:#0f172a;">
+                  <i class="bi bi-camera-fill text-primary me-1"></i>Old Snapshots
+                </div>
+                <div style="font-size:0.75rem;color:#64748b;margin-top:2px;">
+                  Cutover snapshots > 3 months old
+                </div>
+              </div>
+              <div class="text-end">
+                <div style="font-size:0.72rem;color:#94a3b8;">Count</div>
+                <div style="font-size:1.1rem;font-weight:800;color:#0f172a;" id="shCleanupSnapshotsCount">—</div>
+              </div>
+            </div>
+            <button class="guide-btn-outline w-100" onclick="shCleanupSnapshots()">
+              <i class="bi bi-trash me-1"></i>Delete Old Snapshots
+            </button>
+          </div>
+        </div>
+
+        <!-- Cleanup: Audit Logs -->
+        <div class="col-md-4">
+          <div style="padding:16px;background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <div>
+                <div style="font-weight:700;font-size:0.9rem;color:#0f172a;">
+                  <i class="bi bi-clock-history text-info me-1"></i>Old Audit Logs
+                </div>
+                <div style="font-size:0.75rem;color:#64748b;margin-top:2px;">
+                  Audit logs > 6 months old
+                </div>
+              </div>
+              <div class="text-end">
+                <div style="font-size:0.72rem;color:#94a3b8;">Count</div>
+                <div style="font-size:1.1rem;font-weight:800;color:#0f172a;" id="shCleanupAuditCount">—</div>
+              </div>
+            </div>
+            <button class="guide-btn-outline w-100" onclick="shCleanupAuditLogs()">
+              <i class="bi bi-trash me-1"></i>Delete Old Logs
+            </button>
+          </div>
+        </div>
+
+        <!-- Cleanup: Messages -->
+        <div class="col-md-4">
+          <div style="padding:16px;background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <div>
+                <div style="font-weight:700;font-size:0.9rem;color:#0f172a;">
+                  <i class="bi bi-chat-dots-fill text-success me-1"></i>Old Messages
+                </div>
+                <div style="font-size:0.75rem;color:#64748b;margin-top:2px;">
+                  Messages > 3 months old
+                </div>
+              </div>
+              <div class="text-end">
+                <div style="font-size:0.72rem;color:#94a3b8;">Count</div>
+                <div style="font-size:1.1rem;font-weight:800;color:#0f172a;" id="shCleanupMessagesCount">—</div>
+              </div>
+            </div>
+            <button class="guide-btn-outline w-100" onclick="shCleanupMessages()">
+              <i class="bi bi-trash me-1"></i>Delete Old Messages
+            </button>
+          </div>
+        </div>
+
+        <!-- Cleanup: Completed Docs -->
+        <div class="col-md-4">
+          <div style="padding:16px;background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <div>
+                <div style="font-weight:700;font-size:0.9rem;color:#0f172a;">
+                  <i class="bi bi-file-earmark-check-fill text-danger me-1"></i>Completed Docs
+                </div>
+                <div style="font-size:0.75rem;color:#64748b;margin-top:2px;">
+                  Documents > 1 year old
+                </div>
+              </div>
+              <div class="text-end">
+                <div style="font-size:0.72rem;color:#94a3b8;">Count</div>
+                <div style="font-size:1.1rem;font-weight:800;color:#0f172a;" id="shCleanupDocsCount">—</div>
+              </div>
+            </div>
+            <button class="guide-btn-outline w-100" onclick="shCleanupCompletedDocs()">
+              <i class="bi bi-trash me-1"></i>Delete Old Docs
+            </button>
+          </div>
+        </div>
+
+        <!-- Custom Date Range -->
+        <div class="col-md-4">
+          <div style="padding:16px;background:#fff;border:1.5px solid #fee2e2;border-radius:10px;">
+            <div style="font-weight:700;font-size:0.9rem;color:#dc2626;">
+              <i class="bi bi-calendar-x me-1"></i>Custom Date Range
+            </div>
+            <div style="font-size:0.75rem;color:#64748b;margin-top:2px;margin-bottom:8px;">
+              Selective delete with date filter
+            </div>
+            <button class="guide-btn danger w-100" onclick="shOpenCustomDelete()">
+              <i class="bi bi-trash me-1"></i>Open Custom Delete
+            </button>
+          </div>
+        </div>
+
+        <!-- Full Cleanup -->
+        <div class="col-md-4">
+          <div style="padding:16px;background:linear-gradient(135deg,#fef2f2 0%,#fee2e2 100%);border:1.5px solid #fecaca;border-radius:10px;">
+            <div style="font-weight:700;font-size:0.9rem;color:#991b1b;">
+              <i class="bi bi-exclamation-triangle-fill me-1"></i>Full Cleanup
+            </div>
+            <div style="font-size:0.75rem;color:#7f1d1d;margin-top:2px;margin-bottom:8px;">
+              Lahat ng above in one click
+            </div>
+            <button class="guide-btn danger w-100" onclick="shRunFullCleanup()">
+              <i class="bi bi-shield-fill-x me-1"></i>Run Full Cleanup
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- BACKUP CENTER (NEW!) -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="section-card mb-3" style="border-left:4px solid #10b981;">
+    <div class="section-card-header">
+      <div class="section-card-title">
+        <i class="bi bi-hdd-fill text-success"></i>
+        <span>💾 Backup Center</span>
+      </div>
+      <div class="small text-muted">
+        <i class="bi bi-shield-check me-1"></i>
+        Manual backup & restore
+      </div>
+    </div>
+    <div class="section-card-body" style="padding:20px;">
+
+      <div class="row g-3">
+
+        <!-- Create Backup -->
+        <div class="col-md-4">
+          <div style="padding:16px;background:#f0fdf4;border:1.5px solid #a7f3d0;border-radius:10px;">
+            <div style="font-weight:700;font-size:0.9rem;color:#065f46;">
+              <i class="bi bi-plus-circle-fill me-1"></i>Create Backup
+            </div>
+            <div style="font-size:0.75rem;color:#047857;margin-top:2px;margin-bottom:12px;">
+              Snapshot ng lahat ng master data
+            </div>
+            <button class="guide-btn primary w-100" onclick="shCreateBackup()">
+              <i class="bi bi-hdd-fill me-1"></i>Backup Now
+            </button>
+          </div>
+        </div>
+
+        <!-- Download Backup -->
+        <div class="col-md-4">
+          <div style="padding:16px;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;">
+            <div style="font-weight:700;font-size:0.9rem;color:#1e40af;">
+              <i class="bi bi-download me-1"></i>Download Backup
+            </div>
+            <div style="font-size:0.75rem;color:#1d4ed8;margin-top:2px;margin-bottom:12px;">
+              Export sa JSON file (local save)
+            </div>
+            <button class="guide-btn primary w-100" onclick="shDownloadBackup()">
+              <i class="bi bi-download me-1"></i>Download Backup
+            </button>
+          </div>
+        </div>
+
+        <!-- Restore Backup -->
+        <div class="col-md-4">
+          <div style="padding:16px;background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;">
+            <div style="font-weight:700;font-size:0.9rem;color:#92400e;">
+              <i class="bi bi-arrow-counterclockwise me-1"></i>Restore Backup
+            </div>
+            <div style="font-size:0.75rem;color:#78350f;margin-top:2px;margin-bottom:12px;">
+              I-restore sa previous backup
+            </div>
+            <button class="guide-btn warning w-100" onclick="shRestoreBackup()">
+              <i class="bi bi-arrow-counterclockwise me-1"></i>Restore Backup
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Recent Backups -->
+      <div style="margin-top:20px;padding-top:20px;border-top:1px solid #e2e8f0;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div style="font-weight:700;font-size:0.9rem;color:#0f172a;">
+            <i class="bi bi-clock-history me-1"></i>Recent Backups
+          </div>
+          <button class="btn btn-sm btn-outline-secondary" onclick="shLoadBackups()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+          </button>
+        </div>
+        <div id="shBackupList" style="max-height:300px;overflow-y:auto;">
+          <div class="text-muted small text-center py-3">Loading backups...</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- EXPORT DATA (NEW!) -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="section-card mb-3" style="border-left:4px solid #8b5cf6;">
+    <div class="section-card-header">
+      <div class="section-card-title">
+        <i class="bi bi-file-earmark-arrow-down-fill text-purple" style="color:#8b5cf6;"></i>
+        <span>📥 Export Data</span>
+      </div>
+      <div class="small text-muted">
+        <i class="bi bi-info-circle me-1"></i>
+        Export per table to CSV
+      </div>
+    </div>
+    <div class="section-card-body" style="padding:20px;">
+
+      <div class="row g-2" id="shExportButtons">
+        <!-- Dynamic: generated by JS -->
+      </div>
+
+    </div>
+  </div>
   <!-- TWO COLUMN LAYOUT -->
   <div class="row g-3">
 
