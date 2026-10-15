@@ -238,23 +238,23 @@ function erpRenderTable() {
   var start = (_erpCurrentPage - 1) * _erpPageSize;
   var end = Math.min(start + _erpPageSize, total);
   var pageItems = _erpFilteredItems.slice(start, end);
-  
+
   document.getElementById('erpTableCount').textContent = total + ' items';
   document.getElementById('erpPageTotal').textContent = total;
   document.getElementById('erpPageStart').textContent = total > 0 ? start + 1 : 0;
   document.getElementById('erpPageEnd').textContent = end;
   document.getElementById('erpPageLabel').textContent = 'Page ' + _erpCurrentPage;
-  
+
   document.getElementById('erpBtnPrev').disabled = (_erpCurrentPage <= 1);
   document.getElementById('erpBtnNext').disabled = (end >= total);
-  
+
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="14" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="15" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No items match your filters.</td></tr>';
     return;
   }
-  
+
   var html = '';
   pageItems.forEach(function(it) {
     var onHand = Number(it.on_hand || 0);
@@ -263,16 +263,16 @@ function erpRenderTable() {
     var aveMo = Number(it.ave_monthly_consumption || 0);
     var aveDay = Number(it.ave_daily_consumption || 0);
     var activeMo = Number(it.active_consumption_months || 0);
-    
+
     var qtyClass = 'qty-ok';
     if (onHand === 0) qtyClass = 'qty-zero';
     else if (onHand <= buffer) qtyClass = 'qty-low';
-    
+
     var abcBadge = '';
     if (it.abc_classification) {
       abcBadge = '<span class="abc-badge abc-' + erpEsc(it.abc_classification) + '">' + erpEsc(it.abc_classification) + '</span>';
     }
-    
+
     var movBadge = '';
     if (it.inventory_movement) {
       var m = it.inventory_movement.toUpperCase();
@@ -283,7 +283,7 @@ function erpRenderTable() {
       var shortLabel = m.replace(' MOVING', '').replace('MOVEMENT', '').trim() || 'N/A';
       movBadge = '<span class="mov-badge ' + mClass + '">' + erpEsc(shortLabel) + '</span>';
     }
-    
+
     var reorderStatus = '';
     if (buffer > 0 && onHand <= buffer) {
       reorderStatus = '<span class="reorder-badge reorder-critical">FOR REPLENISHMENT</span>';
@@ -296,46 +296,45 @@ function erpRenderTable() {
     } else {
       reorderStatus = '<span class="reorder-badge reorder-none">NO USAGE</span>';
     }
-    
+
     var lockIcon = isLocked ? 'bi-lock-fill' : 'bi-unlock';
     var lockClass = isLocked ? 'locked' : 'unlocked';
-    
-    var safeCode = String(it.item_code || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    
-  var unitCost = Number(it.unit_cost || 0);
-var onHandCost = onHand * unitCost;
 
-html += '<tr onclick="erpRowClick(event, \'' + safeCode + '\')" style="cursor:pointer;">' +
-  '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
-  '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
-  '<td>' + erpEsc(it.category || '—') + '</td>' +
-  '<td>' + erpEsc(it.location || '—') + '</td>' +
-  '<td class="text-end ' + qtyClass + '">' + erpNum(onHand) + '</td>' +
-  '<td class="text-end buffer-cell">' + 
-    (isLocked ? '<i class="bi bi-lock-fill" style="color:#dc2626;font-size:0.7rem;margin-right:4px;" title="Locked (manual value)"></i>' : '') +
-    erpNum(buffer) + 
-  '</td>' +
-  '<td class="text-center">' + erpEsc(it.base_unit || '') + '</td>' +
-  '<td class="text-end" style="font-family:\'Courier New\',monospace;">₱' + erpNum(unitCost.toFixed(2)) + '</td>' +   // ✅ IDINAGDAG
-  '<td class="text-end fw-bold" style="font-family:\'Courier New\',monospace;color:#1e3a5f;">₱' + erpNum(onHandCost.toFixed(2)) + '</td>' +   // ✅ IDINAGDAG
-  '<td class="text-center usage-cell">' + activeMo + '</td>' +
-  '<td class="text-end usage-cell">' + erpNum(aveMo) + '</td>' +
-  '<td class="text-end usage-cell">' + erpNum(aveDay) + '</td>' +
-  '<td class="text-center">' + reorderStatus + '</td>' +
-  '<td class="text-center">' + abcBadge + '</td>' +
-  '<td class="text-center">' + movBadge + '</td>' +
-  '<td class="text-center">' +
-    '<button class="lock-toggle-btn ' + lockClass + '" ' +
-      'onclick="event.stopPropagation();erpToggleLock(\'' + safeCode + '\', ' + isLocked + ')" ' +
-      'title="' + (isLocked ? 'Unlock buffer (auto-recompute enabled)' : 'Lock buffer (manual value)') + '">' +
-      '<i class="bi ' + lockIcon + '"></i>' +
-    '</button>' +
-  '</td>' +
-  '</tr>';
+    var safeCode = String(it.item_code || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    var unitCost = Number(it.unit_cost || 0);
+    var onHandCost = onHand * unitCost;
+
+    // ✅ ROW WITH ONCLICK
+    html += '<tr onclick="erpRowClick(event, \'' + safeCode + '\')" style="cursor:pointer;">' +
+      '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
+      '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
+      '<td>' + erpEsc(it.category || '—') + '</td>' +
+      '<td>' + erpEsc(it.location || '—') + '</td>' +
+      '<td class="text-end ' + qtyClass + '">' + erpNum(onHand) + '</td>' +
+      '<td class="text-end buffer-cell">' +
+        (isLocked ? '<i class="bi bi-lock-fill" style="color:#dc2626;font-size:0.7rem;margin-right:4px;" title="Locked (manual value)"></i>' : '') +
+        erpNum(buffer) +
+      '</td>' +
+      '<td class="text-center">' + erpEsc(it.base_unit || '') + '</td>' +
+      '<td class="text-end" style="font-family:\'Courier New\',monospace;">₱' + erpNum(unitCost.toFixed(2)) + '</td>' +
+      '<td class="text-end fw-bold" style="font-family:\'Courier New\',monospace;color:#1e3a5f;">₱' + erpNum(onHandCost.toFixed(2)) + '</td>' +
+      '<td class="text-center usage-cell">' + activeMo + '</td>' +
+      '<td class="text-end usage-cell">' + erpNum(aveMo) + '</td>' +
+      '<td class="text-end usage-cell">' + erpNum(aveDay) + '</td>' +
+      '<td class="text-center">' + reorderStatus + '</td>' +
+      '<td class="text-center">' + abcBadge + '</td>' +
+      '<td class="text-center">' + movBadge + '</td>' +
+      '<td class="text-center">' +
+        '<button class="lock-toggle-btn ' + lockClass + '" ' +
+          'onclick="event.stopPropagation();erpToggleLock(\'' + safeCode + '\', ' + isLocked + ')" ' +
+          'title="' + (isLocked ? 'Unlock buffer (auto-recompute enabled)' : 'Lock buffer (manual value)') + '">' +
+          '<i class="bi ' + lockIcon + '"></i>' +
+        '</button>' +
+      '</td>' +
+      '</tr>';
   });
   tbody.innerHTML = html;
 }
-
 function erpPagePrev() {
   if (_erpCurrentPage > 1) {
     _erpCurrentPage--;
