@@ -464,7 +464,7 @@ async function submitMrif() {
     return;
   }
   
-   // ═══ Validation ═══
+    // ═══ Validation ═══
   if (!_mrifState.joNo) {
     erpShowToast('Please lookup a JO No. first', 'warning');
     return;
@@ -476,6 +476,14 @@ async function submitMrif() {
     return;
   }
   _mrifState.department = department;
+  
+  // ✅ NEW: Capture SOF# from readonly field (auto-filled from JO lookup)
+  var sofNoEl = document.getElementById('mrifSofNo');
+  var sofNo = sofNoEl ? sofNoEl.value.trim() : '';
+  _mrifState.sofNo = sofNo;
+  console.log('[Submit MRIF] SOF# captured:', sofNo);
+  
+  var validItems = [];
   
   // ✅ NEW: Capture SOF# from readonly field (auto-filled from JO lookup)
   var sofNoEl = document.getElementById('mrifSofNo');
