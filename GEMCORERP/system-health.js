@@ -1242,6 +1242,9 @@ async function shExecuteSql(sql) {
 // ═══════════════════════════════════════════════════════════
 
 // ─── Create Backup ───
+// ═══════════════════════════════════════════════════════════
+// FIXED: shCreateBackup() v2
+// ═══════════════════════════════════════════════════════════
 async function shCreateBackup() {
   if (_shEnhanced.isExecuting) return;
 
@@ -1257,19 +1260,27 @@ async function shCreateBackup() {
   erpShowToast('💾 Creating backup...', 'info');
 
   try {
-    // ✅ FIX: Sanitize table name — tanggalin ang dashes
-var timestamp = new Date().toISOString()
-  .replace(/[:.]/g, '')
-  .replace(/-/g, '_')
-  .slice(0, 15);
-var tableName = 'manual_backup_' + timestamp;
+    // ✅ FIX 1: Sanitize table name — tanggalin dashes
+    var timestamp = new Date().toISOString()
+      .replace(/[:.]/g, '')
+      .replace(/-/g, '_')
+      .slice(0, 15);
+    var tableName = 'manual_backup_' + timestamp;
+
+    if (!/^[a-z_][a-z0-9_]*$/i.test(tableName)) {
+      throw new Error('Invalid table name: ' + tableName);
+    }
+
+    console.log('[Backup] Creating table:', tableName);
+
+    // ✅ FIX 2: Add alias `t` sa bawat FROM clause
     var sql = 
-  "CREATE TABLE IF NOT EXISTS \"" + tableName + "\" AS " +
-  "SELECT " +
-      "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM erp_items WHERE is_deleted = false) AS items, " +
-      "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM users) AS users, " +
-      "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM vendors) AS vendors, " +
-      "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM requestors) AS requestors, " +
+      "CREATE TABLE IF NOT EXISTS \"" + tableName + "\" AS " +
+      "SELECT " +
+      "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM erp_items t WHERE t.is_deleted = false) AS items, " +
+      "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM users t) AS users, " +
+      "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM vendors t) AS vendors, " +
+      "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM requestors t) AS requestors, " +
       "NOW() AS backup_date";
 
     await shExecuteSql(sql);
@@ -1278,6 +1289,7 @@ var tableName = 'manual_backup_' + timestamp;
     await shLoadBackups();
 
   } catch(err) {
+    console.error('[shCreateBackup]', err);
     erpShowToast('❌ Backup failed: ' + err.message, 'danger');
   } finally {
     _shEnhanced.isExecuting = false;
