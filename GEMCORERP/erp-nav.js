@@ -132,6 +132,13 @@
           href: 'edit-requests.html',
           roles: ['warehouse']
         }
+        {
+      id: 'sof-tracker',
+      label: 'SOF Tracker',
+      icon: 'bi-file-earmark-ruled',
+      href: 'sof-tracker.html',
+      roles: ['warehouse']
+    }
       ]
     },
     {
