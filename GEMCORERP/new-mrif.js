@@ -229,13 +229,13 @@ async function checkAndPromptSofAllocation(sofNo) {
     
     if (existing && existing.length > 0) {
       // ✅ MAY SOF ALLOCATION NA
-      console.log('[MRIF] ✅ SOF allocation found:', existing[0].sof_no, '| Status:', existing[0].status);
+      console.log('[MRIF] ✅ SOF allocation found:', existing[0].sof_no);
       
       if (sofStatusEl) {
         sofStatusEl.innerHTML = '<span class="text-success">' +
           '<i class="bi bi-check-circle-fill me-1"></i>' +
-          'SOF# <strong>' + erpEsc(sofNo) + '</strong> already allocated ' +
-          '(status: ' + erpEsc(existing[0].status) + ')</span>';
+          'SOF# <strong>' + erpEsc(sofNo) + '</strong> existing — ' +
+          'items will be added on submit</span>';
       }
     } else {
       // ⚠️ WALANG SOF ALLOCATION — Will auto-create on submit
