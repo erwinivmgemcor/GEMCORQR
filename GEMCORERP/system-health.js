@@ -1257,12 +1257,15 @@ async function shCreateBackup() {
   erpShowToast('💾 Creating backup...', 'info');
 
   try {
-    var timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    var tableName = '_manual_backup_' + timestamp;
-
+    // ✅ FIX: Sanitize table name — tanggalin ang dashes
+var timestamp = new Date().toISOString()
+  .replace(/[:.]/g, '')
+  .replace(/-/g, '_')
+  .slice(0, 15);
+var tableName = 'manual_backup_' + timestamp;
     var sql = 
-      "CREATE TABLE IF NOT EXISTS " + tableName + " AS " +
-      "SELECT " +
+  "CREATE TABLE IF NOT EXISTS \"" + tableName + "\" AS " +
+  "SELECT " +
       "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM erp_items WHERE is_deleted = false) AS items, " +
       "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM users) AS users, " +
       "(SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) FROM vendors) AS vendors, " +
