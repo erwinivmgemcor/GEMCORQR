@@ -7,6 +7,7 @@
 var _mrifState = {
   joNo: '',
   gemSoNo: '',
+  sofNo: '',                    // ✅ NEW
   clientName: '',
   project: '',
   requestor: '',
@@ -15,8 +16,8 @@ var _mrifState = {
   inventoryList: [],
   inventoryLoaded: false,
   isSubmitting: false,
-  lastSubmittedDocNo: '',        // Track last submitted doc
-  lastSubmittedAt: 0             // Timestamp to prevent double
+  lastSubmittedDocNo: '',
+  lastSubmittedAt: 0
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -123,6 +124,7 @@ async function lookupJoNo() {
   var joNo = document.getElementById('mrifJoNo').value.trim();
   var statusEl = document.getElementById('joStatus');
   var resultEl = document.getElementById('joLookupResult');
+  var sofStatusEl = document.getElementById('sofStatus');
   
   if (!joNo) {
     statusEl.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Please enter a JO No.</span>';
@@ -133,6 +135,10 @@ async function lookupJoNo() {
   resultEl.className = 'alert alert-info mb-0 py-2';
   resultEl.innerHTML = '<span class="small">Searching...</span>';
   
+  // Reset SOF# field
+  document.getElementById('mrifSofNo').value = '';
+  _mrifState.sofNo = '';
+  
   try {
     var rows = await erpFetch('erp_sof_cache', 
       'jo_no=eq.' + encodeURIComponent(joNo) + '&limit=1');
@@ -141,16 +147,25 @@ async function lookupJoNo() {
       statusEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> JO No. not found in SOF Monitoring</span>';
       resultEl.className = 'alert alert-warning mb-0 py-2';
       resultEl.innerHTML = '<span class="small"><i class="bi bi-exclamation-triangle me-1"></i>JO No. <strong>' + erpEsc(joNo) + '</strong> not found. Please verify.</span>';
+      
+      if (sofStatusEl) {
+        sofStatusEl.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>No SOF# found for this JO#</span>';
+      }
       return;
     }
     
     var sof = rows[0];
     _mrifState.joNo = joNo;
-    _mrifState.gemSoNo = sof.so_form || sof.so_no || '';
+    _mrifState.sofNo = sof.sof_no || '';               // ✅ TAMANG COLUMN
     _mrifState.clientName = sof.client_name || '';
     _mrifState.project = sof.project_name || '';
     
-    document.getElementById('mrifGemSoNo').value = _mrifState.gemSoNo;
+    // ✅ Auto-fill SOF# field (readonly)
+    var sofEl = document.getElementById('mrifSofNo');
+    if (sofEl && _mrifState.sofNo) {
+      sofEl.value = _mrifState.sofNo;
+    }
+    
     document.getElementById('mrifClientName').value = _mrifState.clientName;
     document.getElementById('mrifProject').value = _mrifState.project;
     document.getElementById('mrifRequestor').value = _mrifState.requestor;
@@ -161,7 +176,26 @@ async function lookupJoNo() {
     
     statusEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> JO No. found!</span>';
     resultEl.className = 'alert alert-success mb-0 py-2';
-    resultEl.innerHTML = '<span class="small"><i class="bi bi-check-circle me-1"></i>Found: <strong>' + erpEsc(sof.so_form || '') + '</strong> — ' + erpEsc(sof.client_name || '') + '</span>';
+    resultEl.innerHTML = '<span class="small"><i class="bi bi-check-circle me-1"></i>Found: <strong>SOF# ' + erpEsc(_mrifState.sofNo) + '</strong> — ' + erpEsc(sof.client_name || '') + '</span>';
+    
+    // ✅ Update SOF status message + check allocation
+    if (sofStatusEl) {
+      if (_mrifState.sofNo) {
+        sofStatusEl.innerHTML = '<span class="text-success">' +
+          '<i class="bi bi-check-circle-fill me-1"></i>' +
+          'SOF# <strong>' + erpEsc(_mrifState.sofNo) + '</strong> ' +
+          'auto-filled from JO# ' + erpEsc(joNo) + '</span>';
+      } else {
+        sofStatusEl.innerHTML = '<span class="text-warning">' +
+          '<i class="bi bi-exclamation-triangle me-1"></i>' +
+          'No SOF# found for this JO#</span>';
+      }
+    }
+    
+    // ✅ NEW: Check kung may existing SOF allocation
+    if (_mrifState.sofNo) {
+      await checkAndPromptSofAllocation(_mrifState.sofNo);
+    }
     
     erpShowToast('JO No. found! Ready to add items.', 'success');
     
@@ -178,6 +212,81 @@ async function lookupJoNo() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+// ✅ NEW: Check existing SOF allocation + prompt to create
+// ═══════════════════════════════════════════════════════════
+async function checkAndPromptSofAllocation(sofNo) {
+  if (!sofNo) return;
+  
+  try {
+    console.log('[MRIF] Checking SOF allocation for:', sofNo);
+    
+    var existing = await erpFetch('erp_sof_allocations',
+      'sof_no=eq.' + encodeURIComponent(sofNo) + '&limit=1');
+    
+    if (existing && existing.length > 0) {
+      // ✅ MAY SOF ALLOCATION
+      console.log('[MRIF] ✅ SOF allocation found:', existing[0].sof_no, '| Status:', existing[0].status);
+      erpShowToast('✅ SOF allocation found: ' + sofNo, 'success');
+      return;
+    }
+    
+    // ⚠️ WALANG SOF ALLOCATION — Prompt user
+    console.log('[MRIF] ⚠️ No SOF allocation for:', sofNo);
+    
+    var userChoice = confirm(
+      '⚠️ Walang SOF allocation record para sa SOF# ' + sofNo + '.\n\n' +
+      'Gusto mo bang i-create ngayon?\n\n' +
+      'KUNG OO: Mag-create tayo ng SOF allocation record para ma-track ang progress.\n' +
+      'KUNG HINDI: Proceed pa rin tayo sa MRIF creation — walang allocation tracking.'
+    );
+    
+    if (!userChoice) {
+      console.log('[MRIF] User declined SOF allocation creation');
+      erpShowToast('⚠️ Proceeding without SOF allocation tracking', 'info');
+      return;
+    }
+    
+    // ✅ Create SOF allocation
+    console.log('[MRIF] User accepted — creating SOF allocation for:', sofNo);
+    
+    var currentUser = localStorage.getItem('ivm_username') || 'system';
+    var currentFullname = localStorage.getItem('ivm_userFullname') || currentUser;
+    
+    var createRes = await fetch(erpUrl('rpc/erp_sof_create_allocation'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({
+        p_sof_no: sofNo,
+        p_client_name: _mrifState.clientName || null,
+        p_project_name: _mrifState.project || null,
+        p_jo_no: _mrifState.joNo || null,
+        p_sof_date: new Date().toISOString().split('T')[0],
+        p_notes: 'Auto-created from MRIF for JO# ' + _mrifState.joNo,
+        p_created_by: currentUser,
+        p_created_by_fullname: currentFullname
+      })
+    });
+    
+    if (!createRes.ok) {
+      var errText = await createRes.text();
+      throw new Error('HTTP ' + createRes.status + ' — ' + errText.substring(0, 100));
+    }
+    
+    var createData = await createRes.json();
+    
+    if (createData && createData.success) {
+      console.log('[MRIF] ✅ SOF allocation created:', createData.sof_no);
+      erpShowToast('✅ SOF allocation created: ' + createData.sof_no, 'success');
+    } else {
+      throw new Error((createData && createData.error) || 'Unknown error');
+    }
+    
+  } catch(err) {
+    console.error('[MRIF] SOF allocation check/create failed:', err);
+    erpShowToast('⚠️ Could not check/create SOF allocation: ' + err.message, 'warning');
+  }
+}
 // ═══════════════════════════════════════════════════════════
 // ITEMS
 // ═══════════════════════════════════════════════════════════
@@ -355,7 +464,7 @@ async function submitMrif() {
     return;
   }
   
-  // ═══ Validation ═══
+   // ═══ Validation ═══
   if (!_mrifState.joNo) {
     erpShowToast('Please lookup a JO No. first', 'warning');
     return;
@@ -367,6 +476,12 @@ async function submitMrif() {
     return;
   }
   _mrifState.department = department;
+  
+  // ✅ NEW: Capture SOF# from readonly field (auto-filled from JO lookup)
+  var sofNoEl = document.getElementById('mrifSofNo');
+  var sofNo = sofNoEl ? sofNoEl.value.trim() : '';
+  _mrifState.sofNo = sofNo;
+  console.log('[Submit MRIF] SOF# captured:', sofNo);
   
   var validItems = [];
   var rows = document.querySelectorAll('.erp-item-row');
@@ -430,7 +545,7 @@ async function submitMrif() {
     console.log('[Submit] Doc No:', docNo);
     
     // Step 2: Insert document
-        var docRes = await fetch(erpUrl('documents'), {
+         var docRes = await fetch(erpUrl('documents'), {
       method: 'POST',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify({
@@ -444,7 +559,8 @@ async function submitMrif() {
         gem_so_no: _mrifState.gemSoNo,
         client_name: _mrifState.clientName,
         project: _mrifState.project,
-        date_prepared: new Date().toISOString().split('T')[0],  // ✅ IDAGDAG ITO
+        sof_no: _mrifState.sofNo,                    // ✅ NEW
+        date_prepared: new Date().toISOString().split('T')[0],
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
@@ -529,15 +645,23 @@ function showSuccessModal(docNo) {
 function resetFormSilent() {
   _mrifState.joNo = '';
   _mrifState.gemSoNo = '';
+  _mrifState.sofNo = '';                    // ✅ NEW
   _mrifState.clientName = '';
   _mrifState.project = '';
   _mrifState.items = [];
   
   document.getElementById('mrifJoNo').value = '';
   document.getElementById('mrifGemSoNo').value = '';
+  document.getElementById('mrifSofNo').value = '';   // ✅ NEW
   document.getElementById('mrifClientName').value = '';
   document.getElementById('mrifProject').value = '';
   document.getElementById('mrifRequestor').value = '';
+  
+  // ✅ Reset SOF status
+  var sofStatusEl = document.getElementById('sofStatus');
+  if (sofStatusEl) {
+    sofStatusEl.innerHTML = '<i class="bi bi-info-circle me-1"></i>Ito ay auto-filled from JO lookup.';
+  }
   // ⚠️ DON'T clear department — auto-filled from user
   document.getElementById('joStatus').innerHTML = '';
   document.getElementById('joLookupResult').className = 'alert alert-secondary mb-0 py-2';
