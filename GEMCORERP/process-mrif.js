@@ -622,6 +622,69 @@ async function submitProcess() {
     console.log('[submitProcess] Status:', newStatus);
     console.log('[submitProcess] Items:', itemsUpdated);
     console.log('[submitProcess] ============================================');
+        // ═══════════════════════════════════════════════════════════
+    // ✅ NEW: Update SOF used qty (if document has SOF#)
+    // ═══════════════════════════════════════════════════════════
+    var docSofNo = _process.doc ? _process.doc.sof_no : null;
+    
+    if (docSofNo) {
+      console.log('[submitProcess] 📦 Document has SOF#:', docSofNo);
+      console.log('[submitProcess] Updating SOF used qty...');
+      
+      var sofUpdatedCount = 0;
+      var sofFailedCount = 0;
+      
+      for (var sIdx = 0; sIdx < verifiedItems.length; sIdx++) {
+        var sofItem = verifiedItems[sIdx];
+        
+        if (!sofItem.issuedQty || sofItem.issuedQty <= 0) {
+          console.log('[submitProcess] Skipping item (issuedQty=0):', sofItem.itemCode);
+          continue;
+        }
+        
+        try {
+          var sofUpdateRes = await fetch(erpUrl('rpc/erp_sof_update_used_qty'), {
+            method: 'POST',
+            headers: erpHeaders(),
+            body: JSON.stringify({
+              p_sof_no: docSofNo,
+              p_item_code: sofItem.itemCode,
+              p_qty_used: sofItem.issuedQty,
+              p_reference_doc: _process.docNo,
+              p_reference_type: 'MRIF',
+              p_reason: 'Issued from ' + _process.docNo,
+              p_performed_by: currentUser,
+              p_performed_by_fullname: currentUser
+            })
+          });
+          
+          if (sofUpdateRes.ok) {
+            var sofData = await sofUpdateRes.json();
+            if (sofData && sofData.success) {
+              sofUpdatedCount++;
+              console.log('[submitProcess] ✅ SOF updated:', sofItem.itemCode, '|', sofData.status);
+            } else {
+              sofFailedCount++;
+              console.warn('[submitProcess] ⚠️ SOF update failed:', sofItem.itemCode, sofData.error);
+            }
+          } else {
+            sofFailedCount++;
+            console.warn('[submitProcess] ⚠️ SOF update HTTP error:', sofItem.itemCode, sofUpdateRes.status);
+          }
+        } catch(sofErr) {
+          sofFailedCount++;
+          console.error('[submitProcess] SOF update exception:', sofItem.itemCode, sofErr);
+        }
+      }
+      
+      console.log('[submitProcess] 📊 SOF update summary:', sofUpdatedCount, 'updated,', sofFailedCount, 'failed');
+      
+      if (sofUpdatedCount > 0) {
+        erpShowToast('✅ SOF updated: ' + sofUpdatedCount + ' item(s)', 'success');
+      }
+    } else {
+      console.log('[submitProcess] No SOF# on document — skipping SOF update');
+    }
 
     document.getElementById('successDocNo').textContent = _process.docNo;
     document.getElementById('successStatus').textContent = newStatus;
