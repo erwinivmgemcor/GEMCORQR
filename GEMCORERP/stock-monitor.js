@@ -209,7 +209,7 @@ async function erpLoadItems() {
   var tbody = document.getElementById('erpTableBody');
   if (!tbody) return;
   
-  tbody.innerHTML = '<tr><td colspan="14" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading inventory...</div></td></tr>';
+ tbody.innerHTML = '<tr><td colspan="17" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading inventory...</div></td></tr>';
   
   var filters = {
     category: document.getElementById('erpCategoryFilter').value,
@@ -223,8 +223,8 @@ async function erpLoadItems() {
   var result = await erpGetAllItems(filters);
   
   if (!result.success) {
-    tbody.innerHTML = '<tr><td colspan="14" class="erp-empty text-danger">' +
-      '<i class="bi bi-exclamation-triangle-fill"></i> ' + erpEsc(result.error) + '</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="17" class="erp-empty text-danger">' +
+  '<i class="bi bi-exclamation-triangle-fill"></i> ' + erpEsc(result.error) + '</td></tr>';
     return;
   }
   
@@ -1141,7 +1141,8 @@ function erpRenderOutOfStock() {
       statusBadge = '<span class="reorder-badge reorder-none">NO USAGE</span>';
     }
     
-    html += '<tr onclick="erpRowClick(event, \'' + safeCode + '\')" style="cursor:pointer;">' +
+ var safeCode = String(it.item_code || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+html += '<tr onclick="erpRowClick(event, \'' + safeCode + '\')" style="cursor:pointer;">' +
   '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
   '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
       '<td>' + erpEsc(it.category || '—') + '</td>' +
