@@ -111,7 +111,7 @@
           href: 'mrr-list.html',
           roles: ['warehouse']
         },
-        {
+                {
           id: 'mrs-list',
           label: 'MRS — Returns',
           icon: 'bi-arrow-counterclockwise',
@@ -131,14 +131,14 @@
           icon: 'bi-pencil-square',
           href: 'edit-requests.html',
           roles: ['warehouse']
-        }
+        },                                       
         {
-      id: 'sof-tracker',
-      label: 'SOF Tracker',
-      icon: 'bi-file-earmark-ruled',
-      href: 'sof-tracker.html',
-      roles: ['warehouse']
-    }
+          id: 'sof-tracker',
+          label: 'SOF Tracker',
+          icon: 'bi-file-earmark-ruled',
+          href: 'sof-tracker.html',
+          roles: ['warehouse']
+        }                                       
       ]
     },
     {
