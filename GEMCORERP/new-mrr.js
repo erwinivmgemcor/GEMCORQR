@@ -700,6 +700,54 @@ async function submitMrr() {
 
     console.log('[Submit MRR] Items inserted:', validItems.length);
 
+        // ═══════════════════════════════════════════════════════════
+    // ✅ STEP 4.5: SOF AUTO-ALLOCATION (NEW)
+    // ═══════════════════════════════════════════════════════════
+    var sofAllocationResult = null;
+    if (_mrrState.sofNo && _mrrState.sofNo.trim()) {
+      try {
+        console.log('[Submit MRR] Calling SOF auto-allocate for:', _mrrState.sofNo);
+        
+        var sofRes = await fetch(erpUrl('rpc/erp_sof_auto_allocate_on_mrr'), {
+          method: 'POST',
+          headers: erpHeaders(),
+          body: JSON.stringify({
+            p_doc_no: docNo,
+            p_performed_by: _mrrState.preparedBy,
+            p_performed_by_fullname: _mrrState.preparedBy
+          })
+        });
+
+        if (sofRes.ok) {
+          sofAllocationResult = await sofRes.json();
+          console.log('[Submit MRR] ✅ SOF auto-allocation:', sofAllocationResult);
+
+          if (!sofAllocationResult.success) {
+            console.warn('[Submit MRR] ⚠️ SOF allocation warning:', sofAllocationResult.error);
+            erpShowToast('⚠️ MRR created, but SOF allocation: ' + sofAllocationResult.error, 'warning');
+          } else {
+            console.log('[Submit MRR] ✅ SOF allocated:',
+              sofAllocationResult.allocated_count, 'items',
+              '| Errors:', sofAllocationResult.error_count);
+            
+            if (sofAllocationResult.error_count > 0) {
+              erpShowToast('⚠️ MRR created. SOF: ' + 
+                sofAllocationResult.allocated_count + ' allocated, ' + 
+                sofAllocationResult.error_count + ' failed', 'warning');
+            }
+          }
+        } else {
+          console.warn('[Submit MRR] ⚠️ SOF RPC failed:', sofRes.status);
+          erpShowToast('⚠️ MRR created, but SOF allocation failed', 'warning');
+        }
+      } catch(sofErr) {
+        console.error('[Submit MRR] SOF allocation error:', sofErr);
+        erpShowToast('⚠️ MRR created, but SOF allocation error: ' + sofErr.message, 'warning');
+      }
+    } else {
+      console.log('[Submit MRR] No SOF# provided — skipping allocation');
+    }
+
     // ─── Step 5: PATCH documents to final status ───
     if (overallStatus !== 'PENDING') {
       console.log('[Submit MRR] Patching status to:', overallStatus);
@@ -724,8 +772,13 @@ async function submitMrr() {
       }
     }
 
-    erpShowToast('✅ MRR created: ' + docNo + ' (' + overallStatus + ')', 'success');
-    showSuccessModal(docNo);
+       // ✅ Success toast with SOF context
+    var successMsg = '✅ MRR created: ' + docNo + ' (' + overallStatus + ')';
+    if (sofAllocationResult && sofAllocationResult.success) {
+      successMsg += ' · SOF allocated: ' + sofAllocationResult.allocated_count;
+    }
+    erpShowToast(successMsg, 'success');
+    showSuccessModal(docNo, sofAllocationResult);
 
   } catch(err) {
     console.error('[submitMrr]', err);
@@ -740,9 +793,30 @@ async function submitMrr() {
 // ═══════════════════════════════════════════════════════════
 // SUCCESS MODAL
 // ═══════════════════════════════════════════════════════════
-function showSuccessModal(docNo) {
+function showSuccessModal(docNo, sofInfo) {
   document.getElementById('successDocNo').textContent = docNo;
+  
+  // ✅ Optional: Show SOF allocation info
+  var sofEl = document.getElementById('successSofInfo');
+  if (!sofEl) {
+    // Create if not exists
+    var alertInfo = document.querySelector('#successModal .alert-info');
+    if (alertInfo && sofInfo) {
+      var sofDiv = document.createElement('div');
+      sofDiv.id = 'successSofInfo';
+      sofDiv.className = 'alert alert-warning small mt-2 mb-0';
+      sofDiv.innerHTML = '<i class="bi bi-info-circle me-1"></i>' +
+        'SOF Allocation: <strong>' + sofInfo.sof_no + '</strong> — ' +
+        sofInfo.allocated_count + ' items allocated';
+      alertInfo.appendChild(sofDiv);
+    }
+  } else if (sofInfo) {
+    sofEl.innerHTML = '<i class="bi bi-info-circle me-1"></i>' +
+      'SOF Allocation: <strong>' + sofInfo.sof_no + '</strong> — ' +
+      sofInfo.allocated_count + ' items allocated';
+  }
 
+  // ... existing QR code logic
   var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
   var qrData = base + '../?doc=' + encodeURIComponent(docNo) + '&view=print';
   var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(qrData);
