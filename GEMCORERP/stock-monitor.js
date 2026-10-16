@@ -2,7 +2,6 @@
 // GEMCOR ERP — Stock Monitor Logic (v3)
 // Phase 4: Inline Edit + Lock Toggle + CSV Import
 // ============================================================
-
 var _erpAllItems = [];
 var _erpFilteredItems = [];
 var _erpCurrentPage = 1;
@@ -13,6 +12,9 @@ var _erpSearchTimer = null;
 // Phase 4 state
 var _editCellContext = null;
 var _csvImportData = null;
+
+// ✅ NEW: SOF Allocated Map (item_code → allocated qty)
+var _erpSofAllocatedMap = {};
 
 // ═══════════════════════════════════════════════════════════
 // INIT
@@ -229,6 +231,24 @@ async function erpLoadItems() {
   _erpAllItems = result.items || [];
   _erpFilteredItems = _erpAllItems.slice();
   _erpCurrentPage = 1;
+  // ✅ NEW: Fetch SOF allocated qty per item
+  try {
+    var sofRes = await erpFetch('erp_v_sof_allocated_per_item', 'select=*');
+    // OR kung walang view, use direct query:
+    // var sofRes = await erpFetch('erp_sof_allocation_items',
+    //   'select=item_code,allocated_qty,used_qty&status=in.(OPEN,PARTIAL)');
+    
+    _erpSofAllocatedMap = {};
+    (sofRes || []).forEach(function(sof) {
+      _erpSofAllocatedMap[sof.item_code] = 
+        Number(sof.allocated_qty || 0) - Number(sof.used_qty || 0);
+    });
+    
+    console.log('[Stock Monitor] SOF allocated map loaded:', Object.keys(_erpSofAllocatedMap).length, 'items');
+  } catch(sofErr) {
+    console.warn('[Stock Monitor] SOF allocation fetch failed:', sofErr.message);
+    _erpSofAllocatedMap = {};
+  }
   erpRenderTable();
 }
 
@@ -249,7 +269,7 @@ function erpRenderTable() {
   document.getElementById('erpBtnNext').disabled = (end >= total);
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="15" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="17" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No items match your filters.</td></tr>';
     return;
@@ -264,9 +284,17 @@ function erpRenderTable() {
     var aveDay = Number(it.ave_daily_consumption || 0);
     var activeMo = Number(it.active_consumption_months || 0);
 
+    // ✅ NEW: SOF Allocated + Available
+    var sofAllocated = Number(_erpSofAllocatedMap[it.item_code] || 0);
+    var available = onHand - sofAllocated;
+
     var qtyClass = 'qty-ok';
     if (onHand === 0) qtyClass = 'qty-zero';
     else if (onHand <= buffer) qtyClass = 'qty-low';
+
+    var availableClass = 'qty-ok';
+    if (available <= 0) availableClass = 'qty-zero';
+    else if (available <= buffer) availableClass = 'qty-low';
 
     var abcBadge = '';
     if (it.abc_classification) {
@@ -304,6 +332,16 @@ function erpRenderTable() {
     var unitCost = Number(it.unit_cost || 0);
     var onHandCost = onHand * unitCost;
 
+    // ✅ SOF Allocated display
+    var sofDisplay = sofAllocated > 0 
+      ? '<span class="fw-bold" style="color:#f59e0b;">' + erpNum(sofAllocated) + '</span>'
+      : '<span class="text-muted">—</span>';
+
+    // ✅ Available display
+    var availableDisplay = sofAllocated > 0
+      ? '<span class="fw-bold ' + availableClass + '">' + erpNum(available) + '</span>'
+      : '<span class="text-muted">' + erpNum(onHand) + '</span>';
+
     // ✅ ROW WITH ONCLICK
     html += '<tr onclick="erpRowClick(event, \'' + safeCode + '\')" style="cursor:pointer;">' +
       '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
@@ -311,6 +349,8 @@ function erpRenderTable() {
       '<td>' + erpEsc(it.category || '—') + '</td>' +
       '<td>' + erpEsc(it.location || '—') + '</td>' +
       '<td class="text-end ' + qtyClass + '">' + erpNum(onHand) + '</td>' +
+      '<td class="text-end">' + sofDisplay + '</td>' +
+      '<td class="text-end">' + availableDisplay + '</td>' +
       '<td class="text-end buffer-cell">' +
         (isLocked ? '<i class="bi bi-lock-fill" style="color:#dc2626;font-size:0.7rem;margin-right:4px;" title="Locked (manual value)"></i>' : '') +
         erpNum(buffer) +
