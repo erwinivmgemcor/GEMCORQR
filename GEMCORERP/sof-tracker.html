@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEMCOR ERP — SOF Tracker</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1e3a5f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="erp-design-system.css">
+<link rel="stylesheet" href="erp-styles.css">
+<link rel="stylesheet" href="erp-nav.css">
+<link rel="stylesheet" href="erp-notif.css">
+
+<style>
+/* ═══════════════════════════════════════════════════════════
+   SOF TRACKER — Custom Styles
+   ═══════════════════════════════════════════════════════════ */
+
+/* KPI icon colors */
+.kpi-sof-total .kpi-icon { background: #dbeafe; color: #1e40af; }
+.kpi-sof-active .kpi-icon { background: #d1fae5; color: #065f46; }
+.kpi-sof-completed .kpi-icon { background: #e0e7ff; color: #3730a3; }
+.kpi-sof-cancelled .kpi-icon { background: #fee2e2; color: #991b1b; }
+.kpi-sof-remaining .kpi-icon { background: #fef3c7; color: #92400e; }
+
+/* Status badges */
+.sof-status-ACTIVE {
+  background: #d1fae5;
+  color: #065f46;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.sof-status-COMPLETED {
+  background: #dbeafe;
+  color: #1e40af;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.sof-status-CANCELLED {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+/* Progress bar */
+.sof-progress {
+  width: 100%;
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+.sof-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+  transition: width 0.3s ease;
+}
+.sof-progress-bar.partial {
+  background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+}
+.sof-progress-bar.empty {
+  background: linear-gradient(90deg, #cbd5e1 0%, #94a3b8 100%);
+}
+.sof-progress-label {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+/* SOF item row in modal */
+.sof-item-row {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0f2f5;
+  font-size: 0.85rem;
+}
+.sof-item-row:last-child { border-bottom: none; }
+.sof-item-row:hover { background: #f8fafc; }
+
+/* History timeline */
+.sof-history-item {
+  position: relative;
+  padding: 14px 14px 14px 44px;
+  border-bottom: 1px solid #f0f2f5;
+  font-size: 0.85rem;
+}
+.sof-history-item:last-child { border-bottom: none; }
+.sof-history-item::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  top: 20px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #cbd5e1;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px #cbd5e1;
+}
+.sof-history-item.history-QTY_USED::before { background: #10b981; box-shadow: 0 0 0 2px #10b981; }
+.sof-history-item.history-SOF_CREATED::before { background: #3b82f6; box-shadow: 0 0 0 2px #3b82f6; }
+.sof-history-item.history-ITEM_ADDED::before { background: #8b5cf6; box-shadow: 0 0 0 2px #8b5cf6; }
+.sof-history-item.history-SOF_COMPLETED::before { background: #059669; box-shadow: 0 0 0 2px #059669; }
+.sof-history-item.history-SOF_CANCELLED::before { background: #dc2626; box-shadow: 0 0 0 2px #dc2626; }
+
+/* Action buttons */
+.sof-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1.5px solid #e2e8f0;
+  background: #fff;
+  border-radius: 6px;
+  color: #64748b;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin: 0 2px;
+  padding: 0;
+}
+.sof-action-btn:hover {
+  background: #1e3a5f;
+  color: #fff;
+  border-color: #1e3a5f;
+  transform: translateY(-1px);
+}
+.sof-action-btn.primary {
+  background: #1e3a5f;
+  color: #fff;
+  border-color: #1e3a5f;
+}
+.sof-action-btn.primary:hover {
+  background: #2a4a73;
+  border-color: #2a4a73;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .sof-kpi-row {
+    grid-template-columns: 1fr !important;
+  }
+}
+</style>
+
+<script src="erp-theme.js"></script>
+<script src="erp-guard.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script defer src="erp-config.js"></script>
+<script defer src="erp-supabase.js"></script>
+<script defer src="erp-nav.js"></script>
+<script defer src="sof-tracker.js"></script>
+<script defer src="notifications.js"></script>
+<script defer src="js/update.js"></script>
+</head>
+<body>
+
+<nav class="erp-topbar">
+  <div class="erp-topbar-left">
+    <img src="../gemcor-logo.png" alt="GEMCOR" class="erp-logo" onerror="this.style.display='none'">
+    <div>
+      <div class="erp-brand">GEMCOR ERP</div>
+      <div class="erp-brand-sub">SOF Tracker <span class="badge-live">LIVE</span></div>
+    </div>
+  </div>
+  <div id="erpNavBar"></div>
+  <div class="erp-topbar-right">
+    <div class="erp-health" id="erpHealthBadge">
+      <span class="dot dot-pending"></span>
+      <span id="erpHealthText">Checking...</span>
+    </div>
+    <button class="erp-btn-icon" onclick="sofTrackerRefresh()" title="Refresh">
+      <i class="bi bi-arrow-clockwise"></i>
+    </button>
+    <a href="stock-monitor.html" class="erp-btn-outline">
+      <i class="bi bi-arrow-left"></i> <span>Stock Monitor</span>
+    </a>
+  </div>
+</nav>
+
+<div class="erp-container">
+
+  <!-- PAGE HEADER -->
+  <div class="erp-page-header">
+    <div>
+      <div class="erp-page-title">
+        <i class="bi bi-file-earmark-ruled"></i>
+        <span>SOF Allocation Tracker</span>
+      </div>
+      <div class="erp-breadcrumb">
+        <a href="stock-monitor.html">Home</a>
+        <i class="bi bi-chevron-right"></i>
+        <span>SOF Tracker</span>
+      </div>
+    </div>
+    <div>
+      <button class="erp-btn-primary" onclick="sofTrackerCreateNew()">
+        <i class="bi bi-plus-circle me-1"></i>New SOF
+      </button>
+    </div>
+  </div>
+
+  <!-- KPI CARDS -->
+  <div class="erp-kpi-row sof-kpi-row" style="grid-template-columns: repeat(5, 1fr);margin-bottom:20px;">
+    <div class="erp-kpi-card kpi-sof-total">
+      <div class="kpi-icon"><i class="bi bi-file-earmark-ruled"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Total SOFs</div>
+        <div class="kpi-value" id="sofKpiTotal">—</div>
+        <div class="kpi-sub">All allocations</div>
+      </div>
+    </div>
+    <div class="erp-kpi-card kpi-sof-active">
+      <div class="kpi-icon"><i class="bi bi-check-circle-fill"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Active</div>
+        <div class="kpi-value" id="sofKpiActive">—</div>
+        <div class="kpi-sub">Currently in use</div>
+      </div>
+    </div>
+    <div class="erp-kpi-card kpi-sof-completed">
+      <div class="kpi-icon"><i class="bi bi-check2-all"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Completed</div>
+        <div class="kpi-value" id="sofKpiCompleted">—</div>
+        <div class="kpi-sub">Fully used</div>
+      </div>
+    </div>
+    <div class="erp-kpi-card kpi-sof-cancelled">
+      <div class="kpi-icon"><i class="bi bi-x-circle-fill"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Cancelled</div>
+        <div class="kpi-value" id="sofKpiCancelled">—</div>
+        <div class="kpi-sub">Voided SOFs</div>
+      </div>
+    </div>
+    <div class="erp-kpi-card kpi-sof-remaining">
+      <div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Total Remaining</div>
+        <div class="kpi-value" id="sofKpiRemaining">—</div>
+        <div class="kpi-sub">Unused qty</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FILTERS -->
+  <div class="erp-card erp-filters-card" style="padding:16px 18px;margin-bottom:20px;">
+    <div class="erp-filters-row">
+      <div class="erp-search-wrap">
+        <i class="bi bi-search"></i>
+        <input type="text" id="sofSearchInput" class="erp-search" 
+          placeholder="Search SOF No., client, project, or JO No..." 
+          oninput="sofTrackerOnSearch()">
+      </div>
+      <select id="sofStatusFilter" class="erp-select" onchange="sofTrackerLoad()">
+        <option value="">All Status</option>
+        <option value="ACTIVE">Active</option>
+        <option value="COMPLETED">Completed</option>
+        <option value="CANCELLED">Cancelled</option>
+      </select>
+      <select id="sofClientFilter" class="erp-select" onchange="sofTrackerLoad()">
+        <option value="">All Clients</option>
+      </select>
+      <input type="date" id="sofDateFrom" class="erp-select" style="min-width:150px;" 
+        onchange="sofTrackerLoad()" title="From date">
+      <input type="date" id="sofDateTo" class="erp-select" style="min-width:150px;" 
+        onchange="sofTrackerLoad()" title="To date">
+      <button class="erp-btn-clear" onclick="sofTrackerClearFilters()">
+        <i class="bi bi-x-lg"></i> Clear
+      </button>
+    </div>
+  </div>
+
+  <!-- SOF TABLE -->
+  <div class="erp-card erp-table-card">
+    <div class="erp-table-header">
+      <div>
+        <i class="bi bi-list-ul me-2"></i>
+        <strong>SOF Allocations</strong>
+        <span class="erp-table-subtitle" id="sofTableSubtitle">All SOFs</span>
+      </div>
+      <div>
+        <span class="erp-badge" id="sofTableCount">0 items</span>
+      </div>
+    </div>
+
+    <div class="erp-table-wrap" style="max-height:65vh;">
+      <table class="erp-table" style="font-size:0.82rem;">
+        <thead>
+          <tr>
+            <th style="width:10%">SOF No.</th>
+            <th style="width:14%">Client</th>
+            <th style="width:12%">Project</th>
+            <th style="width:9%">JO No.</th>
+            <th style="width:8%">Date</th>
+            <th style="width:5%" class="text-center">Items</th>
+            <th style="width:8%" class="text-end">Allocated</th>
+            <th style="width:8%" class="text-end">Used</th>
+            <th style="width:8%" class="text-end">Remaining</th>
+            <th style="width:10%" class="text-center">Progress</th>
+            <th style="width:8%" class="text-center">Status</th>
+            <th style="width:10%" class="text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="sofTableBody">
+          <tr>
+            <td colspan="12" class="erp-empty">
+              <div class="erp-spinner"></div>
+              <div class="mt-2">Loading SOF allocations...</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="erp-table-footer">
+      <div>Showing <span id="sofPageStart">0</span>–<span id="sofPageEnd">0</span> of <span id="sofPageTotal">0</span></div>
+      <div class="erp-pagination">
+        <button id="sofBtnPrev" onclick="sofTrackerPagePrev()" disabled>
+          <i class="bi bi-chevron-left"></i> Prev
+        </button>
+        <span id="sofPageLabel">Page 1</span>
+        <button id="sofBtnNext" onclick="sofTrackerPageNext()">
+          Next <i class="bi bi-chevron-right"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="erp-footer">
+    <div>GEMCOR ERP — SOF Tracker v1.0.0</div>
+    <div>Pure Supabase • Live Data</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- VIEW ITEMS MODAL -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="sofItemsModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header erp-modal-header">
+        <h5 class="modal-title">
+          <i class="bi bi-box-seam me-2"></i>
+          <span id="sofItemsTitle">SOF Items</span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="sofItemsBody">
+        <div class="text-center py-4">
+          <div class="erp-spinner"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" onclick="sofTrackerPrintCurrent()">
+          <i class="bi bi-printer me-1"></i>Print
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- VIEW HISTORY MODAL -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="sofHistoryModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header erp-modal-header">
+        <h5 class="modal-title">
+          <i class="bi bi-clock-history me-2"></i>
+          <span id="sofHistoryTitle">SOF History</span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0" id="sofHistoryBody">
+        <div class="text-center py-4">
+          <div class="erp-spinner"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="erpToast" class="toast erp-toast">
+    <div class="toast-body" id="erpToastBody">Message</div>
+  </div>
+</div>
+
+</body>
+</html>
