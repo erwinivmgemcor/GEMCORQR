@@ -444,19 +444,13 @@ async function submitMrif() {
   }
   _mrifState.department = department;
   
-  // ✅ NEW: Capture SOF# from readonly field (auto-filled from JO lookup)
+   // ✅ Capture SOF# from readonly field (auto-filled from JO lookup)
   var sofNoEl = document.getElementById('mrifSofNo');
   var sofNo = sofNoEl ? sofNoEl.value.trim() : '';
   _mrifState.sofNo = sofNo;
   console.log('[Submit MRIF] SOF# captured:', sofNo);
   
   var validItems = [];
-  
-  // ✅ NEW: Capture SOF# from readonly field (auto-filled from JO lookup)
-  var sofNoEl = document.getElementById('mrifSofNo');
-  var sofNo = sofNoEl ? sofNoEl.value.trim() : '';
-  _mrifState.sofNo = sofNo;
-  console.log('[Submit MRIF] SOF# captured:', sofNo);
   
   var validItems = [];
   var rows = document.querySelectorAll('.erp-item-row');
@@ -577,90 +571,13 @@ async function submitMrif() {
       throw new Error('Insert items failed: ' + itemsRes.status + ' ' + itemsErrText);
     }
     
-    // ═══════════════════════════════════════════════════════════
-    // ✅ NEW: AUTO-CREATE SOF allocation + allocate items from MRIF
+       // ═══════════════════════════════════════════════════════════
+    // ⚠️ SOF# is REFERENCE ONLY — NO allocation from MRIF
+    // Allocation happens on MRR (actual receipt)
     // ═══════════════════════════════════════════════════════════
     if (_mrifState.sofNo) {
-      try {
-        console.log('[Submit MRIF] Auto-creating SOF allocation for:', _mrifState.sofNo);
-        
-        var currentUser = localStorage.getItem('ivm_username') || 'system';
-        var currentFullname = localStorage.getItem('ivm_userFullname') || currentUser;
-        
-        // Step A: Check kung may existing SOF header
-        var existingSof = await erpFetch('erp_sof_allocations',
-          'sof_no=eq.' + encodeURIComponent(_mrifState.sofNo) + '&limit=1');
-        
-        if (!existingSof || existingSof.length === 0) {
-          // Step B: Auto-create SOF header (silent)
-          console.log('[Submit MRIF] Creating SOF header...');
-          
-          var createRes = await fetch(erpUrl('rpc/erp_sof_create_allocation'), {
-            method: 'POST',
-            headers: erpHeaders(),
-            body: JSON.stringify({
-              p_sof_no: _mrifState.sofNo,
-              p_client_name: _mrifState.clientName || null,
-              p_project_name: _mrifState.project || null,
-              p_jo_no: _mrifState.joNo || null,
-              p_sof_date: new Date().toISOString().split('T')[0],
-              p_notes: 'Auto-created from MRIF ' + docNo,
-              p_created_by: currentUser,
-              p_created_by_fullname: currentFullname
-            })
-          });
-          
-          if (createRes.ok) {
-            var createData = await createRes.json();
-            if (createData && createData.success) {
-              console.log('[Submit MRIF] ✅ SOF header created:', createData.sof_no);
-            } else {
-              console.warn('[Submit MRIF] SOF header create failed:', createData.error);
-            }
-          }
-        } else {
-          console.log('[Submit MRIF] SOF header exists:', _mrifState.sofNo);
-        }
-        
-        // Step C: Auto-allocate items from MRIF (silent)
-        console.log('[Submit MRIF] Allocating ' + validItems.length + ' items sa SOF...');
-        
-        var sofItems = validItems.map(function(it) {
-          return {
-            item_code: it.code,
-            description: it.description,
-            allocated_qty: it.qty,
-            unit: it.unit,
-            remarks: 'From MRIF ' + docNo
-          };
-        });
-        
-        var allocateRes = await fetch(erpUrl('rpc/erp_sof_allocate_items'), {
-          method: 'POST',
-          headers: erpHeaders(),
-          body: JSON.stringify({
-            p_sof_no: _mrifState.sofNo,
-            p_items: sofItems,
-            p_performed_by: currentUser,
-            p_performed_by_fullname: currentFullname
-          })
-        });
-        
-        if (allocateRes.ok) {
-          var allocateData = await allocateRes.json();
-          if (allocateData && allocateData.success) {
-            console.log('[Submit MRIF] ✅ SOF items allocated:',
-              allocateData.added_count, 'added,',
-              allocateData.updated_count, 'updated');
-          } else {
-            console.warn('[Submit MRIF] SOF items allocate failed:', allocateData.error);
-          }
-        }
-        
-      } catch(sofErr) {
-        console.error('[Submit MRIF] SOF auto-allocation failed:', sofErr);
-        // ✅ Silent fail — hindi nakaka-apekto sa MRIF submission
-      }
+      console.log('[Submit MRIF] SOF# reference saved to document:', _mrifState.sofNo);
+      console.log('[Submit MRIF] ⚠️ No SOF allocation from MRIF — allocation will happen on MRR');
     }
     
     _mrifState.lastSubmittedDocNo = docNo;
