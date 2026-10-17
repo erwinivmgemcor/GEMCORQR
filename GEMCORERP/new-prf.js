@@ -687,7 +687,7 @@ function toggleItemSelect(idx, checked) {
 
   var breakdown = computeSuggestedBreakdown(item);
   
-  // ✅ HARANGIN KUNG MAY PENDING AT 0 NET NEED
+  // Harangin kung may pending PRF at wala nang need
   if (checked && breakdown.pendingQty > 0 && breakdown.netNeed === 0) {
     erpShowToast('Item has pending PRF and enough stock. Cannot add to avoid duplicates.', 'warning');
     return;
@@ -696,8 +696,8 @@ function toggleItemSelect(idx, checked) {
   item._selected = checked;
   
   if (checked) {
-    // Kung may net need (e.g. 5), yun ang ilagay. Kung 0, 0 lang.
-    item._qtyOrder = breakdown.netNeed > 0 ? breakdown.netNeed : 0; 
+    // ✅ KUNG 0 ANG NET NEED, GAWING 1 PARA MAY MAI-ORDER PA RIN KAHIT PAPANO
+    item._qtyOrder = breakdown.netNeed > 0 ? breakdown.netNeed : 1; 
   } else {
     item._qtyOrder = 0;
   }
@@ -711,9 +711,9 @@ window.toggleItemSelect = toggleItemSelect;
 function toggleSelectAll(checked) {
   _prf.items.forEach(function(it) {
     var breakdown = computeSuggestedBreakdown(it);
-    // ✅ KUNG MAY PENDING AT 0 NET NEED, HUWAG ISAMA SA SELECT ALL
     var isBlocked = (breakdown.pendingQty > 0 && breakdown.netNeed === 0);
     
+    // I-skip ang mga naka-block (may pending PRF)
     if (isBlocked) {
       it._selected = false;
       it._qtyOrder = 0;
@@ -722,7 +722,8 @@ function toggleSelectAll(checked) {
 
     it._selected = checked;
     if (checked) {
-      it._qtyOrder = breakdown.netNeed > 0 ? breakdown.netNeed : 0;
+      // ✅ KUNG 0 ANG NET NEED, GAWING 1
+      it._qtyOrder = breakdown.netNeed > 0 ? breakdown.netNeed : 1;
     } else {
       it._qtyOrder = 0;
     }
@@ -776,9 +777,9 @@ function updateRemarks(idx, value) {
 window.updateRemarks = updateRemarks;
 
 function recomputeSelected() {
+  // ✅ BILANGIN LAHAT NG NAKA-CHECK (kahit 0 muna ang qty initially)
   _prf.selectedItems = _prf.items.filter(function(it) {
-    // ✅ DAPAT SELECTED AT MAY QTY > 0 (hindi pwedeng 0)
-    return it._selected && (Number(it._qtyOrder) > 0);
+    return it._selected === true;
   });
 }
 
