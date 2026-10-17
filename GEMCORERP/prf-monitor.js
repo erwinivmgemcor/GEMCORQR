@@ -1834,12 +1834,12 @@ window.saveEditPrfItems = async function() {
   } catch(err) {
     console.error('[saveEditPrfItems]', err);
     erpShowToast('Failed: ' + err.message, 'danger');
-  } finally {
-    _editPrfState.isSaving = false;
-    btn.disabled = false;
-    btn.innerHTML = origHtml;
-  }
-};
+      } finally {
+      _editPrfState.isSaving = false;
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  };
   var rows = document.querySelectorAll('#editPrfItemsBody tbody tr');
   rows.forEach(function(row, idx) {
     if (!_editPrfState.currentItems[idx]) return;
