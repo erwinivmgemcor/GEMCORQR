@@ -687,7 +687,7 @@ function toggleItemSelect(idx, checked) {
 
   var breakdown = computeSuggestedBreakdown(item);
   
-  // Harangin kung may pending PRF at wala nang need
+  // Harangin kung may pending PRF at 0 net need
   if (checked && breakdown.pendingQty > 0 && breakdown.netNeed === 0) {
     erpShowToast('Item has pending PRF and enough stock. Cannot add to avoid duplicates.', 'warning');
     return;
@@ -696,7 +696,7 @@ function toggleItemSelect(idx, checked) {
   item._selected = checked;
   
   if (checked) {
-    // ✅ KUNG 0 ANG NET NEED, GAWING 1 PARA MAY MAI-ORDER PA RIN KAHIT PAPANO
+    // ✅ KUNG 0 ANG NET NEED, GAWING 1 PARA MAY MAI-ORDER PA RIN
     item._qtyOrder = breakdown.netNeed > 0 ? breakdown.netNeed : 1; 
   } else {
     item._qtyOrder = 0;
@@ -706,6 +706,7 @@ function toggleItemSelect(idx, checked) {
   renderReorderItems();
 }
 
+
 window.toggleItemSelect = toggleItemSelect;
 
 function toggleSelectAll(checked) {
@@ -713,7 +714,7 @@ function toggleSelectAll(checked) {
     var breakdown = computeSuggestedBreakdown(it);
     var isBlocked = (breakdown.pendingQty > 0 && breakdown.netNeed === 0);
     
-    // I-skip ang mga naka-block (may pending PRF)
+    // Skip blocked items
     if (isBlocked) {
       it._selected = false;
       it._qtyOrder = 0;
@@ -722,7 +723,7 @@ function toggleSelectAll(checked) {
 
     it._selected = checked;
     if (checked) {
-      // ✅ KUNG 0 ANG NET NEED, GAWING 1
+      // ✅ DEFAULT 1 KAPAG WALANG NET NEED
       it._qtyOrder = breakdown.netNeed > 0 ? breakdown.netNeed : 1;
     } else {
       it._qtyOrder = 0;
@@ -777,7 +778,7 @@ function updateRemarks(idx, value) {
 window.updateRemarks = updateRemarks;
 
 function recomputeSelected() {
-  // ✅ BILANGIN LAHAT NG NAKA-CHECK (kahit 0 muna ang qty initially)
+  // Bilangin lahat ng naka-check, kahit 0 muna ang qty
   _prf.selectedItems = _prf.items.filter(function(it) {
     return it._selected === true;
   });
