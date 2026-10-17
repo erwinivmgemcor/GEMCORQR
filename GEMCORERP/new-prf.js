@@ -383,10 +383,8 @@ function onCategoryChange() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER REORDER ITEMS (with pending column)
-// ═══════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════
 // RENDER REORDER ITEMS (v2.6 — Sort pending first + Filter)
+// ✅ FIXED: isDisabled computed BEFORE html building
 // ═══════════════════════════════════════════════════════════
 function renderReorderItems() {
   var container = document.getElementById('reorderItemsContainer');
@@ -403,9 +401,7 @@ function renderReorderItems() {
     return;
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // ✅ Filter: show only items with pending PRF (kung naka-check)
-  // ═══════════════════════════════════════════════════════════
+  // ── Filter: show only items with pending PRF (kung naka-check) ──
   var filterCheck = document.getElementById('filterPendingOnly');
   var filterPendingOnly = filterCheck ? filterCheck.checked : false;
 
@@ -417,33 +413,23 @@ function renderReorderItems() {
     });
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // ✅ Sort: pending items FIRST, then alphabetical by item_code
-  // ═══════════════════════════════════════════════════════════
+  // ── Sort: pending items FIRST, then alphabetical by item_code ──
   itemsToRender.sort(function(a, b) {
     var aPending = computeSuggestedBreakdown(a).pendingQty;
     var bPending = computeSuggestedBreakdown(b).pendingQty;
-    
-    // Kung pareho (both may pending or both wala) → alphabetical
     if ((aPending > 0) === (bPending > 0)) {
       return String(a.item_code || '').localeCompare(String(b.item_code || ''));
     }
-    
-    // May pending → mas priority (top)
     return (bPending > 0 ? 1 : 0) - (aPending > 0 ? 1 : 0);
   });
 
-  // ═══════════════════════════════════════════════════════════
-  // ✅ Update tab badge (B)
-  // ═══════════════════════════════════════════════════════════
+  // ── Update tab badge ──
   var pendingCountInCategory = _prf.items.filter(function(it) {
     return computeSuggestedBreakdown(it).pendingQty > 0;
   }).length;
   updateReorderTabBadge(pendingCountInCategory);
 
-  // ═══════════════════════════════════════════════════════════
-  // Empty state kapag na-filter lahat
-  // ═══════════════════════════════════════════════════════════
+  // ── Empty state kapag na-filter lahat ──
   if (itemsToRender.length === 0) {
     container.innerHTML = '<div class="alert alert-success mb-0">' +
       '<i class="bi bi-check-circle-fill me-2"></i>' +
@@ -486,11 +472,17 @@ function renderReorderItems() {
     var isSelected = it._selected === true;
     var qtyOrder = it._qtyOrder !== undefined ? it._qtyOrder : 0;
     var remarks = it._remarks || '';
-    
-    // ✅ Find original index para sa callbacks (toggle, update)
     var originalIdx = _prf.items.indexOf(it);
 
-    // ✅ Pending display
+    // ═══════════════════════════════════════════════════════
+    // ✅ FIX: Compute isDisabled BEFORE building html
+    // ═══════════════════════════════════════════════════════
+    var isDisabled = (breakdown.pendingQty > 0 && suggested === 0);
+    var disabledAttr = isDisabled
+      ? ' disabled title="May pending PRF na ito at sapat ang stock"'
+      : '';
+
+    // Pending display
     var pendingDisplay = '<span class="text-muted">—</span>';
     if (breakdown.pendingQty > 0) {
       var tooltipText = 'PRF Nos:\n' + String(breakdown.prfNos).replace(/, /g, '\n');
@@ -501,7 +493,7 @@ function renderReorderItems() {
         '</div></span>';
     }
 
-    // ✅ Net Need display
+    // Net Need display
     var netNeedDisplay = '';
     if (breakdown.pendingQty > 0) {
       netNeedDisplay = '<div style="text-decoration:line-through;color:#9ca3af;font-size:0.72rem;">' +
@@ -515,7 +507,7 @@ function renderReorderItems() {
     if (it.urgency === 'CRITICAL') urgencyBadge = ' <span class="badge bg-danger">CRIT</span>';
     else if (it.urgency === 'URGENT') urgencyBadge = ' <span class="badge bg-warning text-dark">URG</span>';
 
-    // ✅ Highlight row kapag may pending
+    // Row style
     var rowStyle = '';
     if (isSelected) {
       rowStyle = ' style="background:#ecfdf5;"';
@@ -526,13 +518,9 @@ function renderReorderItems() {
     html += '<tr data-idx="' + originalIdx + '"' +
       rowStyle +
       (breakdown.pendingQty > 0 ? ' data-has-pending="true"' : '') + '>' +
-     // ✅ KUNG MAY PENDING AT 0 ANG NET NEED, I-DISABLE ANG CHECKBOX PARA HINDI MA-DOBLE
-var isDisabled = (breakdown.pendingQty > 0 && suggested === 0);
-var disabledAttr = isDisabled ? ' disabled title="May pending PRF na ito at sapat ang stock"' : '';
-
-'<td><input type="checkbox" class="item-select-chk" data-idx="' + originalIdx + '"' +
-  (isSelected ? ' checked' : '') + disabledAttr +
-  ' onchange="toggleItemSelect(' + originalIdx + ', this.checked)"></td>' +
+      '<td><input type="checkbox" class="item-select-chk" data-idx="' + originalIdx + '"' +
+        (isSelected ? ' checked' : '') + disabledAttr +
+        ' onchange="toggleItemSelect(' + originalIdx + ', this.checked)"></td>' +
       '<td>' + (idx + 1) + '</td>' +
       '<td><code>' + erpEsc(it.item_code) + '</code>' + urgencyBadge + '</td>' +
       '<td>' + erpEsc(it.description || '—') + '</td>' +
@@ -543,8 +531,9 @@ var disabledAttr = isDisabled ? ' disabled title="May pending PRF na ito at sapa
       '<td class="text-center">' + netNeedDisplay + '</td>' +
       '<td class="text-center">' +
         '<input type="number" class="form-control form-control-sm qty-order-input" ' +
-'data-idx="' + originalIdx + '" value="' + qtyOrder + '" min="0" step="1" ' +
-'placeholder="' + Math.ceil(suggested) + '" onchange="updateQty(' + originalIdx + ', this.value)">' +
+          'data-idx="' + originalIdx + '" value="' + qtyOrder + '" min="0" step="1" ' +
+          'placeholder="' + Math.ceil(suggested) + '" onchange="updateQty(' + originalIdx + ', this.value)" ' +
+          (isDisabled ? 'disabled' : '') + '>' +
       '</td>' +
       '<td class="text-center">' +
         '<select class="form-select form-select-sm unit-select" data-idx="' + originalIdx + '" onchange="updateUnit(' + originalIdx + ', this.value)" style="font-size:0.75rem;padding:2px 4px;">' +
@@ -596,7 +585,6 @@ var disabledAttr = isDisabled ? ' disabled title="May pending PRF na ito at sapa
   updateItemsCount();
   updateSubmitButton();
 }
-
 // ═══════════════════════════════════════════════════════════
 // ✅ NEW: Update Reorder Tab Badge
 // ═══════════════════════════════════════════════════════════
