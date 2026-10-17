@@ -526,3 +526,233 @@ function erpShowToast(msg, type) {
 }
 
 console.log('✅ mrr-monitoring.js v1.0 loaded');
+
+// ═══════════════════════════════════════════════════════════
+// TRANSMITTAL LOGIC (v2 with Selection & DB Tracking)
+// ═══════════════════════════════════════════════════════════
+var _transmitMRRList = []; // Temporary storage para sa checklist
+
+window.openTransmittalModal = async function() {
+  if (!_mrrMon.filteredItems || _mrrMon.filteredItems.length === 0) {
+    erpShowToast('Walang items na nakikita para i-transmit.', 'warning');
+    return;
+  }
+  
+  resetTransmittalModal();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('transmittalModal')).show();
+  
+  var tbody = document.getElementById('transmittalSelectionBody');
+  tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3"><div class="erp-spinner" style="margin:0 auto;"></div></td></tr>';
+  
+  try {
+    // 1. Kunin ang unique MRRs mula sa currently filtered items
+    var uniqueMRRs = {};
+    _mrrMon.filteredItems.forEach(function(it) {
+      var mrrNo = it.mrr_no;
+      if (!mrrNo) return;
+      if (!uniqueMRRs[mrrNo]) {
+        uniqueMRRs[mrrNo] = {
+          mrrNo: mrrNo,
+          date: it.mrr_date || it.processed_at || it.created_at,
+          supplier: it.vendor || '—',
+          poNo: it.po_no || it.ref_no || '—'
+        };
+      }
+    });
+    
+    var mrrList = Object.values(uniqueMRRs);
+    mrrList.sort(function(a, b) { return String(b.mrrNo).localeCompare(String(a.mrrNo)); });
+    
+    // 2. Kunin ang is_transmitted status sa DB para maiwasan ang doble
+    if (mrrList.length > 0) {
+      var mrrNosStr = mrrList.map(function(m) { return m.mrrNo; }).join(',');
+      var docsRes = await erpFetch('documents', 'select=doc_no,is_transmitted&doc_no=in.(' + encodeURIComponent(mrrNosStr) + ')');
+      
+      var transmitStatusMap = {};
+      (docsRes || []).forEach(function(d) {
+        transmitStatusMap[d.doc_no] = d.is_transmitted === true;
+      });
+      
+      // 3. I-merge ang status
+      _transmitMRRList = mrrList.map(function(m) {
+        m.isTransmitted = transmitStatusMap[m.mrrNo] === true;
+        return m;
+      });
+    } else {
+      _transmitMRRList = [];
+    }
+    
+    renderTransmittalSelection();
+    
+  } catch(err) {
+    console.error('[openTransmittalModal]', err);
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Failed to load statuses.</td></tr>';
+  }
+};
+
+function renderTransmittalSelection() {
+  var tbody = document.getElementById('transmittalSelectionBody');
+  var html = '';
+  
+  if (_transmitMRRList.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted">No MRRs found.</td></tr>';
+    return;
+  }
+  
+  _transmitMRRList.forEach(function(m, idx) {
+    // Auto-check kung HINDI PA naka-transmit
+    var isChecked = !m.isTransmitted; 
+    var rowClass = m.isTransmitted ? ' style="background:#f8fafc;opacity:0.7;"' : '';
+    
+    var statusBadge = m.isTransmitted 
+      ? '<span class="badge bg-secondary">TRANSMITTED</span>'
+      : '<span class="badge bg-success">READY</span>';
+      
+    var dateStr = '—';
+    if (m.date) {
+      try {
+        dateStr = new Date(m.date).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
+      } catch(e) {}
+    }
+    
+    html += '<tr' + rowClass + '>' +
+      '<td class="text-center align-middle">' +
+        '<input type="checkbox" class="transmit-mrr-chk" data-idx="' + idx + '" ' +
+        (isChecked ? 'checked' : '') + '>' +
+      '</td>' +
+      '<td class="align-middle"><strong>' + erpEsc(m.mrrNo) + '</strong></td>' +
+      '<td class="align-middle">' + erpEsc(dateStr) + '</td>' +
+      '<td class="align-middle">' + erpEsc(m.supplier) + '</td>' +
+      '<td class="text-center align-middle">' + statusBadge + '</td>' +
+    '</tr>';
+  });
+  
+  tbody.innerHTML = html;
+}
+
+function toggleAllTransmittalMRRs(checked) {
+  document.querySelectorAll('.transmit-mrr-chk').forEach(function(chk) {
+    chk.checked = checked; 
+  });
+}
+
+function backToTransmittalSelection() {
+  document.getElementById('transmittalSelectionView').style.display = 'block';
+  document.getElementById('transmittalPreviewView').style.display = 'none';
+  document.getElementById('btnProceedToPreview').style.display = 'inline-block';
+  document.getElementById('btnPrintTransmittal').style.display = 'none';
+}
+
+function buildTransmittalPreview() {
+  var selectedMRRs = [];
+  document.querySelectorAll('.transmit-mrr-chk').forEach(function(chk) {
+    if (chk.checked) {
+      var idx = parseInt(chk.getAttribute('data-idx'), 10);
+      selectedMRRs.push(_transmitMRRList[idx]);
+    }
+  });
+  
+  if (selectedMRRs.length === 0) {
+    erpShowToast('Pumili ng kahit isang MRR para i-transmit.', 'warning');
+    return;
+  }
+  
+  // Setup Date
+  document.getElementById('transmittalDate').textContent = new Date().toLocaleDateString('en-US', {
+    month: 'long', day: 'numeric', year: 'numeric'
+  });
+  
+  // Setup Prepared By
+  document.getElementById('transmittalPreparedBy').textContent = localStorage.getItem('ivm_userFullname') || 'ADMIN';
+  
+  // Render Table Rows
+  var tbody = document.getElementById('transmittalBody');
+  var html = '';
+  selectedMRRs.forEach(function(m) {
+    var dateStr = '—';
+    if (m.date) {
+      try { dateStr = new Date(m.date).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }); } catch(e) {}
+    }
+    html += '<tr style="border-bottom: 1px solid #e2e8f0;">' +
+      '<td style="padding: 10px 8px; text-align: center; font-weight: 600;">' + erpEsc(m.mrrNo) + '</td>' +
+      '<td style="padding: 10px 8px; text-align: center;">' + erpEsc(dateStr) + '</td>' +
+      '<td style="padding: 10px 8px;">' + erpEsc(m.supplier) + '</td>' +
+      '<td style="padding: 10px 8px; text-align: center;">' + erpEsc(m.poNo) + '</td>' +
+    '</tr>';
+  });
+  tbody.innerHTML = html;
+  
+  // Switch Views
+  document.getElementById('transmittalSelectionView').style.display = 'none';
+  document.getElementById('transmittalPreviewView').style.display = 'block';
+  document.getElementById('btnProceedToPreview').style.display = 'none';
+  document.getElementById('btnPrintTransmittal').style.display = 'inline-block';
+}
+
+window.printTransmittal = async function() {
+  var printContents = document.getElementById('transmittalSheet').innerHTML;
+  
+  // 1. Kunin ang mga naka-check para i-save sa DB
+  var selectedMRRs = [];
+  document.querySelectorAll('.transmit-mrr-chk').forEach(function(chk) {
+    if (chk.checked) {
+      var idx = parseInt(chk.getAttribute('data-idx'), 10);
+      selectedMRRs.push(_transmitMRRList[idx].mrrNo);
+    }
+  });
+  
+  // 2. I-flag as TRANSMITTED sa database
+  if (selectedMRRs.length > 0) {
+    try {
+      var mrrNosStr = selectedMRRs.join(',');
+      await fetch(erpUrl('documents?doc_no=in.(' + encodeURIComponent(mrrNosStr) + ')'), {
+        method: 'PATCH',
+        headers: erpHeaders(),
+        body: JSON.stringify({
+          is_transmitted: true,
+          transmitted_at: new Date().toISOString()
+        })
+      });
+      console.log('Marked as transmitted:', selectedMRRs);
+      erpShowToast('✅ ' + selectedMRRs.length + ' MRR(s) marked as transmitted.', 'success');
+    } catch(err) {
+      console.warn('Failed to mark as transmitted:', err);
+    }
+  }
+  
+  // 3. Print Logic
+  var printWindow = window.open('', '_blank');
+  printWindow.document.write(
+    '<html><head><title>MRR Transmittal</title>' +
+    '<style>' +
+    '  body { font-family: "Inter", Arial, sans-serif; padding: 20px; }' +
+    '  table { width: 100%; border-collapse: collapse; font-size: 12px; }' +
+    '  th, td { padding: 8px; text-align: left; }' +
+    '  th { border-top: 2px solid #000; border-bottom: 2px solid #000; text-align: center; font-weight: bold; }' +
+    '  tr { border-bottom: 1px solid #ccc; }' +
+    '  h3 { margin-bottom: 20px; }' +
+    '  @media print { @page { size: portrait; margin: 0.5in; } body { padding: 0; } }' +
+    '</style></head><body>' + printContents + '</body></html>'
+  );
+  
+  printWindow.document.close();
+  printWindow.focus();
+  
+  setTimeout(function() {
+    printWindow.print();
+    printWindow.close();
+    
+    // I-refresh ang MRR Monitor para maging "TRANSMITTED" na sila sa susunod
+    if (typeof mrrMonLoad === 'function') mrrMonLoad(); 
+    
+    // Isara ang modal
+    bootstrap.Modal.getInstance(document.getElementById('transmittalModal')).hide();
+  }, 250);
+};
+
+function resetTransmittalModal() {
+  backToTransmittalSelection();
+  document.querySelectorAll('.transmit-mrr-chk').forEach(function(cb) { cb.checked = true; });
+  var selectAllCb = document.getElementById('transmitSelectAll');
+  if (selectAllCb) selectAllCb.checked = false;
+}
