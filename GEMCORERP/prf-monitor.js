@@ -1694,19 +1694,20 @@ function computePrfItemsDiff(oldItems, newItems) {
 
 window.saveEditPrfItems = async function() {
   if (_editPrfState.isSaving) return;
-  
+
+  // Sync inputs to state bago mag-save
   _syncEditPrfInputs();
-  
+
   var prf = _editPrfState.originalPrf;
   if (!prf) { erpShowToast('No PRF loaded', 'warning'); return; }
-  
+
   var reason = (document.getElementById('editPrfRevisionReason').value || '').trim();
   if (!reason) {
     erpShowToast('Reason for revision is required', 'warning');
     document.getElementById('editPrfRevisionReason').focus();
     return;
   }
-  
+
   var validItems = [];
   for (var i = 0; i < _editPrfState.currentItems.length; i++) {
     var it = _editPrfState.currentItems[i];
@@ -1718,30 +1719,28 @@ window.saveEditPrfItems = async function() {
     }
     validItems.push(it);
   }
-  
+
   if (validItems.length === 0) { erpShowToast('Add at least one item', 'warning'); return; }
-  
+
   if (!confirm('Save changes to ' + prf.prf_no + ' as v' + _editPrfState.newVersionNumber + '?\n\n' +
     validItems.length + ' item(s) will be saved. Same PRF number, updated version.')) return;
-  
+
   _editPrfState.isSaving = true;
   var btn = document.getElementById('btnSaveEditPrfItems');
   var origHtml = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
-  
+
   try {
     var currentUser = localStorage.getItem('ivm_username') || '';
     var currentFullname = localStorage.getItem('ivm_userFullname') || currentUser;
-    
+
     var currentVersion = parseInt(prf.version_number, 10) || 1;
     var newVersion = _editPrfState.newVersionNumber;
     var diff = computePrfItemsDiff(_editPrfState.originalItems, validItems);
     var totalQty = validItems.reduce(function(s, it) { return s + (it.qty_for_order || 0); }, 0);
-    
-    // ═══════════════════════════════════════════════════════════
-    // STEP 1: DIRECT UPDATE SA EXISTING PRF DOCUMENT (PATCH)
-    // ═══════════════════════════════════════════════════════════
+
+    // STEP 1: Update PRF document
     var updateDocPayload = {
       version_number: newVersion,
       total_items: validItems.length,
@@ -1752,29 +1751,27 @@ window.saveEditPrfItems = async function() {
       revised_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-    
+
     var docRes = await fetch(erpUrl('prf_documents?id=eq.' + prf.id), {
-      method: 'PATCH', // ✅ UPDATE LANG, HINDI INSERT
+      method: 'PATCH',
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify(updateDocPayload)
     });
-    
+
     if (!docRes.ok) throw new Error('Update PRF doc failed: ' + docRes.status);
-    
-    // ═══════════════════════════════════════════════════════════
-    // STEP 2: REPLACE ANG MGA ITEMS (DELETE OLD, INSERT NEW)
-    // ═══════════════════════════════════════════════════════════
+
+    // STEP 2: Replace items
     var delRes = await fetch(erpUrl('prf_items?prf_id=eq.' + prf.id), {
       method: 'DELETE',
       headers: erpHeaders()
     });
-    
+
     if (!delRes.ok) throw new Error('Delete old items failed');
-    
+
     var itemPayloads = validItems.map(function(it, idx) {
       return {
         prf_id: prf.id,
-        prf_no: prf.prf_no, // Same PRF No.
+        prf_no: prf.prf_no,
         line_no: idx + 1,
         item_code: it.item_code,
         description: it.description,
@@ -1789,18 +1786,16 @@ window.saveEditPrfItems = async function() {
         remarks: it.remarks || ''
       };
     });
-    
+
     var itemRes = await fetch(erpUrl('prf_items'), {
       method: 'POST',
       headers: erpHeaders({ 'Prefer': 'return=minimal' }),
       body: JSON.stringify(itemPayloads)
     });
-    
+
     if (!itemRes.ok) throw new Error('Insert new items failed: ' + itemRes.status);
-    
-    // ═══════════════════════════════════════════════════════════
-    // STEP 3: LOG SA REVISION AUDIT (History tracking)
-    // ═══════════════════════════════════════════════════════════
+
+    // STEP 3: Log audit
     try {
       await fetch(erpUrl('prf_revision_audit'), {
         method: 'POST',
@@ -1810,7 +1805,7 @@ window.saveEditPrfItems = async function() {
           prf_no: prf.prf_no,
           from_version: currentVersion,
           to_version: newVersion,
-          new_prf_id: prf.id, // Same ID
+          new_prf_id: prf.id,
           revised_by: currentUser,
           revised_by_fullname: currentFullname,
           reason: reason,
@@ -1820,26 +1815,26 @@ window.saveEditPrfItems = async function() {
     } catch(auditErr) {
       console.warn('[EditPRF] Audit log failed:', auditErr);
     }
-    
+
     closeEditPrfItems();
-    
-    var diffSummary = 'Added: ' + diff.added.length + 
-                     ' | Removed: ' + diff.removed.length + 
-                     ' | Modified: ' + diff.modified.length;
-    
+
+    var diffSummary = 'Added: ' + diff.added.length + ' | Removed: ' + diff.removed.length + ' | Modified: ' + diff.modified.length;
     erpShowToast('✅ ' + prf.prf_no + ' updated to v' + newVersion + '! ' + diffSummary, 'success');
-    
+
     await prfMonitorLoad();
-    
+
   } catch(err) {
     console.error('[saveEditPrfItems]', err);
     erpShowToast('Failed: ' + err.message, 'danger');
-      } finally {
-      _editPrfState.isSaving = false;
-      btn.disabled = false;
-      btn.innerHTML = origHtml;
-    }
-  };
+  } finally {
+    _editPrfState.isSaving = false;
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+  }
+};
+
+// Helper function para basahin lahat ng inputs at i-sync sa state
+function _syncEditPrfInputs() {
   var rows = document.querySelectorAll('#editPrfItemsBody tbody tr');
   rows.forEach(function(row, idx) {
     if (!_editPrfState.currentItems[idx]) return;
