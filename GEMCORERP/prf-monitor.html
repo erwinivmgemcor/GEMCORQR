@@ -419,8 +419,8 @@
       </button>
     </div>
 
-    <div class="erp-table-header">
-      <div class="d-flex align-items-center gap-2">
+        <div class="erp-table-header">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
         <button class="erp-btn-outline-dark" onclick="selectAllFilteredItems()" title="Select all items matching current filter">
           <i class="bi bi-check2-square me-1"></i>Select All Filtered
         </button>
@@ -428,6 +428,19 @@
           <i class="bi bi-file-earmark-excel"></i> Export Items
         </button>
         <span class="erp-badge" id="itemTableCount">0 items</span>
+
+        <!-- ✅ BAGONG FILTERS DITO -->
+        <select id="itemFilterDuplicates" class="erp-select" onchange="prfMonitorApplyFilter()" style="width: auto; margin-left: 10px; height: 32px; font-size: 0.85rem;">
+          <option value="all">Show All Items</option>
+          <option value="duplicates">Show Duplicated Items Only</option>
+        </select>
+        
+        <select id="itemSortOrder" class="erp-select" onchange="prfMonitorApplyFilter()" style="width: auto; height: 32px; font-size: 0.85rem;">
+          <option value="newest">Sort: Newest First</option>
+          <option value="oldest">Sort: Oldest First</option>
+        </select>
+        <!-- ✅ END NG BAGONG FILTERS -->
+        
       </div>
       <div>
         <i class="bi bi-list-ol me-2"></i>
