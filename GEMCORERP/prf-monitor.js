@@ -113,14 +113,15 @@ function _resolvePoData(item, prfNo) {
 // ═══════════════════════════════════════════════════════════
 function _versionBadge(prf, latestPrfId) {
   var v = parseInt(prf.version_number, 10) || 1;
-  if (v <= 1 && !latestPrfId) return '';
   
-  var isLatest = (prf.id === latestPrfId);
-  
-  if (v <= 1 && latestPrfId) {
-    // v1 na hindi latest (may bagong version na)
-    return ' <span class="badge bg-secondary" style="font-size:0.6rem;" title="Superseded by latest version">v1 OLD</span>';
+  if (v > 1) {
+    // Kung version 2 pataas, ipakita ang badge
+    return ' <span class="badge bg-success" style="font-size:0.62rem;" title="Latest version">v' + v + ' LATEST</span>';
   }
+  
+  // Kung version 1 lang, wag na mag-lagay ng LATEST badge para malinis tignan
+  return ''; 
+}
   
   if (isLatest) {
     return ' <span class="badge bg-success" style="font-size:0.62rem;" title="Latest version">v' + v + ' LATEST</span>';
@@ -486,10 +487,12 @@ function prfMonitorRenderPrfTab() {
     var safeBasePrf = String(p.base_prf_no || p.prf_no || '').replace(/'/g, "\\'");
     
     // ✅ v3.4: Dynamic version badge
-    var versionBadge = _versionBadge(p, latestIds[p.id] ? p.id : null);
+   var versionBadge = _versionBadge(p, latestIds[p.id] ? p.id : null);
+var batchNum = parseInt(p.batch_number, 10) || 1;
+var batchBadge = batchNum > 1 ? ' <span class="badge bg-info text-dark" style="font-size:0.65rem;" title="Split Batch #' + batchNum + '">B' + batchNum + '</span>' : '';
 
-    html += '<tr>' +
-      '<td><code>' + erpEsc(p.prf_no) + '</code>' + versionBadge + '</td>' +
+html += '<tr>' +
+  '<td><code>' + erpEsc(p.prf_no) + '</code>' + batchBadge + versionBadge + '</td>' +
       '<td>' + erpEsc(dateStr) + '</td>' +
       '<td>' + erpEsc(p.requestor || '—') + '</td>' +
       '<td class="text-center"><span class="badge ' + categoryBadge + '">' + erpEsc(cat || '—') + '</span></td>' +
