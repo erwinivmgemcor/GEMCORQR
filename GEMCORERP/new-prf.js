@@ -1376,9 +1376,9 @@ async function createSinglePrf(prfNo, basePrfNo, batchNumber, items, category, p
     headers: erpHeaders({ 'Prefer': 'return=representation' }),
     body: JSON.stringify({
       prf_no: prfNo,
-      base_prf_no: basePrfNo,
-      version_number: 1, // ✅ LAGING 1 ANG BATCH
-      batch_number: batchNumber,
+      base_prf_no: prfNo,          // ✅ ITO ANG FIX: Gawing sariling prf_no ang base, hindi yung root.
+      version_number: 1,           // ✅ Laging version 1 sa umpisa
+      batch_number: batchNumber,   // ✅ Isasalpak natin ito sa UI mamaya
       category: category,
       requestor: preparedBy,
       department: department,
@@ -1393,7 +1393,8 @@ async function createSinglePrf(prfNo, basePrfNo, batchNumber, items, category, p
       updated_at: new Date().toISOString()
     })
   });
-
+  
+  // ... (yung natitirang code sa ibaba, hayaan mo lang)
   if (!docRes.ok) throw new Error('Insert PRF failed: ' + docRes.status);
   var docArr = await docRes.json();
   var doc = docArr[0];
