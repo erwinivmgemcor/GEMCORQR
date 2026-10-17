@@ -173,7 +173,9 @@ function renderItems() {
       '<td class="text-center">' + erpEsc(it.unit) + '</td>' +
       '<td>' +
         '<input type="text" class="form-control form-control-sm item-remarks" data-idx="' + idx + '" value="' + erpEsc(it.remarks === 'PENDING' || it.remarks === 'SERVED' ? '' : it.remarks) + '" placeholder="Optional" onchange="updateRemarks(' + idx + ', this.value)">' +
-        '<button class="btn btn-sm btn-link p-0 mt-1" onclick="openQtyModal(' + idx + ')">Edit Qty</button>' +
+       <button class="btn btn-sm btn-outline-primary w-100 mt-1 py-1" style="font-size: 0.75rem;" onclick="openQtyModal(' + idx + ')">
+  <i class="bi bi-pencil-square me-1"></i> Edit
+</button>
       '</td>' +
     '</tr>';
   });
