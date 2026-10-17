@@ -526,9 +526,13 @@ function renderReorderItems() {
     html += '<tr data-idx="' + originalIdx + '"' +
       rowStyle +
       (breakdown.pendingQty > 0 ? ' data-has-pending="true"' : '') + '>' +
-      '<td><input type="checkbox" class="item-select-chk" data-idx="' + originalIdx + '"' +
-        (isSelected ? ' checked' : '') +
-        ' onchange="toggleItemSelect(' + originalIdx + ', this.checked)"></td>' +
+     // ✅ KUNG MAY PENDING AT 0 ANG NET NEED, I-DISABLE ANG CHECKBOX PARA HINDI MA-DOBLE
+var isDisabled = (breakdown.pendingQty > 0 && suggested === 0);
+var disabledAttr = isDisabled ? ' disabled title="May pending PRF na ito at sapat ang stock"' : '';
+
+'<td><input type="checkbox" class="item-select-chk" data-idx="' + originalIdx + '"' +
+  (isSelected ? ' checked' : '') + disabledAttr +
+  ' onchange="toggleItemSelect(' + originalIdx + ', this.checked)"></td>' +
       '<td>' + (idx + 1) + '</td>' +
       '<td><code>' + erpEsc(it.item_code) + '</code>' + urgencyBadge + '</td>' +
       '<td>' + erpEsc(it.description || '—') + '</td>' +
@@ -539,7 +543,7 @@ function renderReorderItems() {
       '<td class="text-center">' + netNeedDisplay + '</td>' +
       '<td class="text-center">' +
         '<input type="number" class="form-control form-control-sm qty-order-input" ' +
-'data-idx="' + originalIdx + '" value="' + (isSelected && qtyOrder === 0 ? 1 : qtyOrder) + '" min="0" step="1" ' +
+'data-idx="' + originalIdx + '" value="' + qtyOrder + '" min="0" step="1" ' +
 'placeholder="' + Math.ceil(suggested) + '" onchange="updateQty(' + originalIdx + ', this.value)">' +
       '</td>' +
       '<td class="text-center">' +
@@ -692,13 +696,20 @@ window.showPendingReorderList = showPendingReorderList;
 function toggleItemSelect(idx, checked) {
   var item = _prf.items[idx];
   if (!item) return;
+
+  var breakdown = computeSuggestedBreakdown(item);
   
+  // ✅ HARANGIN KUNG MAY PENDING AT 0 NET NEED
+  if (checked && breakdown.pendingQty > 0 && breakdown.netNeed === 0) {
+    erpShowToast('Item has pending PRF and enough stock. Cannot add to avoid duplicates.', 'warning');
+    return;
+  }
+
   item._selected = checked;
   
   if (checked) {
-    // ✅ FORCE NA GAWING 1 KAPAG WALANG LAMAN O 0 ANG SUGGESTED
-    var suggested = computeSuggested(item);
-    item._qtyOrder = suggested > 0 ? suggested : 1; 
+    // Kung may net need (e.g. 5), yun ang ilagay. Kung 0, 0 lang.
+    item._qtyOrder = breakdown.netNeed > 0 ? breakdown.netNeed : 0; 
   } else {
     item._qtyOrder = 0;
   }
@@ -710,14 +721,20 @@ function toggleItemSelect(idx, checked) {
 window.toggleItemSelect = toggleItemSelect;
 
 function toggleSelectAll(checked) {
-  console.log('[PRF] Toggle Select All:', checked, '| Items:', _prf.items.length);
-
   _prf.items.forEach(function(it) {
+    var breakdown = computeSuggestedBreakdown(it);
+    // ✅ KUNG MAY PENDING AT 0 NET NEED, HUWAG ISAMA SA SELECT ALL
+    var isBlocked = (breakdown.pendingQty > 0 && breakdown.netNeed === 0);
+    
+    if (isBlocked) {
+      it._selected = false;
+      it._qtyOrder = 0;
+      return; 
+    }
+
     it._selected = checked;
     if (checked) {
-      var suggested = computeSuggested(it);
-      // ✅ KAHIT 0 ANG NET NEED, GAWING 1 PARA MA-SELECT
-      it._qtyOrder = suggested > 0 ? suggested : 1; 
+      it._qtyOrder = breakdown.netNeed > 0 ? breakdown.netNeed : 0;
     } else {
       it._qtyOrder = 0;
     }
@@ -772,7 +789,8 @@ window.updateRemarks = updateRemarks;
 
 function recomputeSelected() {
   _prf.selectedItems = _prf.items.filter(function(it) {
-    return it._selected && (it._qtyOrder || 0) > 0;
+    // ✅ DAPAT SELECTED AT MAY QTY > 0 (hindi pwedeng 0)
+    return it._selected && (Number(it._qtyOrder) > 0);
   });
 }
 
