@@ -186,19 +186,21 @@
     <strong>Inventory Master</strong>
   </div>
   <div class="d-flex align-items-center gap-2">
-    <button class="erp-btn-outline-danger" onclick="erpOpenDeactivatedModal()" title="View Deactivated Items">
-      <i class="bi bi-archive me-1"></i>Deactivated Items
-    </button>
     <button class="erp-btn-outline-dark" onclick="window.location.href='inventory-count.html'" title="Go to Inventory Count">
       <i class="bi bi-clipboard-check me-1"></i>Inventory Count
     </button>
     <button class="erp-btn-primary" onclick="erpOpenAddItemModal()" title="Add a new item to inventory">
       <i class="bi bi-plus-lg"></i> Add New Item
     </button>
-    <span class="erp-badge" id="erpTableCount">0 items</span>
     <button class="erp-btn-primary" onclick="erpOpenCsvImport()" title="Bulk import via CSV">
-  <i class="bi bi-upload me-1"></i>Bulk Import
-</button>
+      <i class="bi bi-upload me-1"></i>Bulk Import
+    </button>
+    
+    <!-- ✅ Dito na nakalagay sa dulo ang badge at Deactivated Items -->
+    <span class="erp-badge ms-2" id="erpTableCount" style="margin-right: 8px;">0 items</span>
+    <button class="erp-btn-outline-secondary" onclick="erpOpenDeactivatedModal()" title="View Deactivated Items" style="border-color:#cbd5e1; color:#475569;">
+      <i class="bi bi-archive me-1"></i>Deactivated Items
+    </button>
   </div>
 </div>
 
