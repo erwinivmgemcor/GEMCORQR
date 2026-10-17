@@ -756,3 +756,224 @@ function resetTransmittalModal() {
   var selectAllCb = document.getElementById('transmitSelectAll');
   if (selectAllCb) selectAllCb.checked = false;
 }
+// ═══════════════════════════════════════════════════════════
+// GLOBAL VAR FOR CURRENT TRN
+// ═══════════════════════════════════════════════════════════
+var _currentTransmittalNo = '';
+
+// ═══════════════════════════════════════════════════════════
+// UPDATE PREVIEW PARA MAKAKUHA NG TRN
+// ═══════════════════════════════════════════════════════════
+// Hanapin ang existing buildTransmittalPreview at i-replace ng ganito:
+window.buildTransmittalPreview = async function() {
+  var selectedMRRs = [];
+  document.querySelectorAll('.transmit-mrr-chk').forEach(function(chk) {
+    if (chk.checked) {
+      var idx = parseInt(chk.getAttribute('data-idx'), 10);
+      selectedMRRs.push(_transmitMRRList[idx]);
+    }
+  });
+  
+  if (selectedMRRs.length === 0) {
+    erpShowToast('Pumili ng kahit isang MRR para i-transmit.', 'warning');
+    return;
+  }
+  
+  // Kunin ang susunod na TRN Number
+  try {
+    var res = await fetch(erpUrl('rpc/get_next_transmittal_no'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({})
+    });
+    if (res.ok) {
+      _currentTransmittalNo = await res.json();
+    } else {
+      _currentTransmittalNo = 'TRN-' + new Date().toISOString().slice(0, 7) + '-XXX';
+    }
+  } catch(e) {
+    _currentTransmittalNo = 'TRN-ERROR';
+  }
+
+  // Setup Date & TRN
+  document.getElementById('transmittalDate').textContent = new Date().toLocaleDateString('en-US', {
+    month: 'long', day: 'numeric', year: 'numeric'
+  });
+  document.getElementById('transmittalNo').textContent = _currentTransmittalNo;
+  
+  // Setup Prepared By
+  document.getElementById('transmittalPreparedBy').textContent = localStorage.getItem('ivm_userFullname') || 'ADMIN';
+  
+  // Render Table Rows
+  var tbody = document.getElementById('transmittalBody');
+  var html = '';
+  selectedMRRs.forEach(function(m) {
+    var dateStr = '—';
+    if (m.date) {
+      try { dateStr = new Date(m.date).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' }); } catch(e) {}
+    }
+    html += '<tr style="border-bottom: 1px solid #e2e8f0;">' +
+      '<td style="padding: 10px 8px; text-align: center; font-weight: 600;">' + erpEsc(m.mrrNo) + '</td>' +
+      '<td style="padding: 10px 8px; text-align: center;">' + erpEsc(dateStr) + '</td>' +
+      '<td style="padding: 10px 8px;">' + erpEsc(m.supplier) + '</td>' +
+      '<td style="padding: 10px 8px; text-align: center;">' + erpEsc(m.poNo) + '</td>' +
+    '</tr>';
+  });
+  tbody.innerHTML = html;
+  
+  // Switch Views
+  document.getElementById('transmittalSelectionView').style.display = 'none';
+  document.getElementById('transmittalPreviewView').style.display = 'block';
+  document.getElementById('btnProceedToPreview').style.display = 'none';
+  document.getElementById('btnPrintTransmittal').style.display = 'inline-block';
+};
+
+// ═══════════════════════════════════════════════════════════
+// UPDATE PRINT FUNCTION PARA MA-SAVE SA DB
+// ═══════════════════════════════════════════════════════════
+// Hanapin ang existing printTransmittal at palitan:
+window.printTransmittal = async function() {
+  var printContents = document.getElementById('transmittalSheet').innerHTML;
+  
+  var selectedMRRs = [];
+  document.querySelectorAll('.transmit-mrr-chk').forEach(function(chk) {
+    if (chk.checked) {
+      var idx = parseInt(chk.getAttribute('data-idx'), 10);
+      selectedMRRs.push(_transmitMRRList[idx].mrrNo);
+    }
+  });
+  
+  if (selectedMRRs.length > 0) {
+    try {
+      var currentUser = localStorage.getItem('ivm_userFullname') || 'ADMIN';
+      
+      // 1. Insert sa mrr_transmittals table
+      await fetch(erpUrl('mrr_transmittals'), {
+        method: 'POST',
+        headers: erpHeaders({ 'Prefer': 'return=minimal' }),
+        body: JSON.stringify({
+          transmittal_no: _currentTransmittalNo,
+          transmittal_date: new Date().toISOString().split('T')[0],
+          prepared_by: currentUser
+        })
+      });
+
+      // 2. Update ang documents table para ma-link sa TRN
+      var mrrNosStr = selectedMRRs.join(',');
+      await fetch(erpUrl('documents?doc_no=in.(' + encodeURIComponent(mrrNosStr) + ')'), {
+        method: 'PATCH',
+        headers: erpHeaders(),
+        body: JSON.stringify({
+          is_transmitted: true,
+          transmittal_no: _currentTransmittalNo,
+          transmitted_at: new Date().toISOString()
+        })
+      });
+      
+      console.log('Transmittal saved:', _currentTransmittalNo);
+      erpShowToast('✅ Transmittal ' + _currentTransmittalNo + ' saved!', 'success');
+    } catch(err) {
+      console.warn('Failed to save transmittal:', err);
+      erpShowToast('⚠️ Warning: Na-print pero hindi na-save sa DB.', 'warning');
+    }
+  }
+  
+  var printWindow = window.open('', '_blank');
+  printWindow.document.write(
+    '<html><head><title>MRR Transmittal</title>' +
+    '<style>' +
+    '  body { font-family: "Inter", Arial, sans-serif; padding: 20px; }' +
+    '  table { width: 100%; border-collapse: collapse; font-size: 12px; }' +
+    '  th, td { padding: 8px; text-align: left; }' +
+    '  th { border-top: 2px solid #000; border-bottom: 2px solid #000; text-align: center; font-weight: bold; }' +
+    '  tr { border-bottom: 1px solid #ccc; }' +
+    '  h3 { margin-bottom: 20px; }' +
+    '  @media print { @page { size: portrait; margin: 0.5in; } body { padding: 0; } }' +
+    '</style></head><body>' + printContents + '</body></html>'
+  );
+  
+  printWindow.document.close();
+  printWindow.focus();
+  
+  setTimeout(function() {
+    printWindow.print();
+    printWindow.close();
+    if (typeof mrrMonLoad === 'function') mrrMonLoad(); 
+    bootstrap.Modal.getInstance(document.getElementById('transmittalModal')).hide();
+  }, 250);
+};
+
+// ═══════════════════════════════════════════════════════════
+// TRANSMITTAL HISTORY LOGIC
+// ═══════════════════════════════════════════════════════════
+window.openTransmittalHistoryModal = async function() {
+  var modalEl = document.getElementById('transmittalHistoryModal');
+  var tbody = document.getElementById('transmittalHistoryBody');
+  
+  bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3"><div class="erp-spinner" style="margin:0 auto;"></div></td></tr>';
+  
+  try {
+    var rows = await erpFetch('mrr_transmittals', 'select=*&order=created_at.desc&limit=100');
+    
+    if (!rows || rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted">No transmittals generated yet.</td></tr>';
+      return;
+    }
+    
+    var html = '';
+    rows.forEach(function(r) {
+      var dateStr = r.transmittal_date ? new Date(r.transmittal_date).toLocaleDateString() : '—';
+      var safeTrn = String(r.transmittal_no).replace(/'/g, "\\'");
+      
+      html += '<tr>' +
+        '<td><strong style="color:#dc2626;">' + erpEsc(r.transmittal_no) + '</strong></td>' +
+        '<td>' + erpEsc(dateStr) + '</td>' +
+        '<td>' + erpEsc(r.prepared_by) + '</td>' +
+        '<td class="text-center">' +
+          '<button class="btn btn-sm btn-outline-primary" onclick="viewTransmittalMRRs(\'' + safeTrn + '\')">' +
+            '<i class="bi bi-eye me-1"></i>View MRRs' +
+          '</button>' +
+        '</td>' +
+      '</tr>';
+    });
+    tbody.innerHTML = html;
+  } catch(err) {
+    console.error('[openTransmittalHistoryModal]', err);
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger py-3">Failed to load history.</td></tr>';
+  }
+};
+
+window.viewTransmittalMRRs = async function(trnNo) {
+  var modalEl = document.getElementById('viewTrnMRRsModal');
+  var tbody = document.getElementById('viewTrnMRRsBody');
+  var titleEl = document.getElementById('viewTrnTitle');
+  
+  titleEl.textContent = trnNo;
+  bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3"><div class="erp-spinner" style="margin:0 auto;"></div></td></tr>';
+  
+  try {
+    var rows = await erpFetch('documents', 'select=doc_no,vendor,po_no,receiving_date&transmittal_no=eq.' + encodeURIComponent(trnNo) + '&order=doc_no.asc');
+    
+    if (!rows || rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted">No MRRs found for this transmittal.</td></tr>';
+      return;
+    }
+    
+    var html = '';
+    rows.forEach(function(r) {
+      var dateStr = r.receiving_date ? new Date(r.receiving_date).toLocaleDateString() : '—';
+      html += '<tr>' +
+        '<td><strong>' + erpEsc(r.doc_no) + '</strong></td>' +
+        '<td>' + erpEsc(r.vendor || '—') + '</td>' +
+        '<td>' + erpEsc(r.po_no || '—') + '</td>' +
+        '<td>' + erpEsc(dateStr) + '</td>' +
+      '</tr>';
+    });
+    tbody.innerHTML = html;
+  } catch(err) {
+    console.error('[viewTransmittalMRRs]', err);
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger py-3">Failed to load MRRs.</td></tr>';
+  }
+};
