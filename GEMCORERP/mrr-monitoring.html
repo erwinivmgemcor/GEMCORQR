@@ -275,13 +275,18 @@ tr.completed-row {
 
   <!-- MONITORING TABLE -->
   <div class="erp-card erp-table-card">
-    <div class="erp-table-header">
+       <div class="erp-table-header">
       <div>
         <i class="bi bi-table me-2"></i>
         <strong>All MRR Items</strong>
         <span class="erp-table-subtitle">Real-time monitoring with creator info</span>
       </div>
       <div class="d-flex gap-2 align-items-center">
+        <!-- ✅ BAGONG BUTTON DITO -->
+        <button class="erp-btn-primary" onclick="openTransmittalModal()" style="padding: 6px 14px; font-size: 0.82rem;">
+          <i class="bi bi-file-earmark-arrow-up me-1"></i>Generate Transmittal
+        </button>
+        
         <span class="erp-badge" id="mrrMonTableCount">0 items</span>
         <button class="erp-btn-icon" onclick="mrrMonToggleAuto()" id="autoToggleBtn" title="Toggle auto-refresh">
           <i class="bi bi-pause-fill" id="autoToggleIcon"></i>
@@ -342,6 +347,106 @@ tr.completed-row {
 <div class="toast-container position-fixed bottom-0 end-0 p-3">
   <div id="erpToast" class="toast erp-toast">
     <div class="toast-body" id="erpToastBody">Message</div>
+  </div>
+</div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TRANSMITTAL MODAL (v2 - WITH SELECTION & PREVIEW) -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="transmittalModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable" style="max-width: 850px;">
+    <div class="modal-content">
+      <div class="modal-header erp-modal-header">
+        <h5 class="modal-title"><i class="bi bi-file-earmark-arrow-up me-2"></i>MRR Transmittal Report</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" onclick="resetTransmittalModal()"></button>
+      </div>
+      
+      <div class="modal-body p-0" style="background: #f1f5f9;">
+        
+        <!-- STEP 1: SELECTION LIST (Default View) -->
+        <div id="transmittalSelectionView" style="padding: 20px;">
+          <div class="alert alert-info small py-2 mb-3">
+            <i class="bi bi-info-circle-fill me-1"></i>
+            Piliin kung aling mga MRR ang isasama sa transmittal. Naka-gray at naka-uncheck ang mga na-transmit na para hindi ma-doble.
+          </div>
+          <div class="table-responsive" style="max-height: 400px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;">
+            <table class="erp-table" style="font-size: 0.85rem;">
+              <thead class="table-light sticky-top">
+                <tr>
+                  <th style="width: 5%;" class="text-center">
+                    <input type="checkbox" id="transmitSelectAll" onchange="toggleAllTransmittalMRRs(this.checked)">
+                  </th>
+                  <th style="width: 25%;">MRR No.</th>
+                  <th style="width: 25%;">Date Received</th>
+                  <th style="width: 30%;">Supplier</th>
+                  <th style="width: 15%;" class="text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody id="transmittalSelectionBody">
+                <tr><td colspan="5" class="text-center py-3"><div class="erp-spinner" style="margin:0 auto;"></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- STEP 2: PRINT PREVIEW (Hidden by default) -->
+        <div id="transmittalPreviewView" style="display: none; padding: 20px;">
+          <button class="btn btn-sm btn-outline-secondary mb-3" onclick="backToTransmittalSelection()">
+            <i class="bi bi-arrow-left me-1"></i>Back to Selection
+          </button>
+          
+          <div id="transmittalSheet" style="background: #fff; width: 100%; max-width: 800px; margin: 0 auto; padding: 40px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); font-family: 'Inter', sans-serif;">
+            <div style="margin-bottom: 20px;">
+              <h3 style="font-weight: 800; text-transform: uppercase; margin: 0; letter-spacing: 0.5px;">MRR TRANSMITTAL RECEIVING</h3>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 24px; font-size: 0.9rem;">
+              <div>
+                <strong>DATE:</strong> <span id="transmittalDate" style="font-weight: 700; border-bottom: 1px solid #000; padding: 0 10px;">—</span>
+              </div>
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
+              <thead>
+                <tr style="border-top: 2px solid #000; border-bottom: 2px solid #000;">
+                  <th style="padding: 8px; text-align: center; font-weight: 800;">MRR No.</th>
+                  <th style="padding: 8px; text-align: center; font-weight: 800;">DATE RECEIVED OF ITEM</th>
+                  <th style="padding: 8px; text-align: center; font-weight: 800;">SUPPLIER NAME</th>
+                  <th style="padding: 8px; text-align: center; font-weight: 800;">PO No.</th>
+                </tr>
+              </thead>
+              <tbody id="transmittalBody">
+                <!-- Dynamic rows here -->
+              </tbody>
+            </table>
+
+            <div style="display: flex; justify-content: space-between; margin-top: 60px; font-size: 0.85rem;">
+              <div style="width: 45%;">
+                <div style="margin-bottom: 8px; font-weight: 700;">Prepared By:</div>
+                <div style="border-bottom: 1px solid #000; text-align: center; padding-bottom: 4px; font-weight: 600; text-transform: uppercase;" id="transmittalPreparedBy">—</div>
+                <div style="text-align: center; font-size: 0.75rem; margin-top: 4px; font-weight: 700;">GEMCOR IVM</div>
+              </div>
+              <div style="width: 45%;">
+                <div style="margin-bottom: 8px; font-weight: 700;">Received By:</div>
+                <div style="border-bottom: 1px solid #000; text-align: center; padding-bottom: 4px; font-weight: 600; text-transform: uppercase;">PROCUREMENT</div>
+                <div style="text-align: center; font-size: 0.75rem; margin-top: 4px;">&nbsp;</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      
+      <div class="modal-footer" id="transmittalModalFooter">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" onclick="resetTransmittalModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btnProceedToPreview" onclick="buildTransmittalPreview()">
+          Preview Transmittal <i class="bi bi-arrow-right ms-1"></i>
+        </button>
+        <button type="button" class="btn btn-primary" id="btnPrintTransmittal" onclick="printTransmittal()" style="display: none;">
+          <i class="bi bi-printer me-1"></i>Print / Save PDF
+        </button>
+      </div>
+    </div>
   </div>
 </div>
 
