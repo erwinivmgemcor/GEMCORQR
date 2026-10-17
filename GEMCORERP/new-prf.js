@@ -383,8 +383,7 @@ function onCategoryChange() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER REORDER ITEMS (v2.6 — Sort pending first + Filter)
-// ✅ FIXED: isDisabled computed BEFORE html building
+// RENDER REORDER ITEMS (v3.0 — FULLY EDITABLE QTY)
 // ═══════════════════════════════════════════════════════════
 function renderReorderItems() {
   var container = document.getElementById('reorderItemsContainer');
@@ -401,7 +400,6 @@ function renderReorderItems() {
     return;
   }
 
-  // ── Filter: show only items with pending PRF (kung naka-check) ──
   var filterCheck = document.getElementById('filterPendingOnly');
   var filterPendingOnly = filterCheck ? filterCheck.checked : false;
 
@@ -413,7 +411,6 @@ function renderReorderItems() {
     });
   }
 
-  // ── Sort: pending items FIRST, then alphabetical by item_code ──
   itemsToRender.sort(function(a, b) {
     var aPending = computeSuggestedBreakdown(a).pendingQty;
     var bPending = computeSuggestedBreakdown(b).pendingQty;
@@ -423,13 +420,11 @@ function renderReorderItems() {
     return (bPending > 0 ? 1 : 0) - (aPending > 0 ? 1 : 0);
   });
 
-  // ── Update tab badge ──
   var pendingCountInCategory = _prf.items.filter(function(it) {
     return computeSuggestedBreakdown(it).pendingQty > 0;
   }).length;
   updateReorderTabBadge(pendingCountInCategory);
 
-  // ── Empty state kapag na-filter lahat ──
   if (itemsToRender.length === 0) {
     container.innerHTML = '<div class="alert alert-success mb-0">' +
       '<i class="bi bi-check-circle-fill me-2"></i>' +
@@ -474,15 +469,7 @@ function renderReorderItems() {
     var remarks = it._remarks || '';
     var originalIdx = _prf.items.indexOf(it);
 
-    // ═══════════════════════════════════════════════════════
-    // ✅ FIX: Compute isDisabled BEFORE building html
-    // ═══════════════════════════════════════════════════════
-    var isDisabled = (breakdown.pendingQty > 0 && suggested === 0);
-    var disabledAttr = isDisabled
-      ? ' disabled title="May pending PRF na ito at sapat ang stock"'
-      : '';
-
-    // Pending display
+    // ✅ WALANG DISABLE LOGIC DITO. LAHAT AY EDITABLE.
     var pendingDisplay = '<span class="text-muted">—</span>';
     if (breakdown.pendingQty > 0) {
       var tooltipText = 'PRF Nos:\n' + String(breakdown.prfNos).replace(/, /g, '\n');
@@ -493,7 +480,6 @@ function renderReorderItems() {
         '</div></span>';
     }
 
-    // Net Need display
     var netNeedDisplay = '';
     if (breakdown.pendingQty > 0) {
       netNeedDisplay = '<div style="text-decoration:line-through;color:#9ca3af;font-size:0.72rem;">' +
@@ -507,7 +493,6 @@ function renderReorderItems() {
     if (it.urgency === 'CRITICAL') urgencyBadge = ' <span class="badge bg-danger">CRIT</span>';
     else if (it.urgency === 'URGENT') urgencyBadge = ' <span class="badge bg-warning text-dark">URG</span>';
 
-    // Row style
     var rowStyle = '';
     if (isSelected) {
       rowStyle = ' style="background:#ecfdf5;"';
@@ -519,7 +504,7 @@ function renderReorderItems() {
       rowStyle +
       (breakdown.pendingQty > 0 ? ' data-has-pending="true"' : '') + '>' +
       '<td><input type="checkbox" class="item-select-chk" data-idx="' + originalIdx + '"' +
-        (isSelected ? ' checked' : '') + disabledAttr +
+        (isSelected ? ' checked' : '') +
         ' onchange="toggleItemSelect(' + originalIdx + ', this.checked)"></td>' +
       '<td>' + (idx + 1) + '</td>' +
       '<td><code>' + erpEsc(it.item_code) + '</code>' + urgencyBadge + '</td>' +
@@ -532,8 +517,7 @@ function renderReorderItems() {
       '<td class="text-center">' +
         '<input type="number" class="form-control form-control-sm qty-order-input" ' +
           'data-idx="' + originalIdx + '" value="' + qtyOrder + '" min="0" step="1" ' +
-          'placeholder="' + Math.ceil(suggested) + '" onchange="updateQty(' + originalIdx + ', this.value)" ' +
-          (isDisabled ? 'disabled' : '') + '>' +
+          'placeholder="' + Math.ceil(suggested) + '" onchange="updateQty(' + originalIdx + ', this.value)">' +
       '</td>' +
       '<td class="text-center">' +
         '<select class="form-select form-select-sm unit-select" data-idx="' + originalIdx + '" onchange="updateUnit(' + originalIdx + ', this.value)" style="font-size:0.75rem;padding:2px 4px;">' +
@@ -568,10 +552,13 @@ function renderReorderItems() {
     'Net Need = (Buffer − On-Hand − Pending PRF)' +
     batchingInfo + '</div>';
   html += '<div class="d-flex align-items-center gap-3">';
+  
+  // ✅ Idinagdag natin yung "Deselect PRF Items" dito
   html += '<button type="button" class="btn btn-sm btn-outline-danger me-2" onclick="deselectPrfItems()" title="Alisin sa selection ang mga may pending PRF">' +
-  '<i class="bi bi-shield-x me-1"></i>Deselect PRF Items</button>';
-html += '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllItems()" title="Clear all selections">' +
-  '<i class="bi bi-x-lg me-1"></i>Deselect All</button>';
+    '<i class="bi bi-shield-x me-1"></i>Deselect PRF Items</button>';
+    
+  html += '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllItems()" title="Clear all selections">' +
+    '<i class="bi bi-x-lg me-1"></i>Deselect All</button>';
   html += '<div><strong>Selected:</strong> ' + _prf.selectedItems.length +
     ' items · <strong>Total Qty:</strong> ' + erpNum(totalQty) + '</div>';
   html += '</div>';
