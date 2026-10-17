@@ -518,7 +518,7 @@ html += '<tr>' +
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER TAB 2: BY ITEM (with version filter)
+// RENDER TAB 2: BY ITEM (with version, duplicate & sort filter)
 // ═══════════════════════════════════════════════════════════
 function prfMonitorRenderItemTab() {
   var tbody = document.getElementById('itemTableBody');
@@ -530,14 +530,34 @@ function prfMonitorRenderItemTab() {
   var search = (searchInput ? searchInput.value : '').toLowerCase().trim();
   var statusFilter = statusFilterEl ? statusFilterEl.value : '';
 
-  // ✅ v3.4: Filter items by version mode
+  // ✅ Kunin ang bagong filter values
+  var dupFilter = document.getElementById('itemFilterDuplicates') ? document.getElementById('itemFilterDuplicates').value : 'all';
+  var sortOrder = document.getElementById('itemSortOrder') ? document.getElementById('itemSortOrder').value : 'newest';
+
+  // ✅ Filter by version mode
   var latestIds = _getLatestPrfIds(_prfMonitor.allPrfs);
   var baseItems = _prfMonitor.versionFilter === 'latest'
     ? _prfMonitor.allItems.filter(function(it) { return latestIds[it.prf_id]; })
     : _prfMonitor.allItems;
 
+  // ✅ Count duplicates (bilangin kung ilang beses lumabas ang item_code)
+  var itemCounts = {};
+  baseItems.forEach(function(it) {
+    var code = String(it.item_code || '').trim();
+    if (code) {
+      itemCounts[code] = (itemCounts[code] || 0) + 1;
+    }
+  });
+
+  // ✅ Apply standard filters + Duplicate filter
   _prfMonitor.filteredItems = baseItems.filter(function(it) {
     if (statusFilter && String(it.status || 'UNSERVED').toUpperCase() !== statusFilter) return false;
+
+    // Duplicate logic: Ipakita lang kung >1 ang bilang
+    if (dupFilter === 'duplicates') {
+      var code = String(it.item_code || '').trim();
+      if ((itemCounts[code] || 0) <= 1) return false;
+    }
 
     if (search) {
       var prfNo = String(it._prfNo || '').toLowerCase();
@@ -555,6 +575,18 @@ function prfMonitorRenderItemTab() {
           supplier.indexOf(search) === -1) return false;
     }
     return true;
+  });
+
+  // ✅ SORTING Logic (Newest or Oldest based on PRF Date)
+  _prfMonitor.filteredItems.sort(function(a, b) {
+    var dateA = a._prfDate ? new Date(a._prfDate).getTime() : 0;
+    var dateB = b._prfDate ? new Date(b._prfDate).getTime() : 0;
+    
+    if (sortOrder === 'newest') {
+      return dateB - dateA; // Pinakabago sa taas
+    } else {
+      return dateA - dateB; // Pinakaluma sa taas
+    }
   });
 
   var total = _prfMonitor.filteredItems.length;
@@ -580,6 +612,10 @@ function prfMonitorRenderItemTab() {
 
   var html = '';
   pageItems.forEach(function(it, idx) {
+    // ... (Yung rendering ng table row, hayaan mo lang kung ano ang existing, walang binago dito)
+    
+    // Wait, kailangan nating i-paste yung buong forEach para sure. Kopyahin mo lang mula sa existing mo kung may nakalimutan.
+    
     var status = String(it.status || 'UNSERVED').toUpperCase();
     var rowClass = '';
     if (status === 'SERVED') rowClass = 'item-row-served';
@@ -618,9 +654,15 @@ function prfMonitorRenderItemTab() {
       }
     }
 
-    // ✅ v3.4: Version badge sa PRF No. cell
     var versionBadgeSmall = it._versionNumber > 1 
       ? ' <span class="badge bg-warning text-dark" style="font-size:0.55rem;">v' + it._versionNumber + '</span>'
+      : '';
+      
+    // ✅ Dagdag natin: Duplicate Badge kung > 1 ang count
+    var codeStr = String(it.item_code || '').trim();
+    var dupCount = itemCounts[codeStr] || 0;
+    var dupBadge = dupCount > 1 
+      ? ' <span class="badge bg-danger ms-1" style="font-size:0.6rem;" title="Naka-request ng ' + dupCount + ' beses">x' + dupCount + '</span>' 
       : '';
 
     html += '<tr class="' + rowClass + '" data-item-id="' + it.id + '">' +
@@ -630,7 +672,7 @@ function prfMonitorRenderItemTab() {
       '<td>' + (start + idx + 1) + '</td>' +
       '<td><span class="prf-link" onclick="viewPrfDetailsFromItem(' + it.prf_id + ')">' + erpEsc(it._prfNo) + '</span>' + versionBadgeSmall + '</td>' +
       '<td>' + erpEsc(dateStr) + '</td>' +
-      '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
+      '<td><code>' + erpEsc(it.item_code) + '</code>' + dupBadge + '</td>' +
       '<td title="' + erpEsc(it.description || '') + '">' + erpEsc(truncate(it.description || '—', 45)) + '</td>' +
       '<td class="text-center">' + erpNum(it.stock_on_hand || 0) + '</td>' +
       '<td class="text-center fw-bold">' + erpNum(it.qty_for_order || 0) + '</td>' +
@@ -653,7 +695,6 @@ function prfMonitorRenderItemTab() {
   updateBulkActionsBar();
   updateSelectAllCheckbox();
 }
-
 function truncate(str, max) {
   if (!str) return '';
   if (str.length <= max) return str;
