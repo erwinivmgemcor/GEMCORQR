@@ -1402,13 +1402,15 @@ async function createSinglePrf(prfNo, basePrfNo, batchNumber, items, category, p
   if (!itemsRes.ok) throw new Error('Insert items failed: ' + itemsRes.status);
   return { prf_no: prfNo, items: items.length };
 }
+
+function closeSuccessAndReset() {
   var modal = bootstrap.Modal.getInstance(document.getElementById('successModal'));
   if (modal) modal.hide();
   setTimeout(function() {
     window.location.href = 'prf-monitor.html';
   }, 300);
 }
-
+window.closeSuccessAndReset = closeSuccessAndReset;
 window.closeSuccessAndReset = closeSuccessAndReset;
 
 function cancelCreate() {
