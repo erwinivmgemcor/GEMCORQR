@@ -539,8 +539,8 @@ function renderReorderItems() {
       '<td class="text-center">' + netNeedDisplay + '</td>' +
       '<td class="text-center">' +
         '<input type="number" class="form-control form-control-sm qty-order-input" ' +
-        'data-idx="' + originalIdx + '" value="' + qtyOrder + '" min="0" step="1" ' +
-        'placeholder="' + Math.ceil(suggested) + '" onchange="updateQty(' + originalIdx + ', this.value)">' +
+'data-idx="' + originalIdx + '" value="' + (isSelected && qtyOrder === 0 ? 1 : qtyOrder) + '" min="0" step="1" ' +
+'placeholder="' + Math.ceil(suggested) + '" onchange="updateQty(' + originalIdx + ', this.value)">' +
       '</td>' +
       '<td class="text-center">' +
         '<select class="form-select form-select-sm unit-select" data-idx="' + originalIdx + '" onchange="updateUnit(' + originalIdx + ', this.value)" style="font-size:0.75rem;padding:2px 4px;">' +
@@ -692,12 +692,17 @@ window.showPendingReorderList = showPendingReorderList;
 function toggleItemSelect(idx, checked) {
   var item = _prf.items[idx];
   if (!item) return;
+  
   item._selected = checked;
-  if (checked && (!item._qtyOrder || item._qtyOrder === 0)) {
-    item._qtyOrder = computeSuggested(item);
-  } else if (!checked) {
+  
+  if (checked) {
+    // ✅ FORCE NA GAWING 1 KAPAG WALANG LAMAN O 0 ANG SUGGESTED
+    var suggested = computeSuggested(item);
+    item._qtyOrder = suggested > 0 ? suggested : 1; 
+  } else {
     item._qtyOrder = 0;
   }
+  
   recomputeSelected();
   renderReorderItems();
 }
@@ -710,7 +715,9 @@ function toggleSelectAll(checked) {
   _prf.items.forEach(function(it) {
     it._selected = checked;
     if (checked) {
-      it._qtyOrder = computeSuggested(it);
+      var suggested = computeSuggested(it);
+      // ✅ KAHIT 0 ANG NET NEED, GAWING 1 PARA MA-SELECT
+      it._qtyOrder = suggested > 0 ? suggested : 1; 
     } else {
       it._qtyOrder = 0;
     }
