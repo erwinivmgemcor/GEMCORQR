@@ -114,14 +114,10 @@ function _resolvePoData(item, prfNo) {
 function _versionBadge(prf, latestPrfId) {
   var v = parseInt(prf.version_number, 10) || 1;
   
-  if (v > 1) {
-    // Kung version 2 pataas, ipakita ang badge
-    return ' <span class="badge bg-success" style="font-size:0.62rem;" title="Latest version">v' + v + ' LATEST</span>';
-  }
+  // ✅ Kung version 1 lang, wag nang lagyan ng badge.
+  if (v <= 1) return ''; 
   
-  // Kung version 1 lang, wag na mag-lagay ng LATEST badge para malinis tignan
-  return ''; 
-}
+  var isLatest = (prf.id === latestPrfId);
   
   if (isLatest) {
     return ' <span class="badge bg-success" style="font-size:0.62rem;" title="Latest version">v' + v + ' LATEST</span>';
@@ -131,7 +127,6 @@ function _versionBadge(prf, latestPrfId) {
 }
 
 window._versionBadge = _versionBadge;
-
 // ═══════════════════════════════════════════════════════════
 // ✅ v3.4: GET LATEST VERSION ONLY (per base_prf_no)
 // ═══════════════════════════════════════════════════════════
