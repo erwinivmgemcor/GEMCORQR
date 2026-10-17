@@ -1749,3 +1749,112 @@ window.erpRowClick = function(event, itemCode) {
 };
 
 console.log('✅ stock-monitor.js v3 loaded — Phase 4 (Inline Edit + Lock + CSV)');
+
+// ═══════════════════════════════════════════════════════════
+// BULK BUFFER LOCK/UNLOCK
+// ═══════════════════════════════════════════════════════════
+window.erpBulkLockBuffer = async function(isLocked) {
+  var action = isLocked ? 'LOCK' : 'UNLOCK';
+  if (!confirm('Are you sure you want to ' + action + ' ALL active buffer stocks?\n\nThis will affect all items in the database.')) return;
+
+  erpShowToast('Processing bulk ' + action + '...', 'info');
+  
+  try {
+    var user = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
+    
+    var res = await fetch(erpUrl('rpc/erp_bulk_toggle_buffer_lock'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({
+        p_is_locked: isLocked,
+        p_updated_by: user
+      })
+    });
+
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var data = await res.json();
+    
+    if (data && data.success) {
+      erpShowToast(`✅ ${action}ED ${data.updated} items successfully!`, 'success');
+      await erpLoadItems(); // Refresh table
+    } else {
+      throw new Error(data.error || 'Unknown error');
+    }
+  } catch(err) {
+    console.error('[erpBulkLockBuffer]', err);
+    erpShowToast('Failed: ' + err.message, 'danger');
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// VIEW DEACTIVATED ITEMS & RESTORE
+// ═══════════════════════════════════════════════════════════
+window.erpOpenDeactivatedModal = async function() {
+  var modalEl = document.getElementById('erpDeactivatedModal');
+  if (!modalEl) return;
+  
+  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+  
+  var tbody = document.getElementById('erpDeactivatedBody');
+  tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4"><div class="erp-spinner" style="margin:0 auto;"></div></td></tr>';
+  
+  try {
+    // Kukunin lahat ng naka-soft delete
+    var rows = await erpFetch('erp_items', 'select=item_code,description,category,location&is_deleted=eq.true&limit=1000');
+    
+    if (!rows || rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><i class="bi bi-inbox fs-3 d-block mb-2"></i>No deactivated items found.</td></tr>';
+      return;
+    }
+    
+    var html = '';
+    rows.forEach(function(it) {
+      var safeCode = String(it.item_code).replace(/'/g, "\\'");
+      html += '<tr>' +
+        '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
+        '<td>' + erpEsc(it.description || '—') + '</td>' +
+        '<td>' + erpEsc(it.category || '—') + '</td>' +
+        '<td>' + erpEsc(it.location || '—') + '</td>' +
+        '<td class="text-center">' +
+          '<button class="btn btn-sm btn-success" onclick="erpRestoreItem(\'' + safeCode + '\')">' +
+            '<i class="bi bi-arrow-counterclockwise me-1"></i>Restore' +
+          '</button>' +
+        '</td>' +
+      '</tr>';
+    });
+    tbody.innerHTML = html;
+    
+  } catch(err) {
+    console.error('[erpOpenDeactivatedModal]', err);
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-4">Failed to load: ' + erpEsc(err.message) + '</td></tr>';
+  }
+};
+
+window.erpRestoreItem = async function(itemCode) {
+  if (!confirm('Restore item "' + itemCode + '" to active inventory?')) return;
+  
+  try {
+    var res = await fetch(erpUrl('erp_items?item_code=eq.' + encodeURIComponent(itemCode)), {
+      method: 'PATCH',
+      headers: erpHeaders(),
+      body: JSON.stringify({
+        is_deleted: false,
+        is_active: true,
+        updated_at: new Date().toISOString()
+      })
+    });
+    
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    
+    erpShowToast('✅ Item restored successfully!', 'success');
+    
+    // I-refresh ang deactivated list at main table
+    erpOpenDeactivatedModal(); 
+    erpLoadItems();
+    
+  } catch(err) {
+    console.error('[erpRestoreItem]', err);
+    erpShowToast('Failed to restore: ' + err.message, 'danger');
+  }
+};
