@@ -1721,8 +1721,8 @@ window.saveEditPrfItems = async function() {
   
   if (validItems.length === 0) { erpShowToast('Add at least one item', 'warning'); return; }
   
-  if (!confirm('Save as v' + _editPrfState.newVersionNumber + '?\n\n' +
-    validItems.length + ' item(s) will be saved.')) return;
+  if (!confirm('Save changes to ' + prf.prf_no + ' as v' + _editPrfState.newVersionNumber + '?\n\n' +
+    validItems.length + ' item(s) will be saved. Same PRF number, updated version.')) return;
   
   _editPrfState.isSaving = true;
   var btn = document.getElementById('btnSaveEditPrfItems');
@@ -1734,52 +1734,47 @@ window.saveEditPrfItems = async function() {
     var currentUser = localStorage.getItem('ivm_username') || '';
     var currentFullname = localStorage.getItem('ivm_userFullname') || currentUser;
     
-    var basePrfNo = prf.base_prf_no || prf.prf_no;
     var currentVersion = parseInt(prf.version_number, 10) || 1;
     var newVersion = _editPrfState.newVersionNumber;
-    var versionedPrfNo = basePrfNo + (newVersion > 1 ? '-v' + newVersion : '');
-    
     var diff = computePrfItemsDiff(_editPrfState.originalItems, validItems);
     var totalQty = validItems.reduce(function(s, it) { return s + (it.qty_for_order || 0); }, 0);
     
-    var newDocPayload = {
-      prf_no: versionedPrfNo,
-      base_prf_no: basePrfNo,
+    // ═══════════════════════════════════════════════════════════
+    // STEP 1: DIRECT UPDATE SA EXISTING PRF DOCUMENT (PATCH)
+    // ═══════════════════════════════════════════════════════════
+    var updateDocPayload = {
       version_number: newVersion,
-      parent_prf_id: prf.id,
-      category: prf.category,
-      requestor: prf.requestor,
-      department: prf.department,
-      notes: prf.notes,
-      purpose: prf.purpose || 'STOCK',
       total_items: validItems.length,
       total_qty: totalQty,
-      prepared_by: prf.prepared_by,
-      noted_by: prf.noted_by,
-      approved_by: prf.approved_by,
       revision_reason: reason,
       revised_by: currentUser,
       revised_by_fullname: currentFullname,
       revised_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
     
-    var docRes = await fetch(erpUrl('prf_documents'), {
-      method: 'POST',
+    var docRes = await fetch(erpUrl('prf_documents?id=eq.' + prf.id), {
+      method: 'PATCH', // ✅ UPDATE LANG, HINDI INSERT
       headers: erpHeaders({ 'Prefer': 'return=representation' }),
-      body: JSON.stringify(newDocPayload)
+      body: JSON.stringify(updateDocPayload)
     });
     
-    if (!docRes.ok) throw new Error('Insert doc failed: ' + docRes.status);
+    if (!docRes.ok) throw new Error('Update PRF doc failed: ' + docRes.status);
     
-    var newDoc = (await docRes.json())[0];
-    if (!newDoc || !newDoc.id) throw new Error('No doc ID returned');
+    // ═══════════════════════════════════════════════════════════
+    // STEP 2: REPLACE ANG MGA ITEMS (DELETE OLD, INSERT NEW)
+    // ═══════════════════════════════════════════════════════════
+    var delRes = await fetch(erpUrl('prf_items?prf_id=eq.' + prf.id), {
+      method: 'DELETE',
+      headers: erpHeaders()
+    });
+    
+    if (!delRes.ok) throw new Error('Delete old items failed');
     
     var itemPayloads = validItems.map(function(it, idx) {
       return {
-        prf_id: newDoc.id,
-        prf_no: versionedPrfNo,
+        prf_id: prf.id,
+        prf_no: prf.prf_no, // Same PRF No.
         line_no: idx + 1,
         item_code: it.item_code,
         description: it.description,
@@ -1801,18 +1796,21 @@ window.saveEditPrfItems = async function() {
       body: JSON.stringify(itemPayloads)
     });
     
-    if (!itemRes.ok) throw new Error('Insert items failed: ' + itemRes.status);
+    if (!itemRes.ok) throw new Error('Insert new items failed: ' + itemRes.status);
     
+    // ═══════════════════════════════════════════════════════════
+    // STEP 3: LOG SA REVISION AUDIT (History tracking)
+    // ═══════════════════════════════════════════════════════════
     try {
       await fetch(erpUrl('prf_revision_audit'), {
         method: 'POST',
         headers: erpHeaders({ 'Prefer': 'return=minimal' }),
         body: JSON.stringify({
-          base_prf_no: basePrfNo,
-          prf_no: versionedPrfNo,
+          base_prf_no: prf.base_prf_no || prf.prf_no,
+          prf_no: prf.prf_no,
           from_version: currentVersion,
           to_version: newVersion,
-          new_prf_id: newDoc.id,
+          new_prf_id: prf.id, // Same ID
           revised_by: currentUser,
           revised_by_fullname: currentFullname,
           reason: reason,
@@ -1829,7 +1827,7 @@ window.saveEditPrfItems = async function() {
                      ' | Removed: ' + diff.removed.length + 
                      ' | Modified: ' + diff.modified.length;
     
-    erpShowToast('✅ v' + newVersion + ' created! ' + diffSummary, 'success');
+    erpShowToast('✅ ' + prf.prf_no + ' updated to v' + newVersion + '! ' + diffSummary, 'success');
     
     await prfMonitorLoad();
     
@@ -1842,8 +1840,6 @@ window.saveEditPrfItems = async function() {
     btn.innerHTML = origHtml;
   }
 };
-
-function _syncEditPrfInputs() {
   var rows = document.querySelectorAll('#editPrfItemsBody tbody tr');
   rows.forEach(function(row, idx) {
     if (!_editPrfState.currentItems[idx]) return;
