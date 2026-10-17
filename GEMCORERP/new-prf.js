@@ -1219,8 +1219,8 @@ async function submitPrf() {
   if (!category) { erpShowToast('Category required', 'warning'); return; }
 
   var allItems = [];
-
   recomputeSelected();
+  
   _prf.selectedItems.forEach(function(it) {
     allItems.push({
       item_code: it.item_code,
@@ -1262,18 +1262,6 @@ async function submitPrf() {
     return;
   }
 
-  // ✅ Detect duplicates bago mag-submit
-  var duplicateItems = [];
-  allItems.forEach(function(it) {
-    var pendingInfo = _prf.pendingSummary[it.item_code];
-    if (pendingInfo && pendingInfo.totalQty > 0) {
-      duplicateItems.push({
-        item: it,
-        pending: pendingInfo
-      });
-    }
-  });
-
   var batches = [];
   if (allItems.length > MAX_ITEMS_PER_PRF) {
     for (var i = 0; i < allItems.length; i += MAX_ITEMS_PER_PRF) {
@@ -1283,54 +1271,40 @@ async function submitPrf() {
     batches.push(allItems);
   }
 
-  var isAvailable = await checkPrfNoAvailable(prfNo);
+  // ✅ CHECK BASE PRF NO AVAILABILITY
+  var basePrfNo = prfNo; 
+  var isAvailable = await checkPrfNoAvailable(basePrfNo);
   if (!isAvailable) {
-    var originalPrfNo = prfNo;
-    prfNo = await generateUniquePrfNo(prfNo);
-    console.log('[PRF] Auto-unique:', originalPrfNo, '→', prfNo);
-    erpShowToast('PRF No. adjusted to ' + prfNo, 'info');
+    basePrfNo = await generateUniquePrfNo(basePrfNo);
+    erpShowToast('PRF No. adjusted to ' + basePrfNo, 'info');
   }
 
+  // ✅ ASSIGN UNIQUE BATCH PRF NUMBERS (No versions)
   for (var bIdx = 0; bIdx < batches.length; bIdx++) {
-    var batchBase = prfNo + (bIdx === 0 ? '' : '.' + (bIdx + 1));
-    var batchAvailable = await checkPrfNoAvailable(batchBase);
-    if (!batchAvailable) {
-      var counter = 2;
-      var testNo;
-      do {
-        testNo = batchBase + '-' + counter;
-        counter++;
-      } while (!(await checkPrfNoAvailable(testNo)) && counter < 20);
-      batches[bIdx]._prfNo = testNo;
+    if (bIdx === 0) {
+      batches[bIdx]._prfNo = basePrfNo;
     } else {
-      batches[bIdx]._prfNo = batchBase;
+      var suffix = bIdx + 1;
+      var batchNo = basePrfNo + '.' + suffix;
+      var counter = 1;
+      var finalBatchNo = batchNo;
+      while (!(await checkPrfNoAvailable(finalBatchNo))) {
+        counter++;
+        finalBatchNo = batchNo + '-' + counter;
+      }
+      batches[bIdx]._prfNo = finalBatchNo;
     }
   }
 
-  // ✅ Build confirmation message
   var confirmMsg = 'Create PRF with ' + allItems.length + ' item(s)?\n\n';
   if (batches.length > 1) {
-    confirmMsg += 'Will be split into ' + batches.length + ' batches:\n';
+    confirmMsg += 'Will be split into ' + batches.length + ' distinct PRFs:\n';
     batches.forEach(function(b) {
       confirmMsg += '  • ' + b._prfNo + ' (' + b.length + ' items)\n';
     });
     confirmMsg += '\n';
   }
-  confirmMsg += 'Base PRF No.: ' + prfNo;
-  confirmMsg += '\nTotal qty: ' + allItems.reduce(function(s, it) { return s + (it.qty_for_order || 0); }, 0);
-
-  if (duplicateItems.length > 0) {
-    confirmMsg += '\n\n⚠️ WARNING: ' + duplicateItems.length + ' item(s) may duplicate existing PRF:\n\n';
-    duplicateItems.slice(0, 5).forEach(function(d) {
-      confirmMsg += '• ' + d.item.item_code + '\n';
-      confirmMsg += '  Pending: ' + d.pending.prfNos + '\n';
-      confirmMsg += '  Pending Qty: ' + d.pending.totalQty + ' · New Qty: ' + d.item.qty_for_order + '\n';
-    });
-    if (duplicateItems.length > 5) {
-      confirmMsg += '\n... and ' + (duplicateItems.length - 5) + ' more\n';
-    }
-    confirmMsg += '\nAre you SURE you want to proceed?';
-  }
+  confirmMsg += 'Base PRF No.: ' + basePrfNo;
 
   if (!confirm(confirmMsg)) return;
 
@@ -1342,12 +1316,11 @@ async function submitPrf() {
 
   try {
     var createdPrfs = [];
-
     for (var bIdx2 = 0; bIdx2 < batches.length; bIdx2++) {
       var batch = batches[bIdx2];
       var batchPrfNo = batch._prfNo;
       var result = await createSinglePrf(
-        batchPrfNo, prfNo, bIdx2 + 1, batch,
+        batchPrfNo, basePrfNo, bIdx2 + 1, batch,
         category, preparedBy, department, notedBy, approvedBy, notes
       );
       createdPrfs.push(result);
@@ -1368,7 +1341,6 @@ async function submitPrf() {
     _prf.isSubmitting = false;
   }
 }
-
 window.submitPrf = submitPrf;
 
 async function createSinglePrf(prfNo, basePrfNo, batchNumber, items, category, preparedBy, department, notedBy, approvedBy, notes) {
@@ -1380,7 +1352,7 @@ async function createSinglePrf(prfNo, basePrfNo, batchNumber, items, category, p
     body: JSON.stringify({
       prf_no: prfNo,
       base_prf_no: basePrfNo,
-      version_number: 1,
+      version_number: 1, // ✅ LAGING 1 ANG BATCH
       batch_number: batchNumber,
       category: category,
       requestor: preparedBy,
@@ -1397,11 +1369,7 @@ async function createSinglePrf(prfNo, basePrfNo, batchNumber, items, category, p
     })
   });
 
-  if (!docRes.ok) {
-    var errText = await docRes.text();
-    throw new Error('Insert PRF failed: ' + docRes.status);
-  }
-
+  if (!docRes.ok) throw new Error('Insert PRF failed: ' + docRes.status);
   var docArr = await docRes.json();
   var doc = docArr[0];
   if (!doc || !doc.id) throw new Error('No PRF ID');
@@ -1431,15 +1399,9 @@ async function createSinglePrf(prfNo, basePrfNo, batchNumber, items, category, p
     body: JSON.stringify(itemPayloads)
   });
 
-  if (!itemsRes.ok) {
-    var itemsErrText = await itemsRes.text();
-    throw new Error('Insert items failed: ' + itemsRes.status);
-  }
-
+  if (!itemsRes.ok) throw new Error('Insert items failed: ' + itemsRes.status);
   return { prf_no: prfNo, items: items.length };
 }
-
-function closeSuccessAndReset() {
   var modal = bootstrap.Modal.getInstance(document.getElementById('successModal'));
   if (modal) modal.hide();
   setTimeout(function() {
