@@ -186,6 +186,9 @@
     <strong>Inventory Master</strong>
   </div>
   <div class="d-flex align-items-center gap-2">
+    <button class="erp-btn-outline-danger" onclick="erpOpenDeactivatedModal()" title="View Deactivated Items">
+      <i class="bi bi-archive me-1"></i>Deactivated Items
+    </button>
     <button class="erp-btn-outline-dark" onclick="window.location.href='inventory-count.html'" title="Go to Inventory Count">
       <i class="bi bi-clipboard-check me-1"></i>Inventory Count
     </button>
@@ -210,7 +213,13 @@
     <th class="col-qty text-end">On-Hand</th>
     <th class="col-qty text-end" title="SOF Allocated Qty (sum of all open SOFs)" style="color:#f59e0b;">SOF Allocated</th>
     <th class="col-qty text-end" title="Available = On-Hand − SOF Allocated" style="color:#10b981;">Available</th>
-    <th class="col-buffer text-end" title="Buffer Stock (Ave Monthly × 1.75)">Buffer</th>
+   <th class="col-buffer text-end" title="Buffer Stock (Ave Monthly × 1.75)">
+  Buffer 
+  <span class="ms-1">
+    <button class="btn btn-sm p-0 text-success" onclick="erpBulkLockBuffer(true)" title="Lock All Buffers"><i class="bi bi-lock-fill"></i></button>
+    <button class="btn btn-sm p-0 text-danger ms-1" onclick="erpBulkLockBuffer(false)" title="Unlock All Buffers"><i class="bi bi-unlock-fill"></i></button>
+  </span>
+</th>
     <th class="col-unit text-center">Unit</th>
     <th class="col-cost text-end" title="Unit Cost (₱)">Unit Cost</th>
     <th class="col-value text-end" title="Total Value = On-Hand × Unit Cost">On-Hand Cost</th>
@@ -1042,7 +1051,37 @@
     </div>
   </div>
 </div>
-
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- DEACTIVATED ITEMS MODAL -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="erpDeactivatedModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title"><i class="bi bi-archive-fill me-2"></i>Deactivated Items</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div class="table-responsive" style="max-height: 60vh;">
+          <table class="erp-table" style="font-size:0.85rem;">
+            <thead class="sticky-top table-light">
+              <tr>
+                <th>Item Code</th>
+                <th>Description</th>
+                <th>Category</th>
+                <th>Location</th>
+                <th class="text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="erpDeactivatedBody">
+              <tr><td colspan="5" class="text-center py-4 text-muted">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
   
 
 </body>
