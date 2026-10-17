@@ -1376,9 +1376,9 @@ async function createSinglePrf(prfNo, basePrfNo, batchNumber, items, category, p
     headers: erpHeaders({ 'Prefer': 'return=representation' }),
     body: JSON.stringify({
       prf_no: prfNo,
-      base_prf_no: prfNo,          // ✅ ITO ANG FIX: Gawing sariling prf_no ang base, hindi yung root.
+      base_prf_no: prfNo,          // ✅ ITO ANG FIX: Gawing sariling ID niya ang base.
       version_number: 1,           // ✅ Laging version 1 sa umpisa
-      batch_number: batchNumber,   // ✅ Isasalpak natin ito sa UI mamaya
+      batch_number: batchNumber,
       category: category,
       requestor: preparedBy,
       department: department,
