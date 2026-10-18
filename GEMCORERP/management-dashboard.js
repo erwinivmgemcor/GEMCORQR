@@ -1,3 +1,28 @@
+// ═══════════════════════════════════════════════════════════
+// HELPER: COUNT-UP ANIMATION
+// ═══════════════════════════════════════════════════════════
+function animateValue(el, start, end, duration, isPeso) {
+  if (!el) return;
+  let startTimestamp = null;
+  const step = (timestamp) => {
+    if (!startTimestamp) startTimestamp = timestamp;
+    const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+    // Use easeOutQuart for smooth deceleration
+    const easeOut = 1 - Math.pow(1 - progress, 4); 
+    const current = Math.floor(easeOut * (end - start) + start);
+    
+    el.textContent = isPeso ? '₱' + current.toLocaleString() : current.toLocaleString();
+    
+    if (progress < 1) {
+      window.requestAnimationFrame(step);
+    } else {
+      // Ensure final value is exactly the target
+      el.textContent = isPeso ? '₱' + end.toLocaleString() : end.toLocaleString();
+    }
+  };
+  window.requestAnimationFrame(step);
+}
+
 // ============================================================
 // GEMCOR ERP — Management Dashboard
 // Real-time inventory analytics with 8 KPIs + 4 charts
@@ -195,17 +220,31 @@ function mdashRenderKPIs(data) {
   var act = data.activity || {};
 
   // 1. Total Items
-  document.getElementById('mdashKpiTotalItems').textContent = erpNum(s.total_items || 0);
+  var elTotalItems = document.getElementById('mdashKpiTotalItems');
+  animateValue(elTotalItems, 0, s.total_items || 0, 1000, false);
   document.getElementById('mdashKpiTotalItemsSub').textContent = 'Active SKUs';
 
   // 2. Inventory Value
-  document.getElementById('mdashKpiValue').textContent = erpPeso(s.total_value || 0);
+  var elValue = document.getElementById('mdashKpiValue');
+  animateValue(elValue, 0, s.total_value || 0, 1500, true);
 
   // 3. Accuracy
   var accEl = document.getElementById('mdashKpiAccuracy');
   var accSubEl = document.getElementById('mdashKpiAccuracySub');
   if (a.has_data) {
-    accEl.textContent = Number(a.accuracy_pct || 0).toFixed(2) + '%';
+    // Custom animation for percentage
+    let start = 0;
+    let end = Number(a.accuracy_pct || 0);
+    let duration = 1500;
+    let startTime = null;
+    const step = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      accEl.textContent = (progress * end).toFixed(2) + '%';
+      if (progress < 1) window.requestAnimationFrame(step);
+    };
+    window.requestAnimationFrame(step);
+
     accEl.className = 'mdash-kpi-value kpi-value-sm';
     accSubEl.textContent = 'Count: ' + (a.count_no || '—');
   } else {
@@ -218,25 +257,33 @@ function mdashRenderKPIs(data) {
   var toEl = document.getElementById('mdashKpiTurnover');
   var toSubEl = document.getElementById('mdashKpiTurnoverSub');
   var turnoverVal = Number(t.turnover_annualized || 0);
-  toEl.textContent = turnoverVal > 0 ? turnoverVal.toFixed(2) : '0.00';
+  animateValue(toEl, 0, turnoverVal, 1200, false);
   toSubEl.textContent = 'Annualized · ' + (t.days_in_period || 30) + 'd basis';
 
   // 5. MRR
-  document.getElementById('mdashKpiMrr').textContent = erpPeso(act.mrr_value || 0);
+  var elMrr = document.getElementById('mdashKpiMrr');
+  animateValue(elMrr, 0, act.mrr_value || 0, 1200, true);
   document.getElementById('mdashKpiMrrSub').textContent = (act.mrr_count || 0) + ' docs received';
 
   // 6. MRIF
-  document.getElementById('mdashKpiMrif').textContent = erpPeso(act.mrif_value || 0);
+  var elMrif = document.getElementById('mdashKpiMrif');
+  animateValue(elMrif, 0, act.mrif_value || 0, 1200, true);
   document.getElementById('mdashKpiMrifSub').textContent = (act.mrif_count || 0) + ' docs issued';
 
   // 7. Replenishment
-  document.getElementById('mdashKpiReplenish').textContent = erpPeso(s.replenishment_value || 0);
+  var elRep = document.getElementById('mdashKpiReplenish');
+  animateValue(elRep, 0, s.replenishment_value || 0, 1200, true);
   document.getElementById('mdashKpiReplenishSub').textContent = (s.replenishment_count || 0) + ' items below buffer';
 
   // 8. Out of Stock
-  document.getElementById('mdashKpiOutOfStock').textContent = erpNum(s.out_of_stock_count || 0);
+  var elOos = document.getElementById('mdashKpiOutOfStock');
+  animateValue(elOos, 0, s.out_of_stock_count || 0, 1000, false);
+  
+  // Add pulse to out of stock if > 0
+  if ((s.out_of_stock_count || 0) > 0) {
+    elOos.parentElement.classList.add('alert-pulse');
+  }
 }
-
 // ═══════════════════════════════════════════════════════════
 // RENDER CHARTS
 // ═══════════════════════════════════════════════════════════
