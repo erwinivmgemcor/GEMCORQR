@@ -301,7 +301,6 @@ function mdashRenderCategoryChart(categories) {
 
   if (_mdash.charts.category) _mdash.charts.category.destroy();
 
-  // Top 8 + Others
   var sorted = categories.slice().sort(function(a, b) {
     return Number(b.total_value || 0) - Number(a.total_value || 0);
   });
@@ -334,6 +333,7 @@ function mdashRenderCategoryChart(categories) {
       responsive: true,
       maintainAspectRatio: false,
       cutout: '55%',
+      animation: { duration: 1500, easing: 'easeOutQuart', delay: function(ctx) { return ctx.dataIndex * 100; } }, // ✅ ANIMATION
       plugins: {
         legend: {
           position: 'right',
@@ -377,37 +377,23 @@ function mdashRenderABCChart(abc) {
     type: 'bar',
     data: {
       labels: labels,
-      datasets: [{
-        data: values,
-        backgroundColor: colors,
-        borderRadius: 6
-      }]
+      datasets: [{ data: values, backgroundColor: colors, borderRadius: 6 }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: { duration: 1500, easing: 'easeOutQuart', delay: function(ctx) { return ctx.dataIndex * 100; } }, // ✅ ANIMATION
       plugins: {
         legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: function(ctx) { return erpPeso(ctx.parsed.y); }
-          }
-        }
+        tooltip: { callbacks: { label: function(ctx) { return erpPeso(ctx.parsed.y); } } }
       },
       scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            callback: function(v) { return erpPeso(v); },
-            font: { size: 10 }
-          }
-        },
+        y: { beginAtZero: true, ticks: { callback: function(v) { return erpPeso(v); }, font: { size: 10 } } },
         x: { ticks: { font: { size: 11, weight: '600' } } }
       }
     }
   });
 }
-
 // ─── Chart 3: Movement Classification (Horizontal Bar) ───
 function mdashRenderMovementChart(movement) {
   var canvas = document.getElementById('mdashChartMovement');
@@ -419,44 +405,25 @@ function mdashRenderMovementChart(movement) {
   var values = movement.map(function(m) { return Number(m.total_value || 0); });
 
   var colorMap = {
-    'FAST MOVING': '#10b981',
-    'MODERATE MOVING': '#06b6d4',
-    'SLOW MOVING': '#f59e0b',
-    'NO MOVEMENT': '#6b7280',
-    'UNCLASSIFIED': '#9ca3af'
+    'FAST MOVING': '#10b981', 'MODERATE MOVING': '#06b6d4',
+    'SLOW MOVING': '#f59e0b', 'NO MOVEMENT': '#6b7280', 'UNCLASSIFIED': '#9ca3af'
   };
   var colors = labels.map(function(l) { return colorMap[l] || '#6b7280'; });
 
   _mdash.charts.movement = new Chart(canvas.getContext('2d'), {
     type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [{
-        data: values,
-        backgroundColor: colors,
-        borderRadius: 6
-      }]
-    },
+    data: { labels: labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 6 }] },
     options: {
       indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
+      animation: { duration: 1500, easing: 'easeOutQuart', delay: function(ctx) { return ctx.dataIndex * 100; } }, // ✅ ANIMATION
       plugins: {
         legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: function(ctx) { return erpPeso(ctx.parsed.x); }
-          }
-        }
+        tooltip: { callbacks: { label: function(ctx) { return erpPeso(ctx.parsed.x); } } }
       },
       scales: {
-        x: {
-          beginAtZero: true,
-          ticks: {
-            callback: function(v) { return erpPeso(v); },
-            font: { size: 10 }
-          }
-        },
+        x: { beginAtZero: true, ticks: { callback: function(v) { return erpPeso(v); }, font: { size: 10 } } },
         y: { ticks: { font: { size: 10, weight: '600' } } }
       }
     }
@@ -470,31 +437,22 @@ function mdashRenderTopValueChart() {
 
   if (_mdash.charts.topValue) _mdash.charts.topValue.destroy();
 
-  // Get top 10 by on_hand_cost
   var top = _mdash.allItems.slice().sort(function(a, b) {
     return Number(b.on_hand_cost || 0) - Number(a.on_hand_cost || 0);
   }).slice(0, 10);
 
   var labels = top.map(function(it) { return it.item_code; });
   var values = top.map(function(it) { return Number(it.on_hand_cost || 0); });
-  var descriptions = top.map(function(it) {
-    return String(it.description || '').substring(0, 40);
-  });
+  var descriptions = top.map(function(it) { return String(it.description || '').substring(0, 40); });
 
   _mdash.charts.topValue = new Chart(canvas.getContext('2d'), {
     type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [{
-        data: values,
-        backgroundColor: '#1e3a5f',
-        borderRadius: 6
-      }]
-    },
+    data: { labels: labels, datasets: [{ data: values, backgroundColor: '#1e3a5f', borderRadius: 6 }] },
     options: {
       indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
+      animation: { duration: 1500, easing: 'easeOutQuart', delay: function(ctx) { return ctx.dataIndex * 100; } }, // ✅ ANIMATION
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -508,13 +466,7 @@ function mdashRenderTopValueChart() {
         }
       },
       scales: {
-        x: {
-          beginAtZero: true,
-          ticks: {
-            callback: function(v) { return erpPeso(v); },
-            font: { size: 10 }
-          }
-        },
+        x: { beginAtZero: true, ticks: { callback: function(v) { return erpPeso(v); }, font: { size: 10 } } },
         y: { ticks: { font: { size: 9, weight: '600' } } }
       }
     }
