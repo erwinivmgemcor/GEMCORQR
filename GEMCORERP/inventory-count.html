@@ -569,13 +569,14 @@
       </div>
     </div>
 
-    <div class="erp-card" style="padding:20px;">
+      <!-- ✅ IDINAGDAG ANG ID PARA MA-HIDE KAPAG HINDI ADMIN -->
+    <div class="erp-card" id="icReviewActionCard" style="padding:20px;">
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="small text-muted">
+        <div class="small text-muted" id="icReviewActionMessage">
           <i class="bi bi-info-circle me-1"></i>
           Reviewing as supervisor. Approve to auto-adjust stock, or reject to return for recount.
         </div>
-        <div>
+        <div id="icReviewActionButtons">
           <button class="btn btn-outline-danger me-2" onclick="icRejectCount()">
             <i class="bi bi-x-circle me-1"></i>Reject
           </button>
