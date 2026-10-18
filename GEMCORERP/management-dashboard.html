@@ -588,6 +588,52 @@
 /* Toast */
 .toast-container { z-index: 9999; }
 .erp-toast { background: var(--mdash-navy-light); color: #fff; }
+
+   /* ═══════════════════════════════════════════════════════════
+   PREMIUM ANIMATIONS & EFFECTS
+   ═══════════════════════════════════════════════════════════ */
+
+/* KPI Cards Hover Effect */
+.mdash-kpi {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+}
+.mdash-kpi:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(10, 22, 40, 0.12);
+  border-color: #cbd5e1;
+}
+
+/* Chart Cards Fade-in */
+.mdash-chart-card {
+  animation: slideUpFade 0.6s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.mdash-chart-card:nth-child(1) { animation-delay: 0.1s; }
+.mdash-chart-card:nth-child(2) { animation-delay: 0.2s; }
+.mdash-chart-card:nth-child(3) { animation-delay: 0.3s; }
+.mdash-chart-card:nth-child(4) { animation-delay: 0.4s; }
+
+@keyframes slideUpFade {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Custom Scrollbar for Table */
+.mdash-table-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
+.mdash-table-wrap::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+.mdash-table-wrap::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+.mdash-table-wrap::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Pulse Animation for Critical Alerts */
+@keyframes pulseRed {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+.alert-pulse {
+  animation: pulseRed 2s infinite;
+}
+   
 </style>
 
 <script src="erp-theme.js"></script>
