@@ -454,7 +454,6 @@ async function submitProcess() {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
 
   try {
-    // ═══ STEP 1: PREPARE UPDATES ═══
     var allComplete = true;
     var anyIssued = false;
     var preparedItems = [];
@@ -487,14 +486,6 @@ async function submitProcess() {
                       localStorage.getItem('ivm_username') || 
                       'WAREHOUSE';
 
-    console.log('[submitProcess] ============================================');
-    console.log('[submitProcess] v2.2 SUBMIT — ITEMS FIRST, DOCUMENT LAST');
-    console.log('[submitProcess] Items to update:', preparedItems.length);
-    console.log('[submitProcess] Target status:', newStatus);
-    console.log('[submitProcess] ============================================');
-
-    // ═══ STEP 2: UPDATE ITEMS FIRST ═══
-    // (para may issued_qty value na sa DB pag na-fire ang trigger)
     console.log('[submitProcess] STEP 1: Updating items FIRST...');
 
     var itemsUpdated = 0;
@@ -527,15 +518,10 @@ async function submitProcess() {
       }
     }
 
-    console.log('[submitProcess] Items updated:', itemsUpdated, '/', preparedItems.length);
-
     if (itemErrors.length > 0) {
       throw new Error('Failed to update items: ' + itemErrors.join(', '));
     }
 
-    // ═══ STEP 3: UPDATE DOCUMENT STATUS (triggers stock validation) ═══
-    // Ngayon na may issued_qty na sa DB, mag-fifire ang trigger
-    // at mag-vavalidate ng stock correctly
     console.log('[submitProcess] STEP 2: Updating document (trigger will validate stock)...');
 
     var docRes = await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(_process.docNo)), {
@@ -549,15 +535,12 @@ async function submitProcess() {
       })
     });
 
-    // ═══ IF DOCUMENT FAILS — ROLLBACK ITEMS ═══
     if (!docRes.ok) {
       var errText = await docRes.text();
       console.error('[submitProcess] ❌ Document update FAILED:', docRes.status, errText);
       
       console.warn('[submitProcess] ⏪ Rolling back', itemsUpdated, 'item updates...');
       
-      // Rollback items to original state
-      var rollbackCount = 0;
       for (var k = 0; k < preparedItems.length; k++) {
         var pi2 = preparedItems[k];
         try {
@@ -569,15 +552,11 @@ async function submitProcess() {
               remarks: pi2.originalRemarks
             })
           });
-          rollbackCount++;
         } catch(e) {
           console.warn('[submitProcess] Rollback failed for:', pi2.itemCode);
         }
       }
       
-      console.log('[submitProcess] ✅ Rollback complete:', rollbackCount, 'items reverted');
-      
-      // Parse error message for user
       var userFriendlyMsg = 'Failed to update document status';
       
       try {
@@ -597,16 +576,6 @@ async function submitProcess() {
                             'Please add stock in Stock Monitor before processing.\n\n' +
                             '(Items have been reverted automatically)';
         }
-        else if (pgCode === '23502') {
-          var colMatch = pgMessage.match(/column "(\w+)"/);
-          userFriendlyMsg = '⚠️ Database error: missing required field "' + (colMatch ? colMatch[1] : 'unknown') + '"';
-        }
-        else if (pgCode === '23503') {
-          userFriendlyMsg = '⚠️ Reference error: item code not found in inventory master';
-        }
-        else if (pgCode === '23505') {
-          userFriendlyMsg = '⚠️ Duplicate entry: this document may already be processed';
-        }
         else if (pgMessage) {
           userFriendlyMsg = '❌ ' + pgMessage;
         }
@@ -617,35 +586,16 @@ async function submitProcess() {
       throw new Error(userFriendlyMsg);
     }
 
-    // ═══ Success ═══
-    console.log('[submitProcess] ============================================');
-    console.log('[submitProcess] ✅ v2.2 SUBMIT COMPLETE');
-    console.log('[submitProcess] Document:', _process.docNo);
-    console.log('[submitProcess] Status:', newStatus);
-    console.log('[submitProcess] Items:', itemsUpdated);
-    console.log('[submitProcess] ============================================');
-        // ═══════════════════════════════════════════════════════════
-    // ✅ NEW: Update SOF used qty (if document has SOF#)
-    // ═══════════════════════════════════════════════════════════
-    var docSofNo = _process.doc ? _process.doc.sof_no : null;
+    console.log('[submitProcess] ✅ SUBMIT COMPLETE');
     
+    var docSofNo = _process.doc ? _process.doc.sof_no : null;
     if (docSofNo) {
-      console.log('[submitProcess] 📦 Document has SOF#:', docSofNo);
-      console.log('[submitProcess] Updating SOF used qty...');
-      
-      var sofUpdatedCount = 0;
-      var sofFailedCount = 0;
-      
       for (var sIdx = 0; sIdx < verifiedItems.length; sIdx++) {
         var sofItem = verifiedItems[sIdx];
-        
-        if (!sofItem.issuedQty || sofItem.issuedQty <= 0) {
-          console.log('[submitProcess] Skipping item (issuedQty=0):', sofItem.itemCode);
-          continue;
-        }
+        if (!sofItem.issuedQty || sofItem.issuedQty <= 0) continue;
         
         try {
-          var sofUpdateRes = await fetch(erpUrl('rpc/erp_sof_update_used_qty'), {
+          await fetch(erpUrl('rpc/erp_sof_update_used_qty'), {
             method: 'POST',
             headers: erpHeaders(),
             body: JSON.stringify({
@@ -659,33 +609,10 @@ async function submitProcess() {
               p_performed_by_fullname: currentUser
             })
           });
-          
-          if (sofUpdateRes.ok) {
-            var sofData = await sofUpdateRes.json();
-            if (sofData && sofData.success) {
-              sofUpdatedCount++;
-              console.log('[submitProcess] ✅ SOF updated:', sofItem.itemCode, '|', sofData.status);
-            } else {
-              sofFailedCount++;
-              console.warn('[submitProcess] ⚠️ SOF update failed:', sofItem.itemCode, sofData.error);
-            }
-          } else {
-            sofFailedCount++;
-            console.warn('[submitProcess] ⚠️ SOF update HTTP error:', sofItem.itemCode, sofUpdateRes.status);
-          }
         } catch(sofErr) {
-          sofFailedCount++;
           console.error('[submitProcess] SOF update exception:', sofItem.itemCode, sofErr);
         }
       }
-      
-      console.log('[submitProcess] 📊 SOF update summary:', sofUpdatedCount, 'updated,', sofFailedCount, 'failed');
-      
-      if (sofUpdatedCount > 0) {
-        erpShowToast('✅ SOF updated: ' + sofUpdatedCount + ' item(s)', 'success');
-      }
-    } else {
-      console.log('[submitProcess] No SOF# on document — skipping SOF update');
     }
 
     document.getElementById('successDocNo').textContent = _process.docNo;
@@ -703,7 +630,6 @@ async function submitProcess() {
     _process.isSubmitting = false;
   }
 }
-
 function cancelProcess() {
   if (!confirm('Cancel and return to queue?')) return;
   window.location.href = 'all-requests.html';
