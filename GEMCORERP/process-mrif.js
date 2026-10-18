@@ -72,15 +72,27 @@ async function processCheckHealth() {
 // LOAD DOCUMENT + ITEMS
 // ═══════════════════════════════════════════════════════════
 async function loadDocument() {
+  console.log("1. Starting loadDocument for:", _process.docNo);
+
   try {
+    console.log("2. Fetching document header...");
     var docRes = await erpFetch('documents', 'doc_no=eq.' + encodeURIComponent(_process.docNo) + '&limit=1');
+    
+    console.log("3. Document response:", docRes);
+
     if (!docRes || docRes.length === 0) {
+      console.error("❌ Document not found in database!");
       erpShowToast('Document not found', 'danger');
+      document.getElementById('docNoTitle').innerHTML = '<i class="bi bi-exclamation-triangle text-danger me-2"></i>Document Not Found';
       return;
     }
+    
     _process.doc = docRes[0];
 
+    console.log("4. Fetching document items...");
     var itemsRes = await erpFetch('doc_items', 'doc_no=eq.' + encodeURIComponent(_process.docNo) + '&order=line_no.asc');
+    
+    console.log("5. Items response:", itemsRes);
 
     _process.items = (itemsRes || []).map(function(it) {
       return {
@@ -95,7 +107,6 @@ async function loadDocument() {
         verified: false,
         selected: false,
         scanned: false,
-        // ═══ Store original values for rollback ═══
         originalQty: Number(it.issued_qty || 0),
         originalRemarks: it.remarks || 'PENDING'
       };
@@ -107,16 +118,25 @@ async function loadDocument() {
       }
     });
 
+    console.log("6. Rendering UI...");
     renderDocInfo();
     renderItems();
-    console.log('[Process] Loaded doc:', _process.docNo, 'items:', _process.items.length);
+    
+    console.log("7. ✅ Load complete!");
 
   } catch(err) {
-    console.error('[loadDocument]', err);
+    console.error('❌ [loadDocument] ERROR:', err);
     erpShowToast('Failed to load: ' + err.message, 'danger');
+    
+    // Ipakita ang error sa screen para hindi lang "Loading" ang nakikita
+    var tbody = document.getElementById('itemsBody');
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">' +
+        '<i class="bi bi-exclamation-triangle-fill fs-3 d-block mb-2"></i>' +
+        'Failed to load items: ' + erpEsc(err.message) + '</td></tr>';
+    }
   }
 }
-
 function renderDocInfo() {
   var doc = _process.doc;
 
