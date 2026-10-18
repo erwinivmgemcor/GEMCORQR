@@ -1151,10 +1151,13 @@ async function icApproveCount() {
   if (!_ic.currentSession) return;
 
   var countNo = _ic.currentSession.count_no;
+   // ✅ SMART FILTER: Isama lang kung na-scan talaga at may variance.
+  // Ibig sabihin, kung hindi na-scan (scan_count = 0), hindi siya mababago.
   var varianceItems = _ic.currentItems.filter(function(it) {
-    return Math.abs(Number(it.variance || 0)) > 0.0001;
+    var isCounted = (it.scan_count > 0 || Number(it.counted_qty) > 0);
+    var hasVariance = Math.abs(Number(it.variance || 0)) > 0.0001;
+    return isCounted && hasVariance;
   });
-
   var msg = 'Approve this count and adjust stock?\n\n';
   msg += 'Count No.: ' + countNo + '\n';
   msg += 'Items to adjust: ' + varianceItems.length + '\n\n';
@@ -1255,9 +1258,63 @@ async function icRejectCount() {
   reason = String(reason).trim();
   if (!reason) { icShowToast('Rejection reason is required', 'warning'); return; }
 
+  var isApproved = _ic.currentSession.status === 'APPROVED';
+
+  if (isApproved) {
+    if (!confirm('⚠️ WARNING: This count is already APPROVED and stock has been adjusted.\n\nRejecting it will REVERSE the stock adjustments to restore the original quantities.\n\nContinue?')) {
+      return;
+    }
+  }
+
   try {
     var currentUser = localStorage.getItem('ivm_userFullname') || 'SUPERVISOR';
 
+    // ✅ KUNG APPROVED, I-REVERSE ANG MGA STOCK ADJUSTMENTS
+    if (isApproved) {
+      var varianceItems = _ic.currentItems.filter(function(it) {
+        var isCounted = (it.scan_count > 0 || Number(it.counted_qty) > 0);
+        return isCounted && Math.abs(Number(it.variance || 0)) > 0.0001;
+      });
+
+      for (var i = 0; i < varianceItems.length; i++) {
+        var item = varianceItems[i];
+        var oldSystemQty = Number(item.system_qty || 0); // Ito ang dapat ibalik
+        var currentQty = Number(item.counted_qty || 0);  // Ito ang kasalukuyang on_hand
+        var reverseVariance = oldSystemQty - currentQty; // E.g., 5 - 10 = -5
+
+        // 1. Ibalik ang erp_items.on_hand sa dating system_qty
+        await fetch(erpUrl('erp_items?item_code=eq.' + encodeURIComponent(item.item_code)), {
+          method: 'PATCH',
+          headers: erpHeaders(),
+          body: JSON.stringify({
+            on_hand: oldSystemQty,
+            updated_at: new Date().toISOString(),
+            updated_by: currentUser
+          })
+        });
+
+        // 2. Mag-log ng reversal sa stock_ledger
+        await fetch(erpUrl('erp_stock_ledger'), {
+          method: 'POST',
+          headers: erpHeaders(),
+          body: JSON.stringify([{
+            item_code: item.item_code,
+            transaction_type: 'ADJUSTMENT',
+            qty_in: reverseVariance > 0 ? reverseVariance : 0,
+            qty_out: reverseVariance < 0 ? Math.abs(reverseVariance) : 0,
+            balance_before: currentQty,
+            balance_after: oldSystemQty,
+            reference_doc: 'REVERSE-' + _ic.currentSession.count_no,
+            transaction_date: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            remarks: 'Reversal for rejected count: ' + reason
+          }])
+        });
+      }
+      console.log('Reversed stock adjustments for', varianceItems.length, 'items');
+    }
+
+    // 3. I-update ang session status
     await fetch(erpUrl('erp_inventory_counts?id=eq.' + _ic.currentSession.id), {
       method: 'PATCH',
       headers: erpHeaders(),
@@ -1270,10 +1327,12 @@ async function icRejectCount() {
       })
     });
 
-    icShowToast('Count rejected', 'info');
+    icShowToast('Count rejected' + (isApproved ? ' and stock restored!' : ''), 'info');
     setTimeout(function() { icBackToList(); }, 1000);
+
   } catch(err) {
-    icShowToast('Failed: ' + err.message, 'danger');
+    console.error('[icRejectCount]', err);
+    icShowToast('Failed to reject: ' + err.message, 'danger');
   }
 }
 
