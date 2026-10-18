@@ -535,58 +535,40 @@ async function submitMrr() {
   }
 
   var drNo = document.getElementById('mrrDrNo').value.trim();
-  if (!drNo) {
-    erpShowToast('DR No. / S.I. No. is required', 'warning');
-    document.getElementById('mrrDrNo').focus();
-    return;
-  }
+  if (!drNo) { erpShowToast('DR No. / S.I. No. is required', 'warning'); return; }
   _mrrState.drNo = drNo;
 
   var receivingDate = document.getElementById('mrrReceivingDate').value;
-  if (!receivingDate) {
-    erpShowToast('Receiving Date is required', 'warning');
-    return;
-  }
+  if (!receivingDate) { erpShowToast('Receiving Date is required', 'warning'); return; }
   _mrrState.receivingDate = receivingDate;
 
   var receivingSite = document.getElementById('mrrReceivingSite').value.trim();
-  if (!receivingSite) {
-    erpShowToast('Receiving Site is required', 'warning');
-    return;
-  }
-  _mrrState.receivingSite = receivingSite;
+  if (!receivingSite) { erpShowToast('Receiving Site is required', 'warning'); return; }
 
   var vendor = document.getElementById('mrrVendor').value.trim();
-  _mrrState.vendor = vendor;
-
   var prfNo = document.getElementById('mrrPrfNo').value.trim();
+  var sofNo = document.getElementById('mrrSofNoDisplay').value.trim() || document.getElementById('mrrSofNo').value.trim();
+  
+  _mrrState.vendor = vendor;
   _mrrState.prfNo = prfNo;
-
-  // ✅ Get SOF No. from either field (step 1 or step 2)
-  var sofStep1 = document.getElementById('mrrSofNo');
-  var sofStep2 = document.getElementById('mrrSofNoDisplay');
-  var sofNo = '';
-  if (sofStep2 && sofStep2.value.trim()) sofNo = sofStep2.value.trim();
-  else if (sofStep1 && sofStep1.value.trim()) sofNo = sofStep1.value.trim();
   _mrrState.sofNo = sofNo;
 
-  if (_mrrState.items.length === 0) {
-    erpShowToast('No items to submit', 'warning');
-    return;
-  }
+  if (_mrrState.items.length === 0) { erpShowToast('No items to submit', 'warning'); return; }
 
   var validItems = [];
   for (var i = 0; i < _mrrState.items.length; i++) {
     var it = _mrrState.items[i];
-    if (!it.itemCode || !it.itemCode.trim()) {
-      erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning');
-      return;
-    }
-    if (it.issuedQty < 0) {
-      erpShowToast('Item #' + (i + 1) + ' has invalid qty', 'warning');
-      return;
-    }
-    validItems.push(it);
+    if (!it.itemCode || !it.itemCode.trim()) { erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning'); return; }
+    if (it.issuedQty < 0) { erpShowToast('Item #' + (i + 1) + ' has invalid qty', 'warning'); return; }
+    
+    validItems.push({
+      item_code: it.itemCode,
+      description: it.description,
+      qty: it.requestedQty,
+      atl_qty: it.issuedQty,
+      unit: it.unit,
+      remarks: it.remarks || (it.issuedQty >= it.requestedQty ? 'COMPLETE' : 'PARTIAL')
+    });
   }
 
   if (!confirm('Create MRR with ' + validItems.length + ' item(s)?')) return;
@@ -600,184 +582,74 @@ async function submitMrr() {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
 
   try {
-    // ─── Step 1: RPC for doc number ───
-    console.log('[Submit MRR] Calling RPC...');
+    // 1. Kunin ang susunod na Doc No
     var rpcRes = await fetch(erpUrl('rpc/get_next_doc_number'), {
       method: 'POST',
       headers: erpHeaders(),
       body: JSON.stringify({ p_prefix: 'MRR' })
     });
 
-    if (!rpcRes.ok) throw new Error('RPC failed: ' + rpcRes.status);
+    if (!rpcRes.ok) throw new Error('RPC Doc Num failed');
     var nextNum = await rpcRes.json();
-    if (!nextNum || typeof nextNum !== 'number') {
-      throw new Error('Invalid RPC response');
-    }
-
     var padded = String(nextNum).padStart(7, '0');
     var docNo = 'MRR' + padded;
-    console.log('[Submit MRR] Doc No:', docNo, '| SOF:', sofNo);
 
-    // ─── Step 2: Determine overall status ───
-    var allComplete = validItems.every(function(it) {
-      return it.issuedQty >= it.requestedQty && it.requestedQty > 0;
-    });
-    var anyReceived = validItems.some(function(it) {
-      return it.issuedQty > 0;
-    });
+    var currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
 
-    var overallStatus = (allComplete && anyReceived) ? 'COMPLETED' :
-                        (anyReceived ? 'PARTIAL' : 'PENDING');
+    var docPayload = {
+      requestor: _mrrState.preparedBy,
+      department: '',
+      po_no: _mrrState.poNo || '',
+      sof_no: _mrrState.sofNo || '',
+      prf_no: _mrrState.prfNo,
+      vendor: _mrrState.vendor,
+      client_name: _mrrState.client || '',
+      dr_no: _mrrState.drNo,
+      receiving_site: _mrrState.receivingSite,
+      receiving_date: _mrrState.receivingDate,
+      date_prepared: new Date().toISOString().split('T')[0],
+      prepared_by: _mrrState.preparedBy
+    };
 
-    console.log('[Submit MRR] Final status:', overallStatus);
-
-    // ─── Step 3: Insert document ───
-    var docRes = await fetch(erpUrl('documents'), {
+    // 2. Tawagin ang RPC para i-save lahat (Doc, Items, Stock, Ledger)
+    var processRes = await fetch(erpUrl('rpc/erp_submit_mrr'), {
       method: 'POST',
-      headers: erpHeaders({ 'Prefer': 'return=representation' }),
+      headers: erpHeaders(),
       body: JSON.stringify({
-        doc_no: docNo,
-        doc_type: 'MRR',
-        status: 'PENDING',
-        is_bal: false,
-        requestor: _mrrState.preparedBy,
-        department: '',
-        po_no: _mrrState.poNo || '',
-        sof_no: _mrrState.sofNo || '',         // ✅ NEW
-        prf_no: _mrrState.prfNo,
-        vendor: _mrrState.vendor,
-        client_name: _mrrState.client || '',
-        dr_no: _mrrState.drNo,
-        receiving_site: _mrrState.receivingSite,
-        receiving_date: _mrrState.receivingDate,
-        date_prepared: new Date().toISOString().split('T')[0],
-        prepared_by: _mrrState.preparedBy,
-        item_count: validItems.length,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        p_doc_no: docNo,
+        p_doc_payload: docPayload,
+        p_items: validItems,
+        p_processed_by: currentUser
       })
     });
 
-    if (!docRes.ok) {
-      var errText = await docRes.text();
-      throw new Error('Insert doc failed: ' + docRes.status + ' ' + errText);
+    if (!processRes.ok) {
+      var errText = await processRes.text();
+      throw new Error('RPC Error: ' + processRes.status + ' ' + errText);
     }
+    
+    var data = await processRes.json();
+    if (!data || !data.success) throw new Error(data.error || 'Unknown error');
 
-    var docArr = await docRes.json();
-    var doc = docArr[0];
-    if (!doc || !doc.id) throw new Error('No document ID returned');
-
-    console.log('[Submit MRR] Document inserted:', docNo);
-
-    // ─── Step 4: Insert doc_items ───
-    var itemPayloads = validItems.map(function(it, idx) {
-      var itemStatus = it.issuedQty >= it.requestedQty ? 'COMPLETE' :
-                       (it.issuedQty > 0 ? 'PARTIAL' : 'PENDING');
-      return {
-        document_id: doc.id,
-        doc_no: docNo,
-        line_no: idx + 1,
-        item_code: it.itemCode,
-        description: it.description,
-        requested_qty: it.requestedQty || it.issuedQty,
-        issued_qty: it.issuedQty,
-        unit: it.unit,
-        remarks: it.remarks || itemStatus,
-        row_index: idx + 1
-      };
-    });
-
-    var itemsRes = await fetch(erpUrl('doc_items'), {
-      method: 'POST',
-      headers: erpHeaders(),
-      body: JSON.stringify(itemPayloads)
-    });
-
-    if (!itemsRes.ok) {
-      var itemsErrText = await itemsRes.text();
-      throw new Error('Insert items failed: ' + itemsRes.status + ' ' + itemsErrText);
-    }
-
-    console.log('[Submit MRR] Items inserted:', validItems.length);
-
-        // ═══════════════════════════════════════════════════════════
-    // ✅ STEP 4.5: SOF AUTO-ALLOCATION (NEW)
-    // ═══════════════════════════════════════════════════════════
+    // 3. SOF Allocation (kung meron)
     var sofAllocationResult = null;
     if (_mrrState.sofNo && _mrrState.sofNo.trim()) {
       try {
-        console.log('[Submit MRR] Calling SOF auto-allocate for:', _mrrState.sofNo);
-        
         var sofRes = await fetch(erpUrl('rpc/erp_sof_auto_allocate_on_mrr'), {
           method: 'POST',
           headers: erpHeaders(),
           body: JSON.stringify({
             p_doc_no: docNo,
-            p_performed_by: _mrrState.preparedBy,
-            p_performed_by_fullname: _mrrState.preparedBy
+            p_performed_by: currentUser,
+            p_performed_by_fullname: currentUser
           })
         });
-
-        if (sofRes.ok) {
-          sofAllocationResult = await sofRes.json();
-          console.log('[Submit MRR] ✅ SOF auto-allocation:', sofAllocationResult);
-
-          if (!sofAllocationResult.success) {
-            console.warn('[Submit MRR] ⚠️ SOF allocation warning:', sofAllocationResult.error);
-            erpShowToast('⚠️ MRR created, but SOF allocation: ' + sofAllocationResult.error, 'warning');
-          } else {
-            console.log('[Submit MRR] ✅ SOF allocated:',
-              sofAllocationResult.allocated_count, 'items',
-              '| Errors:', sofAllocationResult.error_count);
-            
-            if (sofAllocationResult.error_count > 0) {
-              erpShowToast('⚠️ MRR created. SOF: ' + 
-                sofAllocationResult.allocated_count + ' allocated, ' + 
-                sofAllocationResult.error_count + ' failed', 'warning');
-            }
-          }
-        } else {
-          console.warn('[Submit MRR] ⚠️ SOF RPC failed:', sofRes.status);
-          erpShowToast('⚠️ MRR created, but SOF allocation failed', 'warning');
-        }
-      } catch(sofErr) {
-        console.error('[Submit MRR] SOF allocation error:', sofErr);
-        erpShowToast('⚠️ MRR created, but SOF allocation error: ' + sofErr.message, 'warning');
-      }
-    } else {
-      console.log('[Submit MRR] No SOF# provided — skipping allocation');
+        if (sofRes.ok) sofAllocationResult = await sofRes.json();
+      } catch(sofErr) { console.warn(sofErr); }
     }
 
-    // ─── Step 5: PATCH documents to final status ───
-    if (overallStatus !== 'PENDING') {
-      console.log('[Submit MRR] Patching status to:', overallStatus);
-
-      var patchRes = await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(docNo)), {
-        method: 'PATCH',
-        headers: erpHeaders({ 'Prefer': 'return=representation' }),
-        body: JSON.stringify({
-          status: overallStatus,
-          processed_by: _mrrState.preparedBy,
-          processed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-      });
-
-      if (!patchRes.ok) {
-        var patchErrText = await patchRes.text();
-        console.error('[Submit MRR] PATCH failed:', patchErrText);
-        erpShowToast('⚠️ MRR created but status update may have failed', 'warning');
-      } else {
-        console.log('[Submit MRR] Status patched to:', overallStatus);
-      }
-    }
-
-       // ✅ Success toast with SOF context
-    var successMsg = '✅ MRR created: ' + docNo + ' (' + overallStatus + ')';
-    if (sofAllocationResult && sofAllocationResult.success) {
-      successMsg += ' · SOF allocated: ' + sofAllocationResult.allocated_count;
-    }
-    erpShowToast(successMsg, 'success');
+    // Success!
+    erpShowToast('✅ MRR created: ' + docNo + ' (' + data.status + ')', 'success');
     showSuccessModal(docNo, sofAllocationResult);
 
   } catch(err) {
@@ -789,6 +661,7 @@ async function submitMrr() {
     btn.innerHTML = originalHtml;
   }
 }
+
 
 // ═══════════════════════════════════════════════════════════
 // SUCCESS MODAL
