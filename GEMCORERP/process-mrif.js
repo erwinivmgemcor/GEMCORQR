@@ -36,19 +36,25 @@ document.addEventListener('DOMContentLoaded', function() {
   processCheckHealth();
   loadDocument();
 
-  document.getElementById('manualItemInput').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      manualItemVerify();
-    }
-  });
+  var manualInput = document.getElementById('manualItemInput');
+  if (manualInput) {
+    manualInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        manualItemVerify();
+      }
+    });
+  }
 
-  document.getElementById('qtyModalInput').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      confirmQty();
-    }
-  });
+  var qtyModalInput = document.getElementById('qtyModalInput');
+  if (qtyModalInput) {
+    qtyModalInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        confirmQty();
+      }
+    });
+  }
 });
 
 async function processCheckHealth() {
@@ -72,27 +78,15 @@ async function processCheckHealth() {
 // LOAD DOCUMENT + ITEMS
 // ═══════════════════════════════════════════════════════════
 async function loadDocument() {
-  console.log("1. Starting loadDocument for:", _process.docNo);
-
   try {
-    console.log("2. Fetching document header...");
     var docRes = await erpFetch('documents', 'doc_no=eq.' + encodeURIComponent(_process.docNo) + '&limit=1');
-    
-    console.log("3. Document response:", docRes);
-
     if (!docRes || docRes.length === 0) {
-      console.error("❌ Document not found in database!");
       erpShowToast('Document not found', 'danger');
-      document.getElementById('docNoTitle').innerHTML = '<i class="bi bi-exclamation-triangle text-danger me-2"></i>Document Not Found';
       return;
     }
-    
     _process.doc = docRes[0];
 
-    console.log("4. Fetching document items...");
     var itemsRes = await erpFetch('doc_items', 'doc_no=eq.' + encodeURIComponent(_process.docNo) + '&order=line_no.asc');
-    
-    console.log("5. Items response:", itemsRes);
 
     _process.items = (itemsRes || []).map(function(it) {
       return {
@@ -118,25 +112,16 @@ async function loadDocument() {
       }
     });
 
-    console.log("6. Rendering UI...");
     renderDocInfo();
     renderItems();
-    
-    console.log("7. ✅ Load complete!");
+    console.log('[Process] Loaded doc:', _process.docNo, 'items:', _process.items.length);
 
   } catch(err) {
-    console.error('❌ [loadDocument] ERROR:', err);
+    console.error('[loadDocument]', err);
     erpShowToast('Failed to load: ' + err.message, 'danger');
-    
-    // Ipakita ang error sa screen para hindi lang "Loading" ang nakikita
-    var tbody = document.getElementById('itemsBody');
-    if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">' +
-        '<i class="bi bi-exclamation-triangle-fill fs-3 d-block mb-2"></i>' +
-        'Failed to load items: ' + erpEsc(err.message) + '</td></tr>';
-    }
   }
 }
+
 function renderDocInfo() {
   var doc = _process.doc;
 
@@ -193,9 +178,9 @@ function renderItems() {
       '<td class="text-center">' + erpEsc(it.unit) + '</td>' +
       '<td>' +
         '<input type="text" class="form-control form-control-sm item-remarks" data-idx="' + idx + '" value="' + erpEsc(it.remarks === 'PENDING' || it.remarks === 'SERVED' ? '' : it.remarks) + '" placeholder="Optional" onchange="updateRemarks(' + idx + ', this.value)">' +
-       <button class="btn btn-sm btn-outline-primary w-100 mt-1 py-1" style="font-size: 0.75rem;" onclick="openQtyModal(' + idx + ')">
-  <i class="bi bi-pencil-square me-1"></i> Edit
-</button>
+       '<button class="btn btn-sm btn-outline-primary w-100 mt-1 py-1" style="font-size: 0.75rem;" onclick="openQtyModal(' + idx + ')">' +
+          '<i class="bi bi-pencil-square me-1"></i> Edit' +
+        '</button>' +
       '</td>' +
     '</tr>';
   });
@@ -315,6 +300,7 @@ function updateScanStatus(msg, type) {
 
 function manualItemVerify() {
   var input = document.getElementById('manualItemInput');
+  if (!input) return;
   var code = (input.value || '').trim();
   if (!code) return;
   input.value = '';
@@ -454,7 +440,7 @@ function updateProgress() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT — v2.2: ITEMS FIRST, document last + rollback
+// SUBMIT
 // ═══════════════════════════════════════════════════════════
 async function submitProcess() {
   if (_process.isSubmitting) return;
@@ -582,7 +568,6 @@ async function submitProcess() {
       try {
         var errJson = JSON.parse(errText);
         var pgMessage = errJson.message || '';
-        var pgCode = errJson.code || '';
         
         if (pgMessage.indexOf('Insufficient stock') !== -1) {
           var itemMatch = pgMessage.match(/item (\S+?)\./);
@@ -650,6 +635,7 @@ async function submitProcess() {
     _process.isSubmitting = false;
   }
 }
+
 function cancelProcess() {
   if (!confirm('Cancel and return to queue?')) return;
   window.location.href = 'all-requests.html';
