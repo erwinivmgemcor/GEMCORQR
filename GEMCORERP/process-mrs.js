@@ -485,7 +485,7 @@ async function submitProcess() {
     return;
   }
 
-  if (!confirm('Submit ' + verifiedItems.length + ' item(s)?')) return;
+  if (!confirm('Submit ' + verifiedItems.length + ' item(s)?\n\nThis will add the actual returned quantities to stock.')) return;
 
   _process.isSubmitting = true;
   var btn = document.getElementById('btnSubmitProcess');
@@ -496,16 +496,14 @@ async function submitProcess() {
   try {
     var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
     
-    // Prepare payload
     var itemsPayload = verifiedItems.map(function(it) {
       return {
         id: it.id,
-        issued_qty: it.issuedQty,
+        issued_qty: it.issuedQty, // ✅ Actual returned qty na na-verify
         remarks: it.remarks || ''
       };
     });
 
-    // ✅ Tawagin ang RPC para i-update ang items at magdagdag ng stock
     var res = await fetch(erpUrl('rpc/erp_process_mrs_verification'), {
       method: 'POST',
       headers: erpHeaders(),
@@ -528,11 +526,6 @@ async function submitProcess() {
 
     document.getElementById('successDocNo').textContent = _process.docNo;
     document.getElementById('successStatus').textContent = data.status;
-
-    if (data.status === 'PARTIAL') {
-      var successStatusEl = document.getElementById('successStatus');
-      successStatusEl.innerHTML += '<br><br><span class="text-warning fw-bold"><i class="bi bi-info-circle me-1"></i>Note: This MRS is still PARTIAL. Please process the remaining items to complete.</span>';
-    }
 
     erpShowToast('✅ MRS Processed: ' + data.status, 'success');
     
