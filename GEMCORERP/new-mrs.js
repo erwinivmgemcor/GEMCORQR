@@ -530,13 +530,13 @@ async function submitMrs() {
   for (var i = 0; i < rows.length; i++) {
     var row = rows[i];
     var codeEl = row.querySelector('.item-code-input');
+    if (!codeEl) continue;
+
+    var code = codeEl.value.trim();
     var descEl = row.querySelector('#mrsItemDesc' + i);
     var qtyEl = row.querySelector('.item-qty-input');
     var unitEl = row.querySelector('#mrsItemUnit' + i);
     
-    if (!codeEl) continue;  // Skip empty rows
-
-    var code = codeEl.value.trim();
     var desc = descEl ? descEl.value.trim() : '';
     var qtyReturned = qtyEl ? (parseFloat(qtyEl.value) || 0) : 0;
     var unit = unitEl ? unitEl.value : 'PIECE';
@@ -549,11 +549,12 @@ async function submitMrs() {
     }
 
     validItems.push({
-      code: code,
+      item_code: code,
       description: desc,
-      qtyReturned: qtyReturned,
+      qty: qtyReturned,
+      atl_qty: qtyReturned, // ✅ Sa MRS, ang Requested at Actual ay pareho (warehouse mag-a-verify later kung babaguhin)
       unit: unit,
-      remarks: ''
+      remarks: 'PENDING'
     });
   }
 
@@ -573,79 +574,50 @@ async function submitMrs() {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
 
   try {
-    // Step 1: RPC for doc number
+    // 1. Kunin ang susunod na Doc No
     var rpcRes = await fetch(erpUrl('rpc/get_next_doc_number'), {
       method: 'POST',
       headers: erpHeaders(),
       body: JSON.stringify({ p_prefix: 'MRS' })
     });
 
-    if (!rpcRes.ok) throw new Error('RPC failed');
+    if (!rpcRes.ok) throw new Error('RPC Doc Num failed');
     var nextNum = await rpcRes.json();
     var padded = String(nextNum).padStart(4, '0');
     var docNo = 'MRS' + padded;
 
-    console.log('[Submit MRS] Doc No:', docNo);
+    var currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'PRODUCTION';
 
-    // Step 2: Insert document (status = PENDING)
-    var docRes = await fetch(erpUrl('documents'), {
+    var docPayload = {
+      requestor: _mrsState.requestor,
+      department: department,
+      jo_no: _mrsState.joNo,
+      gem_so_no: _mrsState.gemSoNo,
+      client_name: _mrsState.clientName,
+      project: _mrsState.project,
+      date_prepared: new Date().toISOString().split('T')[0],
+      prepared_by: _mrsState.requestor
+    };
+
+    // 2. Tawagin ang RPC para i-save lahat
+    var processRes = await fetch(erpUrl('rpc/erp_submit_mrs'), {
       method: 'POST',
-      headers: erpHeaders({ 'Prefer': 'return=representation' }),
+      headers: erpHeaders(),
       body: JSON.stringify({
-        doc_no: docNo,
-        doc_type: 'MRS',
-        status: 'PENDING',                    // ✅ PENDING (hindi COMPLETED)
-        is_bal: false,
-        requestor: _mrsState.requestor,
-        department: department,
-        jo_no: _mrsState.joNo,
-        gem_so_no: _mrsState.gemSoNo,
-        client_name: _mrsState.clientName,
-        project: _mrsState.project,
-        date_prepared: new Date().toISOString().split('T')[0],   // ✅ FIX
-        item_count: validItems.length,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        p_doc_no: docNo,
+        p_doc_payload: docPayload,
+        p_items: validItems,
+        p_processed_by: currentUser
       })
     });
 
-    if (!docRes.ok) {
-      var errText = await docRes.text();
-      throw new Error('Insert doc failed: ' + docRes.status + ' ' + errText);
+    if (!processRes.ok) {
+      var errText = await processRes.text();
+      throw new Error('RPC Error: ' + processRes.status + ' ' + errText);
     }
-
-    var docArr = await docRes.json();
-    var doc = docArr[0];
-    if (!doc || !doc.id) throw new Error('No document ID returned');
-
-    // Step 3: Insert items (issued_qty = 0, waiting for verification)
-    var itemPayloads = validItems.map(function(it, idx) {
-      return {
-        document_id: doc.id,
-        doc_no: docNo,
-        line_no: idx + 1,
-        item_code: it.code,
-        description: it.description,
-        requested_qty: it.qtyReturned,       // Qty Returned = Requested Qty
-        issued_qty: 0,                        // ✅ 0 — warehouse pa mag-verify
-        unit: it.unit,
-        remarks: 'PENDING',                   // ✅ PENDING
-        row_index: idx + 1
-      };
-    });
-
-    var itemsRes = await fetch(erpUrl('doc_items'), {
-      method: 'POST',
-      headers: erpHeaders(),
-      body: JSON.stringify(itemPayloads)
-    });
-
-    if (!itemsRes.ok) {
-      var itemsErrText = await itemsRes.text();
-      throw new Error('Insert items failed: ' + itemsRes.status + ' ' + itemsErrText);
-    }
-
-    console.log('[Submit MRS] Items inserted:', validItems.length);
+    
+    var data = await processRes.json();
+    if (!data || !data.success) throw new Error(data.error || 'Unknown error');
 
     erpShowToast('✅ MRS created: ' + docNo + ' (PENDING — pending warehouse verification)', 'success');
     showSuccessModal(docNo);
@@ -659,7 +631,6 @@ async function submitMrs() {
     btn.innerHTML = originalHtml;
   }
 }
-
 function showSuccessModal(docNo) {
   document.getElementById('successDocNo').textContent = docNo;
 
