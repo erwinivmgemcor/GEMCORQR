@@ -15,7 +15,6 @@ var _mrsState = {
 };
 
 var _mrsInventoryCache = null;
-var _mrsInventoryPromise = null;
 var _mrsSearchTimers = {};
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -89,6 +88,7 @@ async function loadUserDepartment() {
 async function preloadInventory() {
   if (_mrsInventoryCache) return;
   try {
+    console.log('[Manual MRS v2.0] Loading inventory...');
     if (typeof erpGetInventoryListForDropdown === 'function') {
       _mrsInventoryCache = await erpGetInventoryListForDropdown();
     } else {
@@ -110,8 +110,9 @@ async function preloadInventory() {
         return { code: r.item_code, description: r.description || '', unit: r.base_unit || 'PIECE', category: r.category || '' };
       });
     }
+    console.log('[Manual MRS v2.0] ✅ Inventory loaded:', _mrsInventoryCache.length);
   } catch(err) {
-    console.warn('[Manual MRS] Load inventory failed:', err.message);
+    console.warn('[Manual MRS v2.0] Failed:', err.message);
     _mrsInventoryCache = [];
   }
 }
@@ -142,16 +143,18 @@ function renderItems() {
   _mrsState.items.forEach(function(it, idx) {
     html += '<tr data-idx="' + idx + '">' +
       '<td class="text-center">' + (idx + 1) + '</td>' +
-      '<td style="position:relative;">' +
-        '<input type="text" class="form-control form-control-sm item-code-input" ' +
-          'id="mrsItemCode' + idx + '" ' +
-          'value="' + erpEsc(it.itemCode) + '" ' +
-          'placeholder="Type to search..." ' +
-          'autocomplete="off" ' +
-          'oninput="onMrsItemCodeInput(' + idx + ', this.value)" ' +
-          'onfocus="onMrsItemCodeInput(' + idx + ', this.value)" ' +
-          'onblur="onMrsItemCodeBlur(' + idx + ')">' +
-        '<div class="item-search-dropdown d-none" id="mrsDropdown' + idx + '"></div>' +
+      '<td>' +
+        '<div class="item-search-wrap">' +
+          '<input type="text" class="form-control form-control-sm item-code-input" ' +
+            'id="mrsItemCode' + idx + '" ' +
+            'value="' + erpEsc(it.itemCode) + '" ' +
+            'placeholder="Type to search..." ' +
+            'autocomplete="off" ' +
+            'oninput="onMrsItemCodeInput(' + idx + ', this.value)" ' +
+            'onfocus="onMrsItemCodeInput(' + idx + ', this.value)" ' +
+            'onblur="onMrsItemCodeBlur(' + idx + ')">' +
+          '<div class="item-search-dropdown d-none" id="mrsDropdown' + idx + '"></div>' +
+        '</div>' +
       '</td>' +
       '<td><input type="text" class="form-control form-control-sm" ' +
         'id="mrsItemDesc' + idx + '" ' +
@@ -195,7 +198,6 @@ function onMrsItemCodeInput(idx, value) {
   if (!term || term.length < 2) { dropdown.classList.add('d-none'); return; }
 
   dropdown.innerHTML = '<div class="item-search-item muted"><i class="bi bi-hourglass-split me-2"></i>Searching...</div>';
-  _positionMrsDropdown(dropdown, input);
   dropdown.classList.remove('d-none');
 
   _mrsSearchTimers[idx] = setTimeout(function() { _mrsSearchItems(idx, term); }, 200);
@@ -224,11 +226,9 @@ function _mrsSearchItems(idx, term) {
     html += '<div class="item-search-item" onmousedown="event.preventDefault();selectMrsItem(' + idx + ', \'' + safeCode + '\', \'' + safeDesc + '\', \'' + safeUnit + '\')">' +
       '<div class="item-code">' + erpEsc(it.code) + '</div>' +
       '<div class="item-desc">' + erpEsc(String(it.description).substring(0, 100)) + '</div>' +
-      '<div class="item-meta"><span class="badge bg-light text-dark">' + erpEsc(it.unit) + '</span></div>' +
     '</div>';
   });
   dropdown.innerHTML = html;
-  _positionMrsDropdown(dropdown, input);
   dropdown.classList.remove('d-none');
 }
 
@@ -260,28 +260,6 @@ function onMrsItemCodeBlur(idx) {
     var dropdown = document.getElementById('mrsDropdown' + idx);
     if (dropdown) dropdown.classList.add('d-none');
   }, 200);
-}
-
-function _positionMrsDropdown(dropdown, input) {
-  var rect = input.getBoundingClientRect();
-  var spaceBelow = window.innerHeight - rect.bottom;
-  var spaceAbove = rect.top;
-  var width = Math.max(rect.width, 400);
-  var maxWidth = window.innerWidth - rect.left - 20;
-  if (width > maxWidth) width = maxWidth;
-  dropdown.style.position = 'fixed';
-  dropdown.style.left = rect.left + 'px';
-  dropdown.style.width = width + 'px';
-  dropdown.style.zIndex = '99999';
-  if (spaceBelow < 320 && spaceAbove > spaceBelow) {
-    dropdown.style.top = 'auto';
-    dropdown.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
-    dropdown.style.maxHeight = Math.min(spaceAbove - 20, 320) + 'px';
-  } else {
-    dropdown.style.bottom = 'auto';
-    dropdown.style.top = (rect.bottom + 4) + 'px';
-    dropdown.style.maxHeight = Math.min(spaceBelow - 20, 320) + 'px';
-  }
 }
 
 async function submitMrs() {
