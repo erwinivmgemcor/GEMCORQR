@@ -207,7 +207,34 @@ async function lookupPoNo() {
       };
     });
 
-    renderItems();
+       renderItems();
+
+    // ✅ IPAKITA ANG FORM KAPAG MAY NAKITANG PO
+    var step2 = document.getElementById('step2Card');
+    var step3 = document.getElementById('step3Card');
+    var step4 = document.getElementById('step4Card');
+    if (step2) step2.style.display = 'block';
+    if (step3) step3.style.display = 'block';
+    if (step4) step4.style.display = 'block';
+
+    // I-restore yung table view para sa items
+    var itemsTable = document.querySelector('#step3Card .table-responsive');
+    if (itemsTable) {
+      itemsTable.innerHTML = '<table class="erp-table" id="itemsTable">' +
+        '<thead><tr>' +
+          '<th style="width:5%">#</th>' +
+          '<th style="width:20%">Item Code</th>' +
+          '<th style="width:25%">Description</th>' +
+          '<th style="width:9%" class="text-center">Req Qty</th>' +
+          '<th style="width:9%" class="text-center">ATL Qty</th>' +
+          '<th style="width:8%" class="text-center">Unit</th>' +
+          '<th style="width:14%">Remarks</th>' +
+          '<th style="width:6%"></th>' +
+        '</tr></thead>' +
+        '<tbody id="itemsBody"></tbody>' +
+      '</table>';
+      renderItems();
+    }
 
     var sourceLabel = source === 'po_cache' ? ' <em>(from PO cache)</em>' : '';
     statusEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> PO No. found!</span>';
@@ -234,6 +261,12 @@ async function lookupPoNo() {
 // ITEMS MANAGEMENT
 // ═══════════════════════════════════════════════════════════
 function addItemRow() {
+  // ✅ HARANGIN KUNG WALANG PO
+  if (!_mrrState.poNo) {
+    erpShowToast('Please lookup a valid PO No. first. For manual entry, use the Manual MRR page.', 'warning');
+    return;
+  }
+  
   _mrrState.items.push({
     itemCode: '',
     description: '',
