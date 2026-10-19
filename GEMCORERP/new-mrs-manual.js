@@ -128,20 +128,14 @@ async function preloadInventory() {
   }
 }
 
-function addItemRow() {
-  _mrsState.items.push({
-    itemCode: '',
-    description: '',
-    qtyReturned: 0,
-    unit: 'PIECE',
-    remarks: ''
-  });
+window.mrsManualAddItem = function() {
+  _mrsState.items.push({ itemCode: '', description: '', qtyReturned: 0, unit: 'PIECE', remarks: '' });
   renderItems();
   setTimeout(function() {
     var input = document.getElementById('mrsItemCode' + (_mrsState.items.length - 1));
     if (input) input.focus();
   }, 150);
-}
+};
 
 function renderItems() {
   var tbody = document.getElementById('itemsBody');
@@ -183,12 +177,18 @@ function renderItems() {
       '<td><input type="text" class="form-control form-control-sm" ' +
         'value="' + erpEsc(it.remarks) + '" placeholder="Optional" ' +
         'oninput="updateItem(' + idx + ', \'remarks\', this.value)"></td>' +
-      '<td class="text-center"><button class="btn btn-sm btn-outline-danger" ' +
-        'onclick="removeItem(' + idx + ')" title="Remove"><i class="bi bi-trash"></i></button></td>' +
+            '<td class="text-center"><button class="btn btn-sm btn-outline-danger" ' +
+        'onclick="mrsManualRemoveItemAt(' + idx + ')" title="Remove"><i class="bi bi-trash"></i></button></td>' +
     '</tr>';
   });
   tbody.innerHTML = html;
 }
+
+window.mrsManualRemoveItemAt = function(idx) {
+  if (!confirm('Remove this item?')) return;
+  _mrsState.items.splice(idx, 1);
+  renderItems();
+};
 
 function updateItem(idx, field, value) {
   if (_mrsState.items[idx]) _mrsState.items[idx][field] = value;
@@ -344,13 +344,13 @@ async function submitMrs() {
   for (var i = 0; i < rows.length; i++) {
     var row = rows[i];
     var codeEl = row.querySelector('.item-code-input');
+    if (!codeEl) continue;
+
+    var code = codeEl.value.trim();
     var descEl = row.querySelector('#mrsItemDesc' + i);
     var qtyEl = row.querySelector('.item-qty-input');
     var unitEl = row.querySelector('#mrsItemUnit' + i);
     
-    if (!codeEl) continue;
-
-    var code = codeEl.value.trim();
     var desc = descEl ? descEl.value.trim() : '';
     var qtyReturned = qtyEl ? (parseFloat(qtyEl.value) || 0) : 0;
     var unit = unitEl ? unitEl.value : 'PIECE';
@@ -362,11 +362,12 @@ async function submitMrs() {
     }
 
     validItems.push({
-      code: code,
+      item_code: code,
       description: desc,
-      qtyReturned: qtyReturned,
+      qty: qtyReturned,
+      atl_qty: qtyReturned, // ✅ Sa MRS, Requested at Actual ay pareho initially
       unit: unit,
-      remarks: ''
+      remarks: 'PENDING'
     });
   }
 
@@ -392,58 +393,43 @@ async function submitMrs() {
       body: JSON.stringify({ p_prefix: 'MRS' })
     });
 
-    if (!rpcRes.ok) throw new Error('RPC failed');
+    if (!rpcRes.ok) throw new Error('RPC Doc Num failed');
     var nextNum = await rpcRes.json();
     var padded = String(nextNum).padStart(4, '0');
     var docNo = 'MRS' + padded;
 
-    var docRes = await fetch(erpUrl('documents'), {
+    var currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'PRODUCTION';
+
+    var docPayload = {
+      requestor: _mrsState.requestor,
+      department: department,
+      jo_no: joNo,
+      gem_so_no: gemSoNo,
+      client_name: clientName,
+      project: project,
+      date_prepared: new Date().toISOString().split('T')[0],
+      prepared_by: _mrsState.requestor
+    };
+
+    // ✅ Tawagin ang RPC
+    var processRes = await fetch(erpUrl('rpc/erp_submit_mrs'), {
       method: 'POST',
-      headers: erpHeaders({ 'Prefer': 'return=representation' }),
+      headers: erpHeaders(),
       body: JSON.stringify({
-        doc_no: docNo,
-        doc_type: 'MRS',
-        status: 'PENDING',                    // ✅ PENDING
-        is_bal: false,
-        requestor: _mrsState.requestor,
-        department: department,
-        jo_no: joNo,
-        gem_so_no: gemSoNo,
-        client_name: clientName,
-        project: project,
-        date_prepared: new Date().toISOString().split('T')[0],   // ✅ FIX
-        item_count: validItems.length,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        p_doc_no: docNo,
+        p_doc_payload: docPayload,
+        p_items: validItems,
+        p_processed_by: currentUser
       })
     });
 
-    if (!docRes.ok) throw new Error('Insert doc failed');
-    var docArr = await docRes.json();
-    var doc = docArr[0];
-
-    var itemPayloads = validItems.map(function(it, idx) {
-      return {
-        document_id: doc.id,
-        doc_no: docNo,
-        line_no: idx + 1,
-        item_code: it.code,
-        description: it.description,
-        requested_qty: it.qtyReturned,
-        issued_qty: 0,                        // ✅ 0
-        unit: it.unit,
-        remarks: 'PENDING',                   // ✅ PENDING
-        row_index: idx + 1
-      };
-    });
-
-    var itemsRes = await fetch(erpUrl('doc_items'), {
-      method: 'POST',
-      headers: erpHeaders(),
-      body: JSON.stringify(itemPayloads)
-    });
-
-    if (!itemsRes.ok) throw new Error('Insert items failed');
+    if (!processRes.ok) {
+      var errText = await processRes.text();
+      throw new Error('RPC Error: ' + processRes.status + ' ' + errText);
+    }
+    
+    var data = await processRes.json();
+    if (!data || !data.success) throw new Error(data.error || 'Unknown error');
 
     erpShowToast('✅ Manual MRS created: ' + docNo + ' (PENDING)', 'success');
     showSuccessModal(docNo);
@@ -457,7 +443,6 @@ async function submitMrs() {
     btn.innerHTML = originalHtml;
   }
 }
-
 function showSuccessModal(docNo) {
   document.getElementById('successDocNo').textContent = docNo;
   var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
