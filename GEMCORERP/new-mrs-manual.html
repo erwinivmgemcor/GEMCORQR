@@ -102,10 +102,10 @@
 
   <div class="erp-card" style="padding:24px;margin-bottom:20px;">
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h5 class="mb-0">
+           <h5 class="mb-0">
         <span class="badge bg-primary me-2">2</span>Items
       </h5>
-      <button class="btn btn-sm btn-primary" onclick="addItemRow()">
+      <button class="btn btn-sm btn-primary" onclick="mrsManualAddItem()">
         <i class="bi bi-plus-lg me-1"></i>Add Item
       </button>
     </div>
@@ -145,7 +145,7 @@
   <div class="erp-item-row mb-3" data-item-idx="">
     <div class="d-flex justify-content-between align-items-center mb-2">
       <div class="erp-item-row-header">Item #<span class="item-number"></span></div>
-      <button class="btn btn-sm btn-outline-danger" onclick="removeItemRow(this)" title="Remove">
+      <button class="btn btn-sm btn-outline-danger" onclick="mrsManualRemoveItem(this)" title="Remove">
         <i class="bi bi-trash"></i>
       </button>
     </div>
