@@ -48,6 +48,29 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('mrrReceivingDate').value = today;
   _mrrState.receivingDate = today;
 
+  // ✅ ITAGO ANG MGA STEPS 2, 3, 4 HANGGANG WALANG PO
+  var step2 = document.getElementById('step2Card');
+  var step3 = document.getElementById('step3Card');
+  var step4 = document.getElementById('step4Card');
+  if (step2) step2.style.display = 'none';
+  if (step3) step3.style.display = 'none';
+  if (step4) step4.style.display = 'none';
+
+  // ❌ TANGGALIN ANG ADD ITEM BUTTON SA NEW MRR (Dapat PO lang ang source)
+  var addItemBtn = document.querySelector('#step3Card .btn-primary');
+  if (addItemBtn) addItemBtn.style.display = 'none';
+  
+  // I-update ang alert message sa loob ng step 3
+  var itemsTable = document.querySelector('#step3Card .table-responsive');
+  if (itemsTable) {
+    itemsTable.innerHTML = '<div class="text-center py-5 text-muted">' +
+      '<i class="bi bi-inbox fs-1 d-block mb-3 opacity-50"></i>' +
+      '<h5>No PO Loaded</h5>' +
+      '<p class="small mb-0">Please enter a valid PO No. above and click "Lookup" to auto-load items.<br>' +
+      'If this is a manual/legacy receipt without a PO, please use the <a href="new-mrr-manual.html" class="fw-bold text-primary">Manual MRR Entry</a>.</p>' +
+      '</div>';
+  }
+
   document.getElementById('mrrPoNo').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
       e.preventDefault();
