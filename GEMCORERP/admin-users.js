@@ -349,9 +349,8 @@ async function umSaveUser() {
   var reason = document.getElementById('umReason').value.trim();
   var originalUsername = document.getElementById('umOriginalUsername').value;
 
-  // Validation
   if (!username) { erpShowToast('Username is required', 'warning'); return; }
-  if (!password) { erpShowToast('Password is required', 'warning'); return; }
+  if (mode === 'add' && !password) { erpShowToast('Password is required for new user', 'warning'); return; }
   if (!fullname) { erpShowToast('Full name is required', 'warning'); return; }
   if (!roleWarehouse && !roleProduction) {
     erpShowToast('Select at least one role', 'warning'); return;
@@ -360,12 +359,10 @@ async function umSaveUser() {
     erpShowToast('Reason is required for changes', 'warning'); return;
   }
 
-  // Build roles array
   var roles = [];
   if (roleWarehouse) roles.push('warehouse');
   if (roleProduction) roles.push('production');
 
-  // Username uniqueness check (for add mode)
   if (mode === 'add') {
     var existing = _um.allUsers.find(function(u) { return u.username === username; });
     if (existing) {
@@ -380,70 +377,41 @@ async function umSaveUser() {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
 
   try {
-    var payload = {
-      username: username,
-      password: password,
-      fullname: fullname,
-      department: department || null,
-      roles: roles,
-      is_admin: isAdmin,
-      is_active: true
-    };
+    var res = await fetch(erpUrl('rpc/admin_upsert_user'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({
+        p_mode: mode,
+        p_username: username,
+        p_password: password || null,
+        p_fullname: fullname,
+        p_department: department || null,
+        p_roles: roles,
+        p_is_admin: isAdmin,
+        p_original_username: mode === 'edit' ? originalUsername : null
+      })
+    });
 
-    if (mode === 'add') {
-      // INSERT
-      var res = await fetch(erpUrl('users'), {
-        method: 'POST',
-        headers: erpHeaders({ 'Prefer': 'return=minimal' }),
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) {
-        var errText = await res.text();
-        throw new Error('Insert failed: ' + res.status + ' ' + errText);
-      }
-
-      await umLogAction(username, 'CREATED', null, payload, reason || 'New user created');
-      erpShowToast('✅ User created: ' + username, 'success');
-
-    } else {
-      // UPDATE
-      var oldUser = _um.allUsers.find(function(u) { return u.username === originalUsername; });
-      var oldData = {
-        fullname: oldUser.fullname,
-        department: oldUser.department,
-        roles: oldUser.roles,
-        is_admin: oldUser.is_admin
-      };
-
-      var patchBody = {
-        password: password,
-        fullname: fullname,
-        department: department || null,
-        roles: roles,
-        is_admin: isAdmin
-      };
-
-      var patchRes = await fetch(erpUrl('users?username=eq.' + encodeURIComponent(originalUsername)), {
-        method: 'PATCH',
-        headers: erpHeaders({ 'Prefer': 'return=minimal' }),
-        body: JSON.stringify(patchBody)
-      });
-
-      if (!patchRes.ok) {
-        var patchErr = await patchRes.text();
-        throw new Error('Update failed: ' + patchRes.status + ' ' + patchErr);
-      }
-
-      // Determine action type for audit
-      var actionType = 'UPDATED';
-      if (oldUser.password !== password) actionType = 'PASSWORD_RESET';
-      if (oldUser.is_admin !== isAdmin) actionType = isAdmin ? 'PROMOTED' : 'DEMOTED';
-
-      await umLogAction(originalUsername, actionType, oldData, patchBody, reason);
-      erpShowToast('✅ User updated: ' + username, 'success');
+    if (!res.ok) {
+      var errText = await res.text();
+      throw new Error('HTTP ' + res.status + ' ' + errText);
     }
 
+    var data = await res.json();
+    if (!data || !data.success) throw new Error((data && data.error) || 'Unknown error');
+
+    var actionType = mode === 'add' ? 'CREATED' 
+                   : (data.password_changed ? 'PASSWORD_RESET' : 'UPDATED');
+
+    await umLogAction(
+      mode === 'add' ? username : originalUsername,
+      actionType,
+      null,
+      { fullname: fullname, roles: roles, is_admin: isAdmin },
+      reason || (mode === 'add' ? 'New user created' : 'User updated')
+    );
+
+    erpShowToast('✅ User ' + (mode === 'add' ? 'created' : 'updated') + ': ' + username, 'success');
     umCloseModal();
     await umLoadUsers();
 
@@ -455,9 +423,6 @@ async function umSaveUser() {
     btn.innerHTML = origHtml;
   }
 }
-
-window.umSaveUser = umSaveUser;
-
 // ═══════════════════════════════════════════════════════════
 // DEACTIVATE / REACTIVATE
 // ═══════════════════════════════════════════════════════════
