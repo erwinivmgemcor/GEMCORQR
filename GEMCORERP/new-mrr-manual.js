@@ -247,16 +247,26 @@ async function submitMrr() {
     var unit = row.querySelector('.item-unit-input').value;
     var remarks = row.querySelector('.item-remarks-input').value.trim();
     
-    if (!code) { erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning'); return; }
-    if (qty <= 0) { erpShowToast('Item #' + (i + 1) + ' has invalid quantity', 'warning'); return; }
+       // ✅ SMART VALIDATION: Payagan ang 0 qty basta may ATL (Actual Qty)
+    if (!code) { 
+      erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning'); 
+      return; 
+    }
+    if (qty <= 0 && atlQty <= 0) { 
+      erpShowToast('Item #' + (i + 1) + ' has no quantity. Please enter Req Qty or ATL Qty.', 'warning'); 
+      return; 
+    }
+    
+    // Kung 0 ang Req Qty pero may ATL, gawing ATL ang requested qty para pumasok sa logic
+    var finalQty = qty > 0 ? qty : atlQty;
     
     validItems.push({
       item_code: code,
       description: desc,
-      qty: qty,
+      qty: finalQty,
       atl_qty: atlQty,
       unit: unit,
-      remarks: remarks || (atlQty >= qty ? 'COMPLETE' : 'PARTIAL')
+      remarks: remarks || (atlQty >= finalQty ? 'COMPLETE' : 'PARTIAL')
     });
   }
 
