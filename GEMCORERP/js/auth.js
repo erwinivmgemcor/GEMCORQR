@@ -140,19 +140,13 @@ async function loginUser() {
   var password = document.getElementById('loginPassword').value.trim();
   var role = _authState.selectedRole;
   
-  // Validation
-  if (!role) {
-    showError('Please select a role first');
-    return;
-  }
-  
+  if (!role) { showError('Please select a role first'); return; }
   if (!username) {
     showError('Please enter your username');
     document.getElementById('loginUsername').classList.add('is-invalid');
     document.getElementById('loginUsername').focus();
     return;
   }
-  
   if (!password) {
     showError('Please enter your password');
     document.getElementById('loginPassword').classList.add('is-invalid');
@@ -160,7 +154,6 @@ async function loginUser() {
     return;
   }
   
-  // Set loading state
   _authState.isLoggingIn = true;
   var btn = document.getElementById('btnLogin');
   var btnText = document.getElementById('btnLoginText');
@@ -173,18 +166,15 @@ async function loginUser() {
   document.getElementById('loginPassword').classList.remove('is-invalid');
   
   try {
-    console.log('[Auth] Verifying user:', username, '/', role);
+    console.log('[Auth] Verifying via RPC:', username, '/', role);
     
-    // ═══ STEP 1: Query users table (BASIC FIELDS ONLY) ═══
-    var url = erpUrl('users') + 
-              '?username=eq.' + encodeURIComponent(username) +
-              '&password=eq.' + encodeURIComponent(password) +
-              '&select=username,fullname,roles,department' +
-              '&limit=1';
-    
-    var res = await fetch(url, {
-      method: 'GET',
+    var res = await fetch(erpUrl('rpc/verify_user'), {
+      method: 'POST',
       headers: erpHeaders(),
+      body: JSON.stringify({
+        p_username: username,
+        p_password: password
+      }),
       cache: 'no-store'
     });
     
@@ -192,59 +182,38 @@ async function loginUser() {
       throw new Error('Server error: ' + res.status);
     }
     
-    var users = await res.json();
+    var data = await res.json();
     
-    // ═══ Check if user exists ═══
-    if (!users || users.length === 0) {
-      console.warn('[Auth] Invalid credentials for:', username);
+    // Failed
+    if (!data || !data.success) {
       _authState.attempts++;
-      showError('Invalid username or password. Please try again.');
-      document.getElementById('loginPassword').value = '';
-      document.getElementById('loginPassword').focus();
-      return;
-    }
-    
-    var user = users[0];
-    console.log('[Auth] User found:', user.username, '| Roles:', user.roles);
-    
-    // ═══ STEP 2: Fetch admin flags from VIEW ═══
-    user.is_admin = false;
-    user.is_active = true;
-    
-    try {
-      var flagUrl = erpUrl('v_users_admin') + 
-                    '?username=eq.' + encodeURIComponent(username) +
-                    '&select=is_admin,is_active' +
-                    '&limit=1';
+      var errorMsg = (data && data.error) || 'Invalid credentials';
       
-      var flagRes = await fetch(flagUrl, {
-        method: 'GET',
-        headers: erpHeaders(),
-        cache: 'no-store'
-      });
-      
-      if (flagRes.ok) {
-        var flagData = await flagRes.json();
-        if (flagData && flagData[0]) {
-          user.is_admin = flagData[0].is_admin === true;
-          user.is_active = flagData[0].is_active !== false;
-          console.log('[Auth] Flags — Admin:', user.is_admin, '| Active:', user.is_active);
-        }
+      if (errorMsg.toLowerCase().indexOf('deactivated') !== -1) {
+        showError('Your account has been <strong>deactivated</strong>. Please contact admin.');
       } else {
-        console.warn('[Auth] View query HTTP ' + flagRes.status + ' — using defaults');
+        showError('Invalid username or password. Please try again.');
+        document.getElementById('loginPassword').value = '';
+        document.getElementById('loginPassword').focus();
       }
-    } catch(flagErr) {
-      console.warn('[Auth] Could not fetch flags:', flagErr.message);
-    }
-    
-    // ═══ STEP 3: Block inactive users ═══
-    if (user.is_active === false) {
-      showError('Your account has been <strong>deactivated</strong>. Please contact admin.');
+      
+      // Lockout after 5 attempts
+      if (_authState.attempts >= 5) {
+        btn.disabled = true;
+        btnText.textContent = 'Too many attempts — wait 30s';
+        showError('Too many failed attempts. Please wait <strong>30 seconds</strong>.');
+        setTimeout(function() {
+          _authState.attempts = 0;
+          btn.disabled = false;
+          btnText.textContent = originalText;
+        }, 30000);
+        return;
+      }
       return;
     }
     
-    // ═══ STEP 4: Verify role permission ═══
-    var userRoles = Array.isArray(user.roles) ? user.roles : ['warehouse'];
+    // Check role
+    var userRoles = Array.isArray(data.roles) ? data.roles : ['warehouse'];
     
     if (userRoles.indexOf(role) === -1) {
       var allowedRoles = userRoles.map(function(r) {
@@ -257,32 +226,30 @@ async function loginUser() {
       return;
     }
     
-    // ═══ STEP 5: Success — Save session ═══
-    console.log('[Auth] ✅ Login successful');
+    // Save session
+    console.log('[Auth] ✅ Login successful for:', data.username);
     
-    localStorage.setItem('ivm_username', user.username);
-    localStorage.setItem('ivm_userFullname', user.fullname || user.username);
+    localStorage.setItem('ivm_username', data.username);
+    localStorage.setItem('ivm_userFullname', data.fullname || data.username);
     localStorage.setItem('ivm_userRole', role);
     localStorage.setItem('ivm_allowedRoles', JSON.stringify(userRoles));
     
-    // ✅ Save is_admin flag
-    if (user.is_admin === true) {
+    if (data.is_admin === true) {
       localStorage.setItem('ivm_isAdmin', 'true');
     } else {
       localStorage.removeItem('ivm_isAdmin');
     }
     
-    if (user.department) {
-      localStorage.setItem('ivm_userDepartment', user.department);
+    if (data.department) {
+      localStorage.setItem('ivm_userDepartment', data.department);
     }
     
     sessionStorage.setItem('ivm_justLoggedIn', '1');
+    _authState.attempts = 0;
     
-    // Show success
     btnText.textContent = 'Success!';
     btn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
     
-    // Redirect
     setTimeout(function() {
       redirectAfterLogin(role);
     }, 500);
@@ -304,14 +271,13 @@ async function loginUser() {
     
   } finally {
     _authState.isLoggingIn = false;
-    btn.disabled = false;
-    btnText.textContent = originalText;
-    btn.style.background = '';
+    if (_authState.attempts < 5) {
+      btn.disabled = false;
+      btnText.textContent = originalText;
+      btn.style.background = '';
+    }
   }
 }
-
-window.loginUser = loginUser;
-
 // ═══════════════════════════════════════════════════════════
 // REDIRECT AFTER LOGIN
 // ═══════════════════════════════════════════════════════════
