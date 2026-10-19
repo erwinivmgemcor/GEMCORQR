@@ -290,18 +290,25 @@ async function submitMrs() {
     var unit = unitEl ? unitEl.value : 'PIECE';
     if (!code) continue;
     if (qtyReturned <= 0) { erpShowToast('Item #' + (i + 1) + ' has invalid quantity', 'warning'); return; }
-    validItems.push({ item_code: code, description: desc, qty: qtyReturned, atl_qty: qtyReturned, unit: unit, remarks: 'PENDING' });
+    
+    validItems.push({ 
+      item_code: code, 
+      description: desc, 
+      qty: qtyReturned, 
+      unit: unit, 
+      remarks: 'PENDING' 
+    });
   }
 
   if (validItems.length === 0) { erpShowToast('Please add at least one item', 'warning'); return; }
-  if (!confirm('Create manual MRS with ' + validItems.length + ' item(s)?')) return;
+  if (!confirm('Submit MRS with ' + validItems.length + ' item(s)?\n\nStatus will be PENDING — warehouse will verify.')) return;
 
   _mrsState.isSubmitting = true;
   _mrsState.lastSubmittedAt = now;
   var btn = document.getElementById('btnSubmitMrs');
   var originalHtml = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
 
   try {
     var rpcRes = await fetch(erpUrl('rpc/get_next_doc_number'), {
@@ -327,7 +334,7 @@ async function submitMrs() {
     var data = await processRes.json();
     if (!data || !data.success) throw new Error(data.error || 'Unknown error');
 
-    erpShowToast('✅ Manual MRS created: ' + docNo + ' (PENDING)', 'success');
+    erpShowToast('✅ MRS created: ' + docNo + ' (PENDING)', 'success');
     showSuccessModal(docNo);
   } catch(err) {
     console.error('[submitMrs]', err);
