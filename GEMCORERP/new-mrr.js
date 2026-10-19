@@ -56,9 +56,9 @@ document.addEventListener('DOMContentLoaded', function() {
   if (step3) step3.style.display = 'none';
   if (step4) step4.style.display = 'none';
 
-  // ❌ TANGGALIN ANG ADD ITEM BUTTON SA NEW MRR (Dapat PO lang ang source)
-  var addItemBtn = document.querySelector('#step3Card .btn-primary');
-  if (addItemBtn) addItemBtn.style.display = 'none';
+// HINDI na natin itatago. Hayaan lang siyang lumabas.
+ var addItemBtn = document.querySelector('#step3Card .btn-primary');
+if (addItemBtn) addItemBtn.style.display = 'inline-block';
   
   // I-update ang alert message sa loob ng step 3
   var itemsTable = document.querySelector('#step3Card .table-responsive');
