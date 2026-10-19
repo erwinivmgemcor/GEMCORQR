@@ -485,149 +485,65 @@ async function submitProcess() {
     return;
   }
 
-  if (!confirm('Submit ' + verifiedItems.length + ' verified item(s)?')) return;
+  if (!confirm('Submit ' + verifiedItems.length + ' item(s)?')) return;
 
   _process.isSubmitting = true;
   var btn = document.getElementById('btnSubmitProcess');
-  var originalHtml = btn ? btn.innerHTML : '';
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
-  }
+  var originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
 
   try {
-    var allComplete = true;
-    var anyReturned = false;
-    var preparedItems = [];
+    var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
+    
+    // Prepare payload
+    var itemsPayload = verifiedItems.map(function(it) {
+      return {
+        id: it.id,
+        issued_qty: it.issuedQty,
+        remarks: it.remarks || ''
+      };
+    });
 
-    for (var i = 0; i < verifiedItems.length; i++) {
-      var item = verifiedItems[i];
-      if (item.issuedQty < item.requestedQty) allComplete = false;
-      if (item.issuedQty > 0) anyReturned = true;
-
-      var newRemarks = item.remarks || '';
-      var status = item.issuedQty >= item.requestedQty ? 'SERVED' : (item.issuedQty > 0 ? 'PARTIAL' : 'PENDING');
-      if (newRemarks && newRemarks !== 'PENDING' && newRemarks !== 'SERVED' && newRemarks !== 'PARTIAL') {
-        newRemarks = newRemarks + ' | ' + status;
-      } else {
-        newRemarks = status;
-      }
-
-      preparedItems.push({
-        id: item.id,
-        itemCode: item.itemCode,
-        issuedQty: item.issuedQty,
-        remarks: newRemarks,
-        originalQty: item.originalQty,
-        originalRemarks: item.originalRemarks
-      });
-    }
-
-    var newStatus = (allComplete && anyReturned) ? 'COMPLETED' : (anyReturned ? 'PARTIAL' : 'PENDING');
-    var currentUser = localStorage.getItem('ivm_userFullname') || 
-                      localStorage.getItem('ivm_username') || 
-                      'WAREHOUSE';
-
-    console.log('[submitProcess] Items to update:', preparedItems.length);
-    console.log('[submitProcess] Target status:', newStatus);
-
-    // ═══ STEP 1: UPDATE ITEMS FIRST ═══
-    var itemsUpdated = 0;
-    var itemErrors = [];
-
-    for (var j = 0; j < preparedItems.length; j++) {
-      var pi = preparedItems[j];
-      
-      try {
-        var itemRes = await fetch(erpUrl('doc_items?id=eq.' + pi.id), {
-          method: 'PATCH',
-          headers: erpHeaders({ 'Prefer': 'return=representation' }),
-          body: JSON.stringify({
-            issued_qty: pi.issuedQty,
-            remarks: pi.remarks
-          })
-        });
-
-        if (!itemRes.ok) {
-          var itemErrText = await itemRes.text();
-          console.error('[submitProcess] Item update failed:', pi.itemCode, itemErrText);
-          itemErrors.push(pi.itemCode);
-        } else {
-          itemsUpdated++;
-          console.log('[submitProcess] ✓ Updated item:', pi.itemCode, 'qty:', pi.issuedQty);
-        }
-      } catch(e) {
-        console.error('[submitProcess] Item error:', pi.itemCode, e);
-        itemErrors.push(pi.itemCode);
-      }
-    }
-
-    if (itemErrors.length > 0) {
-      throw new Error('Failed to update items: ' + itemErrors.join(', '));
-    }
-
-    // ═══ STEP 2: UPDATE DOCUMENT STATUS ═══
-    var docRes = await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(_process.docNo)), {
-      method: 'PATCH',
-      headers: erpHeaders({ 'Prefer': 'return=representation' }),
+    // ✅ Tawagin ang RPC para i-update ang items at magdagdag ng stock
+    var res = await fetch(erpUrl('rpc/erp_process_mrs_verification'), {
+      method: 'POST',
+      headers: erpHeaders(),
       body: JSON.stringify({
-        status: newStatus,
-        processed_by: currentUser,
-        processed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        p_doc_no: _process.docNo,
+        p_items: itemsPayload,
+        p_processed_by: currentUser
       })
     });
 
-    if (!docRes.ok) {
-      var errText = await docRes.text();
-      console.error('[submitProcess] ❌ Document update FAILED:', docRes.status, errText);
-      
-      // ═══ ROLLBACK ═══
-      console.warn('[submitProcess] ⏪ Rolling back', itemsUpdated, 'items...');
-      
-      for (var k = 0; k < preparedItems.length; k++) {
-        var pi2 = preparedItems[k];
-        try {
-          await fetch(erpUrl('doc_items?id=eq.' + pi2.id), {
-            method: 'PATCH',
-            headers: erpHeaders(),
-            body: JSON.stringify({
-              issued_qty: pi2.originalQty,
-              remarks: pi2.originalRemarks
-            })
-          });
-        } catch(e) {
-          console.warn('[submitProcess] Rollback failed for:', pi2.itemCode);
-        }
-      }
-      
-      var userFriendlyMsg = 'Failed to update document status';
-      try {
-        var errJson = JSON.parse(errText);
-        if (errJson.message) userFriendlyMsg = '❌ ' + errJson.message;
-      } catch(parseErr) {}
-      
-      throw new Error(userFriendlyMsg);
+    if (!res.ok) {
+      var errText = await res.text();
+      throw new Error('RPC Error: ' + res.status + ' ' + errText);
     }
 
-    // ═══ Success ═══
-    console.log('[submitProcess] ✅ MRS SUBMIT COMPLETE:', newStatus);
+    var data = await res.json();
+    if (!data || !data.success) {
+      throw new Error(data.error || 'Failed to process');
+    }
 
-    var successDocNo = document.getElementById('successDocNo');
-    var successStatus = document.getElementById('successStatus');
-    if (successDocNo) successDocNo.textContent = _process.docNo;
-    if (successStatus) successStatus.textContent = newStatus;
+    document.getElementById('successDocNo').textContent = _process.docNo;
+    document.getElementById('successStatus').textContent = data.status;
 
-    var successModal = document.getElementById('successModal');
-    if (successModal) new bootstrap.Modal(successModal).show();
+    if (data.status === 'PARTIAL') {
+      var successStatusEl = document.getElementById('successStatus');
+      successStatusEl.innerHTML += '<br><br><span class="text-warning fw-bold"><i class="bi bi-info-circle me-1"></i>Note: This MRS is still PARTIAL. Please process the remaining items to complete.</span>';
+    }
+
+    erpShowToast('✅ MRS Processed: ' + data.status, 'success');
+    
+    var modal = new bootstrap.Modal(document.getElementById('successModal'));
+    modal.show();
 
   } catch(err) {
-    console.error('[submitProcess] ❌ SUBMIT FAILED:', err);
+    console.error('[submitProcess] ❌ ERROR:', err);
     erpShowToast('Submit failed: ' + err.message, 'danger');
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = originalHtml;
-    }
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
   } finally {
     _process.isSubmitting = false;
   }
