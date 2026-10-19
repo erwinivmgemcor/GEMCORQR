@@ -213,13 +213,13 @@ function hideItemDropdown(input) {
 // ═══════════════════════════════════════════════════════════
 async function submitMrr() {
   if (_mrrState.isSubmitting) return;
-  
+
   var now = Date.now();
   if (_mrrState.lastSubmittedAt && (now - _mrrState.lastSubmittedAt) < 10000) {
     erpShowToast('Please wait before submitting again', 'warning');
     return;
   }
-  
+
   var receivingSite = document.getElementById('mrrReceivingSite').value.trim();
   if (!receivingSite) { erpShowToast('Receiving Site is required', 'warning'); return; }
   
@@ -231,12 +231,11 @@ async function submitMrr() {
   
   var receivingDate = document.getElementById('mrrReceivingDate').value;
   if (!receivingDate) { erpShowToast('Receiving Date is required', 'warning'); return; }
-  
+
   var poNo = document.getElementById('mrrPoNo').value.trim();
-  var sofNo = document.getElementById('mrrSofNo') ? document.getElementById('mrrSofNo').value.trim() : '';  // ✅ NEW
+  var sofNo = document.getElementById('mrrSofNo').value.trim();
   var prfNo = document.getElementById('mrrPrfNo').value.trim();
   
-  // Collect items
   var validItems = [];
   var rows = document.querySelectorAll('.erp-item-row');
   for (var i = 0; i < rows.length; i++) {
@@ -250,112 +249,80 @@ async function submitMrr() {
     
     if (!code) { erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning'); return; }
     if (qty <= 0) { erpShowToast('Item #' + (i + 1) + ' has invalid quantity', 'warning'); return; }
-    validItems.push({ code: code, description: desc, qty: qty, atlQty: atlQty, unit: unit, remarks: remarks });
+    
+    validItems.push({
+      item_code: code,
+      description: desc,
+      qty: qty,
+      atl_qty: atlQty,
+      unit: unit,
+      remarks: remarks || (atlQty >= qty ? 'COMPLETE' : 'PARTIAL')
+    });
   }
-  
+
   if (validItems.length === 0) { erpShowToast('Please add at least one item', 'warning'); return; }
-  
+
   if (!confirm('Create manual MRR with ' + validItems.length + ' item(s)?')) return;
-  
+
   _mrrState.isSubmitting = true;
   _mrrState.lastSubmittedAt = now;
-  
+
   var btn = document.getElementById('btnSubmitMrr');
   var originalHtml = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
-  
+
   try {
-    // RPC
     var rpcRes = await fetch(erpUrl('rpc/get_next_doc_number'), {
       method: 'POST',
       headers: erpHeaders(),
       body: JSON.stringify({ p_prefix: 'MRR' })
     });
-    
-    if (!rpcRes.ok) throw new Error('RPC failed');
+
+    if (!rpcRes.ok) throw new Error('RPC Doc Num failed');
     var nextNum = await rpcRes.json();
     var padded = String(nextNum).padStart(7, '0');
     var docNo = 'MRR' + padded;
-    
-    console.log('[Submit] Doc No:', docNo, '| SOF:', sofNo);
-    
-    // Insert document
-    var docRes = await fetch(erpUrl('documents'), {
-      method: 'POST',
-      headers: erpHeaders({ 'Prefer': 'return=representation' }),
-      body: JSON.stringify({
-        doc_no: docNo,
-        doc_type: 'MRR',
-        status: 'PENDING',
-        is_bal: false,
-        requestor: _mrrState.preparedBy,
-        department: '',
-        po_no: poNo,
-        sof_no: sofNo,                     // ✅ NEW
-        prf_no: prfNo,
-        vendor: vendor,
-        client_name: vendor,
-        dr_no: drNo,
-        receiving_site: receivingSite,
-        receiving_date: receivingDate,
-        prepared_by: _mrrState.preparedBy,
-        item_count: validItems.length,     // ✅ ADD
-        date_prepared: new Date().toISOString().split('T')[0],  // ✅ ADD
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-    });
-    
-    if (!docRes.ok) throw new Error('Insert doc failed');
-    var docArr = await docRes.json();
-    var doc = docArr[0];
-    
-    // Insert items
-    var itemPayloads = validItems.map(function(it, idx) {
-      var status = (it.atlQty >= it.qty && it.qty > 0) ? 'COMPLETE' : (it.atlQty > 0 ? 'PARTIAL' : 'PENDING');
-      return {
-        document_id: doc.id,
-        doc_no: docNo,
-        line_no: idx + 1,
-        item_code: it.code,
-        description: it.description,
-        requested_qty: it.qty,
-        issued_qty: it.atlQty,
-        unit: it.unit,
-        remarks: it.remarks || status,
-        row_index: idx + 1
-      };
-    });
-    
-    var itemsRes = await fetch(erpUrl('doc_items'), {
+
+    var currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
+
+    var docPayload = {
+      requestor: _mrrState.preparedBy,
+      department: '',
+      po_no: poNo,
+      sof_no: sofNo,
+      prf_no: prfNo,
+      vendor: vendor,
+      client_name: vendor,
+      dr_no: drNo,
+      receiving_site: receivingSite,
+      receiving_date: receivingDate,
+      date_prepared: new Date().toISOString().split('T')[0],
+      prepared_by: _mrrState.preparedBy
+    };
+
+    var processRes = await fetch(erpUrl('rpc/erp_submit_mrr'), {
       method: 'POST',
       headers: erpHeaders(),
-      body: JSON.stringify(itemPayloads)
+      body: JSON.stringify({
+        p_doc_no: docNo,
+        p_doc_payload: docPayload,
+        p_items: validItems,
+        p_processed_by: currentUser
+      })
     });
-    
-    if (!itemsRes.ok) throw new Error('Insert items failed');
-    
-    // Determine overall status
-    var allComplete = validItems.every(function(it) { return it.atlQty >= it.qty; });
-    var anyReceived = validItems.some(function(it) { return it.atlQty > 0; });
-    var overallStatus = (allComplete && anyReceived) ? 'COMPLETED' : (anyReceived ? 'PARTIAL' : 'PENDING');
-    
-    if (overallStatus !== 'PENDING') {
-      await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(docNo)), {
-        method: 'PATCH',
-        headers: erpHeaders(),
-        body: JSON.stringify({
-          status: overallStatus,
-          processed_by: _mrrState.preparedBy,
-          processed_at: new Date().toISOString()
-        })
-      });
+
+    if (!processRes.ok) {
+      var errText = await processRes.text();
+      throw new Error('RPC Error: ' + processRes.status + ' ' + errText);
     }
     
-    erpShowToast('✅ Manual MRR created: ' + docNo, 'success');
+    var data = await processRes.json();
+    if (!data || !data.success) throw new Error(data.error || 'Unknown error');
+
+    erpShowToast('✅ Manual MRR created: ' + docNo + ' (' + data.status + ')', 'success');
     showSuccessModal(docNo);
-    
+
   } catch(err) {
     console.error('[submitMrr]', err);
     erpShowToast('Failed: ' + err.message, 'danger');
