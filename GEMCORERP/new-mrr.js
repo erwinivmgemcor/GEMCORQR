@@ -32,6 +32,11 @@ var _mrrSearchTimers = {};
 document.addEventListener('DOMContentLoaded', function() {
   console.log('[New MRR v4] Initializing...');
 
+  // ✅ IDINAGDAG NATIN ITO: I-reset ang form pagka-open para walang lumang data
+  if (typeof resetFormSilent === 'function') {
+    resetFormSilent();
+  }
+
   mrrCheckHealth();
 
   var userFullname = localStorage.getItem('ivm_userFullname') ||
