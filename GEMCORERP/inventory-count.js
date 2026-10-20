@@ -428,6 +428,25 @@ function icShowReviewView() {
 
   // ✅ CHECK KUNG ADMIN ANG NAKA-LOGIN
   var isAdmin = localStorage.getItem('ivm_isAdmin') === 'true';
+    // ✅ Kung APPROVED na, itago ang buttons
+  if (_ic.currentSession.status === 'APPROVED') {
+    if (actionButtons) actionButtons.style.display = 'none';
+    if (actionMessage) {
+      actionMessage.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i> <strong>This count has been APPROVED.</strong> Stock has been adjusted.';
+    }
+  } else if (!isAdmin) {
+    // Kung hindi admin, itago ang approve/reject buttons
+    if (actionButtons) actionButtons.style.display = 'none';
+    if (actionMessage) {
+      actionMessage.innerHTML = '<i class="bi bi-shield-lock me-1 text-danger"></i> <strong>Awaiting Admin Review.</strong> Only admins can approve or reject this count.';
+    }
+  } else {
+    // Kung admin, ipakita
+    if (actionButtons) actionButtons.style.display = 'block';
+    if (actionMessage) {
+      actionMessage.innerHTML = '<i class="bi bi-info-circle me-1"></i> Reviewing as supervisor. Approve to auto-adjust stock, or reject to return for recount.';
+    }
+  }
   var actionCard = document.getElementById('icReviewActionCard');
   var actionButtons = document.getElementById('icReviewActionButtons');
   var actionMessage = document.getElementById('icReviewActionMessage');
@@ -1152,7 +1171,7 @@ async function icApproveCount() {
 
   var countNo = _ic.currentSession.count_no;
   
-  // ✅ Kunin lang yung mga may totoong variance (positive or negative)
+  // Kunin lang yung mga may totoong variance (positive or negative)
   var varianceItems = _ic.currentItems.filter(function(it) {
     var isCounted = (it.scan_count > 0 || Number(it.counted_qty) > 0);
     var hasVariance = Math.abs(Number(it.variance || 0)) > 0.0001;
@@ -1183,7 +1202,7 @@ async function icApproveCount() {
       var item = varianceItems[i];
       var newOnHand = Number(item.counted_qty || 0);
       var oldOnHand = Number(item.system_qty || 0);
-      var computedVariance = newOnHand - oldOnHand; // ✅ Ito ang tamang variance
+      var computedVariance = newOnHand - oldOnHand;
 
       // 1. Update Master Item
       await fetch(erpUrl('erp_items?item_code=eq.' + encodeURIComponent(item.item_code)), {
