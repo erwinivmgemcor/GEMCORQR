@@ -1,7 +1,8 @@
 // ============================================================
-// GEMCOR ERP — Inventory Count (v1.1)
+// GEMCOR ERP — Inventory Count (v1.2)
 // ✅ NEW: Auto-suggest for manual input field
 // ✅ SUM-based counting + keyboard navigation
+// ✅ FIXED: Approve/Reject buttons hide correctly after action
 // ============================================================
 
 var _ic = {
@@ -23,7 +24,7 @@ var _ic = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Inventory Count v1.1] Initializing...');
+  console.log('[Inventory Count v1.2] Initializing...');
 
   icCheckHealth();
   icLoadSessions();
@@ -48,7 +49,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Global keyboard handler for dropdown navigation
   document.addEventListener('keydown', icHandleDropdownKeydown);
 });
 
@@ -150,14 +150,13 @@ function icRenderSessionList() {
           varianceCount + '</span>' +
       '</td>' +
       '<td class="text-center"><span class="status-badge-lg ' + statusClass + '">' + icEsc(s.status) + '</span></td>' +
-           '<td class="text-center">' +
+      '<td class="text-center">' +
         '<button class="erp-action-btn primary" onclick="icOpenSession(' + s.id + ')" title="Open">' +
           '<i class="bi bi-play-circle"></i>' +
         '</button>' +
         '<button class="erp-action-btn" onclick="icViewSessionDetails(' + s.id + ')" title="View Details">' +
           '<i class="bi bi-eye"></i>' +
         '</button>' +
-        // ✅ DAGDAG NA REOPEN BUTTON PARA SA ADMIN KUNG REJECTED
         (s.status === 'REJECTED' && localStorage.getItem('ivm_isAdmin') === 'true'
           ? '<button class="erp-action-btn" style="background:#10b981; color:#fff;" onclick="icReopenSession(' + s.id + ')" title="Reopen for Recount">' +
               '<i class="bi bi-arrow-counterclockwise"></i>' +
@@ -231,7 +230,6 @@ async function icCreateSession() {
 
     var countNo = 'IC-' + yy + '-' + mm + '-' + String(nextNum).padStart(3, '0');
 
-    // Fetch items
     var itemsQuery = 'select=item_code,description,category,base_unit,on_hand' +
                      '&is_active=eq.true&order=item_code.asc';
 
@@ -417,6 +415,7 @@ function icShowCountingView() {
   icUpdateVarianceSummary();
 }
 
+// ✅ FIXED: Inalis ang doble at inayos ang variable definition
 function icShowReviewView() {
   _ic.view = 'review';
   document.getElementById('viewSessionList').style.display = 'none';
@@ -426,39 +425,22 @@ function icShowReviewView() {
   document.getElementById('icReviewHeader').textContent = 
     _ic.currentSession.count_no + ' | ' + _ic.currentSession.status;
 
-  // ✅ CHECK KUNG ADMIN ANG NAKA-LOGIN
   var isAdmin = localStorage.getItem('ivm_isAdmin') === 'true';
-    // ✅ Kung APPROVED na, itago ang buttons
+  var actionCard = document.getElementById('icReviewActionCard');
+  var actionButtons = document.getElementById('icReviewActionButtons');
+  var actionMessage = document.getElementById('icReviewActionMessage');
+
   if (_ic.currentSession.status === 'APPROVED') {
     if (actionButtons) actionButtons.style.display = 'none';
     if (actionMessage) {
       actionMessage.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i> <strong>This count has been APPROVED.</strong> Stock has been adjusted.';
     }
   } else if (!isAdmin) {
-    // Kung hindi admin, itago ang approve/reject buttons
     if (actionButtons) actionButtons.style.display = 'none';
     if (actionMessage) {
       actionMessage.innerHTML = '<i class="bi bi-shield-lock me-1 text-danger"></i> <strong>Awaiting Admin Review.</strong> Only admins can approve or reject this count.';
     }
   } else {
-    // Kung admin, ipakita
-    if (actionButtons) actionButtons.style.display = 'block';
-    if (actionMessage) {
-      actionMessage.innerHTML = '<i class="bi bi-info-circle me-1"></i> Reviewing as supervisor. Approve to auto-adjust stock, or reject to return for recount.';
-    }
-  }
-  var actionCard = document.getElementById('icReviewActionCard');
-  var actionButtons = document.getElementById('icReviewActionButtons');
-  var actionMessage = document.getElementById('icReviewActionMessage');
-
-  if (!isAdmin) {
-    // Kung hindi admin, itago ang approve/reject buttons
-    if (actionButtons) actionButtons.style.display = 'none';
-    if (actionMessage) {
-      actionMessage.innerHTML = '<i class="bi bi-shield-lock me-1 text-danger"></i> <strong>Awaiting Admin Review.</strong> Only admins can approve or reject this count.';
-    }
-  } else {
-    // Kung admin, ipakita
     if (actionButtons) actionButtons.style.display = 'block';
     if (actionMessage) {
       actionMessage.innerHTML = '<i class="bi bi-info-circle me-1"></i> Reviewing as supervisor. Approve to auto-adjust stock, or reject to return for recount.';
@@ -624,14 +606,12 @@ function icBuildManualSuggestions(term, dropdown, input) {
     return;
   }
 
-  // ✅ Search sa session items only
   var matches = _ic.currentItems.filter(function(it) {
     var code = String(it.item_code || '').toLowerCase();
     var desc = String(it.description || '').toLowerCase();
     return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
   });
 
-  // Sort: exact match > starts-with > contains
   matches.sort(function(a, b) {
     var aCode = String(a.item_code || '').toLowerCase();
     var bCode = String(b.item_code || '').toLowerCase();
@@ -723,7 +703,6 @@ function icSelectManualSuggestion(itemCode) {
   if (input) input.value = itemCode;
   icHideManualDropdown();
 
-  // ✅ Auto-verify on select
   icProcessScannedItem(itemCode);
 
   if (input) input.value = '';
@@ -731,7 +710,6 @@ function icSelectManualSuggestion(itemCode) {
 
 window.icSelectManualSuggestion = icSelectManualSuggestion;
 
-// ─── Keyboard Navigation ───
 function icHandleDropdownKeydown(e) {
   var dropdown = document.getElementById('icManualDropdown');
   if (!dropdown || dropdown.classList.contains('d-none')) return;
@@ -765,14 +743,12 @@ function icHandleDropdownKeydown(e) {
   }
 }
 
-// ─── Outside click ───
 document.addEventListener('click', function(e) {
   if (!e.target.closest('#icManualInput') && !e.target.closest('#icManualDropdown')) {
     icHideManualDropdown();
   }
 });
 
-// ─── Reposition on scroll ───
 window.addEventListener('scroll', function() {
   var dropdown = document.getElementById('icManualDropdown');
   var input = document.getElementById('icManualInput');
@@ -781,7 +757,6 @@ window.addEventListener('scroll', function() {
   }
 }, { passive: true });
 
-// ─── Hide on resize ───
 window.addEventListener('resize', function() {
   icHideManualDropdown();
 });
@@ -1054,14 +1029,12 @@ window.icRefreshItems = icRefreshItems;
 async function icSubmitForReview() {
   if (!_ic.currentSession) return;
 
-  // ✅ HARANGIN KUNG HINDI IN_PROGRESS ANG STATUS
   if (_ic.currentSession.status !== 'IN_PROGRESS') {
     icShowToast('Cannot submit. This session is already ' + _ic.currentSession.status, 'warning');
     return;
   }
 
   var counted = _ic.currentItems.filter(function(it) {
-    // ...
     return Number(it.counted_qty || 0) > 0 || (it.scan_count || 0) > 0;
   }).length;
 
@@ -1171,7 +1144,6 @@ async function icApproveCount() {
 
   var countNo = _ic.currentSession.count_no;
   
-  // Kunin lang yung mga may totoong variance (positive or negative)
   var varianceItems = _ic.currentItems.filter(function(it) {
     var isCounted = (it.scan_count > 0 || Number(it.counted_qty) > 0);
     var hasVariance = Math.abs(Number(it.variance || 0)) > 0.0001;
@@ -1204,7 +1176,6 @@ async function icApproveCount() {
       var oldOnHand = Number(item.system_qty || 0);
       var computedVariance = newOnHand - oldOnHand;
 
-      // 1. Update Master Item
       await fetch(erpUrl('erp_items?item_code=eq.' + encodeURIComponent(item.item_code)), {
         method: 'PATCH',
         headers: erpHeaders(),
@@ -1215,7 +1186,6 @@ async function icApproveCount() {
         })
       });
 
-      // 2. Insert to Variance Log (Para sa Stock Monitor)
       await fetch(erpUrl('erp_inventory_variances'), {
         method: 'POST',
         headers: erpHeaders(),
@@ -1231,7 +1201,6 @@ async function icApproveCount() {
         }])
       });
 
-      // 3. Insert to Stock Ledger
       await fetch(erpUrl('erp_stock_ledger'), {
         method: 'POST',
         headers: erpHeaders(),
@@ -1248,7 +1217,6 @@ async function icApproveCount() {
         }])
       });
 
-      // 4. Insert to Stock Adjustments
       await fetch(erpUrl('erp_stock_adjustments'), {
         method: 'POST',
         headers: erpHeaders(),
@@ -1268,7 +1236,6 @@ async function icApproveCount() {
       adjustCount++;
     }
 
-    // 5. I-update ang Session Status
     await fetch(erpUrl('erp_inventory_counts?id=eq.' + _ic.currentSession.id), {
       method: 'PATCH',
       headers: erpHeaders(),
@@ -1283,7 +1250,9 @@ async function icApproveCount() {
     _ic.currentSession.status = 'APPROVED';
     icShowToast('✅ Approved! Adjusted ' + adjustCount + ' items', 'success');
 
-    setTimeout(function() { icBackToList(); }, 1500);
+    setTimeout(function() { 
+      icBackToList(); 
+    }, 1500);
 
   } catch(err) {
     console.error('[icApproveCount]', err);
@@ -1314,7 +1283,6 @@ async function icRejectCount() {
   try {
     var currentUser = localStorage.getItem('ivm_userFullname') || 'SUPERVISOR';
 
-    // ✅ KUNG APPROVED, I-REVERSE ANG MGA STOCK ADJUSTMENTS
     if (isApproved) {
       var varianceItems = _ic.currentItems.filter(function(it) {
         var isCounted = (it.scan_count > 0 || Number(it.counted_qty) > 0);
@@ -1323,11 +1291,10 @@ async function icRejectCount() {
 
       for (var i = 0; i < varianceItems.length; i++) {
         var item = varianceItems[i];
-        var oldSystemQty = Number(item.system_qty || 0); // Ito ang dapat ibalik
-        var currentQty = Number(item.counted_qty || 0);  // Ito ang kasalukuyang on_hand
-        var reverseVariance = oldSystemQty - currentQty; // E.g., 5 - 10 = -5
+        var oldSystemQty = Number(item.system_qty || 0);
+        var currentQty = Number(item.counted_qty || 0);
+        var reverseVariance = oldSystemQty - currentQty;
 
-        // 1. Ibalik ang erp_items.on_hand sa dating system_qty
         await fetch(erpUrl('erp_items?item_code=eq.' + encodeURIComponent(item.item_code)), {
           method: 'PATCH',
           headers: erpHeaders(),
@@ -1338,7 +1305,6 @@ async function icRejectCount() {
           })
         });
 
-        // 2. Mag-log ng reversal sa stock_ledger
         await fetch(erpUrl('erp_stock_ledger'), {
           method: 'POST',
           headers: erpHeaders(),
@@ -1359,7 +1325,6 @@ async function icRejectCount() {
       console.log('Reversed stock adjustments for', varianceItems.length, 'items');
     }
 
-    // 3. I-update ang session status
     await fetch(erpUrl('erp_inventory_counts?id=eq.' + _ic.currentSession.id), {
       method: 'PATCH',
       headers: erpHeaders(),
@@ -1648,32 +1613,4 @@ window.icSubmitForReview = icSubmitForReview;
 window.icApproveCount = icApproveCount;
 window.icRejectCount = icRejectCount;
 
-console.log('✅ inventory-count.js v1.1 loaded (auto-suggest enabled)');
-
-// ═══════════════════════════════════════════════════════════
-// REOPEN REJECTED SESSION (Admin Only)
-// ═══════════════════════════════════════════════════════════
-window.icReopenSession = async function(sessionId) {
-  if (!confirm('Reopen this rejected count? The warehouse staff will be able to continue counting.')) return;
-
-  try {
-    var res = await fetch(erpUrl('erp_inventory_counts?id=eq.' + sessionId), {
-      method: 'PATCH',
-      headers: erpHeaders({ 'Prefer': 'return=representation' }),
-      body: JSON.stringify({
-        status: 'IN_PROGRESS',
-        rejected_reason: null, // Burahin yung reason
-        updated_at: new Date().toISOString()
-      })
-    });
-
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-
-    erpShowToast('✅ Session reopened. Warehouse can now continue counting.', 'success');
-    await icLoadSessions(); // Refresh list
-
-  } catch (err) {
-    console.error('[icReopenSession]', err);
-    erpShowToast('Failed to reopen: ' + err.message, 'danger');
-  }
-};
+console.log('✅ inventory-count.js v1.2 loaded (UI bugs fixed)');
