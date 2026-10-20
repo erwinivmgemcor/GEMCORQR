@@ -153,36 +153,47 @@
   <!-- ═══════════════════════════════════════════════════════════ -->
   <!-- FILTERS + SEARCH -->
   <!-- ═══════════════════════════════════════════════════════════ -->
-  <div class="erp-card erp-filters-card">
-    <div class="erp-filters-row">
-      <div class="erp-search-wrap">
-        <i class="bi bi-search"></i>
-        <input type="text" id="erpSearchInput" class="erp-search" placeholder="Search item code or description..." oninput="erpOnSearchInput()">
-      </div>
-      <select id="erpCategoryFilter" class="erp-select" onchange="erpLoadItems()">
-        <option value="">All Categories</option>
-      </select>
-      <select id="erpLocationFilter" class="erp-select" onchange="erpLoadItems()">
-        <option value="">All Locations</option>
-      </select>
-      <select id="erpMovementFilter" class="erp-select" onchange="erpLoadItems()">
-        <option value="">All Movements</option>
-        <option value="FAST MOVING">Fast Moving</option>
-        <option value="MODERATE MOVING">Moderate</option>
-        <option value="SLOW MOVING">Slow Moving</option>
-        <option value="NO MOVEMENT">No Movement</option>
-      </select>
-      <select id="erpAbcFilter" class="erp-select" onchange="erpLoadItems()">
-        <option value="">All ABC</option>
-        <option value="A">Class A</option>
-        <option value="B">Class B</option>
-        <option value="C">Class C</option>
-      </select>
-      <button class="erp-btn-clear" onclick="erpClearFilters()" title="Clear all filters">
-        <i class="bi bi-x-lg"></i> Clear
-      </button>
+ <!-- FILTERS + SEARCH -->
+<div class="erp-card erp-filters-card">
+  <div class="erp-filters-row">
+    <div class="erp-search-wrap">
+      <i class="bi bi-search"></i>
+      <input type="text" id="erpSearchInput" class="erp-search" placeholder="Search item code or description..." oninput="erpOnSearchInput()">
     </div>
+    <select id="erpCategoryFilter" class="erp-select" onchange="erpLoadItems()">
+      <option value="">All Categories</option>
+    </select>
+    <select id="erpLocationFilter" class="erp-select" onchange="erpLoadItems()">
+      <option value="">All Locations</option>
+    </select>
+    <select id="erpMovementFilter" class="erp-select" onchange="erpLoadItems()">
+      <option value="">All Movements</option>
+      <option value="FAST MOVING">Fast Moving</option>
+      <option value="MODERATE MOVING">Moderate</option>
+      <option value="SLOW MOVING">Slow Moving</option>
+      <option value="NO MOVEMENT">No Movement</option>
+    </select>
+    <select id="erpAbcFilter" class="erp-select" onchange="erpLoadItems()">
+      <option value="">All ABC</option>
+      <option value="A">Class A</option>
+      <option value="B">Class B</option>
+      <option value="C">Class C</option>
+    </select>
+    
+    <!-- ✅ BAGONG DAGDAG: VARIANCE FILTER -->
+    <select id="erpVarianceFilter" class="erp-select" onchange="erpLoadItems()" title="Filter by variance">
+      <option value="">All Items</option>
+      <option value="with">With Variance Only</option>
+      <option value="without">No Variance</option>
+      <option value="positive">Positive Variance (+)</option>
+      <option value="negative">Negative Variance (−)</option>
+    </select>
+
+    <button class="erp-btn-clear" onclick="erpClearFilters()" title="Clear all filters">
+      <i class="bi bi-x-lg"></i> Clear
+    </button>
   </div>
+</div>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <!-- STOCK TABLE -->
