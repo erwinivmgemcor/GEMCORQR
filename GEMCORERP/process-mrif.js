@@ -442,7 +442,7 @@ function updateProgress() {
 // ═══════════════════════════════════════════════════════════
 // SUBMIT
 // ═══════════════════════════════════════════════════════════
-async function submitProcess() {
+{
   if (_process.isSubmitting) return;
 
   var verifiedItems = _process.items.filter(function(it) { return it.verified; });
@@ -488,29 +488,66 @@ async function submitProcess() {
       throw new Error('RPC Error: ' + res.status + ' ' + errText);
     }
 
-    var data = await res.json();
+       var data = await res.json();
     if (!data || !data.success) {
       throw new Error(data.error || 'Failed to process');
     }
-        // ✅ I-trigger ang SOF Deduction pagka-process ng MRIF
-    async function submitProcess()
 
-    // ✅ Ipakita ang success modal
+    // ═══════════════════════════════════════════════════════════
+    // ✅ STEP 2: SOF DEDUCTION (NEW)
+    // ═══════════════════════════════════════════════════════════
+    var sofDeductResult = null;
+    if (data.success && data.status !== 'PENDING') {
+      try {
+        console.log('[MRIF Process] Triggering SOF deduction for:', _process.docNo);
+        
+        var sofDeductRes = await fetch(erpUrl('rpc/erp_sof_deduct_on_mrif'), {
+          method: 'POST',
+          headers: erpHeaders(),
+          body: JSON.stringify({
+            p_doc_no: _process.docNo,
+            p_performed_by: currentUser
+          })
+        });
+
+        if (sofDeductRes.ok) {
+          sofDeductResult = await sofDeductRes.json();
+          console.log('[MRIF Process] ✅ SOF deduction result:', sofDeductResult);
+        } else {
+          var sofErrText = await sofDeductRes.text();
+          console.warn('[MRIF Process] SOF deduction failed:', sofDeductRes.status, sofErrText);
+        }
+      } catch(sofErr) {
+        console.warn('[MRIF Process] SOF deduction error:', sofErr);
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ✅ STEP 3: Show success modal with SOF info
+    // ═══════════════════════════════════════════════════════════
     document.getElementById('successDocNo').textContent = _process.docNo;
     document.getElementById('successStatus').textContent = data.status;
 
-    // ✅ Kung may nabuong Balance document, sabihan ang user
+    // Show SOF deduction info kung meron
+    if (sofDeductResult && sofDeductResult.success) {
+      if (sofDeductResult.skipped && sofDeductResult.reason) {
+        // No SOF# on doc — silent
+        console.log('[MRIF Process] SOF:', sofDeductResult.reason);
+      } else if (sofDeductResult.deducted > 0) {
+        erpShowToast('✅ SOF updated: ' + sofDeductResult.deducted + ' items', 'success');
+      } else if (sofDeductResult.skipped_items > 0) {
+        erpShowToast('⚠️ ' + sofDeductResult.skipped_items + ' item(s) skipped (no matching SOF)', 'warning');
+      }
+    }
+
     if (data.bal_doc) {
       var successStatusEl = document.getElementById('successStatus');
       successStatusEl.innerHTML += '<br><br><span class="text-warning fw-bold"><i class="bi bi-info-circle me-1"></i>Note: A Balance document was created: <u>' + data.bal_doc + '</u></span>';
-      erpShowToast('Partial Processed. Balance doc created: ' + data.bal_doc, 'success', 6000);
-    } else {
-      erpShowToast('✅ Document fully processed!', 'success');
     }
 
     var modal = new bootstrap.Modal(document.getElementById('successModal'));
     modal.show();
-
+    
   } catch(err) {
     console.error('[submitProcess] ❌ ERROR:', err);
     erpShowToast('Submit failed: ' + err.message, 'danger');
