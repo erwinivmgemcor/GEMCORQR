@@ -1,6 +1,6 @@
 // ============================================================
 // GEMCOR ERP — Item In & Out (Movement History Viewer)
-// v1.1 — Added Beginning Balance (Beg Bal) computation
+// v1.0 — Search item → show movements + manual edits
 // ============================================================
 
 var _io = {
@@ -17,7 +17,7 @@ var _io = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Item In & Out v1.1] Initializing...');
+  console.log('[Item In & Out v1.0] Initializing...');
   ioCheckHealth();
 
   // ✅ Auto-load item from URL parameter
@@ -70,6 +70,7 @@ function ioOnSearchInput(value) {
     '<i class="bi bi-hourglass-split me-1"></i>Searching...</div>';
   dropdown.classList.remove('d-none');
 
+  // ✅ I-position agad
   var input = document.getElementById('ioSearchInput');
   _ioPositionDropdown(dropdown, input);
 
@@ -140,6 +141,7 @@ async function ioSearchItems(term) {
         dropdown.innerHTML = html;
     dropdown.classList.remove('d-none');
 
+    // ✅ I-position agad ang dropdown
     var input = document.getElementById('ioSearchInput');
     _ioPositionDropdown(dropdown, input);
 
@@ -272,7 +274,7 @@ function ioSwitchTab(tab) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER MOVEMENTS (With Beg Bal Computation)
+// RENDER MOVEMENTS
 // ═══════════════════════════════════════════════════════════
 function ioRenderMovements() {
   var tbody = document.getElementById('ioTableBody');
@@ -282,7 +284,6 @@ function ioRenderMovements() {
   var dateFrom = document.getElementById('ioDateFrom').value;
   var dateTo = document.getElementById('ioDateTo').value;
 
-  // Filter movements base sa Direction at Date Range
   _io.filteredMovements = _io.allMovements.filter(function(m) {
     if (dirFilter) {
       var dir = String(m.direction || '').toUpperCase();
@@ -304,21 +305,259 @@ function ioRenderMovements() {
     return true;
   });
 
-  // ✅ COMPUTE BEG BAL & END BAL
-  var currentOnHand = Number(_io.currentItem ? _io.currentItem.on_hand : 0);
-  var periodIn = 0;
-  var periodOut = 0;
+  var total = _io.filteredMovements.length;
+  document.getElementById('ioTableCount').textContent = total + ' movements';
 
-  _io.filteredMovements.forEach(function(m) {
-    periodIn += Number(m.qty_in || 0);
-    periodOut += Number(m.qty_out || 0);
+  var subtitleEl = document.getElementById('ioTableSubtitle');
+  if (subtitleEl) {
+    if (dirFilter === 'IN') subtitleEl.textContent = 'IN movements only';
+    else if (dirFilter === 'OUT') subtitleEl.textContent = 'OUT movements only';
+    else if (dirFilter === 'ADJUSTMENT') subtitleEl.textContent = 'Adjustments only';
+    else subtitleEl.textContent = 'All movements';
+  }
+
+  if (total === 0) {
+    tbody.innerHTML = '<tr><td colspan="10" class="erp-empty">' +
+      '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
+      'No movements found.</td></tr>';
+    return;
+  }
+
+  var html = '';
+  _io.filteredMovements.forEach(function(m, idx) {
+    var txDate = m.transaction_date ? new Date(m.transaction_date) : null;
+    var dateStr = txDate ? txDate.toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    }) : '—';
+
+    var dir = String(m.direction || 'OTHER').toUpperCase();
+    var dirBadge = '', rowClass = '';
+    if (dir === 'IN') { dirBadge = '<span class="dir-in"><i class="bi bi-arrow-down me-1"></i>IN</span>'; rowClass = 'row-in'; }
+    else if (dir === 'OUT') { dirBadge = '<span class="dir-out"><i class="bi bi-arrow-up me-1"></i>OUT</span>'; rowClass = 'row-out'; }
+    else if (dir === 'ADJUSTMENT') { dirBadge = '<span class="dir-adj"><i class="bi bi-gear me-1"></i>ADJ</span>'; rowClass = 'row-adj'; }
+    else if (dir === 'MIXED') { dirBadge = '<span class="dir-mixed"><i class="bi bi-arrow-left-right me-1"></i>MIXED</span>'; }
+    else { dirBadge = '<span class="dir-other">' + ioEsc(dir) + '</span>'; }
+
+    var qtyIn = Number(m.qty_in || 0);
+    var qtyOut = Number(m.qty_out || 0);
+    var inDisplay = qtyIn > 0 ? '<span class="text-success fw-bold">+' + ioNum(qtyIn) + '</span>' : '—';
+    var outDisplay = qtyOut > 0 ? '<span class="text-danger fw-bold">−' + ioNum(qtyOut) + '</span>' : '—';
+    var balance = m.balance_after != null ? ioNum(m.balance_after) : '—';
+    var typeLabel = String(m.transaction_type || '—').replace(/_/g, ' ');
+
+    // Combine reason: adj_reason + adj_variance + notes
+    var reasonText = m.reason || '';
+    if (m.adj_variance && Number(m.adj_variance) !== 0) {
+      var varStr = (Number(m.adj_variance) > 0 ? '+' : '') + ioNum(m.adj_variance);
+      reasonText = reasonText ? reasonText + ' (' + varStr + ')' : varStr;
+    }
+
+    html += '<tr class="' + rowClass + '">' +
+      '<td>' + (idx + 1) + '</td>' +
+      '<td style="font-size:0.78rem;">' + ioEsc(dateStr) + '</td>' +
+      '<td class="text-center">' + dirBadge + '</td>' +
+      '<td><span class="badge bg-secondary">' + ioEsc(typeLabel) + '</span></td>' +
+      '<td><code style="font-size:0.75rem;">' + ioEsc(m.reference_doc || '—') + '</code></td>' +
+      '<td class="text-end">' + inDisplay + '</td>' +
+      '<td class="text-end">' + outDisplay + '</td>' +
+      '<td class="text-end fw-bold">' + balance + '</td>' +
+      '<td>' + ioEsc(m.performed_by || '—') + '</td>' +
+      '<td title="' + ioEsc(reasonText) + '">' + ioEsc(ioTruncate(reasonText || '—', 40)) + '</td>' +
+    '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER MANUAL EDITS
+// ═══════════════════════════════════════════════════════════
+function ioRenderEdits() {
+  var tbody = document.getElementById('ioEditsBody');
+  if (!tbody) return;
+
+  var total = _io.allEdits.length;
+  document.getElementById('ioEditsCount').textContent = total + ' edits';
+
+  if (total === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
+      '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
+      'No manual edits found.</td></tr>';
+    return;
+  }
+
+  var html = '';
+  _io.allEdits.forEach(function(e, idx) {
+    var editDate = e.edited_at ? new Date(e.edited_at) : null;
+    var dateStr = editDate ? editDate.toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    }) : '—';
+
+    var oldVal = parseFloat(e.old_value) || 0;
+    var newVal = parseFloat(e.new_value) || 0;
+    var change = newVal - oldVal;
+    var changeStr = (change >= 0 ? '+' : '') + ioNum(change);
+
+    var fieldLabel = String(e.field_name || '').replace(/_/g, ' ').toUpperCase();
+
+    html += '<tr>' +
+      '<td>' + (idx + 1) + '</td>' +
+      '<td style="font-size:0.78rem;">' + ioEsc(dateStr) + '</td>' +
+      '<td><span class="badge bg-info text-dark">' + ioEsc(fieldLabel) + '</span></td>' +
+      '<td class="text-end text-muted">' + ioNum(oldVal) + '</td>' +
+      '<td class="text-end text-success fw-bold">' + ioNum(newVal) + '</td>' +
+      '<td class="text-end ' + (change >= 0 ? 'text-success' : 'text-danger') + '">' + changeStr + '</td>' +
+      '<td>' + ioEsc(e.edited_by || '—') + '</td>' +
+      '<td><span class="badge bg-secondary">' + ioEsc(e.source || '—') + '</span></td>' +
+      '<td title="' + ioEsc(e.reason || '') + '">' + ioEsc(ioTruncate(e.reason || '—', 40)) + '</td>' +
+    '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════
+// FILTERS
+// ═══════════════════════════════════════════════════════════
+function ioClearFilters() {
+  document.getElementById('ioDirectionFilter').value = '';
+  document.getElementById('ioDateFrom').value = '';
+  document.getElementById('ioDateTo').value = '';
+  ioRenderMovements();
+}
+
+// ═══════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════
+function ioExportMovements() {
+  if (!_io.currentItem) { erpShowToast('No item selected', 'warning'); return; }
+  if (_io.filteredMovements.length === 0) { erpShowToast('No movements to export', 'warning'); return; }
+
+  var item = _io.currentItem;
+  var headers = [
+    'Date', 'Direction', 'Type', 'Reference',
+    'Qty In', 'Qty Out', 'Balance Before', 'Balance After',
+    'Performed By', 'Reason'
+  ];
+
+  var rows = _io.filteredMovements.map(function(m) {
+    var txDate = m.transaction_date ? new Date(m.transaction_date) : null;
+    return [
+      txDate ? txDate.toLocaleString() : '',
+      m.direction || '',
+      m.transaction_type || '',
+      m.reference_doc || '',
+      Number(m.qty_in || 0),
+      Number(m.qty_out || 0),
+      Number(m.balance_before || 0),
+      Number(m.balance_after || 0),
+      m.performed_by || '',
+      m.reason || ''
+    ];
   });
 
-  // Beg Bal Formula: Current On-Hand - Period In + Period Out
-  // Ito ay 'derived' Beg Bal. Kung walang filter, babalik siya sa Current On-Hand.
-  var begBal = currentOnHand - periodIn + periodOut;
-  var endBal = begBal + periodIn - periodOut;
+  var csv = 'Item Code,' + _csvEscIo(item.item_code) + '\n';
+  csv += 'Description,' + _csvEscIo(item.description) + '\n';
+  csv += 'Current On-Hand,' + (item.on_hand || 0) + '\n\n';
+  csv += headers.map(_csvEscIo).join(',') + '\n';
+  rows.forEach(function(row) { csv += row.map(_csvEscIo).join(',') + '\n'; });
 
-  // Update Summary Bar
-  document.getElementById('ioBegBal').textContent = ioNum(begBal);
-  document.getElementById('ioPeriodIn').textContent
+  ioDownloadCsv(csv, 'Item_Movements_' + item.item_code + '_' + new Date().toISOString().slice(0, 10) + '.csv');
+  erpShowToast('✅ Exported ' + rows.length + ' movements', 'success');
+}
+
+function ioDownloadCsv(csv, filename) {
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+}
+
+function _csvEscIo(val) {
+  if (val === null || val === undefined) return '';
+  var s = String(val);
+  if (s.indexOf(',') !== -1 || s.indexOf('"') !== -1 || s.indexOf('\n') !== -1) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+function ioNum(n) {
+  if (n === null || n === undefined || isNaN(n)) return '0';
+  return Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
+function ioTruncate(str, max) {
+  if (!str) return '';
+  if (str.length <= max) return str;
+  return str.substring(0, max) + '…';
+}
+
+function ioEsc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function erpShowToast(msg, type) {
+  var toastEl = document.getElementById('erpToast');
+  if (!toastEl) { console.log('[Toast]', type, msg); return; }
+  document.getElementById('erpToastBody').textContent = msg;
+  bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
+}
+
+// Click outside — close dropdown
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.item-search-wrap')) {
+    var dropdown = document.getElementById('ioSearchDropdown');
+    if (dropdown) dropdown.classList.add('d-none');
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// POSITION DROPDOWN (para hindi matakpan ng parent card)
+// ═══════════════════════════════════════════════════════════
+function _ioPositionDropdown(dropdown, input) {
+  if (!dropdown || !input) return;
+  var rect = input.getBoundingClientRect();
+  var spaceBelow = window.innerHeight - rect.bottom;
+  var spaceAbove = rect.top;
+
+  dropdown.style.position = 'fixed';
+  dropdown.style.left = rect.left + 'px';
+  dropdown.style.width = Math.max(rect.width, 400) + 'px';
+  dropdown.style.zIndex = '99999';
+
+  // Kung kulang ang space sa baba, i-flip pataas
+  if (spaceBelow < 320 && spaceAbove > spaceBelow) {
+    dropdown.style.top = 'auto';
+    dropdown.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceAbove - 20, 400) + 'px';
+  } else {
+    dropdown.style.bottom = 'auto';
+    dropdown.style.top = (rect.bottom + 4) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceBelow - 20, 400) + 'px';
+  }
+}
+
+// Reposition on scroll
+window.addEventListener('scroll', function() {
+  var dropdown = document.getElementById('ioSearchDropdown');
+  var input = document.getElementById('ioSearchInput');
+  if (dropdown && !dropdown.classList.contains('d-none') && input) {
+    _ioPositionDropdown(dropdown, input);
+  }
+}, { passive: true });
+
+// Hide on resize
+window.addEventListener('resize', function() {
+  var dropdown = document.getElementById('ioSearchDropdown');
+  if (dropdown) dropdown.classList.add('d-none');
+});
+
+console.log('✅ item-in-out.js v1.0 loaded');
