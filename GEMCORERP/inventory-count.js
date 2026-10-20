@@ -1234,7 +1234,20 @@ async function icApproveCount() {
           adjusted_at: new Date().toISOString()
         }])
       });
-
+      // ✅ NEW: I-save ang Variance sa bagong table
+      await fetch(erpUrl('erp_inventory_variances'), {
+        method: 'POST',
+        headers: erpHeaders(),
+        body: JSON.stringify([{
+          count_no: countNo,
+          item_code: item.item_code,
+          description: item.description,
+          system_qty: oldOnHand,
+          counted_qty: newOnHand,
+          unit: item.unit || 'PIECE',
+          approved_by: currentUser
+        }])
+      });
       adjustCount++;
     }
 
