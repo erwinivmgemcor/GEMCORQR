@@ -445,11 +445,22 @@ function showSuccessModal(docNo) {
 }
 
 function resetFormSilent() {
-  document.getElementById('mrifJoNo').value = '';
-  document.getElementById('mrifGemSoNo').value = '';
-  document.getElementById('mrifClientName').value = '';
-  document.getElementById('mrifProject').value = '';
-  document.getElementById('mrifSofNo').value = '';
+   var joInput = document.getElementById('mrifJoNo');
+  if (joInput) joInput.value = '';
+  
+  // ✅ Tinanggal natin ang GEM SO, kaya safe check na lang
+  var gemSoInput = document.getElementById('mrifGemSoNo');
+  if (gemSoInput) gemSoInput.value = '';
+
+  var sofInput = document.getElementById('mrifSofNo');
+  if (sofInput) sofInput.value = ''; // Clear din natin yung SOF field
+  
+  var clientInput = document.getElementById('mrifClientName');
+  if (clientInput) clientInput.value = '';
+  
+  var projInput = document.getElementById('mrifProject');
+  if (projInput) projInput.value = '';
+  
   _mrifState.items = [];
   var container = document.getElementById('itemsContainer');
   container.querySelectorAll('.erp-item-row').forEach(function(r) { r.remove(); });
