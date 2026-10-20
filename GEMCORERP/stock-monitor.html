@@ -116,12 +116,17 @@
         <div class="kpi-sub">Zero on-hand — click to view</div>
       </div>
     </div>
-    <!-- CARD 6: Inventory Variances-->
-      <div class="erp-kpi-card kpi-amber kpi-clickable" onclick="erpShowVariancesModal()" title="Click to view items with inventory count variances">
+       <!-- CARD 6: Inventory Variances -->
+    <div class="erp-kpi-card kpi-amber kpi-clickable" onclick="erpFilterByVariance()" title="Click to filter items with variances">
       <div class="kpi-icon" style="background:#fef3c7;color:#92400e;"><i class="bi bi-exclamation-diamond-fill"></i></div>
       <div class="kpi-content">
         <div class="kpi-label">Inventory Variances</div>
-        <div class="kpi-value" id="kpiVariances">—</div>
+        <div class="d-flex justify-content-between align-items-end">
+          <div class="kpi-value" id="kpiVariances">—</div>
+          <button class="btn btn-sm btn-outline-dark py-0 px-2 mb-1" style="font-size:0.65rem;" onclick="event.stopPropagation(); erpShowVariancesModal()" title="View full list">
+            <i class="bi bi-list-ul"></i> View
+          </button>
+        </div>
         <div class="kpi-sub">Items with count discrepancies</div>
       </div>
     </div>
@@ -1100,6 +1105,57 @@
   </div>
 </div>
   
-
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- VARIANCES MODAL -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="erpVariancesModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#f59e0b;color:#1f2937;">
+        <h5 class="modal-title">
+          <i class="bi bi-exclamation-diamond-fill me-2"></i>
+          Inventory Variances
+          <span class="badge bg-light text-dark ms-2" id="variancesCount">0</span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="erp-filters-row mb-3">
+          <div class="erp-search-wrap" style="flex:1;">
+            <i class="bi bi-search"></i>
+            <input type="text" id="variancesSearchInput" class="erp-search" placeholder="Search item code or description..." oninput="erpFilterVariancesModal()">
+          </div>
+          <button class="erp-btn-outline-dark" onclick="erpExportVariances()" title="Export to Excel (CSV)">
+            <i class="bi bi-file-earmark-excel"></i> Export
+          </button>
+        </div>
+        <div class="table-responsive" style="max-height:60vh;">
+          <table class="erp-table">
+            <thead>
+              <tr>
+                <th>Item Code</th>
+                <th>Description</th>
+                <th>Category</th>
+                <th class="text-center">System Qty</th>
+                <th class="text-center">Counted Qty</th>
+                <th class="text-center">Variance</th>
+                <th class="text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="variancesTableBody">
+              <tr><td colspan="7" class="erp-empty">
+                <div class="erp-spinner"></div>
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+  
 </body>
 </html>
