@@ -1,6 +1,8 @@
 // ============================================================
 // GEMCOR ERP — Item In & Out (Movement History Viewer)
-// v1.0 — Search item → show movements + manual edits
+// v1.1 — Added Beginning Balance (Beg Bal) computation
+//       + Complete helpers (ioNum, ioTruncate, _ioPositionDropdown)
+//       + Fixed: ioRenderMovements now updates BegBalBar elements
 // ============================================================
 
 var _io = {
@@ -17,16 +19,16 @@ var _io = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Item In & Out v1.0] Initializing...');
+  console.log('[Item In & Out v1.1] Initializing...');
   ioCheckHealth();
 
-  // ✅ Auto-load item from URL parameter
   var params = new URLSearchParams(window.location.search);
   var code = params.get('code');
   if (code) {
     console.log('[Item In & Out] Auto-loading from URL:', code);
     setTimeout(function() {
-      document.getElementById('ioSearchInput').value = code;
+      var searchInput = document.getElementById('ioSearchInput');
+      if (searchInput) searchInput.value = code;
       ioLoadItem(code);
     }, 500);
   }
@@ -57,6 +59,7 @@ async function ioCheckHealth() {
 // ═══════════════════════════════════════════════════════════
 function ioOnSearchInput(value) {
   var dropdown = document.getElementById('ioSearchDropdown');
+  if (!dropdown) return;
   var term = String(value || '').toLowerCase().trim();
 
   if (_io.searchTimer) clearTimeout(_io.searchTimer);
@@ -66,11 +69,10 @@ function ioOnSearchInput(value) {
     return;
   }
 
-    dropdown.innerHTML = '<div class="item-search-item" style="color:#9ca3af;text-align:center;">' +
+  dropdown.innerHTML = '<div class="item-search-item" style="color:#9ca3af;text-align:center;">' +
     '<i class="bi bi-hourglass-split me-1"></i>Searching...</div>';
   dropdown.classList.remove('d-none');
 
-  // ✅ I-position agad
   var input = document.getElementById('ioSearchInput');
   _ioPositionDropdown(dropdown, input);
 
@@ -79,6 +81,8 @@ function ioOnSearchInput(value) {
 
 async function ioSearchItems(term) {
   var dropdown = document.getElementById('ioSearchDropdown');
+  if (!dropdown) return;
+
   try {
     if (!_io.inventoryCache) {
       if (typeof erpGetInventoryListForDropdown === 'function') {
@@ -138,10 +142,9 @@ async function ioSearchItems(term) {
         '</div>' +
       '</div>';
     });
-        dropdown.innerHTML = html;
+    dropdown.innerHTML = html;
     dropdown.classList.remove('d-none');
 
-    // ✅ I-position agad ang dropdown
     var input = document.getElementById('ioSearchInput');
     _ioPositionDropdown(dropdown, input);
 
@@ -188,15 +191,17 @@ async function ioLoadItem(itemCode) {
     var item = itemRows[0];
     _io.currentItem = item;
 
-    // Fetch movements + manual edits in parallel
-    var [movements, edits] = await Promise.all([
-      erpFetch('v_item_movements',
-        'select=*&item_code=eq.' + encodeURIComponent(itemCode) +
-        '&order=transaction_date.desc&limit=1000'),
-      erpFetch('v_item_manual_edits',
-        'select=*&item_code=eq.' + encodeURIComponent(itemCode) +
-        '&order=edited_at.desc&limit=500').catch(function() { return []; })
-    ]);
+    var movementsPromise = erpFetch('v_item_movements',
+      'select=*&item_code=eq.' + encodeURIComponent(itemCode) +
+      '&order=transaction_date.desc&limit=1000').catch(function() { return []; });
+
+    var editsPromise = erpFetch('v_item_manual_edits',
+      'select=*&item_code=eq.' + encodeURIComponent(itemCode) +
+      '&order=edited_at.desc&limit=500').catch(function() { return []; });
+
+    var results = await Promise.all([movementsPromise, editsPromise]);
+    var movements = results[0];
+    var edits = results[1];
 
     _io.allMovements = movements || [];
     _io.allEdits = edits || [];
@@ -274,7 +279,7 @@ function ioSwitchTab(tab) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER MOVEMENTS
+// RENDER MOVEMENTS (WITH BEG BAL COMPUTATION)
 // ═══════════════════════════════════════════════════════════
 function ioRenderMovements() {
   var tbody = document.getElementById('ioTableBody');
@@ -305,16 +310,43 @@ function ioRenderMovements() {
     return true;
   });
 
-  var total = _io.filteredMovements.length;
-  document.getElementById('ioTableCount').textContent = total + ' movements';
+  // ✅ COMPUTE BEG BAL & END BAL
+  var currentOnHand = Number(_io.currentItem ? _io.currentItem.on_hand : 0);
+  var periodIn = 0;
+  var periodOut = 0;
+
+  _io.filteredMovements.forEach(function(m) {
+    periodIn += Number(m.qty_in || 0);
+    periodOut += Number(m.qty_out || 0);
+  });
+
+  var begBal = currentOnHand - periodIn + periodOut;
+  var endBal = begBal + periodIn - periodOut;
+
+  // ✅ Update Summary Bar
+  var elBegBal = document.getElementById('ioBegBal');
+  if (elBegBal) elBegBal.textContent = ioNum(begBal);
+
+  var elPeriodIn = document.getElementById('ioPeriodIn');
+  if (elPeriodIn) elPeriodIn.textContent = ioNum(periodIn);
+
+  var elPeriodOut = document.getElementById('ioPeriodOut');
+  if (elPeriodOut) elPeriodOut.textContent = ioNum(periodOut);
+
+  var elEndBal = document.getElementById('ioEndBal');
+  if (elEndBal) elEndBal.textContent = ioNum(endBal);
 
   var subtitleEl = document.getElementById('ioTableSubtitle');
   if (subtitleEl) {
     if (dirFilter === 'IN') subtitleEl.textContent = 'IN movements only';
     else if (dirFilter === 'OUT') subtitleEl.textContent = 'OUT movements only';
     else if (dirFilter === 'ADJUSTMENT') subtitleEl.textContent = 'Adjustments only';
+    else if (dateFrom || dateTo) subtitleEl.textContent = 'Filtered period';
     else subtitleEl.textContent = 'All movements';
   }
+
+  var total = _io.filteredMovements.length;
+  document.getElementById('ioTableCount').textContent = total + ' movements';
 
   if (total === 0) {
     tbody.innerHTML = '<tr><td colspan="10" class="erp-empty">' +
@@ -323,8 +355,22 @@ function ioRenderMovements() {
     return;
   }
 
+  var sorted = _io.filteredMovements.slice().sort(function(a, b) {
+    var da = a.transaction_date ? new Date(a.transaction_date).getTime() : 0;
+    var db = b.transaction_date ? new Date(b.transaction_date).getTime() : 0;
+    return da - db;
+  });
+
+  var runningBal = begBal;
   var html = '';
-  _io.filteredMovements.forEach(function(m, idx) {
+  var rowNum = 0;
+
+  sorted.forEach(function(m) {
+    rowNum++;
+    var qtyIn = Number(m.qty_in || 0);
+    var qtyOut = Number(m.qty_out || 0);
+    runningBal += qtyIn - qtyOut;
+
     var txDate = m.transaction_date ? new Date(m.transaction_date) : null;
     var dateStr = txDate ? txDate.toLocaleString('en-US', {
       month: 'short', day: 'numeric', year: '2-digit',
@@ -339,14 +385,10 @@ function ioRenderMovements() {
     else if (dir === 'MIXED') { dirBadge = '<span class="dir-mixed"><i class="bi bi-arrow-left-right me-1"></i>MIXED</span>'; }
     else { dirBadge = '<span class="dir-other">' + ioEsc(dir) + '</span>'; }
 
-    var qtyIn = Number(m.qty_in || 0);
-    var qtyOut = Number(m.qty_out || 0);
     var inDisplay = qtyIn > 0 ? '<span class="text-success fw-bold">+' + ioNum(qtyIn) + '</span>' : '—';
     var outDisplay = qtyOut > 0 ? '<span class="text-danger fw-bold">−' + ioNum(qtyOut) + '</span>' : '—';
-    var balance = m.balance_after != null ? ioNum(m.balance_after) : '—';
     var typeLabel = String(m.transaction_type || '—').replace(/_/g, ' ');
 
-    // Combine reason: adj_reason + adj_variance + notes
     var reasonText = m.reason || '';
     if (m.adj_variance && Number(m.adj_variance) !== 0) {
       var varStr = (Number(m.adj_variance) > 0 ? '+' : '') + ioNum(m.adj_variance);
@@ -354,14 +396,14 @@ function ioRenderMovements() {
     }
 
     html += '<tr class="' + rowClass + '">' +
-      '<td>' + (idx + 1) + '</td>' +
+      '<td>' + rowNum + '</td>' +
       '<td style="font-size:0.78rem;">' + ioEsc(dateStr) + '</td>' +
       '<td class="text-center">' + dirBadge + '</td>' +
       '<td><span class="badge bg-secondary">' + ioEsc(typeLabel) + '</span></td>' +
       '<td><code style="font-size:0.75rem;">' + ioEsc(m.reference_doc || '—') + '</code></td>' +
       '<td class="text-end">' + inDisplay + '</td>' +
       '<td class="text-end">' + outDisplay + '</td>' +
-      '<td class="text-end fw-bold">' + balance + '</td>' +
+      '<td class="text-end fw-bold">' + ioNum(runningBal) + '</td>' +
       '<td>' + ioEsc(m.performed_by || '—') + '</td>' +
       '<td title="' + ioEsc(reasonText) + '">' + ioEsc(ioTruncate(reasonText || '—', 40)) + '</td>' +
     '</tr>';
@@ -511,17 +553,14 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
 }
 
-// Click outside — close dropdown
 document.addEventListener('click', function(e) {
-  if (!e.target.closest('.item-search-wrap')) {
-    var dropdown = document.getElementById('ioSearchDropdown');
-    if (dropdown) dropdown.classList.add('d-none');
+  var dropdown = document.getElementById('ioSearchDropdown');
+  if (!dropdown) return;
+  if (!e.target.closest('#ioSearchInput') && !e.target.closest('#ioSearchDropdown')) {
+    dropdown.classList.add('d-none');
   }
 });
 
-// ═══════════════════════════════════════════════════════════
-// POSITION DROPDOWN (para hindi matakpan ng parent card)
-// ═══════════════════════════════════════════════════════════
 function _ioPositionDropdown(dropdown, input) {
   if (!dropdown || !input) return;
   var rect = input.getBoundingClientRect();
@@ -533,7 +572,6 @@ function _ioPositionDropdown(dropdown, input) {
   dropdown.style.width = Math.max(rect.width, 400) + 'px';
   dropdown.style.zIndex = '99999';
 
-  // Kung kulang ang space sa baba, i-flip pataas
   if (spaceBelow < 320 && spaceAbove > spaceBelow) {
     dropdown.style.top = 'auto';
     dropdown.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
@@ -545,7 +583,6 @@ function _ioPositionDropdown(dropdown, input) {
   }
 }
 
-// Reposition on scroll
 window.addEventListener('scroll', function() {
   var dropdown = document.getElementById('ioSearchDropdown');
   var input = document.getElementById('ioSearchInput');
@@ -554,10 +591,9 @@ window.addEventListener('scroll', function() {
   }
 }, { passive: true });
 
-// Hide on resize
 window.addEventListener('resize', function() {
   var dropdown = document.getElementById('ioSearchDropdown');
   if (dropdown) dropdown.classList.add('d-none');
 });
 
-console.log('✅ item-in-out.js v1.0 loaded');
+console.log('✅ item-in-out.js v1.1 loaded (with Beg Bal + all helpers)');
