@@ -316,6 +316,7 @@ async function submitMrif() {
   var gemSoNo = document.getElementById('mrifGemSoNo').value.trim();
   var clientName = document.getElementById('mrifClientName').value.trim();
   var project = document.getElementById('mrifProject').value.trim();
+  var sofNo = document.getElementById('mrifSofNo') ? document.getElementById('mrifSofNo').value.trim() : '';
   
   var validItems = [];
   var rows = document.querySelectorAll('.erp-item-row');
@@ -382,6 +383,7 @@ async function submitMrif() {
         gem_so_no: gemSoNo,
         client_name: clientName,
         project: project,
+        sof_no: sofNo,
         date_prepared: new Date().toISOString().split('T')[0],  // ✅ IDAGDAG ITO
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -447,6 +449,7 @@ function resetFormSilent() {
   document.getElementById('mrifGemSoNo').value = '';
   document.getElementById('mrifClientName').value = '';
   document.getElementById('mrifProject').value = '';
+  document.getElementById('mrifSofNo').value = '';
   _mrifState.items = [];
   var container = document.getElementById('itemsContainer');
   container.querySelectorAll('.erp-item-row').forEach(function(r) { r.remove(); });
