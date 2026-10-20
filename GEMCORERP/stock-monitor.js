@@ -232,19 +232,32 @@ async function erpLoadItems() {
   _erpFilteredItems = _erpAllItems.slice();
   _erpCurrentPage = 1;
 
-  // ✅ Fetch SOF allocated qty per item (FIXED SYNTAX)
+  // Fetch SOF allocated qty per item
   try {
     var sofRes = await erpFetch('erp_v_sof_allocated_per_item', 'select=*');
-    
     _erpSofAllocatedMap = {};
     (sofRes || []).forEach(function(sof) {
       _erpSofAllocatedMap[sof.item_code] = Number(sof.total_remaining_qty || 0);
     });
-    
-    console.log('[Stock Monitor] SOF allocated map loaded:', Object.keys(_erpSofAllocatedMap).length, 'items');
   } catch(sofErr) {
     console.warn('[Stock Monitor] SOF allocation fetch failed:', sofErr.message);
     _erpSofAllocatedMap = {};
+  }
+
+  // ✅ NEW: Fetch Latest Variances
+  window._erpVarianceMap = {};
+  try {
+    var varRes = await erpFetch('erp_v_latest_item_variances', 'select=*');
+    (varRes || []).forEach(function(v) {
+      window._erpVarianceMap[v.item_code] = Number(v.variance_qty || 0);
+    });
+    
+    // Update KPI Card
+    var varKpi = document.getElementById('kpiVariances');
+    if (varKpi) varKpi.textContent = Object.keys(window._erpVarianceMap).length;
+
+  } catch(e) { 
+    console.warn('Variance fetch failed', e); 
   }
   
   erpRenderTable();
@@ -266,7 +279,7 @@ function erpRenderTable() {
   document.getElementById('erpBtnNext').disabled = (end >= total);
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="17" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="18" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No items match your filters.</td></tr>';
     return;
@@ -281,9 +294,13 @@ function erpRenderTable() {
     var aveDay = Number(it.ave_daily_consumption || 0);
     var activeMo = Number(it.active_consumption_months || 0);
 
-    // ✅ NEW: SOF Allocated + Available
+    // SOF Allocated
     var sofAllocated = Number(_erpSofAllocatedMap[it.item_code] || 0);
     var available = onHand - sofAllocated;
+
+    // Variance Check
+    var variance = window._erpVarianceMap ? (window._erpVarianceMap[it.item_code] || 0) : 0;
+    var rowHighlightStyle = variance !== 0 ? 'background:#fffbeb;' : '';
 
     var qtyClass = 'qty-ok';
     if (onHand === 0) qtyClass = 'qty-zero';
@@ -329,18 +346,16 @@ function erpRenderTable() {
     var unitCost = Number(it.unit_cost || 0);
     var onHandCost = onHand * unitCost;
 
-    // ✅ SOF Allocated display
     var sofDisplay = sofAllocated > 0 
       ? '<span class="fw-bold" style="color:#f59e0b;">' + erpNum(sofAllocated) + '</span>'
       : '<span class="text-muted">—</span>';
 
-    // ✅ Available display
     var availableDisplay = sofAllocated > 0
       ? '<span class="fw-bold ' + availableClass + '">' + erpNum(available) + '</span>'
       : '<span class="text-muted">' + erpNum(onHand) + '</span>';
 
-    // ✅ ROW WITH ONCLICK
-    html += '<tr onclick="erpRowClick(event, \'' + safeCode + '\')" style="cursor:pointer;">' +
+    // HTML Row
+    html += '<tr onclick="erpRowClick(event, \'' + safeCode + '\')" style="cursor:pointer;' + rowHighlightStyle + '">' +
       '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
       '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
       '<td>' + erpEsc(it.category || '—') + '</td>' +
@@ -361,6 +376,10 @@ function erpRenderTable() {
       '<td class="text-center">' + reorderStatus + '</td>' +
       '<td class="text-center">' + abcBadge + '</td>' +
       '<td class="text-center">' + movBadge + '</td>' +
+      // ✅ BAGONG TD PARA SA VARIANCE
+      '<td class="text-center">' + 
+        (variance !== 0 ? '<span class="badge bg-warning text-dark" title="Variance: ' + variance + '"><i class="bi bi-exclamation-triangle-fill"></i> ' + (variance > 0 ? '+' : '') + variance + '</span>' : '<span class="text-muted">—</span>') +
+      '</td>' +
       '<td class="text-center">' +
         '<button class="lock-toggle-btn ' + lockClass + '" ' +
           'onclick="event.stopPropagation();erpToggleLock(\'' + safeCode + '\', ' + isLocked + ')" ' +
