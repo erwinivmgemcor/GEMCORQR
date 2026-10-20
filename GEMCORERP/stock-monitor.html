@@ -214,34 +214,27 @@
 
     <div class="erp-table-wrap">
       <table class="erp-table">
- <thead>
+<thead>
   <tr>
     <th class="col-code">Item Code</th>
     <th>Description</th>
     <th class="col-cat">Category</th>
     <th class="col-loc">Location</th>
-   <th class="col-qty text-end">On-Hand</th>
-<!-- ✅ IDAGDAG ITO -->
-<th class="col-qty text-center" style="color:#f59e0b;">Variance</th>
-<!-- END -->
-<th class="col-qty text-end" title="SOF Allocated Qty (sum of all open SOFs)" style="color:#f59e0b;">SOF Allocated</th>
+    <th class="col-qty text-end">On-Hand</th>
+    <th class="col-qty text-center" style="color:#f59e0b;">Variance</th> <!-- ✅ DAPAT NANDITO ITO -->
+    <th class="col-qty text-end" title="SOF Allocated Qty" style="color:#f59e0b;">SOF Allocated</th>
     <th class="col-qty text-end" title="Available = On-Hand − SOF Allocated" style="color:#10b981;">Available</th>
-   <th class="col-buffer text-end" title="Buffer Stock (Ave Monthly × 1.75)">
-  Buffer 
-  <span class="ms-1">
-    <button class="btn btn-sm p-0 text-success" onclick="erpBulkLockBuffer(true)" title="Lock All Buffers"><i class="bi bi-lock-fill"></i></button>
-    <button class="btn btn-sm p-0 text-danger ms-1" onclick="erpBulkLockBuffer(false)" title="Unlock All Buffers"><i class="bi bi-unlock-fill"></i></button>
-  </span>
-</th>
+    <th class="col-buffer text-end" title="Buffer Stock">Buffer</th>
     <th class="col-unit text-center">Unit</th>
-    <th class="col-cost text-end" title="Unit Cost (₱)">Unit Cost</th>
-    <th class="col-value text-end" title="Total Value = On-Hand × Unit Cost">On-Hand Cost</th>
-    <th class="col-usage text-center" title="Active Consumption Months (4+ = STANDARD)">Active Mo</th>
-    <th class="col-usage text-end" title="Average Monthly Consumption">Ave/Mo</th>
-    <th class="col-usage text-end" title="Average Daily Consumption">Ave/Day</th>
+    <th class="col-cost text-end">Unit Cost</th>
+    <th class="col-value text-end">On-Hand Cost</th>
+    <th class="col-usage text-center">Active Mo</th>
+    <th class="col-usage text-end">Ave/Mo</th>
+    <th class="col-usage text-end">Ave/Day</th>
     <th class="col-status text-center">Reorder Status</th>
     <th class="col-abc text-center">ABC</th>
     <th class="col-mov text-center">Movement</th>
+    <th class="text-center">Action</th> <!-- Para sa Lock Button -->
   </tr>
 </thead>
         <tbody id="erpTableBody">
