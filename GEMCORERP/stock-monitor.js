@@ -209,7 +209,7 @@ async function erpLoadItems() {
   var tbody = document.getElementById('erpTableBody');
   if (!tbody) return;
   
- tbody.innerHTML = '<tr><td colspan="17" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading inventory...</div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="17" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading inventory...</div></td></tr>';
   
   var filters = {
     category: document.getElementById('erpCategoryFilter').value,
@@ -223,22 +223,21 @@ async function erpLoadItems() {
   var result = await erpGetAllItems(filters);
   
   if (!result.success) {
-  tbody.innerHTML = '<tr><td colspan="17" class="erp-empty text-danger">' +
-  '<i class="bi bi-exclamation-triangle-fill"></i> ' + erpEsc(result.error) + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="17" class="erp-empty text-danger">' +
+      '<i class="bi bi-exclamation-triangle-fill"></i> ' + erpEsc(result.error) + '</td></tr>';
     return;
   }
   
   _erpAllItems = result.items || [];
   _erpFilteredItems = _erpAllItems.slice();
   _erpCurrentPage = 1;
-   // ✅ NEW: Fetch SOF allocated qty per item
+
+  // ✅ Fetch SOF allocated qty per item (FIXED SYNTAX)
   try {
     var sofRes = await erpFetch('erp_v_sof_allocated_per_item', 'select=*');
     
     _erpSofAllocatedMap = {};
     (sofRes || []).forEach(function(sof) {
-      // View returns: item_code, total_remaining_qty
-      // Map total_remaining_qty directly as the allocated amount
       _erpSofAllocatedMap[sof.item_code] = Number(sof.total_remaining_qty || 0);
     });
     
@@ -247,15 +246,9 @@ async function erpLoadItems() {
     console.warn('[Stock Monitor] SOF allocation fetch failed:', sofErr.message);
     _erpSofAllocatedMap = {};
   }
-    
-    console.log('[Stock Monitor] SOF allocated map loaded:', Object.keys(_erpSofAllocatedMap).length, 'items');
-  } catch(sofErr) {
-    console.warn('[Stock Monitor] SOF allocation fetch failed:', sofErr.message);
-    _erpSofAllocatedMap = {};
-  }
+  
   erpRenderTable();
 }
-
 function erpRenderTable() {
   var tbody = document.getElementById('erpTableBody');
   var total = _erpFilteredItems.length;
