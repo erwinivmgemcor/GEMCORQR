@@ -1,14 +1,10 @@
 // ============================================================
-// GEMCOR ERP — New MRR Creation (v4)
-// ✅ PO Lookup with FALLBACK to erp_prf_po_cache
-// ✅ SOF No. field support (sync between step 1 & 2)
-// ✅ Auto-suggest for manual item entry
-// ✅ Automatic status patch (COMPLETED/PARTIAL) after insert
+// GEMCOR ERP — New MRR Creation (v5.0 - Direct Insert & Clean)
 // ============================================================
 
 var _mrrState = {
   poNo: '',
-  sofNo: '',                    // ✅ NEW
+  sofNo: '',
   prfNo: '',
   client: '',
   vendor: '',
@@ -30,9 +26,8 @@ var _mrrSearchTimers = {};
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[New MRR v4] Initializing...');
+  console.log('[New MRR v5.0] Initializing...');
 
-  // ✅ IDINAGDAG NATIN ITO: I-reset ang form pagka-open para walang lumang data
   if (typeof resetFormSilent === 'function') {
     resetFormSilent();
   }
@@ -48,7 +43,6 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('mrrReceivingDate').value = today;
   _mrrState.receivingDate = today;
 
-  // ✅ ITAGO ANG MGA STEPS 2, 3, 4 HANGGANG WALANG PO
   var step2 = document.getElementById('step2Card');
   var step3 = document.getElementById('step3Card');
   var step4 = document.getElementById('step4Card');
@@ -56,7 +50,6 @@ document.addEventListener('DOMContentLoaded', function() {
   if (step3) step3.style.display = 'none';
   if (step4) step4.style.display = 'none';
 
-// HINDI na natin itatago. Hayaan lang siyang lumabas.
  var addItemBtn = document.querySelector('#step3Card .btn-primary');
 if (addItemBtn) addItemBtn.style.display = 'inline-block';
   
@@ -90,13 +83,13 @@ if (addItemBtn) addItemBtn.style.display = 'inline-block';
   setTimeout(function() {
     _mrrLoadInventory().then(function(items) {
       _mrrInventoryCache = items;
-      console.log('[MRR v4] Inventory cache preloaded:', items.length, 'items');
+      console.log('[MRR v5.0] Inventory cache preloaded:', items.length, 'items');
     }).catch(function(err) {
-      console.warn('[MRR v4] Preload failed:', err.message);
+      console.warn('[MRR v5.0] Preload failed:', err.message);
     });
   }, 500);
 
-  console.log('[New MRR v4] Ready. Prepared By:', userFullname);
+  console.log('[New MRR v5.0] Ready. Prepared By:', userFullname);
 });
 
 async function mrrCheckHealth() {
@@ -153,7 +146,6 @@ async function lookupPoNo() {
 
         if (cacheRows && cacheRows.length > 0) {
           console.log('[MRR Lookup] Found ' + cacheRows.length + ' items in po_cache');
-          // Map po_cache fields to prf_items structure
           rows = cacheRows.map(function(r) {
             return {
               prf_no: r.prf_no || '',
@@ -207,8 +199,6 @@ async function lookupPoNo() {
       };
     });
 
-       renderItems();
-
     // ✅ IPAKITA ANG FORM KAPAG MAY NAKITANG PO
     var step2 = document.getElementById('step2Card');
     var step3 = document.getElementById('step3Card');
@@ -261,7 +251,6 @@ async function lookupPoNo() {
 // ITEMS MANAGEMENT
 // ═══════════════════════════════════════════════════════════
 function addItemRow() {
-  // ✅ HARANGIN KUNG WALANG PO
   if (!_mrrState.poNo) {
     erpShowToast('Please lookup a valid PO No. first. For manual entry, use the Manual MRR page.', 'warning');
     return;
@@ -535,11 +524,11 @@ function _positionMrrDropdown(dropdown, input) {
 }
 
 async function _mrrLoadInventory() {
-  console.log('[MRR v4] Loading inventory for autocomplete...');
+  console.log('[MRR v5.0] Loading inventory for autocomplete...');
   try {
     if (typeof erpGetInventoryListForDropdown === 'function') {
       var list = await erpGetInventoryListForDropdown();
-      console.log('[MRR v4] Inventory loaded (shared):', list.length, 'items');
+      console.log('[MRR v5.0] Inventory loaded (shared):', list.length, 'items');
       return list;
     }
 
@@ -575,16 +564,16 @@ async function _mrrLoadInventory() {
       };
     });
 
-    console.log('[MRR v4] Inventory loaded (fallback):', mapped.length, 'items');
+    console.log('[MRR v5.0] Inventory loaded (fallback):', mapped.length, 'items');
     return mapped;
   } catch(err) {
-    console.warn('[MRR v4] Inventory load failed:', err.message);
+    console.warn('[MRR v5.0] Inventory load failed:', err.message);
     return [];
   }
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT MRR
+// SUBMIT MRR (Direct Supabase Insert)
 // ═══════════════════════════════════════════════════════════
 async function submitMrr() {
   if (_mrrState.isSubmitting) return;
@@ -656,8 +645,16 @@ async function submitMrr() {
     var docNo = 'MRR' + padded;
 
     var currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
+    
+    // Compute overall status
+    var isComplete = validItems.every(function(it) { return it.atl_qty >= it.qty; });
+    var isPartial = validItems.some(function(it) { return it.atl_qty > 0; });
+    var finalStatus = isComplete ? 'COMPLETED' : (isPartial ? 'PARTIAL' : 'PENDING');
 
     var docPayload = {
+      doc_no: docNo,
+      doc_type: 'MRR',
+      status: finalStatus,
       requestor: _mrrState.preparedBy,
       department: '',
       po_no: _mrrState.poNo || '',
@@ -669,49 +666,64 @@ async function submitMrr() {
       receiving_site: _mrrState.receivingSite,
       receiving_date: _mrrState.receivingDate,
       date_prepared: new Date().toISOString().split('T')[0],
-      prepared_by: _mrrState.preparedBy
+      prepared_by: _mrrState.preparedBy,
+      item_count: validItems.length,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
 
-    // 2. Tawagin ang RPC para i-save lahat (Doc, Items, Stock, Ledger)
-    var processRes = await fetch(erpUrl('rpc/erp_submit_mrr'), {
+    // 2. Insert Document
+    var docRes = await fetch(erpUrl('documents'), {
       method: 'POST',
-      headers: erpHeaders(),
-      body: JSON.stringify({
-        p_doc_no: docNo,
-        p_doc_payload: docPayload,
-        p_items: validItems,
-        p_processed_by: currentUser
-      })
+      headers: erpHeaders({ 'Prefer': 'return=representation' }),
+      body: JSON.stringify(docPayload)
     });
 
-    if (!processRes.ok) {
-      var errText = await processRes.text();
-      throw new Error('RPC Error: ' + processRes.status + ' ' + errText);
+    if (!docRes.ok) {
+      var errText = await docRes.text();
+      throw new Error('Insert Document failed: ' + docRes.status + ' ' + errText);
     }
-    
-    var data = await processRes.json();
-    if (!data || !data.success) throw new Error(data.error || 'Unknown error');
 
-    // 3. SOF Allocation (kung meron)
-    var sofAllocationResult = null;
-    if (_mrrState.sofNo && _mrrState.sofNo.trim()) {
-      try {
-        var sofRes = await fetch(erpUrl('rpc/erp_sof_auto_allocate_on_mrr'), {
-          method: 'POST',
-          headers: erpHeaders(),
-          body: JSON.stringify({
-            p_doc_no: docNo,
-            p_performed_by: currentUser,
-            p_performed_by_fullname: currentUser
-          })
-        });
-        if (sofRes.ok) sofAllocationResult = await sofRes.json();
-      } catch(sofErr) { console.warn(sofErr); }
+    var docArr = await docRes.json();
+    var doc = docArr[0];
+    if (!doc || !doc.id) throw new Error('No document ID returned');
+
+    // 3. Insert Doc Items
+    var itemPayloads = validItems.map(function(it, idx) {
+      return {
+        document_id: doc.id,
+        doc_no: docNo,
+        line_no: idx + 1,
+        item_code: it.item_code,
+        description: it.description,
+        requested_qty: it.qty,
+        issued_qty: it.atl_qty,
+        unit: it.unit,
+        remarks: it.remarks,
+        row_index: idx + 1
+      };
+    });
+
+    var itemsRes = await fetch(erpUrl('doc_items'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify(itemPayloads)
+    });
+
+    if (!itemsRes.ok) {
+      var itemsErrText = await itemsRes.text();
+      throw new Error('Insert Items failed: ' + itemsRes.status + ' ' + itemsErrText);
     }
 
     // Success!
-    erpShowToast('✅ MRR created: ' + docNo + ' (' + data.status + ')', 'success');
-    showSuccessModal(docNo, sofAllocationResult);
+    erpShowToast('✅ MRR created: ' + docNo + ' (' + finalStatus + ')', 'success');
+    
+    // I-refresh ang data sa background
+    if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
+    if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications(true);
+    if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
+
+    showSuccessModal(docNo);
 
   } catch(err) {
     console.error('[submitMrr]', err);
@@ -730,27 +742,6 @@ async function submitMrr() {
 function showSuccessModal(docNo, sofInfo) {
   document.getElementById('successDocNo').textContent = docNo;
   
-  // ✅ Optional: Show SOF allocation info
-  var sofEl = document.getElementById('successSofInfo');
-  if (!sofEl) {
-    // Create if not exists
-    var alertInfo = document.querySelector('#successModal .alert-info');
-    if (alertInfo && sofInfo) {
-      var sofDiv = document.createElement('div');
-      sofDiv.id = 'successSofInfo';
-      sofDiv.className = 'alert alert-warning small mt-2 mb-0';
-      sofDiv.innerHTML = '<i class="bi bi-info-circle me-1"></i>' +
-        'SOF Allocation: <strong>' + sofInfo.sof_no + '</strong> — ' +
-        sofInfo.allocated_count + ' items allocated';
-      alertInfo.appendChild(sofDiv);
-    }
-  } else if (sofInfo) {
-    sofEl.innerHTML = '<i class="bi bi-info-circle me-1"></i>' +
-      'SOF Allocation: <strong>' + sofInfo.sof_no + '</strong> — ' +
-      sofInfo.allocated_count + ' items allocated';
-  }
-
-  // ... existing QR code logic
   var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
   var qrData = base + '../?doc=' + encodeURIComponent(docNo) + '&view=print';
   var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(qrData);
@@ -771,7 +762,7 @@ function showSuccessModal(docNo, sofInfo) {
 // ═══════════════════════════════════════════════════════════
 function resetFormSilent() {
   _mrrState.poNo = '';
-  _mrrState.sofNo = '';              // ✅ NEW
+  _mrrState.sofNo = '';
   _mrrState.prfNo = '';
   _mrrState.client = '';
   _mrrState.vendor = '';
@@ -783,7 +774,6 @@ function resetFormSilent() {
   document.getElementById('mrrVendor').value = '';
   document.getElementById('mrrDrNo').value = '';
 
-  // Clear SOF No. fields (both step 1 & step 2)
   var sof1 = document.getElementById('mrrSofNo');
   var sof2 = document.getElementById('mrrSofNoDisplay');
   if (sof1) sof1.value = '';
@@ -854,4 +844,4 @@ function erpShowToast(msg, type) {
   toast.show();
 }
 
-console.log('✅ new-mrr.js v4 loaded (PO cache fallback + SOF No. support)');
+console.log('✅ new-mrr.js v5.0 loaded (Direct Insert + Clean)');
