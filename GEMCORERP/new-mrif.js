@@ -423,7 +423,6 @@ async function submitMrif() {
     return;
   }
   
-  // ═══ Double-submit protection ═══
   var now = Date.now();
   if (_mrifState.lastSubmittedAt && (now - _mrifState.lastSubmittedAt) < 10000) {
     var elapsed = Math.round((now - _mrifState.lastSubmittedAt) / 1000);
@@ -431,7 +430,7 @@ async function submitMrif() {
     return;
   }
   
-    // ═══ Validation ═══
+  // Validation
   if (!_mrifState.joNo) {
     erpShowToast('Please lookup a JO No. first', 'warning');
     return;
@@ -444,53 +443,33 @@ async function submitMrif() {
   }
   _mrifState.department = department;
   
-   // ✅ Capture SOF# from readonly field (auto-filled from JO lookup)
   var sofNoEl = document.getElementById('mrifSofNo');
   var sofNo = sofNoEl ? sofNoEl.value.trim() : '';
-  _mrifState.sofNo = sofNo;
-  console.log('[Submit MRIF] SOF# captured:', sofNo);
   
-  var validItems = [];
+  // ═══════════════════════════════════════════════════════════
+  // ✅ FIX: Kung walang SOF No, hanapin natin sa background
+  // ═══════════════════════════════════════════════════════════
+  if (!sofNo && _mrifState.joNo) {
+    console.log('[Submit MRIF] SOF# is blank — auto-fetching from JO cache...');
+    try {
+      var sofCache = await erpFetch('erp_sof_cache', 
+        'jo_no=eq.' + encodeURIComponent(_mrifState.joNo) + '&limit=1');
+      
+      if (sofCache && sofCache.length > 0) {
+        sofNo = sofCache[0].sof_no || '';
+        if (sofNo && sofNoEl) sofNoEl.value = sofNo; // I-update ang UI
+        console.log('[Submit MRIF] Auto-fetched SOF#:', sofNo);
+      }
+    } catch(e) {
+      console.warn('[Submit MRIF] Auto-fetch SOF failed:', e);
+    }
+  }
+  
+  _mrifState.sofNo = sofNo;
   
   var validItems = [];
   var rows = document.querySelectorAll('.erp-item-row');
-  for (var i = 0; i < rows.length; i++) {
-    var row = rows[i];
-    var code = row.querySelector('.item-code-input').value.trim();
-    var desc = row.querySelector('.item-desc-input').value.trim();
-    var qty = parseFloat(row.querySelector('.item-qty-input').value) || 0;
-    var unit = row.querySelector('.item-unit-input').value;
-    var remarks = row.querySelector('.item-remarks-input').value.trim();
-    
-    if (!code) {
-      erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning');
-      return;
-    }
-    if (qty <= 0) {
-      erpShowToast('Item #' + (i + 1) + ' has invalid quantity', 'warning');
-      return;
-    }
-    
-    validItems.push({
-      code: code, description: desc, qty: qty, unit: unit, remarks: remarks
-    });
-  }
-  
-  if (validItems.length === 0) {
-    erpShowToast('Please add at least one item', 'warning');
-    return;
-  }
-  
-  if (!confirm('Create MRIF with ' + validItems.length + ' item(s)?')) return;
-  
-  _mrifState.isSubmitting = true;
-  _mrifState.lastSubmittedAt = now;
-  
-  var btn = document.getElementById('btnSubmitMrif');
-  var originalHtml = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
-  
+
   try {
     // Step 1: RPC for doc number
     console.log('[Submit] Calling RPC...');
@@ -567,7 +546,7 @@ async function submitMrif() {
     });
     
     if (!itemsRes.ok) {
-      var itemsErrText = await itemsRes.text();
+      var itemsErrText = await itemsRes.text();  
       throw new Error('Insert items failed: ' + itemsRes.status + ' ' + itemsErrText);
     }
     
