@@ -209,7 +209,7 @@ async function erpLoadItems() {
   var tbody = document.getElementById('erpTableBody');
   if (!tbody) return;
   
-  tbody.innerHTML = '<tr><td colspan="17" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading inventory...</div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="19" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading inventory...</div></td></tr>';
   
   var filters = {
     category: document.getElementById('erpCategoryFilter').value,
@@ -223,7 +223,7 @@ async function erpLoadItems() {
   var result = await erpGetAllItems(filters);
   
   if (!result.success) {
-    tbody.innerHTML = '<tr><td colspan="17" class="erp-empty text-danger">' +
+    tbody.innerHTML = '<tr><td colspan="19" class="erp-empty text-danger">' +
       '<i class="bi bi-exclamation-triangle-fill"></i> ' + erpEsc(result.error) + '</td></tr>';
     return;
   }
@@ -244,7 +244,7 @@ async function erpLoadItems() {
     _erpSofAllocatedMap = {};
   }
 
-  // ✅ NEW: Fetch Latest Variances
+  // Fetch Latest Variances
   window._erpVarianceMap = {};
   try {
     var varRes = await erpFetch('erp_v_latest_item_variances', 'select=*');
@@ -258,6 +258,22 @@ async function erpLoadItems() {
 
   } catch(e) { 
     console.warn('Variance fetch failed', e); 
+  }
+
+  // ✅ BAGONG DAGDAG: Apply variance filter
+  var varianceFilter = document.getElementById('erpVarianceFilter');
+  var varValue = varianceFilter ? varianceFilter.value : '';
+  
+  if (varValue) {
+    _erpFilteredItems = _erpFilteredItems.filter(function(it) {
+      var v = window._erpVarianceMap ? (window._erpVarianceMap[it.item_code] || 0) : 0;
+      
+      if (varValue === 'with') return v !== 0;
+      if (varValue === 'without') return v === 0;
+      if (varValue === 'positive') return v > 0;
+      if (varValue === 'negative') return v < 0;
+      return true;
+    });
   }
   
   erpRenderTable();
@@ -836,9 +852,13 @@ function erpClearFilters() {
   document.getElementById('erpLocationFilter').value = '';
   document.getElementById('erpMovementFilter').value = '';
   document.getElementById('erpAbcFilter').value = '';
+  
+  // ✅ BAGONG DAGDAG: Reset variance filter
+  var varFilter = document.getElementById('erpVarianceFilter');
+  if (varFilter) varFilter.value = '';
+  
   erpLoadItems();
 }
-
 // ═══════════════════════════════════════════════════════════
 // FILTER OPTIONS
 // ═══════════════════════════════════════════════════════════
