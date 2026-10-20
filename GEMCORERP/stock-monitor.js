@@ -231,18 +231,22 @@ async function erpLoadItems() {
   _erpAllItems = result.items || [];
   _erpFilteredItems = _erpAllItems.slice();
   _erpCurrentPage = 1;
-  // ✅ NEW: Fetch SOF allocated qty per item
+   // ✅ NEW: Fetch SOF allocated qty per item
   try {
     var sofRes = await erpFetch('erp_v_sof_allocated_per_item', 'select=*');
-    // OR kung walang view, use direct query:
-    // var sofRes = await erpFetch('erp_sof_allocation_items',
-    //   'select=item_code,allocated_qty,used_qty&status=in.(OPEN,PARTIAL)');
     
     _erpSofAllocatedMap = {};
     (sofRes || []).forEach(function(sof) {
-      _erpSofAllocatedMap[sof.item_code] = 
-        Number(sof.allocated_qty || 0) - Number(sof.used_qty || 0);
+      // View returns: item_code, total_remaining_qty
+      // Map total_remaining_qty directly as the allocated amount
+      _erpSofAllocatedMap[sof.item_code] = Number(sof.total_remaining_qty || 0);
     });
+    
+    console.log('[Stock Monitor] SOF allocated map loaded:', Object.keys(_erpSofAllocatedMap).length, 'items');
+  } catch(sofErr) {
+    console.warn('[Stock Monitor] SOF allocation fetch failed:', sofErr.message);
+    _erpSofAllocatedMap = {};
+  }
     
     console.log('[Stock Monitor] SOF allocated map loaded:', Object.keys(_erpSofAllocatedMap).length, 'items');
   } catch(sofErr) {
