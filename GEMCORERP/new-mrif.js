@@ -549,10 +549,6 @@ async function submitMrif() {
     // ⚠️ SOF# is REFERENCE ONLY — NO allocation from MRIF
     // Allocation happens on MRR (actual receipt)
     // ═══════════════════════════════════════════════════════════
-    if (_mrifState.sofNo) {
-      console.log('[Submit MRIF] SOF# reference saved to document:', _mrifState.sofNo);
-      console.log('[Submit MRIF] ⚠️ No SOF allocation from MRIF — allocation will happen on MRR');
-    }
     
     _mrifState.lastSubmittedDocNo = docNo;
     
