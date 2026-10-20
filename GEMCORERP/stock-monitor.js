@@ -361,6 +361,10 @@ function erpRenderTable() {
       '<td>' + erpEsc(it.category || '—') + '</td>' +
       '<td>' + erpEsc(it.location || '—') + '</td>' +
       '<td class="text-end ' + qtyClass + '">' + erpNum(onHand) + '</td>' +
+            // ✅ VARIANCE (Dapat nasa pagitan ng On-Hand at SOF Allocated)
+      '<td class="text-center">' + 
+        (variance !== 0 ? '<span class="badge bg-warning text-dark" title="Variance: ' + variance + '"><i class="bi bi-exclamation-triangle-fill"></i> ' + (variance > 0 ? '+' : '') + variance + '</span>' : '<span class="text-muted">—</span>') +
+      '</td>' +
       '<td class="text-end">' + sofDisplay + '</td>' +
       '<td class="text-end">' + availableDisplay + '</td>' +
       '<td class="text-end buffer-cell">' +
@@ -374,16 +378,12 @@ function erpRenderTable() {
       '<td class="text-end usage-cell">' + erpNum(aveMo) + '</td>' +
       '<td class="text-end usage-cell">' + erpNum(aveDay) + '</td>' +
       '<td class="text-center">' + reorderStatus + '</td>' +
-      '<td class="text-center">' + abcBadge + '</td>' +
+           '<td class="text-center">' + abcBadge + '</td>' +
       '<td class="text-center">' + movBadge + '</td>' +
-      // ✅ BAGONG TD PARA SA VARIANCE
-      '<td class="text-center">' + 
-        (variance !== 0 ? '<span class="badge bg-warning text-dark" title="Variance: ' + variance + '"><i class="bi bi-exclamation-triangle-fill"></i> ' + (variance > 0 ? '+' : '') + variance + '</span>' : '<span class="text-muted">—</span>') +
-      '</td>' +
       '<td class="text-center">' +
         '<button class="lock-toggle-btn ' + lockClass + '" ' +
           'onclick="event.stopPropagation();erpToggleLock(\'' + safeCode + '\', ' + isLocked + ')" ' +
-          'title="' + (isLocked ? 'Unlock buffer (auto-recompute enabled)' : 'Lock buffer (manual value)') + '">' +
+          'title="' + (isLocked ? 'Unlock buffer' : 'Lock buffer') + '">' +
           '<i class="bi ' + lockIcon + '"></i>' +
         '</button>' +
       '</td>' +
