@@ -1151,13 +1151,19 @@ async function icApproveCount() {
   if (!_ic.currentSession) return;
 
   var countNo = _ic.currentSession.count_no;
-   // ✅ SMART FILTER: Isama lang kung na-scan talaga at may variance.
-  // Ibig sabihin, kung hindi na-scan (scan_count = 0), hindi siya mababago.
+  
+  // ✅ Kunin lang yung mga may totoong variance (positive or negative)
   var varianceItems = _ic.currentItems.filter(function(it) {
-       var isCounted = (it.scan_count > 0 || Number(it.counted_qty) > 0);
-    // ✅ I-allow natin kahit 0 variance para tumakbo ang save
-    return isCounted; 
+    var isCounted = (it.scan_count > 0 || Number(it.counted_qty) > 0);
+    var hasVariance = Math.abs(Number(it.variance || 0)) > 0.0001;
+    return isCounted && hasVariance;
   });
+
+  if (varianceItems.length === 0) {
+    icShowToast('Walang variance na ma-adjust. All matched.', 'info');
+    return;
+  }
+
   var msg = 'Approve this count and adjust stock?\n\n';
   msg += 'Count No.: ' + countNo + '\n';
   msg += 'Items to adjust: ' + varianceItems.length + '\n\n';
@@ -1177,8 +1183,9 @@ async function icApproveCount() {
       var item = varianceItems[i];
       var newOnHand = Number(item.counted_qty || 0);
       var oldOnHand = Number(item.system_qty || 0);
-      var variance = Number(item.variance || 0);
+      var computedVariance = newOnHand - oldOnHand; // ✅ Ito ang tamang variance
 
+      // 1. Update Master Item
       await fetch(erpUrl('erp_items?item_code=eq.' + encodeURIComponent(item.item_code)), {
         method: 'PATCH',
         headers: erpHeaders(),
@@ -1188,7 +1195,8 @@ async function icApproveCount() {
           updated_by: currentUser
         })
       });
-      // ✅ NEW: Insert to Variance Log (Para may history tayo)
+
+      // 2. Insert to Variance Log (Para sa Stock Monitor)
       await fetch(erpUrl('erp_inventory_variances'), {
         method: 'POST',
         headers: erpHeaders(),
@@ -1198,19 +1206,21 @@ async function icApproveCount() {
           description: item.description,
           system_qty: oldOnHand,
           counted_qty: newOnHand,
+          variance_qty: computedVariance,
           unit: item.unit || 'PIECE',
           approved_by: currentUser
         }])
       });
 
+      // 3. Insert to Stock Ledger
       await fetch(erpUrl('erp_stock_ledger'), {
         method: 'POST',
         headers: erpHeaders(),
         body: JSON.stringify([{
           item_code: item.item_code,
           transaction_type: 'ADJUSTMENT',
-          qty_in: variance > 0 ? variance : 0,
-          qty_out: variance < 0 ? Math.abs(variance) : 0,
+          qty_in: computedVariance > 0 ? computedVariance : 0,
+          qty_out: computedVariance < 0 ? Math.abs(computedVariance) : 0,
           balance_before: oldOnHand,
           balance_after: newOnHand,
           reference_doc: countNo,
@@ -1219,6 +1229,7 @@ async function icApproveCount() {
         }])
       });
 
+      // 4. Insert to Stock Adjustments
       await fetch(erpUrl('erp_stock_adjustments'), {
         method: 'POST',
         headers: erpHeaders(),
@@ -1227,31 +1238,18 @@ async function icApproveCount() {
           item_code: item.item_code,
           old_on_hand: oldOnHand,
           new_on_hand: newOnHand,
-          variance: variance,
+          variance: computedVariance,
           reason: 'Inventory Count Adjustment',
           reference_doc: countNo,
           adjusted_by: currentUser,
           adjusted_at: new Date().toISOString()
         }])
       });
-      // ✅ NEW: I-save ang Variance sa bagong table
-      await fetch(erpUrl('erp_inventory_variances'), {
-        method: 'POST',
-        headers: erpHeaders(),
-        body: JSON.stringify([{
-          count_no: countNo,
-          item_code: item.item_code,
-          description: item.description,
-          system_qty: oldOnHand,
-          counted_qty: newOnHand,
-          variance_qty: newOnHand - oldOnHand, // ✅ IDINAGDAG PARA SIGURADO
-          unit: item.unit || 'PIECE',
-          approved_by: currentUser
-        }])
-      });
+
       adjustCount++;
     }
 
+    // 5. I-update ang Session Status
     await fetch(erpUrl('erp_inventory_counts?id=eq.' + _ic.currentSession.id), {
       method: 'PATCH',
       headers: erpHeaders(),
