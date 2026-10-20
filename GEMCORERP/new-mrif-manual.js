@@ -448,12 +448,11 @@ function resetFormSilent() {
    var joInput = document.getElementById('mrifJoNo');
   if (joInput) joInput.value = '';
   
-  // ✅ Tinanggal natin ang GEM SO, kaya safe check na lang
   var gemSoInput = document.getElementById('mrifGemSoNo');
   if (gemSoInput) gemSoInput.value = '';
 
   var sofInput = document.getElementById('mrifSofNo');
-  if (sofInput) sofInput.value = ''; // Clear din natin yung SOF field
+  if (sofInput) sofInput.value = ''; // ✅ Tama na ni-reset mo ito, pero baka may ibang field pa
   
   var clientInput = document.getElementById('mrifClientName');
   if (clientInput) clientInput.value = '';
