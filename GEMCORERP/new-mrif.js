@@ -192,11 +192,6 @@ async function lookupJoNo() {
       }
     }
     
-    // ✅ NEW: Check kung may existing SOF allocation
-    if (_mrifState.sofNo) {
-      await checkAndPromptSofAllocation(_mrifState.sofNo);
-    }
-    
     erpShowToast('JO No. found! Ready to add items.', 'success');
     
     setTimeout(function() {
