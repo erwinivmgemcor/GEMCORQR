@@ -1154,9 +1154,9 @@ async function icApproveCount() {
    // ✅ SMART FILTER: Isama lang kung na-scan talaga at may variance.
   // Ibig sabihin, kung hindi na-scan (scan_count = 0), hindi siya mababago.
   var varianceItems = _ic.currentItems.filter(function(it) {
-    var isCounted = (it.scan_count > 0 || Number(it.counted_qty) > 0);
-    var hasVariance = Math.abs(Number(it.variance || 0)) > 0.0001;
-    return isCounted && hasVariance;
+       var isCounted = (it.scan_count > 0 || Number(it.counted_qty) > 0);
+    // ✅ I-allow natin kahit 0 variance para tumakbo ang save
+    return isCounted; 
   });
   var msg = 'Approve this count and adjust stock?\n\n';
   msg += 'Count No.: ' + countNo + '\n';
@@ -1244,6 +1244,7 @@ async function icApproveCount() {
           description: item.description,
           system_qty: oldOnHand,
           counted_qty: newOnHand,
+          variance_qty: newOnHand - oldOnHand, // ✅ IDINAGDAG PARA SIGURADO
           unit: item.unit || 'PIECE',
           approved_by: currentUser
         }])
