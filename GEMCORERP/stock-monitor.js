@@ -1854,15 +1854,16 @@ window.erpRestoreItem = async function(itemCode) {
 // ═══════════════════════════════════════════════════════════
 // VARIANCE FILTER & MODAL FUNCTIONS
 // ═══════════════════════════════════════════════════════════
+
 window.erpFilterByVariance = function() {
   var varFilter = document.getElementById('erpVarianceFilter');
   if (!varFilter) return;
   
   if (varFilter.value === 'with') {
-    varFilter.value = ''; // Reset
+    varFilter.value = ''; 
     erpShowToast('Showing all items');
   } else {
-    varFilter.value = 'with'; // Filter
+    varFilter.value = 'with'; 
     erpShowToast('Filtered: Items with variance');
   }
   
@@ -1876,7 +1877,10 @@ window.erpFilterByVariance = function() {
 
 window.erpShowVariancesModal = function() {
   var modalEl = document.getElementById('erpVariancesModal');
-  if (!modalEl) return;
+  if (!modalEl) {
+    alert('Error: Modal HTML not found. Please add erpVariancesModal in stock-monitor.html');
+    return;
+  }
   
   var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
   var tbody = document.getElementById('variancesTableBody');
@@ -1976,4 +1980,4 @@ window.erpExportVariances = function() {
   erpShowToast('✅ Exported ' + rows.length + ' variances');
 };
 
-console.log('✅ stock-monitor.js v3.1 loaded — Phase 4 + Variance Filter + Modal');
+console.log('✅ Variance functions loaded successfully!');
