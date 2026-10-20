@@ -1188,6 +1188,20 @@ async function icApproveCount() {
           updated_by: currentUser
         })
       });
+      // ✅ NEW: Insert to Variance Log (Para may history tayo)
+      await fetch(erpUrl('erp_inventory_variances'), {
+        method: 'POST',
+        headers: erpHeaders(),
+        body: JSON.stringify([{
+          count_no: countNo,
+          item_code: item.item_code,
+          description: item.description,
+          system_qty: oldOnHand,
+          counted_qty: newOnHand,
+          unit: item.unit || 'PIECE',
+          approved_by: currentUser
+        }])
+      });
 
       await fetch(erpUrl('erp_stock_ledger'), {
         method: 'POST',
