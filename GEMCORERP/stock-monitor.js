@@ -1,6 +1,7 @@
 // ============================================================
-// GEMCOR ERP — Stock Monitor Logic (v3)
+// GEMCOR ERP — Stock Monitor Logic (v3.1)
 // Phase 4: Inline Edit + Lock Toggle + CSV Import
+// + Variance Filter & Modal
 // ============================================================
 var _erpAllItems = [];
 var _erpFilteredItems = [];
@@ -20,7 +21,7 @@ var _erpSofAllocatedMap = {};
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[ERP] Stock Monitor v3 initializing...');
+  console.log('[ERP] Stock Monitor v3.1 initializing...');
   erpCheckHealth();
   erpLoadDashboard();
 });
@@ -244,7 +245,7 @@ async function erpLoadItems() {
     _erpSofAllocatedMap = {};
   }
 
-  // Fetch Latest Variances
+  // ✅ NEW: Fetch Latest Variances
   window._erpVarianceMap = {};
   try {
     var varRes = await erpFetch('erp_v_latest_item_variances', 'select=*');
@@ -260,7 +261,7 @@ async function erpLoadItems() {
     console.warn('Variance fetch failed', e); 
   }
 
-  // ✅ BAGONG DAGDAG: Apply variance filter
+  // ✅ NEW: Apply Variance Filter
   var varianceFilter = document.getElementById('erpVarianceFilter');
   var varValue = varianceFilter ? varianceFilter.value : '';
   
@@ -278,6 +279,7 @@ async function erpLoadItems() {
   
   erpRenderTable();
 }
+
 function erpRenderTable() {
   var tbody = document.getElementById('erpTableBody');
   var total = _erpFilteredItems.length;
@@ -295,7 +297,7 @@ function erpRenderTable() {
   document.getElementById('erpBtnNext').disabled = (end >= total);
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="18" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="19" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No items match your filters.</td></tr>';
     return;
@@ -377,7 +379,6 @@ function erpRenderTable() {
       '<td>' + erpEsc(it.category || '—') + '</td>' +
       '<td>' + erpEsc(it.location || '—') + '</td>' +
       '<td class="text-end ' + qtyClass + '">' + erpNum(onHand) + '</td>' +
-            // ✅ VARIANCE (Dapat nasa pagitan ng On-Hand at SOF Allocated)
       '<td class="text-center">' + 
         (variance !== 0 ? '<span class="badge bg-warning text-dark" title="Variance: ' + variance + '"><i class="bi bi-exclamation-triangle-fill"></i> ' + (variance > 0 ? '+' : '') + variance + '</span>' : '<span class="text-muted">—</span>') +
       '</td>' +
@@ -394,7 +395,7 @@ function erpRenderTable() {
       '<td class="text-end usage-cell">' + erpNum(aveMo) + '</td>' +
       '<td class="text-end usage-cell">' + erpNum(aveDay) + '</td>' +
       '<td class="text-center">' + reorderStatus + '</td>' +
-           '<td class="text-center">' + abcBadge + '</td>' +
+      '<td class="text-center">' + abcBadge + '</td>' +
       '<td class="text-center">' + movBadge + '</td>' +
       '<td class="text-center">' +
         '<button class="lock-toggle-btn ' + lockClass + '" ' +
@@ -407,6 +408,7 @@ function erpRenderTable() {
   });
   tbody.innerHTML = html;
 }
+
 function erpPagePrev() {
   if (_erpCurrentPage > 1) {
     _erpCurrentPage--;
@@ -428,7 +430,6 @@ function erpPageNext() {
 // ═══════════════════════════════════════════════════════════
 // PHASE 4: INLINE EDIT MODAL
 // ═══════════════════════════════════════════════════════════
-
 window.erpOpenEditModal = function(itemCode, fieldName) {
   var item = _erpAllItems.find(function(it) { return it.item_code === itemCode; });
   if (!item) {
@@ -573,7 +574,6 @@ window.erpSaveEditedCell = async function() {
 // ═══════════════════════════════════════════════════════════
 // PHASE 4: LOCK TOGGLE
 // ═══════════════════════════════════════════════════════════
-
 window.erpToggleLock = async function(itemCode, currentLockState) {
   var newLockState = !currentLockState;
   var actionText = newLockState ? 'LOCK' : 'UNLOCK';
@@ -619,7 +619,6 @@ window.erpToggleLock = async function(itemCode, currentLockState) {
 // ═══════════════════════════════════════════════════════════
 // PHASE 4: CSV BULK IMPORT
 // ═══════════════════════════════════════════════════════════
-
 window.erpOpenCsvImport = function() {
   var modalEl = document.getElementById('csvImportModal');
   if (!modalEl) {
@@ -645,10 +644,8 @@ window.erpDownloadCsvTemplate = function() {
     return;
   }
   
-  // ═══ CSV Header (may description na) ═══
   var csv = 'item_code,description,on_hand,unit_cost,buffer_stock\n';
   
-  // ═══ ALL items (walang slice limit) ═══
   _erpAllItems.forEach(function(it) {
     var code = String(it.item_code || '').replace(/,/g, ' ');
     var desc = String(it.description || '').replace(/,/g, ' ').replace(/"/g, '""');
@@ -656,7 +653,6 @@ window.erpDownloadCsvTemplate = function() {
     var unitCost = Number(it.unit_cost || 0);
     var buffer = Number(it.buffer_stock || 0);
     
-    // Quote description kung may comma
     var descField = desc.indexOf(',') !== -1 ? '"' + desc + '"' : desc;
     
     csv += code + ',' + descField + ',' + onHand + ',' + unitCost + ',' + buffer + '\n';
@@ -670,6 +666,7 @@ window.erpDownloadCsvTemplate = function() {
   
   erpShowToast('✅ Template downloaded: ' + _erpAllItems.length + ' items');
 };
+
 window.erpHandleCsvUpload = function(event) {
   var file = event.target.files[0];
   if (!file) return;
@@ -684,12 +681,12 @@ window.erpHandleCsvUpload = function(event) {
       return;
     }
     
-   var header = lines[0].split(',').map(function(h) { return h.trim().toLowerCase(); });
-var itemCodeIdx = header.indexOf('item_code');
-var descriptionIdx = header.indexOf('description');  // NEW
-var onHandIdx = header.indexOf('on_hand');
-var unitCostIdx = header.indexOf('unit_cost');
-var bufferIdx = header.indexOf('buffer_stock');
+    var header = lines[0].split(',').map(function(h) { return h.trim().toLowerCase(); });
+    var itemCodeIdx = header.indexOf('item_code');
+    var descriptionIdx = header.indexOf('description');
+    var onHandIdx = header.indexOf('on_hand');
+    var unitCostIdx = header.indexOf('unit_cost');
+    var bufferIdx = header.indexOf('buffer_stock');
     
     if (itemCodeIdx === -1) {
       erpShowToast('CSV must have "item_code" column', 'danger');
@@ -705,13 +702,13 @@ var bufferIdx = header.indexOf('buffer_stock');
       
       if (!itemCode) continue;
       
-     var row = { item_code: itemCode };
-if (descriptionIdx !== -1 && parts[descriptionIdx]) {
-  row.description = parts[descriptionIdx].trim().replace(/^"|"$/g, '');
-}
-if (onHandIdx !== -1 && parts[onHandIdx]) row.on_hand = parseFloat(parts[onHandIdx]) || 0;
-if (unitCostIdx !== -1 && parts[unitCostIdx]) row.unit_cost = parseFloat(parts[unitCostIdx]) || 0;
-if (bufferIdx !== -1 && parts[bufferIdx]) row.buffer_stock = parseFloat(parts[bufferIdx]) || 0;
+      var row = { item_code: itemCode };
+      if (descriptionIdx !== -1 && parts[descriptionIdx]) {
+        row.description = parts[descriptionIdx].trim().replace(/^"|"$/g, '');
+      }
+      if (onHandIdx !== -1 && parts[onHandIdx]) row.on_hand = parseFloat(parts[onHandIdx]) || 0;
+      if (unitCostIdx !== -1 && parts[unitCostIdx]) row.unit_cost = parseFloat(parts[unitCostIdx]) || 0;
+      if (bufferIdx !== -1 && parts[bufferIdx]) row.buffer_stock = parseFloat(parts[bufferIdx]) || 0;
       
       var existing = _erpAllItems.find(function(it) { return it.item_code === itemCode; });
       row._valid = !!existing;
@@ -738,22 +735,21 @@ if (bufferIdx !== -1 && parts[bufferIdx]) row.buffer_stock = parseFloat(parts[bu
         ? '<span class="badge bg-success">VALID</span>' 
         : '<span class="badge bg-danger">NOT FOUND</span>';
       
-     // Get item description (from CSV, or fallback sa _erpAllItems)
-var itemDesc = row.description || '';
-if (!itemDesc) {
-  var existingItem = _erpAllItems.find(function(it) { return it.item_code === row.item_code; });
-  itemDesc = existingItem ? existingItem.description : '—';
-}
-
-html += '<tr class="' + (row._valid ? 'valid' : 'invalid') + '">' +
-  '<td>' + (idx + 1) + '</td>' +
-  '<td><code>' + erpEsc(row.item_code) + '</code></td>' +
-  '<td class="text-muted small">' + erpEsc(itemDesc.substring(0, 50)) + (itemDesc.length > 50 ? '…' : '') + '</td>' +
-  '<td class="text-end">' + (row.on_hand != null ? erpNum(row.on_hand) : '—') + '</td>' +
-  '<td class="text-end">' + (row.unit_cost != null ? erpPeso(row.unit_cost) : '—') + '</td>' +
-  '<td class="text-end">' + (row.buffer_stock != null ? erpNum(row.buffer_stock) : '—') + '</td>' +
-  '<td class="text-center">' + statusBadge + '</td>' +
-  '</tr>';
+      var itemDesc = row.description || '';
+      if (!itemDesc) {
+        var existingItem = _erpAllItems.find(function(it) { return it.item_code === row.item_code; });
+        itemDesc = existingItem ? existingItem.description : '—';
+      }
+      
+      html += '<tr class="' + (row._valid ? 'valid' : 'invalid') + '">' +
+        '<td>' + (idx + 1) + '</td>' +
+        '<td><code>' + erpEsc(row.item_code) + '</code></td>' +
+        '<td class="text-muted small">' + erpEsc(itemDesc.substring(0, 50)) + (itemDesc.length > 50 ? '…' : '') + '</td>' +
+        '<td class="text-end">' + (row.on_hand != null ? erpNum(row.on_hand) : '—') + '</td>' +
+        '<td class="text-end">' + (row.unit_cost != null ? erpPeso(row.unit_cost) : '—') + '</td>' +
+        '<td class="text-end">' + (row.buffer_stock != null ? erpNum(row.buffer_stock) : '—') + '</td>' +
+        '<td class="text-center">' + statusBadge + '</td>' +
+        '</tr>';
     });
     
     tbody.innerHTML = html;
@@ -853,12 +849,13 @@ function erpClearFilters() {
   document.getElementById('erpMovementFilter').value = '';
   document.getElementById('erpAbcFilter').value = '';
   
-  // ✅ BAGONG DAGDAG: Reset variance filter
+  // ✅ Reset Variance Filter
   var varFilter = document.getElementById('erpVarianceFilter');
   if (varFilter) varFilter.value = '';
   
   erpLoadItems();
 }
+
 // ═══════════════════════════════════════════════════════════
 // FILTER OPTIONS
 // ═══════════════════════════════════════════════════════════
@@ -928,7 +925,6 @@ async function erpLoadFilterOptions() {
 // ═══════════════════════════════════════════════════════════
 // ITEM DETAILS MODAL (with movements)
 // ═══════════════════════════════════════════════════════════
-
 async function erpShowItemDetails(itemCode) {
   var modalEl = document.getElementById('erpItemModal');
   if (!modalEl) {
@@ -957,7 +953,6 @@ async function erpShowItemDetails(itemCode) {
     
     var html = '';
     
-    // Basic info grid
     html += '<div class="erp-item-detail">';
     html += '<div class="detail-row"><span class="detail-label">Item Code</span><span class="detail-value"><code>' + erpEsc(item.item_code) + '</code></span></div>';
     html += '<div class="detail-row"><span class="detail-label">Category</span><span class="detail-value">' + erpEsc(item.category || '—') + '</span></div>';
@@ -973,11 +968,9 @@ async function erpShowItemDetails(itemCode) {
     html += '<div class="detail-row"><span class="detail-label">Stock Class</span><span class="detail-value">' + erpEsc(item.stock_classification || '—') + '</span></div>';
     html += '</div>';
     
-    // Description
     html += '<div class="erp-section-title">Description</div>';
     html += '<div style="padding:12px;background:#f8fafc;border-radius:8px;font-size:0.9rem;">' + erpEsc(item.description || '—') + '</div>';
     
-    // Movement history (In/Out)
     if (movements.length > 0) {
       html += '<div class="erp-section-title">Recent Movements (' + movements.length + ')</div>';
       html += '<div class="table-responsive"><table class="table table-sm" style="font-size:0.82rem;">';
@@ -1014,6 +1007,7 @@ async function erpShowItemDetails(itemCode) {
     body.innerHTML = '<div class="text-danger">Failed to load: ' + erpEsc(err.message) + '</div>';
   }
 }
+
 // ═══════════════════════════════════════════════════════════
 // REORDER MODAL
 // ═══════════════════════════════════════════════════════════
@@ -1177,10 +1171,10 @@ function erpRenderOutOfStock() {
       statusBadge = '<span class="reorder-badge reorder-none">NO USAGE</span>';
     }
     
- var safeCode = String(it.item_code || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-html += '<tr onclick="erpRowClick(event, \'' + safeCode + '\')" style="cursor:pointer;">' +
-  '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
-  '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
+    var safeCode = String(it.item_code || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    html += '<tr onclick="erpRowClick(event, \'' + safeCode + '\')" style="cursor:pointer;">' +
+      '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
+      '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
       '<td>' + erpEsc(it.category || '—') + '</td>' +
       '<td>' + erpEsc(it.location || '—') + '</td>' +
       '<td class="text-center qty-zero">0</td>' +
@@ -1245,7 +1239,6 @@ function _csvEscErp(val) {
 // ═══════════════════════════════════════════════════════════
 // ADD NEW ITEM MODAL
 // ═══════════════════════════════════════════════════════════
-
 var _addItemModal = null;
 var _addItemSuccessModal = null;
 var _addItemCheckTimer = null;
@@ -1398,7 +1391,6 @@ function erpCloseAddItemSuccess() {
 // ═══════════════════════════════════════════════════════════
 // EDIT ITEM MODAL (legacy)
 // ═══════════════════════════════════════════════════════════
-
 var _editItemModal = null;
 var _editItemCurrent = null;
 var _isSubmittingEditItem = false;
@@ -1411,14 +1403,12 @@ function erpOpenEditFromDetails() {
     return;
   }
   
-  // Close Item Details modal first
   var detailsModal = document.getElementById('erpItemModal');
   if (detailsModal) {
     var m = bootstrap.Modal.getInstance(detailsModal);
     if (m) m.hide();
   }
   
-  // Slight delay then open Edit modal
   setTimeout(function() {
     erpOpenEditItemModal(window._currentItemDetails);
   }, 350);
@@ -1432,7 +1422,6 @@ async function erpOpenEditItemModal(item) {
     return;
   }
   
-  // Fetch fresh data from DB
   var freshItem = null;
   try {
     var rows = await erpFetch('erp_items',
@@ -1456,14 +1445,12 @@ async function erpOpenEditItemModal(item) {
     _editItemModal = new bootstrap.Modal(modalEl);
   }
   
-  // ═══ BASIC INFO ═══
   document.getElementById('editItemCode').value = data.item_code || '';
   document.getElementById('editItemCodeDisplay').textContent = data.item_code || '—';
   document.getElementById('editItemDesc').value = data.description || '';
   document.getElementById('editItemCategory').value = data.category || 'UNCATEGORIZED';
   document.getElementById('editItemLocation').value = data.location || '';
   
-  // ═══ STOCK & PRICING (BAGO) ═══
   var onHandEl = document.getElementById('editItemOnHand');
   if (onHandEl) onHandEl.value = data.on_hand != null ? data.on_hand : 0;
   
@@ -1475,7 +1462,6 @@ async function erpOpenEditItemModal(item) {
     bufferEl.setAttribute('readonly', 'readonly');
   }
   
-  // Buffer lock indicator
   var lockBtn = document.getElementById('editItemBufferLock');
   var lockIcon = document.getElementById('editItemBufferLockIcon');
   var lockText = document.getElementById('editItemBufferLockText');
@@ -1496,10 +1482,8 @@ async function erpOpenEditItemModal(item) {
   var reorderEl = document.getElementById('editItemReorderPoint');
   if (reorderEl) reorderEl.value = data.reorder_point != null ? data.reorder_point : 0;
   
-  // ═══ STATUS ═══
   document.getElementById('editItemStatus').value = data.is_active ? 'true' : 'false';
   
-  // ═══ READ-ONLY INFO ═══
   document.getElementById('editItemStockClass').textContent = data.stock_classification || '—';
   document.getElementById('editItemMovement').textContent = data.inventory_movement || '—';
   document.getElementById('editItemActiveMo').textContent = data.active_consumption_months || 0;
@@ -1513,11 +1497,9 @@ async function erpOpenEditItemModal(item) {
     lastUpdatedEl.innerHTML = '';
   }
   
-  // ═══ REASON (reset) ═══
   var reasonEl = document.getElementById('editItemReason');
   if (reasonEl) reasonEl.value = '';
   
-  // ═══ DEACTIVATE BUTTON ═══
   var deactivateBtn = document.getElementById('btnDeactivateItem');
   if (data.is_active === false) {
     deactivateBtn.innerHTML = '<i class="bi bi-arrow-counterclockwise me-1"></i>Reactivate';
@@ -1532,10 +1514,6 @@ async function erpOpenEditItemModal(item) {
   console.log('[Edit] Modal shown');
 }
 
-// ═══════════════════════════════════════════════════════════
-// TOGGLE BUFFER LOCK SA EDIT MODAL
-// ═══════════════════════════════════════════════════════════
-
 window.erpToggleEditBufferLock = function() {
   var bufferEl = document.getElementById('editItemBufferStock');
   var lockIcon = document.getElementById('editItemBufferLockIcon');
@@ -1548,7 +1526,6 @@ window.erpToggleEditBufferLock = function() {
   var isCurrentlyReadonly = bufferEl.hasAttribute('readonly');
   
   if (isCurrentlyReadonly) {
-    // UNLOCK → edit mode
     bufferEl.removeAttribute('readonly');
     bufferEl.focus();
     bufferEl.select();
@@ -1558,7 +1535,6 @@ window.erpToggleEditBufferLock = function() {
     if (lockBtn) lockBtn.className = 'btn btn-sm btn-outline-success';
     if (hintEl) hintEl.innerHTML = '<i class="bi bi-pencil-fill text-success me-1"></i>Editing — pwede mo nang baguhin';
   } else {
-    // LOCK → read-only
     bufferEl.setAttribute('readonly', 'readonly');
     
     if (lockIcon) lockIcon.className = 'bi bi-lock-fill me-1';
@@ -1577,13 +1553,11 @@ async function erpSubmitEditItem() {
     return;
   }
   
-  // ═══ COLLECT ALL FIELDS ═══
   var code = document.getElementById('editItemCode').value;
   var desc = (document.getElementById('editItemDesc').value || '').trim();
   var category = (document.getElementById('editItemCategory').value || '').trim();
   var location = (document.getElementById('editItemLocation').value || '').trim();
   
-  // Stock & Pricing
   var onHandRaw = document.getElementById('editItemOnHand') ? document.getElementById('editItemOnHand').value : '';
   var onHand = onHandRaw !== '' ? parseFloat(onHandRaw) : null;
   
@@ -1596,14 +1570,11 @@ async function erpSubmitEditItem() {
   var reorderRaw = document.getElementById('editItemReorderPoint') ? document.getElementById('editItemReorderPoint').value : '';
   var reorder = reorderRaw !== '' ? parseFloat(reorderRaw) : null;
   
-  // Status
   var statusRaw = document.getElementById('editItemStatus').value;
   var isActive = statusRaw === 'true';
   
-  // Reason
   var reason = (document.getElementById('editItemReason').value || '').trim();
   
-  // ═══ VALIDATION ═══
   if (!desc) { erpShowToast('Description is required', 'warning'); return; }
   if (!category) { erpShowToast('Category is required', 'warning'); return; }
   if (!location) { erpShowToast('Location is required', 'warning'); return; }
@@ -1621,7 +1592,6 @@ async function erpSubmitEditItem() {
     erpShowToast('Reorder Point must be valid (≥ 0)', 'warning'); return; 
   }
   
-  // ═══ CHECK IF MAY CHANGES ═══
   var old = _editItemCurrent;
   var hasChanges = false;
   
@@ -1639,7 +1609,6 @@ async function erpSubmitEditItem() {
     return;
   }
   
-  // ═══ REQUIRE REASON IF MAY CHANGES ═══
   if (!reason) {
     erpShowToast('⚠️ Reason is required for changes', 'warning');
     document.getElementById('editItemReason').focus();
@@ -1657,7 +1626,6 @@ async function erpSubmitEditItem() {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
   
   try {
-    // ═══ Save via new RPC ═══
     var payload = {
       p_item_code: code,
       p_description: desc,
@@ -1688,7 +1656,6 @@ async function erpSubmitEditItem() {
     if (_editItemModal) _editItemModal.hide();
     erpShowToast('✅ Item updated: ' + code);
     
-    // Refresh
     if (typeof erpLoadItems === 'function') await erpLoadItems();
     if (typeof erpLoadSummary === 'function') await erpLoadSummary();
     if (typeof erpLoadCharts === 'function') await erpLoadCharts();
@@ -1751,40 +1718,31 @@ async function erpConfirmDeactivateItem() {
     btn.innerHTML = originalHtml;
   }
 }
+
 // ═══════════════════════════════════════════════════════════
 // ROW CLICK HANDLER
-// Opens item details, but ignores clicks on editable cells/buttons
 // ═══════════════════════════════════════════════════════════
-
 window.erpRowClick = function(event, itemCode) {
-  // Check if click was on editable cell or button
   var target = event.target;
   
-  // Ignore if clicked on editable cell (bubbles to row)
   if (target.closest('.editable-cell')) {
-    return; // Editable cell has its own handler
+    return;
   }
   
-  // Ignore if clicked on lock button
   if (target.closest('.lock-toggle-btn')) {
-    return; // Lock button has its own handler
+    return;
   }
   
-  // Ignore if clicked on checkbox or button
   if (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.tagName === 'A') {
     return;
   }
   
-  // Ignore if inside an action cell (last column)
   if (target.closest('td:last-child')) {
     return;
   }
   
-  // Open item details
   erpShowItemDetails(itemCode);
 };
-
-console.log('✅ stock-monitor.js v3 loaded — Phase 4 (Inline Edit + Lock + CSV)');
 
 // ═══════════════════════════════════════════════════════════
 // BULK BUFFER LOCK/UNLOCK
@@ -1793,7 +1751,7 @@ window.erpBulkLockBuffer = async function(isLocked) {
   var action = isLocked ? 'LOCK' : 'UNLOCK';
   if (!confirm('Are you sure you want to ' + action + ' ALL active buffer stocks?\n\nThis will affect all items in the database.')) return;
 
-  erpShowToast('Processing bulk ' + action + '...', 'info');
+  erpShowToast('Processing bulk ' + action + '...');
   
   try {
     var user = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
@@ -1811,14 +1769,14 @@ window.erpBulkLockBuffer = async function(isLocked) {
     var data = await res.json();
     
     if (data && data.success) {
-      erpShowToast(`✅ ${action}ED ${data.updated} items successfully!`, 'success');
-      await erpLoadItems(); // Refresh table
+      erpShowToast(`✅ ${action}ED ${data.updated} items successfully!`);
+      await erpLoadItems();
     } else {
       throw new Error(data.error || 'Unknown error');
     }
   } catch(err) {
     console.error('[erpBulkLockBuffer]', err);
-    erpShowToast('Failed: ' + err.message, 'danger');
+    erpShowToast('Failed: ' + err.message);
   }
 };
 
@@ -1836,7 +1794,6 @@ window.erpOpenDeactivatedModal = async function() {
   tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4"><div class="erp-spinner" style="margin:0 auto;"></div></td></tr>';
   
   try {
-    // Kukunin lahat ng naka-soft delete
     var rows = await erpFetch('erp_items', 'select=item_code,description,category,location&is_deleted=eq.true&limit=1000');
     
     if (!rows || rows.length === 0) {
@@ -1883,14 +1840,140 @@ window.erpRestoreItem = async function(itemCode) {
     
     if (!res.ok) throw new Error('HTTP ' + res.status);
     
-    erpShowToast('✅ Item restored successfully!', 'success');
+    erpShowToast('✅ Item restored successfully!');
     
-    // I-refresh ang deactivated list at main table
     erpOpenDeactivatedModal(); 
     erpLoadItems();
     
   } catch(err) {
     console.error('[erpRestoreItem]', err);
-    erpShowToast('Failed to restore: ' + err.message, 'danger');
+    erpShowToast('Failed to restore: ' + err.message);
   }
 };
+
+// ═══════════════════════════════════════════════════════════
+// VARIANCE FILTER & MODAL FUNCTIONS
+// ═══════════════════════════════════════════════════════════
+window.erpFilterByVariance = function() {
+  var varFilter = document.getElementById('erpVarianceFilter');
+  if (!varFilter) return;
+  
+  if (varFilter.value === 'with') {
+    varFilter.value = ''; // Reset
+    erpShowToast('Showing all items');
+  } else {
+    varFilter.value = 'with'; // Filter
+    erpShowToast('Filtered: Items with variance');
+  }
+  
+  erpLoadItems();
+  
+  setTimeout(function() {
+    var tableCard = document.querySelector('.erp-table-card');
+    if (tableCard) tableCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 300);
+};
+
+window.erpShowVariancesModal = function() {
+  var modalEl = document.getElementById('erpVariancesModal');
+  if (!modalEl) return;
+  
+  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  var tbody = document.getElementById('variancesTableBody');
+  
+  tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="erp-spinner" style="margin:0 auto;"></div></td></tr>';
+  modal.show();
+  
+  var varianceItems = _erpAllItems.filter(function(it) {
+    return window._erpVarianceMap && (window._erpVarianceMap[it.item_code] || 0) !== 0;
+  });
+  
+  window._variancesAll = varianceItems;
+  window._variancesFiltered = varianceItems;
+  
+  document.getElementById('variancesSearchInput').value = '';
+  erpRenderVariancesModal();
+};
+
+function erpRenderVariancesModal() {
+  var tbody = document.getElementById('variancesTableBody');
+  var items = window._variancesFiltered || [];
+  var countEl = document.getElementById('variancesCount');
+  
+  if (countEl) countEl.textContent = items.length;
+  
+  if (items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted"><i class="bi bi-check-circle text-success fs-3 d-block mb-2"></i>No variances found!</td></tr>';
+    return;
+  }
+  
+  var html = '';
+  items.forEach(function(it) {
+    var v = window._erpVarianceMap[it.item_code] || 0;
+    var systemQty = Number(it.on_hand || 0) - v;
+    var countedQty = Number(it.on_hand || 0);
+    var varColor = v > 0 ? 'text-danger' : 'text-primary';
+    var varPrefix = v > 0 ? '+' : '';
+    var safeCode = String(it.item_code).replace(/'/g, "\\'");
+    
+    html += '<tr>' +
+      '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
+      '<td class="desc-cell">' + erpEsc(it.description || '—') + '</td>' +
+      '<td>' + erpEsc(it.category || '—') + '</td>' +
+      '<td class="text-center text-muted">' + erpNum(systemQty) + '</td>' +
+      '<td class="text-center fw-bold">' + erpNum(countedQty) + '</td>' +
+      '<td class="text-center ' + varColor + '"><strong>' + varPrefix + erpNum(v) + '</strong></td>' +
+      '<td class="text-center"><button class="btn btn-sm btn-outline-primary" onclick="erpViewVarianceItem(\'' + safeCode + '\')"><i class="bi bi-eye"></i> View</button></td>' +
+    '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+window.erpFilterVariancesModal = function() {
+  var term = (document.getElementById('variancesSearchInput').value || '').toLowerCase().trim();
+  var all = window._variancesAll || [];
+  
+  if (!term) {
+    window._variancesFiltered = all;
+  } else {
+    window._variancesFiltered = all.filter(function(it) {
+      return String(it.item_code || '').toLowerCase().indexOf(term) !== -1 || 
+             String(it.description || '').toLowerCase().indexOf(term) !== -1;
+    });
+  }
+  erpRenderVariancesModal();
+};
+
+window.erpViewVarianceItem = function(itemCode) {
+  var modalEl = document.getElementById('erpVariancesModal');
+  if (modalEl) {
+    var m = bootstrap.Modal.getInstance(modalEl);
+    if (m) m.hide();
+  }
+  setTimeout(function() {
+    window.location.href = 'item-in-out.html?code=' + encodeURIComponent(itemCode);
+  }, 300);
+};
+
+window.erpExportVariances = function() {
+  var items = window._variancesFiltered || [];
+  if (items.length === 0) { erpShowToast('No data to export'); return; }
+  
+  var headers = ['Item Code', 'Description', 'Category', 'System Qty', 'Counted Qty', 'Variance'];
+  var rows = items.map(function(it) {
+    var v = window._erpVarianceMap[it.item_code] || 0;
+    return [it.item_code, it.description || '', it.category || '', Number(it.on_hand || 0) - v, Number(it.on_hand || 0), v];
+  });
+  
+  var csv = headers.map(_csvEscErp).join(',') + '\n';
+  rows.forEach(function(row) { csv += row.map(_csvEscErp).join(',') + '\n'; });
+  
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'Inventory_Variances_' + new Date().toISOString().slice(0, 10) + '.csv';
+  link.click();
+  erpShowToast('✅ Exported ' + rows.length + ' variances');
+};
+
+console.log('✅ stock-monitor.js v3.1 loaded — Phase 4 + Variance Filter + Modal');
