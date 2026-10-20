@@ -493,21 +493,7 @@ async function submitProcess() {
       throw new Error(data.error || 'Failed to process');
     }
         // ✅ I-trigger ang SOF Deduction pagka-process ng MRIF
-    try {
-      var sofRes = await fetch(erpUrl('rpc/erp_sof_deduct_on_mrif'), {
-        method: 'POST',
-        headers: erpHeaders(),
-        body: JSON.stringify({
-          p_doc_no: _process.docNo,
-          p_performed_by: currentUser
-        })
-      });
-      if (sofRes.ok) {
-        console.log('[MRIF Process] SOF deduction triggered.');
-      }
-    } catch(sofErr) {
-      console.warn('[MRIF Process] SOF deduction failed:', sofErr);
-    }
+    async function submitProcess()
 
     // ✅ Ipakita ang success modal
     document.getElementById('successDocNo').textContent = _process.docNo;
