@@ -90,6 +90,35 @@ tr.row-adj { border-left: 4px solid #f59e0b; }
   border-radius: 10px; font-size: 0.72rem; font-weight: 700; color: #475569;
 }
 .io-tab.active .tab-count { background: #1e3a5f; color: #fff; }
+
+/* ✅ Summary Bar for Beg Bal */
+.beg-bal-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.beg-bal-item {
+  background: #fff;
+  padding: 12px 16px;
+  text-align: center;
+}
+.beg-bal-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.beg-bal-value {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
 </style>
 
 <script src="erp-theme.js"></script>
@@ -256,6 +285,26 @@ tr.row-adj { border-left: 4px solid #f59e0b; }
           <button class="erp-btn-outline-dark ms-auto" onclick="ioExportMovements()" title="Export Movements">
             <i class="bi bi-file-earmark-excel me-1"></i>Export
           </button>
+        </div>
+      </div>
+
+      <!-- ✅ SUMMARY BAR (Beg Bal / In / Out / End Bal) -->
+      <div class="beg-bal-bar" id="ioBegBalBar">
+        <div class="beg-bal-item">
+          <div class="beg-bal-label">Beginning Balance</div>
+          <div class="beg-bal-value" id="ioBegBal">—</div>
+        </div>
+        <div class="beg-bal-item">
+          <div class="beg-bal-label" style="color:#059669;">Total IN (Period)</div>
+          <div class="beg-bal-value" style="color:#059669;" id="ioPeriodIn">—</div>
+        </div>
+        <div class="beg-bal-item">
+          <div class="beg-bal-label" style="color:#dc2626;">Total OUT (Period)</div>
+          <div class="beg-bal-value" style="color:#dc2626;" id="ioPeriodOut">—</div>
+        </div>
+        <div class="beg-bal-item">
+          <div class="beg-bal-label">Ending Balance</div>
+          <div class="beg-bal-value" id="ioEndBal">—</div>
         </div>
       </div>
 
