@@ -313,7 +313,7 @@ async function submitMrif() {
   }
   
   var joNo = document.getElementById('mrifJoNo').value.trim();
-  var gemSoNo = document.getElementById('mrifGemSoNo').value.trim();
+ var gemSoNo = ''; // Burahin na natin since tinanggal na ang field
   var clientName = document.getElementById('mrifClientName').value.trim();
   var project = document.getElementById('mrifProject').value.trim();
   var sofNo = document.getElementById('mrifSofNo') ? document.getElementById('mrifSofNo').value.trim() : '';
