@@ -442,7 +442,7 @@ function updateProgress() {
 // ═══════════════════════════════════════════════════════════
 // SUBMIT
 // ═══════════════════════════════════════════════════════════
-{
+async function submitProcess() {
   if (_process.isSubmitting) return;
 
   var verifiedItems = _process.items.filter(function(it) { return it.verified; });
