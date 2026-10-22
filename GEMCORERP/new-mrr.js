@@ -734,8 +734,8 @@ async function submitMrr() {
           body: JSON.stringify({
             p_sof_no: finalSofNo.trim(),
             p_client: _mrrState.vendor || '',
-            p_project: '', // Kung may project field ka, ilagay dito
-            p_jo_no: '',   // Kung may JO No field ka, ilagay dito
+            p_project: '', 
+            p_jo_no: _mrrState.prfNo || _mrrState.joNo || '', // Kunin ang JO/PRF No.
             p_items: sofItems
           })
         });
