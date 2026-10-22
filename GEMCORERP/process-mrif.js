@@ -493,7 +493,7 @@ async function submitProcess() {
       throw new Error(data.error || 'Failed to process');
     }
 
-        // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
     // ✅ STEP 2: SOF DEDUCTION (Updated)
     // ═══════════════════════════════════════════════════════════
     try {
@@ -508,7 +508,7 @@ async function submitProcess() {
         })
       });
 
-           var sofResult = await sofRes.json();
+      var sofResult = await sofRes.json();
       console.log('[MRIF Process] SOF Deduct Result:', sofResult);
 
       if (sofResult.success && !sofResult.skipped) {
@@ -519,7 +519,6 @@ async function submitProcess() {
         } else {
           erpShowToast('⚠️ SOF found, but no matching items to deduct', 'warning');
         }
-      }
       } else if (sofResult.skipped) {
         console.log('[MRIF Process] SOF deduction skipped:', sofResult.reason);
         erpShowToast('ℹ️ No SOF allocation linked to this document', 'info');
@@ -528,6 +527,7 @@ async function submitProcess() {
       console.error('[MRIF Process] SOF deduction error:', sofErr);
       erpShowToast('Failed to deduct SOF, but MRIF was saved', 'warning');
     }
+    // ═══════════════════════════════════════════════════════════
     // ═══════════════════════════════════════════════════════════
     // ═══════════════════════════════════════════════════════════
     // ✅ Show success modal
