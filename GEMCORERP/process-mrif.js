@@ -508,15 +508,18 @@ async function submitProcess() {
         })
       });
 
-      var sofResult = await sofRes.json();
+           var sofResult = await sofRes.json();
       console.log('[MRIF Process] SOF Deduct Result:', sofResult);
 
       if (sofResult.success && !sofResult.skipped) {
         if (sofResult.deducted > 0) {
           erpShowToast('✅ SOF Tracker updated: ' + sofResult.deducted + ' items', 'success');
+          // ✅ Ipakita natin sa console kung anong ID ang na-update
+          console.log('DEBUG INFO:', sofResult.debug); 
         } else {
           erpShowToast('⚠️ SOF found, but no matching items to deduct', 'warning');
         }
+      }
       } else if (sofResult.skipped) {
         console.log('[MRIF Process] SOF deduction skipped:', sofResult.reason);
         erpShowToast('ℹ️ No SOF allocation linked to this document', 'info');
