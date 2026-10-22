@@ -332,38 +332,39 @@ async function submitMrr() {
     // ═══════════════════════════════════════════════════════
     // ═══ AUTO-ALLOCATE SA SOF KUNG MAY SOF NO. ═══
     // ═══════════════════════════════════════════════════════
-    var finalSofNo = _mrrState.sofNo || document.getElementById('mrrSofNo')?.value;
-    
-    if (finalSofNo && finalSofNo.trim()) {
-      try {
-        console.log('[Manual MRR] Auto-allocating to SOF:', finalSofNo);
+           // ═══ AUTO-ALLOCATE SA SOF (Base sa SOF No.) ═══
+        var finalSofNo = _mrrState.sofNo || document.getElementById('mrrSofNoDisplay')?.value || document.getElementById('mrrSofNo')?.value;
         
-        var sofItems = validItems.map(function(it) {
-          return {
-            item_code: it.item_code,
-            description: it.description,
-            unit: it.unit,
-            qty: it.qty
-          };
-        });
+        if (finalSofNo && finalSofNo.trim()) {
+          try {
+            console.log('[MRR] Auto-allocating to SOF:', finalSofNo);
+            
+            var sofItems = validItems.map(function(it) {
+              return {
+                item_code: it.item_code,
+                description: it.description,
+                unit: it.unit,
+                qty: it.qty
+              };
+            });
 
-        await fetch(erpUrl('rpc/erp_sof_auto_allocate'), {
-          method: 'POST',
-          headers: erpHeaders(),
-          body: JSON.stringify({
-            p_sof_no: finalSofNo.trim(),
-            p_client: _mrrState.vendor || '',
-            p_project: '', 
-            p_jo_no: _mrrState.prfNo || _mrrState.joNo || '', // Kunin ang JO/PRF No.
-            p_items: sofItems
-          })
-        });
-        
-        console.log('[Manual MRR] ✅ SOF Auto-Allocate success');
-      } catch(sofErr) {
-        console.error('[Manual MRR] SOF Auto-Allocate failed:', sofErr);
-      }
-    }
+            await fetch(erpUrl('rpc/erp_sof_auto_allocate'), {
+              method: 'POST',
+              headers: erpHeaders(),
+              body: JSON.stringify({
+                p_sof_no: finalSofNo.trim(),
+                p_client: _mrrState.vendor || '',
+                p_project: '', 
+                p_jo_no: '', // Wala nang JO No. dito, SOF No. lang ang basehan
+                p_items: sofItems
+              })
+            });
+            
+            console.log('[MRR] ✅ SOF Auto-Allocate success');
+          } catch(sofErr) {
+            console.error('[MRR] SOF Auto-Allocate failed:', sofErr);
+          }
+        }
     // ═══════════════════════════════════════════════════════
     erpShowToast('✅ Manual MRR created: ' + docNo + ' (' + data.status + ')', 'success');
     showSuccessModal(docNo);
