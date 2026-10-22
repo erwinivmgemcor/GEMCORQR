@@ -560,22 +560,35 @@ async function submitProcess() {
               
               console.log('[SOF] ✅ Updated Item:', item.itemCode, '| New Used:', newUsedQty);
 
-                            // ✅ MANUAL STOCK LEDGER ENTRY (via RPC)
+                      // ✅ MANUAL STOCK LEDGER ENTRY (Direct Insert with Correct Columns)
               try {
-                var ledgerRes = await fetch(erpUrl('rpc/erp_insert_stock_ledger'), {
+                // Kunin ang current on-hand para may tamang balance_before at after
+                var itemData = await erpFetch('erp_items', 'select=on_hand&item_code=eq.' + encodeURIComponent(item.itemCode.trim()) + '&limit=1');
+                var currentStock = (itemData && itemData.length > 0) ? Number(itemData[0].on_hand) : 0;
+                
+                // Ang currentStock ay balance AFTER deduction
+                var balanceAfter = currentStock;
+                var balanceBefore = currentStock + qtyToDeduct;
+
+                // ✅ TAMANG COLUMN NAMES BASE SA SCHEMA MO
+                await fetch(erpUrl('erp_stock_ledger'), {
                   method: 'POST',
                   headers: erpHeaders(),
-                  body: JSON.stringify({
-                    p_item_code: item.itemCode.trim(),
-                    p_qty: qtyToDeduct,
-                    p_reference_doc: _process.docNo,
-                    p_performed_by: currentUser,
-                    p_remarks: 'Issued via SOF: ' + sofNo
-                  })
+                  body: JSON.stringify([{
+                    item_code: item.itemCode.trim(),
+                    transaction_type: 'MRIF',
+                    qty_in: 0,
+                    qty_out: qtyToDeduct,
+                    balance_before: balanceBefore, 
+                    balance_after: balanceAfter,
+                    reference_doc: _process.docNo,
+                    transaction_date: new Date().toISOString(),
+                    created_at: new Date().toISOString(),
+                    processed_by: currentUser, // ✅ processed_by, hindi performed_by
+                    notes: 'Issued via SOF: ' + sofNo // ✅ notes, hindi remarks
+                  }])
                 });
-                
-                var ledgerData = await ledgerRes.json();
-                console.log('[Ledger RPC Response]:', ledgerData);
+                console.log('[Ledger] ✅ Inserted movement for:', item.itemCode, '| Before:', balanceBefore, '| After:', balanceAfter);
               } catch(ledgerErr) {
                 console.warn('[Ledger] Failed to insert movement:', ledgerErr);
               }
