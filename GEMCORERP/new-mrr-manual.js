@@ -352,9 +352,9 @@ async function submitMrr() {
           headers: erpHeaders(),
           body: JSON.stringify({
             p_sof_no: finalSofNo.trim(),
-            p_client: vendor || '',
-            p_project: '',
-            p_jo_no: prfNo || '',
+            p_client: _mrrState.vendor || '',
+            p_project: '', 
+            p_jo_no: _mrrState.prfNo || _mrrState.joNo || '', // Kunin ang JO/PRF No.
             p_items: sofItems
           })
         });
