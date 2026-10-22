@@ -710,6 +710,43 @@ async function submitMrr() {
     }
 
     // Success!
+        // ═══════════════════════════════════════════════════════
+    // ═══ AUTO-ALLOCATE SA SOF KUNG MAY SOF NO. ═══
+    // ═══════════════════════════════════════════════════════
+    var finalSofNo = _mrrState.sofNo || document.getElementById('mrrSofNoDisplay')?.value || document.getElementById('mrrSofNo')?.value;
+    
+    if (finalSofNo && finalSofNo.trim()) {
+      try {
+        console.log('[MRR] Auto-allocating to SOF:', finalSofNo);
+        
+        var sofItems = validItems.map(function(it) {
+          return {
+            item_code: it.item_code,
+            description: it.description,
+            unit: it.unit,
+            qty: it.qty // Ito ang requested qty na naka-allocate
+          };
+        });
+
+        await fetch(erpUrl('rpc/erp_sof_auto_allocate'), {
+          method: 'POST',
+          headers: erpHeaders(),
+          body: JSON.stringify({
+            p_sof_no: finalSofNo.trim(),
+            p_client: _mrrState.vendor || '',
+            p_project: '', // Kung may project field ka, ilagay dito
+            p_jo_no: '',   // Kung may JO No field ka, ilagay dito
+            p_items: sofItems
+          })
+        });
+        
+        console.log('[MRR] ✅ SOF Auto-Allocate success');
+      } catch(sofErr) {
+        console.error('[MRR] SOF Auto-Allocate failed:', sofErr);
+        // Hindi natin i-cancel ang MRR creation kahit mag-fail ito, warning lang
+      }
+    }
+    // ═══════════════════════════════════════════════════════
     erpShowToast('✅ MRR created: ' + docNo + ' (' + finalStatus + ')', 'success');
     
     // I-refresh ang data sa background
