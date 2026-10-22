@@ -488,9 +488,36 @@ async function submitProcess() {
       throw new Error('RPC Error: ' + res.status + ' ' + errText);
     }
 
-       var data = await res.json();
+             var data = await res.json();
     if (!data || !data.success) {
       throw new Error(data.error || 'Failed to process');
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ✅ STEP 2: SOF DEDUCTION (Bagong Safe Logic)
+    // ═══════════════════════════════════════════════════════════
+    try {
+      console.log('[MRIF Process] Triggering SOF deduction for JO:', _process.doc.jo_no);
+      
+      var sofDeductRes = await fetch(erpUrl('rpc/erp_sof_deduct_on_mrif'), {
+        method: 'POST',
+        headers: erpHeaders(),
+        body: JSON.stringify({
+          p_doc_no: _process.docNo,
+          p_performed_by: currentUser
+        })
+      });
+
+      if (sofDeductRes.ok) {
+        var sofDeductResult = await sofDeductRes.json();
+        if (sofDeductResult.success && !sofDeductResult.skipped) {
+          erpShowToast('✅ SOF Tracker updated: ' + sofDeductResult.deducted + ' items', 'success');
+        } else if (sofDeductResult.skipped) {
+          console.log('[MRIF Process] SOF skip:', sofDeductResult.reason);
+        }
+      }
+    } catch(sofErr) {
+      console.warn('[MRIF Process] SOF deduction error:', sofErr);
     }
 
     // ═══════════════════════════════════════════════════════════
