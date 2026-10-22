@@ -163,7 +163,7 @@ function sofTrackerRender() {
     else if (status === 'CANCELLED') statusClass = 'bg-danger';
 
     html += '<tr>' +
-      '<td><code style="font-weight:700;color:#1e3a5f;">' + sofTrackerEsc(a.sof_no) + '</code></td>' +
+          '<td><a href="javascript:void(0)" style="font-weight:700;color:#1e3a5f;text-decoration:underline;cursor:pointer;" onclick="sofViewItems(\'' + sofTrackerEsc(a.sof_no) + '\')">' + sofTrackerEsc(a.sof_no) + '</a></td>' +
       '<td>' + sofTrackerEsc(a.client_name || '—') + '</td>' +
       '<td>' + sofTrackerEsc(a.project_name || '—') + '</td>' +
       '<td>' + sofTrackerEsc(a.jo_no || '—') + '</td>' +
@@ -221,3 +221,92 @@ window.sofTrackerClearFilters = sofTrackerClearFilters;
 window.sofTrackerRefresh = sofTrackerRefresh;
 
 console.log('✅ sof-tracker.js v2.0 loaded');
+
+// ═══════════════════════════════════════════════════════════
+// ✅ BAGONG FUNCTION: View Items ng isang SOF
+// ═══════════════════════════════════════════════════════════
+window.sofViewItems = async function(sofNo) {
+  console.log('[SOF Tracker] Fetching items for SOF:', sofNo);
+  
+  // Gumawa tayo ng modal container kung wala pa
+  var modalId = 'sofItemsModal';
+  var existing = document.getElementById(modalId);
+  if (existing) existing.remove();
+  
+  var wrapper = document.createElement('div');
+  wrapper.innerHTML = '<div class="modal fade" id="' + modalId + '" tabindex="-1">' +
+    '<div class="modal-dialog modal-xl modal-dialog-scrollable">' +
+      '<div class="modal-content">' +
+        '<div class="modal-header" style="background:#1e3a5f;color:#fff;">' +
+          '<h5 class="modal-title"><i class="bi bi-list-check me-2"></i>SOF Allocation Details — ' + sofTrackerEsc(sofNo) + '</h5>' +
+          '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>' +
+        '</div>' +
+        '<div class="modal-body p-0" id="sofItemsModalBody">' +
+          '<div class="text-center py-5"><div class="erp-spinner" style="margin:0 auto;"></div><div class="mt-2 text-muted">Loading items...</div></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(wrapper.firstChild);
+
+  var modal = new bootstrap.Modal(document.getElementById(modalId));
+  modal.show();
+
+  try {
+    // Fetch items from database
+    var items = await erpFetch('erp_sof_allocation_items', 'select=*&sof_no=eq.' + encodeURIComponent(sofNo) + '&order=item_code.asc');
+    
+    var bodyEl = document.getElementById('sofItemsModalBody');
+    
+    if (!items || items.length === 0) {
+      bodyEl.innerHTML = '<div class="text-center py-5 text-muted">Walang items na naka-allocate sa SOF na ito.</div>';
+      return;
+    }
+
+    var html = '<div class="table-responsive">' +
+      '<table class="erp-table" style="font-size:0.85rem;">' +
+        '<thead>' +
+          '<tr>' +
+            '<th>#</th>' +
+            '<th>Item Code</th>' +
+            '<th>Description</th>' +
+            '<th class="text-center">Unit</th>' +
+            '<th class="text-end">Allocated Qty</th>' +
+            '<th class="text-end">Used Qty</th>' +
+            '<th class="text-end">Remaining Qty</th>' +
+            '<th class="text-center">Status</th>' +
+          '</tr>' +
+        '</thead>' +
+        '<tbody>';
+
+    items.forEach(function(it, idx) {
+      var alloc = Number(it.allocated_qty || 0);
+      var used = Number(it.used_qty || 0);
+      var remaining = alloc - used;
+      
+      var statusBadge = '';
+      if (remaining === 0) statusBadge = '<span class="badge bg-success">FULLY USED</span>';
+      else if (used > 0) statusBadge = '<span class="badge bg-warning text-dark">PARTIAL</span>';
+      else statusBadge = '<span class="badge bg-primary">ACTIVE</span>';
+
+      html += '<tr>' +
+        '<td>' + (idx + 1) + '</td>' +
+        '<td><code>' + sofTrackerEsc(it.item_code) + '</code></td>' +
+        '<td>' + sofTrackerEsc(it.description || '—') + '</td>' +
+        '<td class="text-center">' + sofTrackerEsc(it.unit || '—') + '</td>' +
+        '<td class="text-end fw-bold">' + sofTrackerNum(alloc) + '</td>' +
+        '<td class="text-end text-success fw-bold">' + sofTrackerNum(used) + '</td>' +
+        '<td class="text-end text-danger fw-bold">' + sofTrackerNum(remaining) + '</td>' +
+        '<td class="text-center">' + statusBadge + '</td>' +
+      '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+    bodyEl.innerHTML = html;
+
+  } catch(err) {
+    console.error('[sofViewItems]', err);
+    document.getElementById('sofItemsModalBody').innerHTML = 
+      '<div class="alert alert-danger m-3">Failed to load items: ' + sofTrackerEsc(err.message) + '</div>';
+  }
+};
