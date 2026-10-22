@@ -53,7 +53,7 @@ async function sofTrackerLoad() {
 
   try {
     var t0 = Date.now();
-    var res = await fetch(erpUrl('rpc/erp_sof_get_tracker_list'), {
+        var res = await fetch(erpUrl('rpc/erp_sof_get_tracker_list_v2'), { // <--- Ito ang pinalitan
       method: 'POST',
       headers: erpHeaders(),
       body: JSON.stringify({ p_limit: 500 })
