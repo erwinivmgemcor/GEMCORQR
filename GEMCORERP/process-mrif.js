@@ -1,6 +1,6 @@
 // ============================================================
 // GEMCOR ERP — Process MRIF (Warehouse)
-// v3.0 — "SOF Priority Deduction" Logic
+// v3.1 — SOF Priority Deduction + Stock Ledger Integration
 // ============================================================
 
 var _process = {
@@ -18,7 +18,7 @@ var _process = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Process MRIF] Initializing v3.0 (SOF Priority Deduction)...');
+  console.log('[Process MRIF] Initializing v3.1...');
 
   var urlParams = new URLSearchParams(window.location.search);
   _process.docNo = urlParams.get('doc') || '';
@@ -121,16 +121,18 @@ async function loadDocument() {
 
 function renderDocInfo() {
   var doc = _process.doc;
-// Sa loob ng renderDocInfo() function
-var sofBadge = document.getElementById('sofBadgeHeader');
-if (sofBadge) {
-  if (doc.sof_no) {
-    sofBadge.textContent = 'SOF: ' + doc.sof_no;
-    sofBadge.classList.remove('d-none');
-  } else {
-    sofBadge.classList.add('d-none');
+  
+  // SOF Badge Header Logic
+  var sofBadge = document.getElementById('sofBadgeHeader');
+  if (sofBadge) {
+    if (doc.sof_no) {
+      sofBadge.textContent = 'SOF: ' + doc.sof_no;
+      sofBadge.classList.remove('d-none');
+    } else {
+      sofBadge.classList.add('d-none');
+    }
   }
-}
+
   document.getElementById('docNoTitle').innerHTML =
     '<i class="bi bi-file-earmark-text me-2"></i>' + erpEsc(doc.doc_no);
 
@@ -446,7 +448,7 @@ function updateProgress() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT (SOF Priority Deduction Logic)
+// SUBMIT (SOF Priority Deduction + Ledger)
 // ═══════════════════════════════════════════════════════════
 async function submitProcess() {
   if (_process.isSubmitting) return;
@@ -467,9 +469,9 @@ async function submitProcess() {
 
   try {
     var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
-    var sofNo = _process.doc.sof_no || _process.doc.gem_so_no || ''; 
+    var sofNo = _process.doc.sof_no || _process.doc.gem_so_no || '';
     
-    // 1. I-process muna ang MRIF (Laging bawas sa physical stock)
+    // 1. I-process muna ang MRIF
     var itemsPayload = verifiedItems.map(function(it) {
       return {
         id: it.id,
@@ -487,7 +489,7 @@ async function submitProcess() {
         p_doc_no: _process.docNo,
         p_items: itemsPayload,
         p_processed_by: currentUser,
-        p_skip_stock_deduction: false // ✅ FALSE: Para laging bumawas sa physical stock (On-Hand)
+        p_skip_stock_deduction: false // ✅ FALSE: Para laging bumawas sa physical stock
       })
     });
 
@@ -502,7 +504,7 @@ async function submitProcess() {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // ✅ STEP 2: SOF PRIORITY DEDUCTION (via Ultimate RPC)
+    // ✅ STEP 2: SOF PRIORITY DEDUCTION + LEDGER
     // ═══════════════════════════════════════════════════════════
     if (sofNo && sofNo.trim() !== '') {
       try {
@@ -526,10 +528,9 @@ async function submitProcess() {
               var currentUsed = Number(allocItem.used_qty || 0);
               var currentAllocated = Number(allocItem.allocated_qty || 0);
               
-              // I-add ang bagong issuance sa existing used_qty
               var newUsedQty = currentUsed + qtyToDeduct;
               
-              // ✅ Tawagin ang BAGONG RPC na may SECURITY DEFINER at Trigger Bypass
+              // Update SOF via RPC (Bypass triggers)
               var updateRes = await fetch(erpUrl('rpc/erp_sof_final_update'), {
                 method: 'POST',
                 headers: erpHeaders(),
@@ -543,7 +544,6 @@ async function submitProcess() {
               var updateData = await updateRes.json();
               console.log('[SOF Ultimate Update]:', updateData);
               
-              // Kung lumagpas sa allocated, bawasin ang sobra sa physical stock
               var overAllocated = newUsedQty - currentAllocated;
               
               if (overAllocated > 0) {
@@ -559,6 +559,30 @@ async function submitProcess() {
               }
               
               console.log('[SOF] ✅ Updated Item:', item.itemCode, '| New Used:', newUsedQty);
+
+              // ✅ MANUAL STOCK LEDGER ENTRY (Para lumabas sa Item In & Out)
+              try {
+                await fetch(erpUrl('erp_stock_ledger'), {
+                  method: 'POST',
+                  headers: erpHeaders(),
+                  body: JSON.stringify([{
+                    item_code: item.itemCode.trim(),
+                    transaction_type: 'MRIF',
+                    qty_in: 0,
+                    qty_out: qtyToDeduct,
+                    balance_before: 0, 
+                    balance_after: 0,
+                    reference_doc: _process.docNo,
+                    transaction_date: new Date().toISOString(),
+                    created_at: new Date().toISOString(),
+                    performed_by: currentUser,
+                    remarks: 'Issued via SOF: ' + sofNo
+                  }])
+                });
+                console.log('[Ledger] ✅ Inserted movement for:', item.itemCode);
+              } catch(ledgerErr) {
+                console.warn('[Ledger] Failed to insert movement:', ledgerErr);
+              }
             }
           }
           erpShowToast('✅ SOF Allocated & Stock updated!', 'success');
@@ -575,6 +599,11 @@ async function submitProcess() {
     document.getElementById('successDocNo').textContent = _process.docNo;
     document.getElementById('successStatus').textContent = data.status;
 
+    if (data.bal_doc) {
+      var successStatusEl = document.getElementById('successStatus');
+      successStatusEl.innerHTML += '<br><br><span class="text-warning fw-bold"><i class="bi bi-info-circle me-1"></i>Note: A Balance document was created: <u>' + data.bal_doc + '</u></span>';
+    }
+
     var modal = new bootstrap.Modal(document.getElementById('successModal'));
     modal.show();
     
@@ -587,6 +616,7 @@ async function submitProcess() {
     _process.isSubmitting = false;
   }
 }
+
 function cancelProcess() {
   if (!confirm('Cancel and return to queue?')) return;
   window.location.href = 'all-requests.html';
@@ -651,4 +681,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4000 }).show();
 }
 
-console.log('✅ process-mrif.js v3.0 loaded (SOF Priority Deduction)');
+console.log('✅ process-mrif.js v3.1 loaded (SOF + Ledger)');
