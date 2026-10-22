@@ -237,10 +237,9 @@ async function erpLoadItems() {
    try {
     var sofRes = await erpFetch('erp_v_sof_allocated_per_item', 'select=*');
     _erpSofAllocatedMap = {};
-    (sofRes || []).forEach(function(sof) {
+      (sofRes || []).forEach(function(sof) {
       var remaining = Number(sof.total_remaining_qty || 0);
-      // Kung negative, gawing 0 (ibig sabihin over-allocated or fully used na)
-      if (remaining < 0) remaining = 0; 
+      if (remaining < 0) remaining = 0;
       _erpSofAllocatedMap[sof.item_code] = remaining;
     });
   } catch(sofErr) { 
