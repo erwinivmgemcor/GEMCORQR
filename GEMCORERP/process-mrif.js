@@ -1,6 +1,6 @@
 // ============================================================
 // GEMCOR ERP — Process MRIF (Warehouse)
-// v3.1 — SOF Priority Deduction + Stock Ledger Integration
+// v3.2 — SOF Priority Deduction + Dynamic Ledger Integration
 // ============================================================
 
 var _process = {
@@ -18,7 +18,7 @@ var _process = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Process MRIF] Initializing v3.1...');
+  console.log('[Process MRIF] Initializing v3.2...');
 
   var urlParams = new URLSearchParams(window.location.search);
   _process.docNo = urlParams.get('doc') || '';
@@ -448,7 +448,7 @@ function updateProgress() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT (SOF Priority Deduction + Ledger)
+// SUBMIT (SOF Priority Deduction + Dynamic Ledger)
 // ═══════════════════════════════════════════════════════════
 async function submitProcess() {
   if (_process.isSubmitting) return;
@@ -504,7 +504,7 @@ async function submitProcess() {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // ✅ STEP 2: SOF PRIORITY DEDUCTION + LEDGER
+    // ✅ STEP 2: SOF PRIORITY DEDUCTION + DYNAMIC LEDGER
     // ═══════════════════════════════════════════════════════════
     if (sofNo && sofNo.trim() !== '') {
       try {
@@ -560,8 +560,16 @@ async function submitProcess() {
               
               console.log('[SOF] ✅ Updated Item:', item.itemCode, '| New Used:', newUsedQty);
 
-              // ✅ MANUAL STOCK LEDGER ENTRY (Para lumabas sa Item In & Out)
+              // ✅ MANUAL STOCK LEDGER ENTRY (Dynamic Balance)
               try {
+                // Kunin ang current on-hand para may tamang balance_before at after
+                var itemData = await erpFetch('erp_items', 'select=on_hand&item_code=eq.' + encodeURIComponent(item.itemCode.trim()) + '&limit=1');
+                var currentStock = (itemData && itemData.length > 0) ? Number(itemData[0].on_hand) : 0;
+                
+                // Dahil nababawas na siya ng RPC, ang currentStock na 'to ay ang balance AFTER deduction
+                var balanceAfter = currentStock;
+                var balanceBefore = currentStock + qtyToDeduct; // I-add pabalik para makuha ang before
+
                 await fetch(erpUrl('erp_stock_ledger'), {
                   method: 'POST',
                   headers: erpHeaders(),
@@ -570,8 +578,8 @@ async function submitProcess() {
                     transaction_type: 'MRIF',
                     qty_in: 0,
                     qty_out: qtyToDeduct,
-                    balance_before: 0, 
-                    balance_after: 0,
+                    balance_before: balanceBefore, 
+                    balance_after: balanceAfter,
                     reference_doc: _process.docNo,
                     transaction_date: new Date().toISOString(),
                     created_at: new Date().toISOString(),
@@ -579,7 +587,7 @@ async function submitProcess() {
                     remarks: 'Issued via SOF: ' + sofNo
                   }])
                 });
-                console.log('[Ledger] ✅ Inserted movement for:', item.itemCode);
+                console.log('[Ledger] ✅ Inserted movement for:', item.itemCode, '| Before:', balanceBefore, '| After:', balanceAfter);
               } catch(ledgerErr) {
                 console.warn('[Ledger] Failed to insert movement:', ledgerErr);
               }
@@ -681,4 +689,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4000 }).show();
 }
 
-console.log('✅ process-mrif.js v3.1 loaded (SOF + Ledger)');
+console.log('✅ process-mrif.js v3.2 loaded (SOF + Dynamic Ledger)');
