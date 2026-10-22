@@ -1,6 +1,6 @@
 // ============================================================
 // GEMCOR ERP — Process MRIF (Warehouse)
-// v2.3 — Direct SOF PATCH Update (Trigger Override)
+// v3.0 — "SOF Priority Deduction" Logic
 // ============================================================
 
 var _process = {
@@ -18,7 +18,7 @@ var _process = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Process MRIF] Initializing v2.3 (Direct SOF Update)...');
+  console.log('[Process MRIF] Initializing v3.0 (SOF Priority Deduction)...');
 
   var urlParams = new URLSearchParams(window.location.search);
   _process.docNo = urlParams.get('doc') || '';
@@ -437,7 +437,7 @@ function updateProgress() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT
+// SUBMIT (SOF Priority Deduction Logic)
 // ═══════════════════════════════════════════════════════════
 async function submitProcess() {
   if (_process.isSubmitting) return;
@@ -458,8 +458,9 @@ async function submitProcess() {
 
   try {
     var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
+    var sofNo = _process.doc.sof_no || _process.doc.gem_so_no || ''; // Check both SOF and GEM SO fields
     
-    // I-prepare ang payload para sa RPC ng MRIF
+    // 1. I-process muna ang MRIF para ma-save ang issued_qty sa doc_items
     var itemsPayload = verifiedItems.map(function(it) {
       return {
         id: it.id,
@@ -476,7 +477,8 @@ async function submitProcess() {
       body: JSON.stringify({
         p_doc_no: _process.docNo,
         p_items: itemsPayload,
-        p_processed_by: currentUser
+        p_processed_by: currentUser,
+        p_skip_stock_deduction: (sofNo.trim() !== '') // ✅ Sasabihin natin sa RPC na may SOF ito, wag galawin physical stock
       })
     });
 
@@ -490,33 +492,78 @@ async function submitProcess() {
       throw new Error(data.error || 'Failed to process');
     }
 
-        // ═══════════════════════════════════════════════════════════
-    // ✅ STEP 2: SOF DEDUCTION (RPC with SECURITY DEFINER)
     // ═══════════════════════════════════════════════════════════
-    try {
-      console.log('[MRIF Process] Calling SOF deduction RPC for:', _process.docNo);
-      
-      var sofRes = await fetch(erpUrl('rpc/erp_sof_deduct_on_mrif'), {
-        method: 'POST',
-        headers: erpHeaders(),
-        body: JSON.stringify({
-          p_doc_no: _process.docNo,
-          p_performed_by: currentUser
-        })
-      });
-
-      var sofResult = await sofRes.json();
-      console.log('[MRIF Process] SOF Deduct Result:', sofResult);
-
-      if (sofResult.success && sofResult.debug) {
-        erpShowToast('✅ SOF Tracker updated!', 'success');
-        console.log('DEBUG:', sofResult.debug);
-      } else if (sofResult.skipped) {
-        console.log('[SOF] Skipped:', sofResult.reason);
+    // ✅ STEP 2: SOF PRIORITY DEDUCTION (SMART PATCH)
+    // ═══════════════════════════════════════════════════════════
+    if (sofNo && sofNo.trim() !== '') {
+      try {
+        console.log('[MRIF Process] Starting SOF Priority Deduction for:', sofNo);
+        
+        var sofAllocRes = await erpFetch('erp_sof_allocations', 'select=id&sof_no=eq.' + encodeURIComponent(sofNo.trim()) + '&limit=1');
+        
+        if (sofAllocRes && sofAllocRes.length > 0) {
+          var sofId = sofAllocRes[0].id;
+          
+          for (var i = 0; i < verifiedItems.length; i++) {
+            var item = verifiedItems[i];
+            var qtyToDeduct = Number(item.issuedQty);
+            
+            // Kunin ang kasalukuyang allocation status
+            var allocItemRes = await erpFetch('erp_sof_allocation_items', 
+              'select=id,allocated_qty,used_qty&sof_id=eq.' + sofId + 
+              '&item_code=eq.' + encodeURIComponent(item.itemCode.trim()) + '&limit=1');
+            
+            if (allocItemRes && allocItemRes.length > 0) {
+              var allocItem = allocItemRes[0];
+              var currentUsed = Number(allocItem.used_qty || 0);
+              var currentAllocated = Number(allocItem.allocated_qty || 0);
+              
+              // ✅ PRIORITY LOGIC
+              // Paano kung mas malaki ang kinuha kaysa sa allocated? I-deduct muna lahat ng allocated.
+              // Yung sobra, doon na natin kunin sa physical stock (on_hand).
+              
+              var newUsedQty = currentUsed + qtyToDeduct;
+              
+              // Update SOF Allocation
+              await fetch(erpUrl('erp_sof_allocation_items?id=eq.' + allocItem.id), {
+                method: 'PATCH',
+                headers: erpHeaders(),
+                body: JSON.stringify({ 
+                  used_qty: newUsedQty, 
+                  updated_at: new Date().toISOString() 
+                })
+              });
+              
+              // Check if over-allocated (kumuha ng sobra sa allocated)
+              var overAllocated = newUsedQty - currentAllocated;
+              
+              if (overAllocated > 0) {
+                console.log('[SOF] ⚠️ Over-allocated by ' + overAllocated + '. Deducting from Physical Stock.');
+                // Kung sobra, ibabawas natin yung sobra sa physical on-hand ng item
+                await fetch(erpUrl('rpc/erp_adjust_physical_stock'), {
+                  method: 'POST',
+                  headers: erpHeaders(),
+                  body: JSON.stringify({
+                    p_item_code: item.itemCode,
+                    p_qty_to_deduct: overAllocated,
+                    p_reason: 'MRIF over-allocation for SOF ' + sofNo
+                  })
+                }).catch(function(e) { console.warn('Physical stock adjust failed:', e); });
+              }
+              
+              console.log('[SOF] ✅ Updated Item:', item.itemCode, '| New Used:', newUsedQty, '| Over:', (overAllocated > 0 ? overAllocated : 0));
+            }
+          }
+          erpShowToast('✅ SOF Allocated & Stock updated!', 'success');
+        } else {
+          console.log('[SOF] No SOF allocation found for:', sofNo);
+        }
+      } catch(sofErr) {
+        console.error('[MRIF Process] SOF deduction error:', sofErr);
+        erpShowToast('Failed to deduct SOF, but MRIF was saved', 'warning');
       }
-    } catch(sofErr) {
-      console.error('[MRIF Process] SOF deduction error:', sofErr);
-      erpShowToast('Failed to deduct SOF, but MRIF was saved', 'warning');
+    } else {
+      console.log('[MRIF Process] No SOF found. Standard stock deduction applied by RPC.');
     }
     // ═══════════════════════════════════════════════════════════
 
@@ -605,4 +652,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4000 }).show();
 }
 
-console.log('✅ process-mrif.js v2.3 loaded (Direct SOF PATCH)');
+console.log('✅ process-mrif.js v3.0 loaded (SOF Priority Deduction)');
