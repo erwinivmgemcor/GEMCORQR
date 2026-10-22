@@ -709,26 +709,6 @@ async function submitMrr() {
       throw new Error('Insert Items failed: ' + itemsRes.status + ' ' + itemsErrText);
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // ✅ TATAWAGIN NATIN ANG BAGONG RPC PARA SA SOF ALLOCATION
-    // ═══════════════════════════════════════════════════════════
-    if (_mrrState.sofNo && _mrrState.sofNo.trim()) {
-      try {
-        var sofRes = await fetch(erpUrl('rpc/erp_process_mrr_sof'), {
-          method: 'POST',
-          headers: erpHeaders(),
-          body: JSON.stringify({ p_doc_no: docNo })
-        });
-        if (sofRes.ok) {
-          console.log('[MRR] ✅ SOF Allocation successful');
-        } else {
-          console.warn('[MRR] SOF allocation failed:', await sofRes.text());
-        }
-      } catch(sofErr) {
-        console.warn('[MRR] SOF allocation RPC error:', sofErr);
-      }
-    }
-
     // Success!
     erpShowToast('✅ MRR created: ' + docNo + ' (' + finalStatus + ')', 'success');
     
