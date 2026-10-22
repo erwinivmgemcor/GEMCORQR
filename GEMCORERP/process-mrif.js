@@ -501,8 +501,8 @@ async function submitProcess() {
       throw new Error(data.error || 'Failed to process');
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // ✅ STEP 2: SOF PRIORITY DEDUCTION (SMART PATCH)
+       // ═══════════════════════════════════════════════════════════
+    // ✅ STEP 2: SOF PRIORITY DEDUCTION (via SECURITY DEFINER RPC)
     // ═══════════════════════════════════════════════════════════
     if (sofNo && sofNo.trim() !== '') {
       try {
@@ -517,7 +517,7 @@ async function submitProcess() {
             var item = verifiedItems[i];
             var qtyToDeduct = Number(item.issuedQty);
             
-            // Kunin ang kasalukuyang allocation status
+            // Kunin ang kasalukuyang used_qty
             var allocItemRes = await erpFetch('erp_sof_allocation_items', 
               'select=id,allocated_qty,used_qty&sof_id=eq.' + sofId + 
               '&item_code=eq.' + encodeURIComponent(item.itemCode.trim()) + '&limit=1');
@@ -527,28 +527,27 @@ async function submitProcess() {
               var currentUsed = Number(allocItem.used_qty || 0);
               var currentAllocated = Number(allocItem.allocated_qty || 0);
               
-              // ✅ PRIORITY LOGIC
-              // Paano kung mas malaki ang kinuha kaysa sa allocated? I-deduct muna lahat ng allocated.
-              // Yung sobra, doon na natin kunin sa physical stock (on_hand).
-              
               var newUsedQty = currentUsed + qtyToDeduct;
               
-              // Update SOF Allocation
-              await fetch(erpUrl('erp_sof_allocation_items?id=eq.' + allocItem.id), {
-                method: 'PATCH',
+              // ✅ Tawagin ang RPC para ma-bypass ang RLS
+              var updateRes = await fetch(erpUrl('rpc/erp_sof_update_used_qty'), {
+                method: 'POST',
                 headers: erpHeaders(),
-                body: JSON.stringify({ 
-                  used_qty: newUsedQty, 
-                  updated_at: new Date().toISOString() 
+                body: JSON.stringify({
+                  p_item_code: item.itemCode.trim(),
+                  p_sof_no: sofNo.trim(),
+                  p_new_used_qty: newUsedQty
                 })
               });
+
+              var updateData = await updateRes.json();
+              console.log('[SOF RPC Response]:', updateData);
               
-              // Check if over-allocated (kumuha ng sobra sa allocated)
+              // Check if over-allocated
               var overAllocated = newUsedQty - currentAllocated;
               
               if (overAllocated > 0) {
                 console.log('[SOF] ⚠️ Over-allocated by ' + overAllocated + '. Deducting from Physical Stock.');
-                // Kung sobra, ibabawas natin yung sobra sa physical on-hand ng item
                 await fetch(erpUrl('rpc/erp_adjust_physical_stock'), {
                   method: 'POST',
                   headers: erpHeaders(),
@@ -560,7 +559,7 @@ async function submitProcess() {
                 }).catch(function(e) { console.warn('Physical stock adjust failed:', e); });
               }
               
-              console.log('[SOF] ✅ Updated Item:', item.itemCode, '| New Used:', newUsedQty, '| Over:', (overAllocated > 0 ? overAllocated : 0));
+              console.log('[SOF] ✅ Updated Item:', item.itemCode, '| New Used:', newUsedQty);
             }
           }
           erpShowToast('✅ SOF Allocated & Stock updated!', 'success');
@@ -571,8 +570,6 @@ async function submitProcess() {
         console.error('[MRIF Process] SOF deduction error:', sofErr);
         erpShowToast('Failed to deduct SOF, but MRIF was saved', 'warning');
       }
-    } else {
-      console.log('[MRIF Process] No SOF found. Standard stock deduction applied by RPC.');
     }
     // ═══════════════════════════════════════════════════════════
 
