@@ -314,9 +314,15 @@ function erpRenderTable() {
     var aveDay = Number(it.ave_daily_consumption || 0);
     var activeMo = Number(it.active_consumption_months || 0);
 
-    // SOF Allocated
+        // Kunin ang allocated at physical on-hand
+    var physicalOnHand = Number(it.on_hand || 0);
     var sofAllocated = Number(_erpSofAllocatedMap[it.item_code] || 0);
-    var available = onHand - sofAllocated;
+    
+    // Logic: Ang Available ay Physical minus Allocated
+    var available = physicalOnHand - sofAllocated;
+    
+    // Para sa display sa table:
+    // onHand = physicalOnHand (ipapakita natin as is)
 
     // Variance Check
     var variance = window._erpVarianceMap ? (window._erpVarianceMap[it.item_code] || 0) : 0;
