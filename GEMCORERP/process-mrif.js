@@ -121,7 +121,16 @@ async function loadDocument() {
 
 function renderDocInfo() {
   var doc = _process.doc;
-
+// Sa loob ng renderDocInfo() function
+var sofBadge = document.getElementById('sofBadgeHeader');
+if (sofBadge) {
+  if (doc.sof_no) {
+    sofBadge.textContent = 'SOF: ' + doc.sof_no;
+    sofBadge.classList.remove('d-none');
+  } else {
+    sofBadge.classList.add('d-none');
+  }
+}
   document.getElementById('docNoTitle').innerHTML =
     '<i class="bi bi-file-earmark-text me-2"></i>' + erpEsc(doc.doc_no);
 
