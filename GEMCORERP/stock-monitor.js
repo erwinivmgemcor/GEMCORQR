@@ -234,13 +234,16 @@ async function erpLoadItems() {
   _erpCurrentPage = 1;
 
   // Fetch SOF allocated qty per item
-  try {
+   try {
     var sofRes = await erpFetch('erp_v_sof_allocated_per_item', 'select=*');
     _erpSofAllocatedMap = {};
     (sofRes || []).forEach(function(sof) {
-      _erpSofAllocatedMap[sof.item_code] = Number(sof.total_remaining_qty || 0);
+      var remaining = Number(sof.total_remaining_qty || 0);
+      // Kung negative, gawing 0 (ibig sabihin over-allocated or fully used na)
+      if (remaining < 0) remaining = 0; 
+      _erpSofAllocatedMap[sof.item_code] = remaining;
     });
-  } catch(sofErr) {
+  } catch(sofErr) { 
     console.warn('[Stock Monitor] SOF allocation fetch failed:', sofErr.message);
     _erpSofAllocatedMap = {};
   }
