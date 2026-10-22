@@ -494,51 +494,10 @@ async function submitProcess() {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // ✅ STEP 2: SOF DEDUCTION (NEW)
-    // ═══════════════════════════════════════════════════════════
-    var sofDeductResult = null;
-    if (data.success && data.status !== 'PENDING') {
-      try {
-        console.log('[MRIF Process] Triggering SOF deduction for:', _process.docNo);
-        
-        var sofDeductRes = await fetch(erpUrl('rpc/erp_sof_deduct_on_mrif'), {
-          method: 'POST',
-          headers: erpHeaders(),
-          body: JSON.stringify({
-            p_doc_no: _process.docNo,
-            p_performed_by: currentUser
-          })
-        });
-
-        if (sofDeductRes.ok) {
-          sofDeductResult = await sofDeductRes.json();
-          console.log('[MRIF Process] ✅ SOF deduction result:', sofDeductResult);
-        } else {
-          var sofErrText = await sofDeductRes.text();
-          console.warn('[MRIF Process] SOF deduction failed:', sofDeductRes.status, sofErrText);
-        }
-      } catch(sofErr) {
-        console.warn('[MRIF Process] SOF deduction error:', sofErr);
-      }
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // ✅ STEP 3: Show success modal with SOF info
+    // ✅ Show success modal
     // ═══════════════════════════════════════════════════════════
     document.getElementById('successDocNo').textContent = _process.docNo;
     document.getElementById('successStatus').textContent = data.status;
-
-    // Show SOF deduction info kung meron
-    if (sofDeductResult && sofDeductResult.success) {
-      if (sofDeductResult.skipped && sofDeductResult.reason) {
-        // No SOF# on doc — silent
-        console.log('[MRIF Process] SOF:', sofDeductResult.reason);
-      } else if (sofDeductResult.deducted > 0) {
-        erpShowToast('✅ SOF updated: ' + sofDeductResult.deducted + ' items', 'success');
-      } else if (sofDeductResult.skipped_items > 0) {
-        erpShowToast('⚠️ ' + sofDeductResult.skipped_items + ' item(s) skipped (no matching SOF)', 'warning');
-      }
-    }
 
     if (data.bal_doc) {
       var successStatusEl = document.getElementById('successStatus');
