@@ -519,7 +519,34 @@ async function submitProcess() {
     } catch(sofErr) {
       console.warn('[MRIF Process] SOF deduction error:', sofErr);
     }
+    // ═══════════════════════════════════════════════════════════
+    // ✅ DEDUCT SA SOF KUNG MAY MATCHING SOF/PO ═══
+    // ═══════════════════════════════════════════════════════════
+    try {
+      console.log('[MRIF Process] Triggering SOF deduction for doc:', _process.docNo);
+      
+      var sofDeductRes = await fetch(erpUrl('rpc/erp_sof_deduct_on_mrif'), {
+        method: 'POST',
+        headers: erpHeaders(),
+        body: JSON.stringify({
+          p_doc_no: _process.docNo,
+          p_performed_by: currentUser
+        })
+      });
 
+      if (sofDeductRes.ok) {
+        var sofDeductResult = await sofDeductRes.json();
+        if (sofDeductResult.success && !sofDeductResult.skipped) {
+          console.log('[MRIF] ✅ SOF Deducted:', sofDeductResult.deducted);
+          erpShowToast('✅ SOF Tracker updated: ' + sofDeductResult.deducted + ' items', 'success');
+        } else if (sofDeductResult.skipped) {
+          console.log('[MRIF] SOF skip:', sofDeductResult.reason);
+        }
+      }
+    } catch(sofErr) {
+      console.error('[MRIF] SOF deduction error:', sofErr);
+    }
+    // ═══════════════════════════════════════════════════════════
     // ═══════════════════════════════════════════════════════════
     // ✅ Show success modal
     // ═══════════════════════════════════════════════════════════
