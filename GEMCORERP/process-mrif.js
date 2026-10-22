@@ -490,64 +490,33 @@ async function submitProcess() {
       throw new Error(data.error || 'Failed to process');
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // ✅ STEP 2: SOF DEDUCTION (Smart Matching)
+        // ═══════════════════════════════════════════════════════════
+    // ✅ STEP 2: SOF DEDUCTION (RPC with SECURITY DEFINER)
     // ═══════════════════════════════════════════════════════════
     try {
-      console.log('[MRIF Process] Starting SOF deduction...');
+      console.log('[MRIF Process] Calling SOF deduction RPC for:', _process.docNo);
       
-      var sofNo = _process.doc.sof_no; 
-      var joNo = _process.doc.jo_no;
+      var sofRes = await fetch(erpUrl('rpc/erp_sof_deduct_on_mrif'), {
+        method: 'POST',
+        headers: erpHeaders(),
+        body: JSON.stringify({
+          p_doc_no: _process.docNo,
+          p_performed_by: currentUser
+        })
+      });
 
-      // SMART MATCHING: Kung walang SOF sa MRIF, hanapin sa MRR gamit ang JO No.
-      if ((!sofNo || sofNo.trim() === '') && joNo && joNo.trim() !== '') {
-        console.log('[MRIF Process] No SOF on MRIF, looking up MRR via JO No:', joNo);
-        var mrrRes = await erpFetch('documents', 'select=sof_no&doc_type=eq.MRR&jo_no=eq.' + encodeURIComponent(joNo.trim()) + '&sof_no=not.is.null&limit=1');
-        if (mrrRes && mrrRes.length > 0) {
-          sofNo = mrrRes[0].sof_no;
-          console.log('[MRIF Process] Found SOF from MRR:', sofNo);
-        }
-      }
-      
-      if (sofNo && sofNo.trim() !== '') {
-        // Hanapin ang SOF Allocation ID
-        var sofAllocRes = await erpFetch('erp_sof_allocations', 'select=id&sof_no=eq.' + encodeURIComponent(sofNo.trim()) + '&limit=1');
-        
-        if (sofAllocRes && sofAllocRes.length > 0) {
-          var sofId = sofAllocRes[0].id;
-          
-          for (var i = 0; i < verifiedItems.length; i++) {
-            var item = verifiedItems[i];
-            
-            var allocItemRes = await erpFetch('erp_sof_allocation_items', 
-              'select=id,used_qty&sof_id=eq.' + sofId + 
-              '&item_code=eq.' + encodeURIComponent(item.itemCode.trim()) + '&limit=1');
-            
-            if (allocItemRes && allocItemRes.length > 0) {
-              var allocItem = allocItemRes[0];
-              var newUsedQty = Number(allocItem.used_qty || 0) + Number(item.issuedQty);
-              
-              await fetch(erpUrl('erp_sof_allocation_items?id=eq.' + allocItem.id), {
-                method: 'PATCH',
-                headers: erpHeaders(),
-                body: JSON.stringify({ 
-                  used_qty: newUsedQty, 
-                  updated_at: new Date().toISOString() 
-                })
-              });
-              
-              console.log('[SOF] ✅ Updated Item:', item.itemCode, '| New Used:', newUsedQty);
-            }
-          }
-          erpShowToast('✅ SOF Tracker updated!', 'success');
-        } else {
-          console.log('[SOF] No SOF allocation found for:', sofNo);
-        }
-      } else {
-        console.log('[SOF] No SOF No. and no MRR matched via JO No.');
+      var sofResult = await sofRes.json();
+      console.log('[MRIF Process] SOF Deduct Result:', sofResult);
+
+      if (sofResult.success && sofResult.debug) {
+        erpShowToast('✅ SOF Tracker updated!', 'success');
+        console.log('DEBUG:', sofResult.debug);
+      } else if (sofResult.skipped) {
+        console.log('[SOF] Skipped:', sofResult.reason);
       }
     } catch(sofErr) {
       console.error('[MRIF Process] SOF deduction error:', sofErr);
+      erpShowToast('Failed to deduct SOF, but MRIF was saved', 'warning');
     }
     // ═══════════════════════════════════════════════════════════
 
