@@ -131,7 +131,14 @@
           icon: 'bi-pencil-square',
           href: 'edit-requests.html',
           roles: ['warehouse']
-        }                                                                
+        },   
+        {
+          id: 'sof-tracker',
+          label: 'SOF Tracker',
+          icon: 'bi-file-earmark-ruled',
+          href: 'sof-tracker.html',
+          roles: ['warehouse']
+        }
       ]
     },
     {
@@ -282,6 +289,7 @@
     'mrs-list': 'MRS List',
     'prf-monitor': 'PRF Monitor',
     'edit-requests': 'Edit Requests',
+        'sof-tracker': 'SOF Tracker',
     'mrif-monitoring': 'MRIF Monitoring',
     'mrr-monitoring': 'MRR Monitoring',
     'mrs-monitoring': 'MRS Monitoring',
