@@ -1,9 +1,6 @@
 // ============================================================
 // GEMCOR ERP — Process MRIF (Warehouse)
-// v2.2 — ITEMS FIRST, document last + rollback
-// ✅ Fixes: stock validation on document update
-// ✅ Rollback if document fails
-// ✅ Enhanced error messages
+// v2.3 — Direct SOF PATCH Update (Trigger Override)
 // ============================================================
 
 var _process = {
@@ -21,7 +18,7 @@ var _process = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Process MRIF] Initializing v2.2 (items first + rollback)...');
+  console.log('[Process MRIF] Initializing v2.3 (Direct SOF Update)...');
 
   var urlParams = new URLSearchParams(window.location.search);
   _process.docNo = urlParams.get('doc') || '';
@@ -462,7 +459,7 @@ async function submitProcess() {
   try {
     var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
     
-    // I-prepare ang payload para sa RPC
+    // I-prepare ang payload para sa RPC ng MRIF
     var itemsPayload = verifiedItems.map(function(it) {
       return {
         id: it.id,
@@ -488,20 +485,20 @@ async function submitProcess() {
       throw new Error('RPC Error: ' + res.status + ' ' + errText);
     }
 
-             var data = await res.json();
+    var data = await res.json();
     if (!data || !data.success) {
       throw new Error(data.error || 'Failed to process');
     }
 
-       // ═══════════════════════════════════════════════════════════
-    // ✅ STEP 2: SOF DEDUCTION (Direct Supabase Update)
+    // ═══════════════════════════════════════════════════════════
+    // ✅ STEP 2: SOF DEDUCTION (Direct Supabase PATCH)
     // ═══════════════════════════════════════════════════════════
     try {
       console.log('[MRIF Process] Starting direct SOF deduction for:', _process.docNo);
       
       var sofNo = _process.doc.sof_no; // Kunin ang SOF No. mula sa MRIF
       
-      if (sofNo) {
+      if (sofNo && sofNo.trim() !== '') {
         // 1. Hanapin ang SOF Allocation ID
         var sofAllocRes = await erpFetch('erp_sof_allocations', 'select=id&sof_no=eq.' + encodeURIComponent(sofNo.trim()) + '&limit=1');
         
@@ -521,7 +518,7 @@ async function submitProcess() {
               var allocItem = allocItemRes[0];
               var newUsedQty = Number(allocItem.used_qty || 0) + Number(item.issuedQty);
               
-              // 4. DIRECT PATCH sa Supabase (Force Update)
+              // 4. DIRECT PATCH sa Supabase (Force Update bypassing trigger)
               await fetch(erpUrl('erp_sof_allocation_items?id=eq.' + allocItem.id), {
                 method: 'PATCH',
                 headers: erpHeaders(),
@@ -544,8 +541,7 @@ async function submitProcess() {
       erpShowToast('Failed to deduct SOF, but MRIF was saved', 'warning');
     }
     // ═══════════════════════════════════════════════════════════
-    // ✅ Show success modal
-    // ═══════════════════════════════════════════════════════════
+
     document.getElementById('successDocNo').textContent = _process.docNo;
     document.getElementById('successStatus').textContent = data.status;
 
@@ -566,6 +562,7 @@ async function submitProcess() {
     _process.isSubmitting = false;
   }
 }
+
 function cancelProcess() {
   if (!confirm('Cancel and return to queue?')) return;
   window.location.href = 'all-requests.html';
@@ -630,4 +627,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4000 }).show();
 }
 
-console.log('✅ process-mrif.js v2.2 loaded (ITEMS FIRST + ROLLBACK)');
+console.log('✅ process-mrif.js v2.3 loaded (Direct SOF PATCH)');
