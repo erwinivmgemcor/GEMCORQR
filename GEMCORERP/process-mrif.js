@@ -493,42 +493,56 @@ async function submitProcess() {
       throw new Error(data.error || 'Failed to process');
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // ✅ STEP 2: SOF DEDUCTION (Updated)
+       // ═══════════════════════════════════════════════════════════
+    // ✅ STEP 2: SOF DEDUCTION (Direct Supabase Update)
     // ═══════════════════════════════════════════════════════════
     try {
-      console.log('[MRIF Process] Calling SOF deduction for:', _process.docNo);
+      console.log('[MRIF Process] Starting direct SOF deduction for:', _process.docNo);
       
-      var sofRes = await fetch(erpUrl('rpc/erp_sof_deduct_on_mrif'), {
-        method: 'POST',
-        headers: erpHeaders(),
-        body: JSON.stringify({
-          p_doc_no: _process.docNo,
-          p_performed_by: currentUser
-        })
-      });
-
-      var sofResult = await sofRes.json();
-      console.log('[MRIF Process] SOF Deduct Result:', sofResult);
-
-      if (sofResult.success && !sofResult.skipped) {
-        if (sofResult.deducted > 0) {
-          erpShowToast('✅ SOF Tracker updated: ' + sofResult.deducted + ' items', 'success');
-          // ✅ Ipakita natin sa console kung anong ID ang na-update
-          console.log('DEBUG INFO:', sofResult.debug); 
+      var sofNo = _process.doc.sof_no; // Kunin ang SOF No. mula sa MRIF
+      
+      if (sofNo) {
+        // 1. Hanapin ang SOF Allocation ID
+        var sofAllocRes = await erpFetch('erp_sof_allocations', 'select=id&sof_no=eq.' + encodeURIComponent(sofNo.trim()) + '&limit=1');
+        
+        if (sofAllocRes && sofAllocRes.length > 0) {
+          var sofId = sofAllocRes[0].id;
+          
+          // 2. Loop sa lahat ng items ng MRIF
+          for (var i = 0; i < verifiedItems.length; i++) {
+            var item = verifiedItems[i];
+            
+            // 3. Hanapin ang specific item sa allocation table
+            var allocItemRes = await erpFetch('erp_sof_allocation_items', 
+              'select=id,used_qty&sof_id=eq.' + sofId + 
+              '&item_code=eq.' + encodeURIComponent(item.itemCode.trim()) + '&limit=1');
+            
+            if (allocItemRes && allocItemRes.length > 0) {
+              var allocItem = allocItemRes[0];
+              var newUsedQty = Number(allocItem.used_qty || 0) + Number(item.issuedQty);
+              
+              // 4. DIRECT PATCH sa Supabase (Force Update)
+              await fetch(erpUrl('erp_sof_allocation_items?id=eq.' + allocItem.id), {
+                method: 'PATCH',
+                headers: erpHeaders(),
+                body: JSON.stringify({ 
+                  used_qty: newUsedQty, 
+                  updated_at: new Date().toISOString() 
+                })
+              });
+              
+              console.log('[SOF] ✅ Updated Item:', item.itemCode, '| New Used:', newUsedQty);
+            }
+          }
+          erpShowToast('✅ SOF Tracker updated!', 'success');
         } else {
-          erpShowToast('⚠️ SOF found, but no matching items to deduct', 'warning');
+          console.log('[SOF] No SOF allocation found for:', sofNo);
         }
-      } else if (sofResult.skipped) {
-        console.log('[MRIF Process] SOF deduction skipped:', sofResult.reason);
-        erpShowToast('ℹ️ No SOF allocation linked to this document', 'info');
       }
     } catch(sofErr) {
       console.error('[MRIF Process] SOF deduction error:', sofErr);
       erpShowToast('Failed to deduct SOF, but MRIF was saved', 'warning');
     }
-    // ═══════════════════════════════════════════════════════════
-    // ═══════════════════════════════════════════════════════════
     // ═══════════════════════════════════════════════════════════
     // ✅ Show success modal
     // ═══════════════════════════════════════════════════════════
