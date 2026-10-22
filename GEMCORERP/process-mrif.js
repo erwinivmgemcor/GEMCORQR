@@ -1,6 +1,6 @@
 // ============================================================
 // GEMCOR ERP — Process MRIF (Warehouse)
-// v3.3 — SOF Priority Deduction + Ledger RPC
+// v3.4 — SOF Priority Deduction + Ledger via SECURITY DEFINER RPC
 // ============================================================
 
 var _process = {
@@ -18,7 +18,7 @@ var _process = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Process MRIF] Initializing v3.3...');
+  console.log('[Process MRIF] Initializing v3.4...');
 
   var urlParams = new URLSearchParams(window.location.search);
   _process.docNo = urlParams.get('doc') || '';
@@ -559,24 +559,33 @@ async function submitProcess() {
               
               console.log('[SOF] ✅ Updated Item:', item.itemCode, '| New Used:', newUsedQty);
 
-              // ✅ LEDGER VIA RPC (Gamit ang na-run mo nang RPC)
+              // ✅ LEDGER VIA RPC (Gamit ang RPC na may SECURITY DEFINER)
               try {
+                var ledgerPayload = {
+                  p_item_code: item.itemCode.trim(),
+                  p_qty: qtyToDeduct,
+                  p_reference_doc: _process.docNo,
+                  p_performed_by: currentUser,
+                  p_remarks: 'Issued via SOF: ' + sofNo
+                };
+                
+                console.log('[Ledger] Calling RPC with payload:', ledgerPayload);
+
                 var ledgerRes = await fetch(erpUrl('rpc/erp_insert_stock_ledger'), {
                   method: 'POST',
                   headers: erpHeaders(),
-                  body: JSON.stringify({
-                    p_item_code: item.itemCode.trim(),
-                    p_qty: qtyToDeduct,
-                    p_reference_doc: _process.docNo,
-                    p_performed_by: currentUser,
-                    p_remarks: 'Issued via SOF: ' + sofNo
-                  })
+                  body: JSON.stringify(ledgerPayload)
                 });
                 
+                if (!ledgerRes.ok) {
+                  var ledgerErrText = await ledgerRes.text();
+                  throw new Error('Ledger RPC failed: ' + ledgerRes.status + ' ' + ledgerErrText);
+                }
+                
                 var ledgerData = await ledgerRes.json();
-                console.log('[Ledger RPC Response]:', ledgerData);
+                console.log('[Ledger RPC Success]:', ledgerData);
               } catch(ledgerErr) {
-                console.warn('[Ledger] Failed to insert movement:', ledgerErr);
+                console.error('[Ledger] ❌ FAILED TO INSERT MOVEMENT:', ledgerErr);
               }
             }
           }
@@ -676,4 +685,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4000 }).show();
 }
 
-console.log('✅ process-mrif.js v3.3 loaded (SOF + Ledger RPC)');
+console.log('✅ process-mrif.js v3.4 loaded (SOF + Ledger RPC)');
