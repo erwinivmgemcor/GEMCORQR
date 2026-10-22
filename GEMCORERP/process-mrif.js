@@ -491,25 +491,34 @@ async function submitProcess() {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // ✅ STEP 2: SOF DEDUCTION (Direct Supabase PATCH)
+    // ✅ STEP 2: SOF DEDUCTION (Smart Matching)
     // ═══════════════════════════════════════════════════════════
     try {
-      console.log('[MRIF Process] Starting direct SOF deduction for:', _process.docNo);
+      console.log('[MRIF Process] Starting SOF deduction...');
       
-      var sofNo = _process.doc.sof_no; // Kunin ang SOF No. mula sa MRIF
+      var sofNo = _process.doc.sof_no; 
+      var joNo = _process.doc.jo_no;
+
+      // SMART MATCHING: Kung walang SOF sa MRIF, hanapin sa MRR gamit ang JO No.
+      if ((!sofNo || sofNo.trim() === '') && joNo && joNo.trim() !== '') {
+        console.log('[MRIF Process] No SOF on MRIF, looking up MRR via JO No:', joNo);
+        var mrrRes = await erpFetch('documents', 'select=sof_no&doc_type=eq.MRR&jo_no=eq.' + encodeURIComponent(joNo.trim()) + '&sof_no=not.is.null&limit=1');
+        if (mrrRes && mrrRes.length > 0) {
+          sofNo = mrrRes[0].sof_no;
+          console.log('[MRIF Process] Found SOF from MRR:', sofNo);
+        }
+      }
       
       if (sofNo && sofNo.trim() !== '') {
-        // 1. Hanapin ang SOF Allocation ID
+        // Hanapin ang SOF Allocation ID
         var sofAllocRes = await erpFetch('erp_sof_allocations', 'select=id&sof_no=eq.' + encodeURIComponent(sofNo.trim()) + '&limit=1');
         
         if (sofAllocRes && sofAllocRes.length > 0) {
           var sofId = sofAllocRes[0].id;
           
-          // 2. Loop sa lahat ng items ng MRIF
           for (var i = 0; i < verifiedItems.length; i++) {
             var item = verifiedItems[i];
             
-            // 3. Hanapin ang specific item sa allocation table
             var allocItemRes = await erpFetch('erp_sof_allocation_items', 
               'select=id,used_qty&sof_id=eq.' + sofId + 
               '&item_code=eq.' + encodeURIComponent(item.itemCode.trim()) + '&limit=1');
@@ -518,7 +527,6 @@ async function submitProcess() {
               var allocItem = allocItemRes[0];
               var newUsedQty = Number(allocItem.used_qty || 0) + Number(item.issuedQty);
               
-              // 4. DIRECT PATCH sa Supabase (Force Update bypassing trigger)
               await fetch(erpUrl('erp_sof_allocation_items?id=eq.' + allocItem.id), {
                 method: 'PATCH',
                 headers: erpHeaders(),
@@ -535,10 +543,11 @@ async function submitProcess() {
         } else {
           console.log('[SOF] No SOF allocation found for:', sofNo);
         }
+      } else {
+        console.log('[SOF] No SOF No. and no MRR matched via JO No.');
       }
     } catch(sofErr) {
       console.error('[MRIF Process] SOF deduction error:', sofErr);
-      erpShowToast('Failed to deduct SOF, but MRIF was saved', 'warning');
     }
     // ═══════════════════════════════════════════════════════════
 
