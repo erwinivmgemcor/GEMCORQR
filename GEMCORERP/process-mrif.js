@@ -467,9 +467,9 @@ async function submitProcess() {
 
   try {
     var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
-    var sofNo = _process.doc.sof_no || _process.doc.gem_so_no || ''; // Check both SOF and GEM SO fields
+    var sofNo = _process.doc.sof_no || _process.doc.gem_so_no || ''; 
     
-    // 1. I-process muna ang MRIF para ma-save ang issued_qty sa doc_items
+    // 1. I-process muna ang MRIF (Laging bawas sa physical stock)
     var itemsPayload = verifiedItems.map(function(it) {
       return {
         id: it.id,
@@ -487,7 +487,7 @@ async function submitProcess() {
         p_doc_no: _process.docNo,
         p_items: itemsPayload,
         p_processed_by: currentUser,
-        p_skip_stock_deduction: (sofNo.trim() !== '') // ✅ Sasabihin natin sa RPC na may SOF ito, wag galawin physical stock
+        p_skip_stock_deduction: false // ✅ FALSE: Para laging bumawas sa physical stock (On-Hand)
       })
     });
 
@@ -501,8 +501,8 @@ async function submitProcess() {
       throw new Error(data.error || 'Failed to process');
     }
 
-       // ═══════════════════════════════════════════════════════════
-    // ✅ STEP 2: SOF PRIORITY DEDUCTION (via SECURITY DEFINER RPC)
+    // ═══════════════════════════════════════════════════════════
+    // ✅ STEP 2: SOF PRIORITY DEDUCTION (via Ultimate RPC)
     // ═══════════════════════════════════════════════════════════
     if (sofNo && sofNo.trim() !== '') {
       try {
@@ -517,7 +517,6 @@ async function submitProcess() {
             var item = verifiedItems[i];
             var qtyToDeduct = Number(item.issuedQty);
             
-            // Kunin ang kasalukuyang used_qty
             var allocItemRes = await erpFetch('erp_sof_allocation_items', 
               'select=id,allocated_qty,used_qty&sof_id=eq.' + sofId + 
               '&item_code=eq.' + encodeURIComponent(item.itemCode.trim()) + '&limit=1');
@@ -527,10 +526,11 @@ async function submitProcess() {
               var currentUsed = Number(allocItem.used_qty || 0);
               var currentAllocated = Number(allocItem.allocated_qty || 0);
               
+              // I-add ang bagong issuance sa existing used_qty
               var newUsedQty = currentUsed + qtyToDeduct;
               
-              // ✅ Tawagin ang RPC para ma-bypass ang RLS
-              var updateRes = await fetch(erpUrl('rpc/erp_sof_update_used_qty'), {
+              // ✅ Tawagin ang BAGONG RPC na may SECURITY DEFINER at Trigger Bypass
+              var updateRes = await fetch(erpUrl('rpc/erp_sof_final_update'), {
                 method: 'POST',
                 headers: erpHeaders(),
                 body: JSON.stringify({
@@ -541,20 +541,19 @@ async function submitProcess() {
               });
 
               var updateData = await updateRes.json();
-              console.log('[SOF RPC Response]:', updateData);
+              console.log('[SOF Ultimate Update]:', updateData);
               
-              // Check if over-allocated
+              // Kung lumagpas sa allocated, bawasin ang sobra sa physical stock
               var overAllocated = newUsedQty - currentAllocated;
               
               if (overAllocated > 0) {
                 console.log('[SOF] ⚠️ Over-allocated by ' + overAllocated + '. Deducting from Physical Stock.');
-                await fetch(erpUrl('rpc/erp_adjust_physical_stock'), {
+                await fetch(erpUrl('rpc/erp_final_adjust_stock'), {
                   method: 'POST',
                   headers: erpHeaders(),
                   body: JSON.stringify({
                     p_item_code: item.itemCode,
-                    p_qty_to_deduct: overAllocated,
-                    p_reason: 'MRIF over-allocation for SOF ' + sofNo
+                    p_qty: overAllocated
                   })
                 }).catch(function(e) { console.warn('Physical stock adjust failed:', e); });
               }
@@ -576,11 +575,6 @@ async function submitProcess() {
     document.getElementById('successDocNo').textContent = _process.docNo;
     document.getElementById('successStatus').textContent = data.status;
 
-    if (data.bal_doc) {
-      var successStatusEl = document.getElementById('successStatus');
-      successStatusEl.innerHTML += '<br><br><span class="text-warning fw-bold"><i class="bi bi-info-circle me-1"></i>Note: A Balance document was created: <u>' + data.bal_doc + '</u></span>';
-    }
-
     var modal = new bootstrap.Modal(document.getElementById('successModal'));
     modal.show();
     
@@ -593,7 +587,6 @@ async function submitProcess() {
     _process.isSubmitting = false;
   }
 }
-
 function cancelProcess() {
   if (!confirm('Cancel and return to queue?')) return;
   window.location.href = 'all-requests.html';
