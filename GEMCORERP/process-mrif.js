@@ -493,13 +493,13 @@ async function submitProcess() {
       throw new Error(data.error || 'Failed to process');
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // ✅ STEP 2: SOF DEDUCTION (Bagong Safe Logic)
+        // ═══════════════════════════════════════════════════════════
+    // ✅ STEP 2: SOF DEDUCTION (Updated)
     // ═══════════════════════════════════════════════════════════
     try {
-      console.log('[MRIF Process] Triggering SOF deduction for JO:', _process.doc.jo_no);
+      console.log('[MRIF Process] Calling SOF deduction for:', _process.docNo);
       
-      var sofDeductRes = await fetch(erpUrl('rpc/erp_sof_deduct_on_mrif'), {
+      var sofRes = await fetch(erpUrl('rpc/erp_sof_deduct_on_mrif'), {
         method: 'POST',
         headers: erpHeaders(),
         body: JSON.stringify({
@@ -508,43 +508,22 @@ async function submitProcess() {
         })
       });
 
-      if (sofDeductRes.ok) {
-        var sofDeductResult = await sofDeductRes.json();
-        if (sofDeductResult.success && !sofDeductResult.skipped) {
-          erpShowToast('✅ SOF Tracker updated: ' + sofDeductResult.deducted + ' items', 'success');
-        } else if (sofDeductResult.skipped) {
-          console.log('[MRIF Process] SOF skip:', sofDeductResult.reason);
-        }
-      }
-    } catch(sofErr) {
-      console.warn('[MRIF Process] SOF deduction error:', sofErr);
-    }
-    // ═══════════════════════════════════════════════════════════
-    // ✅ DEDUCT SA SOF KUNG MAY MATCHING SOF/PO ═══
-    // ═══════════════════════════════════════════════════════════
-    try {
-      console.log('[MRIF Process] Triggering SOF deduction for doc:', _process.docNo);
-      
-      var sofDeductRes = await fetch(erpUrl('rpc/erp_sof_deduct_on_mrif'), {
-        method: 'POST',
-        headers: erpHeaders(),
-        body: JSON.stringify({
-          p_doc_no: _process.docNo,
-          p_performed_by: currentUser
-        })
-      });
+      var sofResult = await sofRes.json();
+      console.log('[MRIF Process] SOF Deduct Result:', sofResult);
 
-      if (sofDeductRes.ok) {
-        var sofDeductResult = await sofDeductRes.json();
-        if (sofDeductResult.success && !sofDeductResult.skipped) {
-          console.log('[MRIF] ✅ SOF Deducted:', sofDeductResult.deducted);
-          erpShowToast('✅ SOF Tracker updated: ' + sofDeductResult.deducted + ' items', 'success');
-        } else if (sofDeductResult.skipped) {
-          console.log('[MRIF] SOF skip:', sofDeductResult.reason);
+      if (sofResult.success && !sofResult.skipped) {
+        if (sofResult.deducted > 0) {
+          erpShowToast('✅ SOF Tracker updated: ' + sofResult.deducted + ' items', 'success');
+        } else {
+          erpShowToast('⚠️ SOF found, but no matching items to deduct', 'warning');
         }
+      } else if (sofResult.skipped) {
+        console.log('[MRIF Process] SOF deduction skipped:', sofResult.reason);
+        erpShowToast('ℹ️ No SOF allocation linked to this document', 'info');
       }
     } catch(sofErr) {
-      console.error('[MRIF] SOF deduction error:', sofErr);
+      console.error('[MRIF Process] SOF deduction error:', sofErr);
+      erpShowToast('Failed to deduct SOF, but MRIF was saved', 'warning');
     }
     // ═══════════════════════════════════════════════════════════
     // ═══════════════════════════════════════════════════════════
