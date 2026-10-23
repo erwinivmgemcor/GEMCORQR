@@ -458,7 +458,30 @@ async function submitProcess() {
     return;
   }
 
+  // ✅ VALIDATION: Check kung sapat ang stock bago mag-submit
+  var sofNo = _process.doc.sof_no || _process.doc.gem_so_no || '';
+  
+  if (!sofNo) {
+    // Kung walang SOF, i-check ang physical on_hand
+    var allItems = await erpFetch('erp_items', 'select=item_code,on_hand');
+    var stockMap = {};
+    (allItems || []).forEach(function(it) { stockMap[it.item_code] = Number(it.on_hand || 0); });
+
+    for (var i = 0; i < verifiedItems.length; i++) {
+      var item = verifiedItems[i];
+      var currentStock = stockMap[item.itemCode] || 0;
+      var issueQty = Number(item.issuedQty);
+
+      if (currentStock < issueQty) {
+        erpShowToast('❌ Insufficient stock for ' + item.itemCode + '. Current: ' + currentStock + ', Attempted: ' + issueQty, 'danger');
+        return; // Pigilan ang submission
+      }
+    }
+  }
+
   if (!confirm('Submit ' + verifiedItems.length + ' item(s)?')) return;
+
+  // ... (yung natitirang code ng submitProcess, hayaan mo lang) ...
 
   _process.isSubmitting = true;
   var btn = document.getElementById('btnSubmitProcess');
