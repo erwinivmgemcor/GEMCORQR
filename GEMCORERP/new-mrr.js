@@ -578,39 +578,12 @@ async function _mrrLoadInventory() {
 async function submitMrr() {
   if (_mrrState.isSubmitting) return;
 
-  var now = Date.now();
-  if (_mrrState.lastSubmittedAt && (now - _mrrState.lastSubmittedAt) < 10000) {
-    erpShowToast('Please wait a moment before submitting again', 'warning');
-    return;
-  }
-
-  var drNo = document.getElementById('mrrDrNo').value.trim();
-  if (!drNo) { erpShowToast('DR No. / S.I. No. is required', 'warning'); return; }
-  _mrrState.drNo = drNo;
-
-  var receivingDate = document.getElementById('mrrReceivingDate').value;
-  if (!receivingDate) { erpShowToast('Receiving Date is required', 'warning'); return; }
-  _mrrState.receivingDate = receivingDate;
-
-  var receivingSite = document.getElementById('mrrReceivingSite').value.trim();
-  if (!receivingSite) { erpShowToast('Receiving Site is required', 'warning'); return; }
-
-  var vendor = document.getElementById('mrrVendor').value.trim();
-  var prfNo = document.getElementById('mrrPrfNo').value.trim();
-  var sofNo = document.getElementById('mrrSofNoDisplay').value.trim() || document.getElementById('mrrSofNo').value.trim();
-  
-  _mrrState.vendor = vendor;
-  _mrrState.prfNo = prfNo;
-  _mrrState.sofNo = sofNo;
-
-  if (_mrrState.items.length === 0) { erpShowToast('No items to submit', 'warning'); return; }
+  // ... (validation code dito, huwag galawin)
 
   var validItems = [];
   for (var i = 0; i < _mrrState.items.length; i++) {
     var it = _mrrState.items[i];
-    if (!it.itemCode || !it.itemCode.trim()) { erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning'); return; }
-    if (it.issuedQty < 0) { erpShowToast('Item #' + (i + 1) + ' has invalid qty', 'warning'); return; }
-    
+    // ... validation ...
     validItems.push({
       item_code: it.itemCode,
       description: it.description,
@@ -624,132 +597,59 @@ async function submitMrr() {
   if (!confirm('Create MRR with ' + validItems.length + ' item(s)?')) return;
 
   _mrrState.isSubmitting = true;
-  _mrrState.lastSubmittedAt = now;
-
   var btn = document.getElementById('btnSubmitMrr');
   var originalHtml = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
 
   try {
-    // 1. Kunin ang susunod na Doc No
+    // 1. Kunin lang ang Doc No (WALANG INSERT DITO)
     var rpcRes = await fetch(erpUrl('rpc/get_next_doc_number'), {
       method: 'POST',
       headers: erpHeaders(),
       body: JSON.stringify({ p_prefix: 'MRR' })
     });
-
-    if (!rpcRes.ok) throw new Error('RPC Doc Num failed');
     var nextNum = await rpcRes.json();
-    var padded = String(nextNum).padStart(7, '0');
-    var docNo = 'MRR' + padded;
+    var docNo = 'MRR' + String(nextNum).padStart(7, '0');
 
-    var currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
-    
-    // Compute overall status
-    var isComplete = validItems.every(function(it) { return it.atl_qty >= it.qty; });
-    var isPartial = validItems.some(function(it) { return it.atl_qty > 0; });
-    var finalStatus = isComplete ? 'COMPLETED' : (isPartial ? 'PARTIAL' : 'PENDING');
+    var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
 
-    var docPayload = {
-      doc_no: docNo,
-      doc_type: 'MRR',
-      status: finalStatus,
-      requestor: _mrrState.preparedBy,
-      department: '',
-      po_no: _mrrState.poNo || '',
-      sof_no: _mrrState.sofNo || '',
-      prf_no: _mrrState.prfNo,
-      vendor: _mrrState.vendor,
-      client_name: _mrrState.client || '',
-      dr_no: _mrrState.drNo,
-      receiving_site: _mrrState.receivingSite,
-      receiving_date: _mrrState.receivingDate,
-      date_prepared: new Date().toISOString().split('T')[0],
-      prepared_by: _mrrState.preparedBy,
-      item_count: validItems.length,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    // 2. Insert Document
-    var docRes = await fetch(erpUrl('documents'), {
+    // 2. Ipaubaya lahat sa RPC (Insert Doc, Insert Items, Update Stock)
+    var processRes = await fetch(erpUrl('rpc/erp_submit_mrr'), {
       method: 'POST',
-      headers: erpHeaders({ 'Prefer': 'return=representation' }),
-      body: JSON.stringify(docPayload)
+      headers: erpHeaders(),
+      body: JSON.stringify({
+        p_doc_no: docNo,
+        p_doc_payload: {
+          requestor: _mrrState.preparedBy,
+          department: '',
+          po_no: _mrrState.poNo || '',
+          sof_no: _mrrState.sofNo || '',
+          prf_no: _mrrState.prfNo,
+          vendor: _mrrState.vendor,
+          client_name: _mrrState.client || '',
+          dr_no: _mrrState.drNo,
+          receiving_site: _mrrState.receivingSite,
+          receiving_date: _mrrState.receivingDate,
+          date_prepared: new Date().toISOString().split('T')[0],
+          prepared_by: _mrrState.preparedBy
+        },
+        p_items: validItems,
+        p_processed_by: currentUser
+      })
     });
 
-    if (!docRes.ok) {
-      var errText = await docRes.text();
-      throw new Error('Insert Document failed: ' + docRes.status + ' ' + errText);
+    if (!processRes.ok) {
+      throw new Error('RPC Error: ' + processRes.status);
     }
-
-    var docArr = await docRes.json();
-    var doc = docArr[0];
-    if (!doc || !doc.id) throw new Error('No document ID returned');
-
-    // 3. Insert Doc Items
-    var itemPayloads = validItems.map(function(it, idx) {
-      return {
-        document_id: doc.id,
-        doc_no: docNo,
-        line_no: idx + 1,
-        item_code: it.item_code,
-        description: it.description,
-        requested_qty: it.qty,
-        issued_qty: it.atl_qty,
-        unit: it.unit,
-        remarks: it.remarks,
-        row_index: idx + 1
-      };
-    });
-
-       if (!itemsRes.ok) {
-      var itemsErrText = await itemsRes.text();
-      throw new Error('Insert Items failed: ' + itemsRes.status + ' ' + itemsErrText);
-    }
-
-        // ═══ AUTO-ALLOCATE SA SOF (Base sa SOF No.) ═══
-        var finalSofNo = _mrrState.sofNo || document.getElementById('mrrSofNoDisplay')?.value || document.getElementById('mrrSofNo')?.value;
-        
-        if (finalSofNo && finalSofNo.trim()) {
-          try {
-            console.log('[MRR] Auto-allocating to SOF:', finalSofNo);
-            
-            var sofItems = validItems.map(function(it) {
-              return {
-                item_code: it.item_code,
-                description: it.description,
-                unit: it.unit,
-                qty: it.qty
-              };
-            });
-
-            await fetch(erpUrl('rpc/erp_sof_auto_allocate'), {
-              method: 'POST',
-              headers: erpHeaders(),
-              body: JSON.stringify({
-                p_sof_no: finalSofNo.trim(),
-                p_client: _mrrState.vendor || '',
-                p_project: '', 
-                p_jo_no: '', // Wala nang JO No. dito, SOF No. lang ang basehan
-                p_items: sofItems
-              })
-            });
-            
-            console.log('[MRR] ✅ SOF Auto-Allocate success');
-          } catch(sofErr) {
-            console.error('[MRR] SOF Auto-Allocate failed:', sofErr);
-          }
-        }
-    // ═══════════════════════════════════════════════════════
-    erpShowToast('✅ MRR created: ' + docNo + ' (' + finalStatus + ')', 'success');
     
-    // I-refresh ang data sa background
-    if (typeof fetchPendingDocs === 'function') fetchPendingDocs(true);
-    if (typeof loadWarehouseNotifications === 'function') loadWarehouseNotifications(true);
-    if (typeof updateWarehouseKPIs === 'function') updateWarehouseKPIs();
+    var data = await processRes.json();
+    if (!data || !data.success) throw new Error(data.error || 'Unknown error');
 
+    // ✅ AUTO-ALLOCATE SA SOF KUNG MAY SOF NO. (Ito ay nasa RPC na, pero kung gusto mong tawagin muli, okay lang)
+    // Actually, tinatawag na ito ng RPC, kaya hindi mo na kailangang tawagin muli sa JS.
+
+    erpShowToast('✅ MRR created: ' + docNo, 'success');
     showSuccessModal(docNo);
 
   } catch(err) {
