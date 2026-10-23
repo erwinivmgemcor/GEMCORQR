@@ -1,7 +1,8 @@
 // ============================================================
-// GEMCOR ERP — Stock Monitor Logic (v3.1)
+// GEMCOR ERP — Stock Monitor Logic (v3.2)
 // Phase 4: Inline Edit + Lock Toggle + CSV Import
 // + Variance Filter & Modal
+// + Direct SOF Allocated Fetch
 // ============================================================
 var _erpAllItems = [];
 var _erpFilteredItems = [];
@@ -21,7 +22,7 @@ var _erpSofAllocatedMap = {};
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[ERP] Stock Monitor v3.1 initializing...');
+  console.log('[ERP] Stock Monitor v3.2 initializing...');
   erpCheckHealth();
   erpLoadDashboard();
 });
@@ -233,21 +234,25 @@ async function erpLoadItems() {
   _erpFilteredItems = _erpAllItems.slice();
   _erpCurrentPage = 1;
 
-  // Fetch SOF allocated qty per item
-   try {
-    var sofRes = await erpFetch('erp_v_sof_allocated_per_item', 'select=*');
+  // ✅ Fetch SOF allocated qty per item (Direct from table)
+  try {
+    var sofRes = await erpFetch('erp_sof_allocation_items', 'select=item_code,allocated_qty,used_qty');
     _erpSofAllocatedMap = {};
-      (sofRes || []).forEach(function(sof) {
-      var remaining = Number(sof.total_remaining_qty || 0);
-      if (remaining < 0) remaining = 0;
-      _erpSofAllocatedMap[sof.item_code] = remaining;
+    (sofRes || []).forEach(function(sof) {
+      var remaining = Number(sof.allocated_qty || 0) - Number(sof.used_qty || 0);
+      if (remaining > 0) {
+        // Kung may existing na value (multiple SOFs), i-add
+        var currentMap = _erpSofAllocatedMap[sof.item_code] || 0;
+        _erpSofAllocatedMap[sof.item_code] = currentMap + remaining;
+      }
     });
-  } catch(sofErr) { 
+    console.log('[Stock Monitor] ✅ SOF Allocated Map:', _erpSofAllocatedMap);
+  } catch(sofErr) {
     console.warn('[Stock Monitor] SOF allocation fetch failed:', sofErr.message);
     _erpSofAllocatedMap = {};
   }
 
-  // ✅ NEW: Fetch Latest Variances
+  // ✅ Fetch Latest Variances
   window._erpVarianceMap = {};
   try {
     var varRes = await erpFetch('erp_v_latest_item_variances', 'select=*');
@@ -263,7 +268,7 @@ async function erpLoadItems() {
     console.warn('Variance fetch failed', e); 
   }
 
-  // ✅ NEW: Apply Variance Filter
+  // ✅ Apply Variance Filter
   var varianceFilter = document.getElementById('erpVarianceFilter');
   var varValue = varianceFilter ? varianceFilter.value : '';
   
@@ -314,15 +319,9 @@ function erpRenderTable() {
     var aveDay = Number(it.ave_daily_consumption || 0);
     var activeMo = Number(it.active_consumption_months || 0);
 
-        // Kunin ang allocated at physical on-hand
-    var physicalOnHand = Number(it.on_hand || 0);
+    // SOF Allocated
     var sofAllocated = Number(_erpSofAllocatedMap[it.item_code] || 0);
-    
-    // Logic: Ang Available ay Physical minus Allocated
-    var available = physicalOnHand - sofAllocated;
-    
-    // Para sa display sa table:
-    // onHand = physicalOnHand (ipapakita natin as is)
+    var available = onHand - sofAllocated;
 
     // Variance Check
     var variance = window._erpVarianceMap ? (window._erpVarianceMap[it.item_code] || 0) : 0;
