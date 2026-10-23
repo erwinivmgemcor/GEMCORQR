@@ -319,9 +319,11 @@ function erpRenderTable() {
     var aveDay = Number(it.ave_daily_consumption || 0);
     var activeMo = Number(it.active_consumption_months || 0);
 
-    // SOF Allocated
+        // SOF Allocated
     var sofAllocated = Number(_erpSofAllocatedMap[it.item_code] || 0);
-    var available = onHand - sofAllocated;
+    
+    // ✅ FIX: Idagdag ang on_hand at sof_allocated
+    var available = onHand + sofAllocated; 
 
     // Variance Check
     var variance = window._erpVarianceMap ? (window._erpVarianceMap[it.item_code] || 0) : 0;
