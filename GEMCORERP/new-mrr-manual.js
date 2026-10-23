@@ -1,9 +1,8 @@
 // ============================================================
-// GEMCOR ERP — Manual MRR Creation (v3.0 FINAL)
-// ✅ FIXED: SyntaxError (Unexpected token '>')
-// ✅ FIXED: addItemRow is not defined
-// ✅ FIXED: Double-submit protection (Global Lock)
-// ✅ FIXED: Null-safe getters
+// GEMCOR ERP — New MRR Creation (v3.1 FINAL)
+// ✅ FIXED: SyntaxError
+// ✅ FIXED: Double-submit lock
+// ✅ FIXED: Labels updated (PO Qty, Received Qty)
 // ============================================================
 
 var _mrrState = {
@@ -18,12 +17,11 @@ var _mrrInventoryCache = null;
 var _mrrSearchTimers = {};
 
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Manual MRR v3.0] Initializing...');
+  console.log('[New MRR v3.1] Initializing...');
 
   mrrCheckHealth();
 
-  var userFullname = localStorage.getItem('ivm_userFullname') ||
-                     localStorage.getItem('ivm_username') || '';
+  var userFullname = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || '';
   _mrrState.preparedBy = userFullname;
   
   var prepByEl = document.getElementById('mrrPreparedBy');
@@ -100,7 +98,7 @@ async function loadUserDepartment() {
 async function preloadInventory() {
   if (_mrrInventoryCache) return;
   try {
-    console.log('[Manual MRR] Loading inventory...');
+    console.log('[New MRR] Loading inventory...');
     if (typeof erpGetInventoryListForDropdown === 'function') {
       _mrrInventoryCache = await erpGetInventoryListForDropdown();
     } else {
@@ -122,25 +120,22 @@ async function preloadInventory() {
         return { code: r.item_code, description: r.description || '', unit: r.base_unit || 'PIECE', category: r.category || '' };
       });
     }
-    console.log('[Manual MRR] ✅ Inventory loaded:', _mrrInventoryCache.length);
+    console.log('[New MRR] ✅ Inventory loaded:', _mrrInventoryCache.length);
   } catch(err) {
-    console.warn('[Manual MRR] Failed:', err.message);
+    console.warn('[New MRR] Failed:', err.message);
     _mrrInventoryCache = [];
   }
 }
 
 // ═══════════════════════════════════════════════════════════
-// ADD ITEM FUNCTION (FIXED)
+// ADD ITEM FUNCTION
 // ═══════════════════════════════════════════════════════════
 window.addItemRow = function() {
   var emptyState = document.getElementById('itemsEmptyState');
   if (emptyState) emptyState.style.display = 'none';
   
   var template = document.getElementById('itemRowTemplate');
-  if (!template) {
-    console.error('[AddItem] Template not found!');
-    return;
-  }
+  if (!template) return;
 
   var clone = template.content.cloneNode(true);
   var row = clone.querySelector('.erp-item-row');
@@ -322,8 +317,8 @@ window.submitMrr = async function() {
     
     var code = row.querySelector('.item-code-input') ? row.querySelector('.item-code-input').value.trim() : '';
     var desc = row.querySelector('.item-desc-input') ? row.querySelector('.item-desc-input').value.trim() : '';
-    var qty = row.querySelector('.item-qty-input') ? (parseFloat(row.querySelector('.item-qty-input').value) || 0) : 0;
-    var atlQty = row.querySelector('.item-atl-input') ? (parseFloat(row.querySelector('.item-atl-input').value) || 0) : 0;
+    var qty = row.querySelector('.item-qty-input') ? (parseFloat(row.querySelector('.item-qty-input').value) || 0) : 0; // PO Qty
+    var atlQty = row.querySelector('.item-atl-input') ? (parseFloat(row.querySelector('.item-atl-input').value) || 0) : 0; // Received Qty
     var unit = row.querySelector('.item-unit-input') ? row.querySelector('.item-unit-input').value : 'PIECE';
     var remarks = row.querySelector('.item-remarks-input') ? row.querySelector('.item-remarks-input').value.trim() : '';
     
@@ -339,7 +334,7 @@ window.submitMrr = async function() {
   }
 
   if (validItems.length === 0) { erpShowToast('Please add at least one item', 'warning'); return; }
-  if (!confirm('Create manual MRR with ' + validItems.length + ' item(s)?')) return;
+  if (!confirm('Create MRR with ' + validItems.length + ' item(s)?')) return;
 
   _mrrState.isSubmitting = true;
   _mrrState.lastSubmittedAt = now;
@@ -388,7 +383,7 @@ window.submitMrr = async function() {
     var data = await processRes.json();
     if (!data || !data.success) throw new Error(data.error || 'Unknown error');
 
-    erpShowToast('✅ Manual MRR created: ' + docNo + ' (' + data.status + ')', 'success');
+    erpShowToast('✅ MRR created: ' + docNo + ' (' + data.status + ')', 'success');
     showSuccessModal(docNo);
 
   } catch(err) {
@@ -452,4 +447,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3500 }).show();
 }
 
-console.log('✅ new-mrr-manual.js v3.0 loaded (Syntax Fixed)');
+console.log('✅ new-mrr-manual.js v3.1 loaded');
