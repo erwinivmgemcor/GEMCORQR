@@ -95,14 +95,6 @@
           href: 'mrif-list.html',
           roles: ['warehouse']
         },
-        // ✅ ITO ANG BAGONG NEW MRR (Dating Manual)
-        {
-          id: 'new-mrr',
-          label: 'New MRR',
-          icon: 'bi-box-arrow-in-down',
-          href: 'new-mrr-manual.html',
-          roles: ['warehouse', 'production']
-        },
         {
           id: 'mrr-list',
           label: 'MRR — Receiving',
