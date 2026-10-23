@@ -1,13 +1,16 @@
 // ============================================================
-// GEMCOR ERP — Manual MRR Creation (v2.0)
-// ✅ NEW: SOF No. field support
+// GEMCOR ERP — Manual MRR Creation (v2.1)
+// ✅ FIXED: Null-safe getters (no crash kung walang field sa HTML)
+// ✅ FIXED: Date fallback (current date kung blank)
+// ✅ FIXED: Double-submit protection
+// ✅ FIXED: Direct RPC call (walang manual JS insert na nagdodoble)
 // ============================================================
 
 var _mrrState = {
   preparedBy: '',
   receivingSite: 'GEMCOR CATMON',
   poNo: '',
-  sofNo: '',                    // ✅ NEW
+  sofNo: '',
   prfNo: '',
   vendor: '',
   drNo: '',
@@ -23,22 +26,25 @@ var _mrrState = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Manual MRR v2.0] Initializing...');
+  console.log('[Manual MRR v2.1] Initializing...');
   
   mrrCheckHealth();
   
   var userFullname = localStorage.getItem('ivm_userFullname') || 
                      localStorage.getItem('ivm_username') || '';
   _mrrState.preparedBy = userFullname;
-  document.getElementById('mrrPreparedBy').value = userFullname;
+  
+  var prepByEl = document.getElementById('mrrPreparedBy');
+  if (prepByEl) prepByEl.value = userFullname;
   
   var today = new Date().toISOString().split('T')[0];
-  document.getElementById('mrrReceivingDate').value = today;
+  var dateEl = document.getElementById('mrrReceivingDate');
+  if (dateEl) dateEl.value = today;
   _mrrState.receivingDate = today;
   
   preloadInventory();
   
-  console.log('[Manual MRR v2.0] Ready. Prepared By:', userFullname);
+  console.log('[Manual MRR v2.1] Ready. Prepared By:', userFullname);
 });
 
 async function mrrCheckHealth() {
@@ -74,11 +80,16 @@ async function preloadInventory() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+// ITEM ROW MANAGEMENT
+// ═══════════════════════════════════════════════════════════
 function addItemRow() {
   var emptyState = document.getElementById('itemsEmptyState');
   if (emptyState) emptyState.style.display = 'none';
   
   var template = document.getElementById('itemRowTemplate');
+  if (!template) return;
+
   var clone = template.content.cloneNode(true);
   var row = clone.querySelector('.erp-item-row');
   
@@ -87,21 +98,27 @@ function addItemRow() {
   row.querySelector('.item-number').textContent = (idx + 1);
   
   var codeInput = row.querySelector('.item-code-input');
-  codeInput.addEventListener('input', function() { onItemCodeInput(this); });
-  codeInput.addEventListener('focus', function() { onItemCodeInput(this); });
-  codeInput.addEventListener('blur', function() {
-    var self = this;
-    setTimeout(function() { hideItemDropdown(self); }, 200);
-  });
+  if (codeInput) {
+    codeInput.addEventListener('input', function() { onItemCodeInput(this); });
+    codeInput.addEventListener('focus', function() { onItemCodeInput(this); });
+    codeInput.addEventListener('blur', function() {
+      var self = this;
+      setTimeout(function() { hideItemDropdown(self); }, 200);
+    });
+  }
   
   document.getElementById('itemsContainer').appendChild(clone);
   _mrrState.items.push({ code: '', description: '', qty: 1, atlQty: 1, unit: 'PCS', remarks: '' });
   
   setTimeout(function() {
     var newRow = document.querySelector('.erp-item-row[data-item-idx="' + idx + '"]');
-    if (newRow) newRow.querySelector('.item-code-input').focus();
+    if (newRow && newRow.querySelector('.item-code-input')) {
+      newRow.querySelector('.item-code-input').focus();
+    }
   }, 100);
 }
+
+window.addItemRow = addItemRow;
 
 function removeItemRow(btn) {
   var row = btn.closest('.erp-item-row');
@@ -115,9 +132,12 @@ function removeItemRow(btn) {
   
   var remaining = document.querySelectorAll('.erp-item-row').length;
   if (remaining === 0) {
-    document.getElementById('itemsEmptyState').style.display = 'block';
+    var empty = document.getElementById('itemsEmptyState');
+    if (empty) empty.style.display = 'block';
   }
 }
+
+window.removeItemRow = removeItemRow;
 
 function reindexItemRows() {
   var rows = document.querySelectorAll('.erp-item-row');
@@ -127,13 +147,17 @@ function reindexItemRows() {
     var item = _mrrState.items[oldIdx];
     if (item) {
       row.setAttribute('data-item-idx', i);
-      row.querySelector('.item-number').textContent = (i + 1);
+      var numEl = row.querySelector('.item-number');
+      if (numEl) numEl.textContent = (i + 1);
       newItems.push(item);
     }
   });
   _mrrState.items = newItems;
 }
 
+// ═══════════════════════════════════════════════════════════
+// AUTO-SUGGEST DROPDOWN
+// ═══════════════════════════════════════════════════════════
 function onItemCodeInput(input) {
   var row = input.closest('.erp-item-row');
   var dropdown = row.querySelector('.item-dropdown');
@@ -148,8 +172,8 @@ function onItemCodeInput(input) {
   }
   
   var matches = _mrrState.inventoryList.filter(function(it) {
-    return it.code.toLowerCase().indexOf(term) !== -1 ||
-           it.description.toLowerCase().indexOf(term) !== -1;
+    return (it.code && it.code.toLowerCase().indexOf(term) !== -1) ||
+           (it.description && it.description.toLowerCase().indexOf(term) !== -1);
   }).slice(0, 15);
   
   if (matches.length === 0) {
@@ -160,28 +184,19 @@ function onItemCodeInput(input) {
   
   var html = '';
   matches.forEach(function(it) {
-    html += '<div class="erp-item-dropdown-item" data-code="' + erpEsc(it.code) + '" data-desc="' + erpEsc(it.description) + '" data-unit="' + erpEsc(it.unit) + '">' +
+    var safeCode = String(it.code || '').replace(/'/g, "\\'");
+    html += '<div class="erp-item-dropdown-item" data-code="' + erpEsc(it.code) + '" onclick="selectItemFromDropdown(' + row.getAttribute('data-item-idx') + ', \'' + safeCode + '\', \'' + erpEsc(it.description) + '\', \'' + erpEsc(it.unit) + '\')">' +
       '<div class="item-code">' + erpEsc(it.code) + ' <span class="item-unit">' + erpEsc(it.unit) + '</span></div>' +
       '<div class="item-desc">' + erpEsc(it.description.substring(0, 80)) + '</div>' +
     '</div>';
   });
   dropdown.innerHTML = html;
   dropdown.classList.remove('d-none');
-  
-  dropdown.querySelectorAll('.erp-item-dropdown-item').forEach(function(el) {
-    if (el.classList.contains('muted')) return;
-    el.addEventListener('mousedown', function(e) {
-      e.preventDefault();
-      selectItemFromDropdown(row, el);
-    });
-  });
 }
 
-function selectItemFromDropdown(row, el) {
-  var idx = parseInt(row.getAttribute('data-item-idx'), 10);
-  var code = el.getAttribute('data-code');
-  var desc = el.getAttribute('data-desc');
-  var unit = el.getAttribute('data-unit');
+function selectItemFromDropdown(idx, code, desc, unit) {
+  var row = document.querySelector('.erp-item-row[data-item-idx="' + idx + '"]');
+  if (!row) return;
   
   row.querySelector('.item-code-input').value = code;
   row.querySelector('.item-desc-input').value = desc;
@@ -200,6 +215,8 @@ function selectItemFromDropdown(row, el) {
   }, 100);
 }
 
+window.selectItemFromDropdown = selectItemFromDropdown;
+
 function hideItemDropdown(input) {
   var row = input.closest('.erp-item-row');
   if (row) {
@@ -209,54 +226,93 @@ function hideItemDropdown(input) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT
+// SUBMIT MRR (Strict RPC-only flow)
 // ═══════════════════════════════════════════════════════════
 async function submitMrr() {
   if (_mrrState.isSubmitting) return;
 
-  // 1. Validation
-  var drNo = document.getElementById('mrrDrNo').value.trim();
-  if (!drNo) { erpShowToast('DR No. / S.I. No. is required', 'warning'); return; }
-  _mrrState.drNo = drNo;
+  var now = Date.now();
+  if (_mrrState.lastSubmittedAt && (now - _mrrState.lastSubmittedAt) < 10000) {
+    erpShowToast('Please wait before submitting again', 'warning');
+    return;
+  }
 
-  var receivingDate = document.getElementById('mrrReceivingDate').value;
-  if (!receivingDate) { erpShowToast('Receiving Date is required', 'warning'); return; }
-  _mrrState.receivingDate = receivingDate;
+  // ✅ NULL-SAFE GETTERS (Hindi mag-crash kahit walang field sa HTML)
+  var getElVal = function(id) {
+    var el = document.getElementById(id);
+    return el ? el.value.trim() : '';
+  };
 
-  var receivingSite = document.getElementById('mrrReceivingSite').value.trim();
-  if (!receivingSite) { erpShowToast('Receiving Site is required', 'warning'); return; }
+  var receivingSite = getElVal('mrrReceivingSite') || 'GEMCOR CATMON';
+  var vendor = getElVal('mrrVendor');
+  var drNo = getElVal('mrrDrNo');
+  
+  // Date fallback kung walang laman ang date input
+  var receivingDate = getElVal('mrrReceivingDate') || new Date().toISOString().split('T')[0]; 
+  
+  var poNo = getElVal('mrrPoNo');
+  var sofNo = getElVal('mrrSofNo');
+  var prfNo = getElVal('mrrPrfNo');
 
-  _mrrState.vendor = document.getElementById('mrrVendor').value.trim();
-  _mrrState.prfNo = document.getElementById('mrrPrfNo').value.trim();
-  _mrrState.sofNo = document.getElementById('mrrSofNoDisplay').value.trim() || document.getElementById('mrrSofNo').value.trim();
-
-  if (_mrrState.items.length === 0) { erpShowToast('No items to submit', 'warning'); return; }
+  if (!vendor) { erpShowToast('Vendor is required', 'warning'); return; }
+  if (!drNo) { erpShowToast('DR No. is required', 'warning'); return; }
 
   var validItems = [];
-  for (var i = 0; i < _mrrState.items.length; i++) {
-    var it = _mrrState.items[i];
-    if (!it.itemCode || !it.itemCode.trim()) { erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning'); return; }
+  var rows = document.querySelectorAll('.erp-item-row');
+  
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    
+    var codeInput = row.querySelector('.item-code-input');
+    var descInput = row.querySelector('.item-desc-input');
+    var qtyInput = row.querySelector('.item-qty-input');
+    var atlInput = row.querySelector('.item-atl-input');
+    var unitInput = row.querySelector('.item-unit-input');
+    var remarksInput = row.querySelector('.item-remarks-input');
+
+    var code = codeInput ? codeInput.value.trim() : '';
+    var desc = descInput ? descInput.value.trim() : '';
+    var qty = qtyInput ? (parseFloat(qtyInput.value) || 0) : 0;
+    var atlQty = atlInput ? (parseFloat(atlInput.value) || 0) : 0;
+    var unit = unitInput ? unitInput.value : 'PIECE';
+    var remarks = remarksInput ? remarksInput.value.trim() : '';
+    
+    if (!code) { 
+      erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning'); 
+      return; 
+    }
+    if (qty <= 0 && atlQty <= 0) { 
+      erpShowToast('Item #' + (i + 1) + ' has no quantity.', 'warning'); 
+      return; 
+    }
+    
+    var finalQty = qty > 0 ? qty : atlQty;
     
     validItems.push({
-      item_code: it.itemCode,
-      description: it.description,
-      qty: it.requestedQty,
-      atl_qty: it.issuedQty,
-      unit: it.unit,
-      remarks: it.remarks || (it.issuedQty >= it.requestedQty ? 'COMPLETE' : 'PARTIAL')
+      item_code: code,
+      description: desc,
+      qty: finalQty,
+      atl_qty: atlQty,
+      unit: unit,
+      remarks: remarks || (atlQty >= finalQty ? 'COMPLETE' : 'PARTIAL')
     });
   }
 
-  if (!confirm('Create MRR with ' + validItems.length + ' item(s)?')) return;
+  if (validItems.length === 0) { erpShowToast('Please add at least one item', 'warning'); return; }
+  if (!confirm('Create manual MRR with ' + validItems.length + ' item(s)?')) return;
 
   _mrrState.isSubmitting = true;
+  _mrrState.lastSubmittedAt = now;
+
   var btn = document.getElementById('btnSubmitMrr');
-  var originalHtml = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
+  var originalHtml = btn ? btn.innerHTML : 'Submit';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
+  }
 
   try {
-    // 2. Kunin lang ang Doc No
+    // 1. Get Doc No
     var rpcRes = await fetch(erpUrl('rpc/get_next_doc_number'), {
       method: 'POST',
       headers: erpHeaders(),
@@ -270,7 +326,7 @@ async function submitMrr() {
 
     var currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
 
-    // 3. Tawagin ang RPC (Ito na ang bahala sa lahat ng Insert at Stock Update)
+    // 2. Ipaubaya lahat sa RPC (Insert Doc, Insert Items, Update Stock)
     var processRes = await fetch(erpUrl('rpc/erp_submit_mrr'), {
       method: 'POST',
       headers: erpHeaders(),
@@ -279,14 +335,14 @@ async function submitMrr() {
         p_doc_payload: {
           requestor: _mrrState.preparedBy,
           department: '',
-          po_no: _mrrState.poNo || '',
-          sof_no: _mrrState.sofNo || '',
-          prf_no: _mrrState.prfNo,
-          vendor: _mrrState.vendor,
-          client_name: _mrrState.client || '',
-          dr_no: _mrrState.drNo,
-          receiving_site: _mrrState.receivingSite,
-          receiving_date: _mrrState.receivingDate,
+          po_no: poNo,
+          sof_no: sofNo,
+          prf_no: prfNo,
+          vendor: vendor,
+          client_name: vendor,
+          dr_no: drNo,
+          receiving_site: receivingSite,
+          receiving_date: receivingDate,
           date_prepared: new Date().toISOString().split('T')[0],
           prepared_by: _mrrState.preparedBy
         },
@@ -303,7 +359,7 @@ async function submitMrr() {
     var data = await processRes.json();
     if (!data || !data.success) throw new Error(data.error || 'Unknown error');
 
-    erpShowToast('✅ MRR created: ' + docNo, 'success');
+    erpShowToast('✅ Manual MRR created: ' + docNo + ' (' + data.status + ')', 'success');
     showSuccessModal(docNo);
 
   } catch(err) {
@@ -311,37 +367,56 @@ async function submitMrr() {
     erpShowToast('Failed: ' + err.message, 'danger');
   } finally {
     _mrrState.isSubmitting = false;
-    btn.disabled = false;
-    btn.innerHTML = originalHtml;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
   }
 }
 
+window.submitMrr = submitMrr;
+
 function showSuccessModal(docNo) {
-  document.getElementById('successDocNo').textContent = docNo;
+  var docNoEl = document.getElementById('successDocNo');
+  if (docNoEl) docNoEl.textContent = docNo;
+
   var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
   var qrData = base + '../?doc=' + encodeURIComponent(docNo) + '&view=print';
-  document.getElementById('successQrImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(qrData);
+  
+  var qrImg = document.getElementById('successQrImg');
+  if (qrImg) {
+    qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(qrData);
+  }
   
   var modalEl = document.getElementById('successModal');
-  new bootstrap.Modal(modalEl).show();
-  modalEl.addEventListener('hidden.bs.modal', function onHide() {
-    modalEl.removeEventListener('hidden.bs.modal', onHide);
-    resetFormSilent();
-  }, { once: true });
+  if (modalEl) {
+    new bootstrap.Modal(modalEl).show();
+    modalEl.addEventListener('hidden.bs.modal', function onHide() {
+      modalEl.removeEventListener('hidden.bs.modal', onHide);
+      resetFormSilent();
+    }, { once: true });
+  }
 }
 
 function resetFormSilent() {
-  document.getElementById('mrrPoNo').value = '';
-  document.getElementById('mrrSofNo').value = '';      // ✅ NEW
-  document.getElementById('mrrPrfNo').value = '';
-  document.getElementById('mrrVendor').value = '';
-  document.getElementById('mrrDrNo').value = '';
-  _mrrState.sofNo = '';                                 // ✅ NEW
+  var getEl = function(id) { return document.getElementById(id); };
+  
+  if (getEl('mrrPoNo')) getEl('mrrPoNo').value = '';
+  if (getEl('mrrSofNo')) getEl('mrrSofNo').value = '';
+  if (getEl('mrrPrfNo')) getEl('mrrPrfNo').value = '';
+  if (getEl('mrrVendor')) getEl('mrrVendor').value = '';
+  if (getEl('mrrDrNo')) getEl('mrrDrNo').value = '';
+  
+  _mrrState.sofNo = '';
   _mrrState.items = [];
   
   var container = document.getElementById('itemsContainer');
-  container.querySelectorAll('.erp-item-row').forEach(function(r) { r.remove(); });
-  document.getElementById('itemsEmptyState').style.display = 'block';
+  if (container) {
+    container.querySelectorAll('.erp-item-row').forEach(function(r) { r.remove(); });
+  }
+  
+  var empty = document.getElementById('itemsEmptyState');
+  if (empty) empty.style.display = 'block';
 }
 
 function resetForm() {
@@ -350,11 +425,20 @@ function resetForm() {
   erpShowToast('Form reset', 'info');
 }
 
+window.resetForm = resetForm;
+
 function closeSuccessAndReset() {
-  var modal = bootstrap.Modal.getInstance(document.getElementById('successModal'));
+  var modalEl = document.getElementById('successModal');
+  if (!modalEl) return;
+  var modal = bootstrap.Modal.getInstance(modalEl);
   if (modal) modal.hide();
 }
 
+window.closeSuccessAndReset = closeSuccessAndReset;
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
 function erpEsc(s) {
   if (s === null || s === undefined) return '';
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -367,4 +451,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3500 }).show();
 }
 
-console.log('✅ new-mrr-manual.js v2.0 loaded (SOF No. support)');
+console.log('✅ new-mrr-manual.js v2.1 loaded (Null-safe + RPC direct)');
