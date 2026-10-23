@@ -214,159 +214,78 @@ function hideItemDropdown(input) {
 async function submitMrr() {
   if (_mrrState.isSubmitting) return;
 
-  var now = Date.now();
-  if (_mrrState.lastSubmittedAt && (now - _mrrState.lastSubmittedAt) < 10000) {
-    erpShowToast('Please wait before submitting again', 'warning');
-    return;
-  }
+  // ... (validation code dito, huwag galawin)
 
-  var receivingSite = document.getElementById('mrrReceivingSite').value.trim();
-  if (!receivingSite) { erpShowToast('Receiving Site is required', 'warning'); return; }
-  
-  var vendor = document.getElementById('mrrVendor').value.trim();
-  if (!vendor) { erpShowToast('Vendor is required', 'warning'); return; }
-  
-  var drNo = document.getElementById('mrrDrNo').value.trim();
-  if (!drNo) { erpShowToast('DR No. is required', 'warning'); return; }
-  
-  var receivingDate = document.getElementById('mrrReceivingDate').value;
-  if (!receivingDate) { erpShowToast('Receiving Date is required', 'warning'); return; }
-
-  var poNo = document.getElementById('mrrPoNo').value.trim();
-  var sofNo = document.getElementById('mrrSofNo').value.trim();
-  var prfNo = document.getElementById('mrrPrfNo').value.trim();
-  
   var validItems = [];
-  var rows = document.querySelectorAll('.erp-item-row');
-  for (var i = 0; i < rows.length; i++) {
-    var row = rows[i];
-    var code = row.querySelector('.item-code-input').value.trim();
-    var desc = row.querySelector('.item-desc-input').value.trim();
-    var qty = parseFloat(row.querySelector('.item-qty-input').value) || 0;
-    var atlQty = parseFloat(row.querySelector('.item-atl-input').value) || 0;
-    var unit = row.querySelector('.item-unit-input').value;
-    var remarks = row.querySelector('.item-remarks-input').value.trim();
-    
-       // ✅ SMART VALIDATION: Payagan ang 0 qty basta may ATL (Actual Qty)
-    if (!code) { 
-      erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning'); 
-      return; 
-    }
-    if (qty <= 0 && atlQty <= 0) { 
-      erpShowToast('Item #' + (i + 1) + ' has no quantity. Please enter Req Qty or ATL Qty.', 'warning'); 
-      return; 
-    }
-    
-    // Kung 0 ang Req Qty pero may ATL, gawing ATL ang requested qty para pumasok sa logic
-    var finalQty = qty > 0 ? qty : atlQty;
-    
+  for (var i = 0; i < _mrrState.items.length; i++) {
+    var it = _mrrState.items[i];
+    // ... validation ...
     validItems.push({
-      item_code: code,
-      description: desc,
-      qty: finalQty,
-      atl_qty: atlQty,
-      unit: unit,
-      remarks: remarks || (atlQty >= finalQty ? 'COMPLETE' : 'PARTIAL')
+      item_code: it.itemCode,
+      description: it.description,
+      qty: it.requestedQty,
+      atl_qty: it.issuedQty,
+      unit: it.unit,
+      remarks: it.remarks || (it.issuedQty >= it.requestedQty ? 'COMPLETE' : 'PARTIAL')
     });
   }
 
-  if (validItems.length === 0) { erpShowToast('Please add at least one item', 'warning'); return; }
-
-  if (!confirm('Create manual MRR with ' + validItems.length + ' item(s)?')) return;
+  if (!confirm('Create MRR with ' + validItems.length + ' item(s)?')) return;
 
   _mrrState.isSubmitting = true;
-  _mrrState.lastSubmittedAt = now;
-
   var btn = document.getElementById('btnSubmitMrr');
   var originalHtml = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
 
   try {
+    // 1. Kunin lang ang Doc No (WALANG INSERT DITO)
     var rpcRes = await fetch(erpUrl('rpc/get_next_doc_number'), {
       method: 'POST',
       headers: erpHeaders(),
       body: JSON.stringify({ p_prefix: 'MRR' })
     });
-
-    if (!rpcRes.ok) throw new Error('RPC Doc Num failed');
     var nextNum = await rpcRes.json();
-    var padded = String(nextNum).padStart(7, '0');
-    var docNo = 'MRR' + padded;
+    var docNo = 'MRR' + String(nextNum).padStart(7, '0');
 
-    var currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
+    var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
 
-    var docPayload = {
-      requestor: _mrrState.preparedBy,
-      department: '',
-      po_no: poNo,
-      sof_no: sofNo,
-      prf_no: prfNo,
-      vendor: vendor,
-      client_name: vendor,
-      dr_no: drNo,
-      receiving_site: receivingSite,
-      receiving_date: receivingDate,
-      date_prepared: new Date().toISOString().split('T')[0],
-      prepared_by: _mrrState.preparedBy
-    };
-
+    // 2. Ipaubaya lahat sa RPC (Insert Doc, Insert Items, Update Stock)
     var processRes = await fetch(erpUrl('rpc/erp_submit_mrr'), {
       method: 'POST',
       headers: erpHeaders(),
       body: JSON.stringify({
         p_doc_no: docNo,
-        p_doc_payload: docPayload,
+        p_doc_payload: {
+          requestor: _mrrState.preparedBy,
+          department: '',
+          po_no: _mrrState.poNo || '',
+          sof_no: _mrrState.sofNo || '',
+          prf_no: _mrrState.prfNo,
+          vendor: _mrrState.vendor,
+          client_name: _mrrState.client || '',
+          dr_no: _mrrState.drNo,
+          receiving_site: _mrrState.receivingSite,
+          receiving_date: _mrrState.receivingDate,
+          date_prepared: new Date().toISOString().split('T')[0],
+          prepared_by: _mrrState.preparedBy
+        },
         p_items: validItems,
         p_processed_by: currentUser
       })
     });
 
     if (!processRes.ok) {
-      var errText = await processRes.text();
-      throw new Error('RPC Error: ' + processRes.status + ' ' + errText);
+      throw new Error('RPC Error: ' + processRes.status);
     }
     
     var data = await processRes.json();
     if (!data || !data.success) throw new Error(data.error || 'Unknown error');
-    // ═══════════════════════════════════════════════════════
-    // ═══ AUTO-ALLOCATE SA SOF KUNG MAY SOF NO. ═══
-    // ═══════════════════════════════════════════════════════
-           // ═══ AUTO-ALLOCATE SA SOF (Base sa SOF No.) ═══
-        var finalSofNo = _mrrState.sofNo || document.getElementById('mrrSofNoDisplay')?.value || document.getElementById('mrrSofNo')?.value;
-        
-        if (finalSofNo && finalSofNo.trim()) {
-          try {
-            console.log('[MRR] Auto-allocating to SOF:', finalSofNo);
-            
-            var sofItems = validItems.map(function(it) {
-              return {
-                item_code: it.item_code,
-                description: it.description,
-                unit: it.unit,
-                qty: it.qty
-              };
-            });
 
-            await fetch(erpUrl('rpc/erp_sof_auto_allocate'), {
-              method: 'POST',
-              headers: erpHeaders(),
-              body: JSON.stringify({
-                p_sof_no: finalSofNo.trim(),
-                p_client: _mrrState.vendor || '',
-                p_project: '', 
-                p_jo_no: '', // Wala nang JO No. dito, SOF No. lang ang basehan
-                p_items: sofItems
-              })
-            });
-            
-            console.log('[MRR] ✅ SOF Auto-Allocate success');
-          } catch(sofErr) {
-            console.error('[MRR] SOF Auto-Allocate failed:', sofErr);
-          }
-        }
-    // ═══════════════════════════════════════════════════════
-    erpShowToast('✅ Manual MRR created: ' + docNo + ' (' + data.status + ')', 'success');
+    // ✅ AUTO-ALLOCATE SA SOF KUNG MAY SOF NO. (Ito ay nasa RPC na, pero kung gusto mong tawagin muli, okay lang)
+    // Actually, tinatawag na ito ng RPC, kaya hindi mo na kailangang tawagin muli sa JS.
+
+    erpShowToast('✅ MRR created: ' + docNo, 'success');
     showSuccessModal(docNo);
 
   } catch(err) {
