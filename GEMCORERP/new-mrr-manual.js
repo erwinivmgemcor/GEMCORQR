@@ -214,12 +214,29 @@ function hideItemDropdown(input) {
 async function submitMrr() {
   if (_mrrState.isSubmitting) return;
 
-  // ... (validation code dito, huwag galawin)
+  // 1. Validation
+  var drNo = document.getElementById('mrrDrNo').value.trim();
+  if (!drNo) { erpShowToast('DR No. / S.I. No. is required', 'warning'); return; }
+  _mrrState.drNo = drNo;
+
+  var receivingDate = document.getElementById('mrrReceivingDate').value;
+  if (!receivingDate) { erpShowToast('Receiving Date is required', 'warning'); return; }
+  _mrrState.receivingDate = receivingDate;
+
+  var receivingSite = document.getElementById('mrrReceivingSite').value.trim();
+  if (!receivingSite) { erpShowToast('Receiving Site is required', 'warning'); return; }
+
+  _mrrState.vendor = document.getElementById('mrrVendor').value.trim();
+  _mrrState.prfNo = document.getElementById('mrrPrfNo').value.trim();
+  _mrrState.sofNo = document.getElementById('mrrSofNoDisplay').value.trim() || document.getElementById('mrrSofNo').value.trim();
+
+  if (_mrrState.items.length === 0) { erpShowToast('No items to submit', 'warning'); return; }
 
   var validItems = [];
   for (var i = 0; i < _mrrState.items.length; i++) {
     var it = _mrrState.items[i];
-    // ... validation ...
+    if (!it.itemCode || !it.itemCode.trim()) { erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning'); return; }
+    
     validItems.push({
       item_code: it.itemCode,
       description: it.description,
@@ -239,18 +256,21 @@ async function submitMrr() {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
 
   try {
-    // 1. Kunin lang ang Doc No (WALANG INSERT DITO)
+    // 2. Kunin lang ang Doc No
     var rpcRes = await fetch(erpUrl('rpc/get_next_doc_number'), {
       method: 'POST',
       headers: erpHeaders(),
       body: JSON.stringify({ p_prefix: 'MRR' })
     });
+
+    if (!rpcRes.ok) throw new Error('RPC Doc Num failed');
     var nextNum = await rpcRes.json();
-    var docNo = 'MRR' + String(nextNum).padStart(7, '0');
+    var padded = String(nextNum).padStart(7, '0');
+    var docNo = 'MRR' + padded;
 
-    var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
+    var currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
 
-    // 2. Ipaubaya lahat sa RPC (Insert Doc, Insert Items, Update Stock)
+    // 3. Tawagin ang RPC (Ito na ang bahala sa lahat ng Insert at Stock Update)
     var processRes = await fetch(erpUrl('rpc/erp_submit_mrr'), {
       method: 'POST',
       headers: erpHeaders(),
@@ -276,14 +296,12 @@ async function submitMrr() {
     });
 
     if (!processRes.ok) {
-      throw new Error('RPC Error: ' + processRes.status);
+      var errText = await processRes.text();
+      throw new Error('RPC Error: ' + processRes.status + ' ' + errText);
     }
     
     var data = await processRes.json();
     if (!data || !data.success) throw new Error(data.error || 'Unknown error');
-
-    // ✅ AUTO-ALLOCATE SA SOF KUNG MAY SOF NO. (Ito ay nasa RPC na, pero kung gusto mong tawagin muli, okay lang)
-    // Actually, tinatawag na ito ng RPC, kaya hindi mo na kailangang tawagin muli sa JS.
 
     erpShowToast('✅ MRR created: ' + docNo, 'success');
     showSuccessModal(docNo);
