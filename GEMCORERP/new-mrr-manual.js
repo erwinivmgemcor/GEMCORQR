@@ -228,121 +228,87 @@ function hideItemDropdown(input) {
 // ═══════════════════════════════════════════════════════════
 // SUBMIT MRR (Strict RPC-only flow)
 // ═══════════════════════════════════════════════════════════
-async function submitMrr() {
-  if (_mrrState.isSubmitting) return;
+var _isGlobalSubmitting = false; // ✅ GLOBAL LOCK
 
-  var now = Date.now();
-  if (_mrrState.lastSubmittedAt && (now - _mrrState.lastSubmittedAt) < 10000) {
-    erpShowToast('Please wait before submitting again', 'warning');
+async function submitMrr(btnElement) {
+  // ✅ KUNG NAG-RUN NA, HUWAG NANG ITULOY
+  if (_isGlobalSubmitting) {
+    console.warn('Submit already in progress...');
     return;
   }
 
-  // ✅ NULL-SAFE GETTERS (Hindi mag-crash kahit walang field sa HTML)
-  var getElVal = function(id) {
-    var el = document.getElementById(id);
-    return el ? el.value.trim() : '';
+  _isGlobalSubmitting = true;
+  var btn = btnElement || document.getElementById('btnSubmitMrr');
+  var originalHtml = btn ? btn.innerHTML : 'Submit MRR';
+  
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
+  }
+
+  var getVal = function(id) {
+    try { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+    catch(e) { return ''; }
   };
 
-  var receivingSite = getElVal('mrrReceivingSite') || 'GEMCOR CATMON';
-  var vendor = getElVal('mrrVendor');
-  var drNo = getElVal('mrrDrNo');
-  
-  // Date fallback kung walang laman ang date input
-  var receivingDate = getElVal('mrrReceivingDate') || new Date().toISOString().split('T')[0]; 
-  
-  var poNo = getElVal('mrrPoNo');
-  var sofNo = getElVal('mrrSofNo');
-  var prfNo = getElVal('mrrPrfNo');
+  var receivingSite = getVal('mrrReceivingSite') || 'GEMCOR CATMON';
+  var vendor = getVal('mrrVendor');
+  var drNo = getVal('mrrDrNo');
+  var receivingDate = getVal('mrrReceivingDate') || new Date().toISOString().split('T')[0]; 
+  var poNo = getVal('mrrPoNo');
+  var sofNo = getVal('mrrSofNo');
+  var prfNo = getVal('mrrPrfNo');
 
-  if (!vendor) { erpShowToast('Vendor is required', 'warning'); return; }
-  if (!drNo) { erpShowToast('DR No. is required', 'warning'); return; }
+  if (!vendor) { erpShowToast('Vendor is required', 'warning'); resetBtn(btn, originalHtml); return; }
+  if (!drNo) { erpShowToast('DR No. is required', 'warning'); resetBtn(btn, originalHtml); return; }
 
   var validItems = [];
   var rows = document.querySelectorAll('.erp-item-row');
   
   for (var i = 0; i < rows.length; i++) {
     var row = rows[i];
+    var code = row.querySelector('.item-code-input') ? row.querySelector('.item-code-input').value.trim() : '';
+    var desc = row.querySelector('.item-desc-input') ? row.querySelector('.item-desc-input').value.trim() : '';
+    var qty = row.querySelector('.item-qty-input') ? (parseFloat(row.querySelector('.item-qty-input').value) || 0) : 0;
+    var atlQty = row.querySelector('.item-atl-input') ? (parseFloat(row.querySelector('.item-atl-input').value) || 0) : 0;
+    var unit = row.querySelector('.item-unit-input') ? row.querySelector('.item-unit-input').value : 'PIECE';
+    var remarks = row.querySelector('.item-remarks-input') ? row.querySelector('.item-remarks-input').value.trim() : '';
     
-    var codeInput = row.querySelector('.item-code-input');
-    var descInput = row.querySelector('.item-desc-input');
-    var qtyInput = row.querySelector('.item-qty-input');
-    var atlInput = row.querySelector('.item-atl-input');
-    var unitInput = row.querySelector('.item-unit-input');
-    var remarksInput = row.querySelector('.item-remarks-input');
-
-    var code = codeInput ? codeInput.value.trim() : '';
-    var desc = descInput ? descInput.value.trim() : '';
-    var qty = qtyInput ? (parseFloat(qtyInput.value) || 0) : 0;
-    var atlQty = atlInput ? (parseFloat(atlInput.value) || 0) : 0;
-    var unit = unitInput ? unitInput.value : 'PIECE';
-    var remarks = remarksInput ? remarksInput.value.trim() : '';
-    
-    if (!code) { 
-      erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning'); 
-      return; 
-    }
-    if (qty <= 0 && atlQty <= 0) { 
-      erpShowToast('Item #' + (i + 1) + ' has no quantity.', 'warning'); 
-      return; 
-    }
+    if (!code) { erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning'); resetBtn(btn, originalHtml); return; }
+    if (qty <= 0 && atlQty <= 0) { erpShowToast('Item #' + (i + 1) + ' has no quantity.', 'warning'); resetBtn(btn, originalHtml); return; }
     
     var finalQty = qty > 0 ? qty : atlQty;
-    
     validItems.push({
-      item_code: code,
-      description: desc,
-      qty: finalQty,
-      atl_qty: atlQty,
-      unit: unit,
-      remarks: remarks || (atlQty >= finalQty ? 'COMPLETE' : 'PARTIAL')
+      item_code: code, description: desc, qty: finalQty, atl_qty: atlQty,
+      unit: unit, remarks: remarks || (atlQty >= finalQty ? 'COMPLETE' : 'PARTIAL')
     });
   }
 
-  if (validItems.length === 0) { erpShowToast('Please add at least one item', 'warning'); return; }
-  if (!confirm('Create manual MRR with ' + validItems.length + ' item(s)?')) return;
-
-  _mrrState.isSubmitting = true;
-  _mrrState.lastSubmittedAt = now;
-
-  var btn = document.getElementById('btnSubmitMrr');
-  var originalHtml = btn ? btn.innerHTML : 'Submit';
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
-  }
+  if (validItems.length === 0) { erpShowToast('Please add at least one item', 'warning'); resetBtn(btn, originalHtml); return; }
+  if (!confirm('Create manual MRR with ' + validItems.length + ' item(s)?')) { resetBtn(btn, originalHtml); return; }
 
   try {
-    // 1. Get Doc No
+    // Kunin ang Doc No
     var rpcRes = await fetch(erpUrl('rpc/get_next_doc_number'), {
-      method: 'POST',
-      headers: erpHeaders(),
+      method: 'POST', headers: erpHeaders(),
       body: JSON.stringify({ p_prefix: 'MRR' })
     });
 
     if (!rpcRes.ok) throw new Error('RPC Doc Num failed');
     var nextNum = await rpcRes.json();
-    var padded = String(nextNum).padStart(7, '0');
-    var docNo = 'MRR' + padded;
+    var docNo = 'MRR' + String(nextNum).padStart(7, '0');
 
-    var currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
+    var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
 
-    // 2. Ipaubaya lahat sa RPC (Insert Doc, Insert Items, Update Stock)
     var processRes = await fetch(erpUrl('rpc/erp_submit_mrr'), {
-      method: 'POST',
-      headers: erpHeaders(),
+      method: 'POST', headers: erpHeaders(),
       body: JSON.stringify({
         p_doc_no: docNo,
         p_doc_payload: {
-          requestor: _mrrState.preparedBy,
-          department: '',
-          po_no: poNo,
-          sof_no: sofNo,
-          prf_no: prfNo,
-          vendor: vendor,
-          client_name: vendor,
-          dr_no: drNo,
-          receiving_site: receivingSite,
-          receiving_date: receivingDate,
+          requestor: _mrrState.preparedBy, department: '',
+          po_no: poNo, sof_no: sofNo, prf_no: prfNo,
+          vendor: vendor, client_name: vendor, dr_no: drNo,
+          receiving_site: receivingSite, receiving_date: receivingDate,
           date_prepared: new Date().toISOString().split('T')[0],
           prepared_by: _mrrState.preparedBy
         },
@@ -359,19 +325,25 @@ async function submitMrr() {
     var data = await processRes.json();
     if (!data || !data.success) throw new Error(data.error || 'Unknown error');
 
-    erpShowToast('✅ Manual MRR created: ' + docNo + ' (' + data.status + ')', 'success');
+    erpShowToast('✅ Manual MRR created: ' + docNo, 'success');
     showSuccessModal(docNo);
 
   } catch(err) {
     console.error('[submitMrr]', err);
     erpShowToast('Failed: ' + err.message, 'danger');
   } finally {
-    _mrrState.isSubmitting = false;
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = originalHtml;
-    }
+    _isGlobalSubmitting = false;
+    resetBtn(btn, originalHtml);
   }
+}
+
+function resetBtn(btn, origHtml) {
+  _isGlobalSubmitting = false;
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+  }
+}
 }
 
 window.submitMrr = submitMrr;
