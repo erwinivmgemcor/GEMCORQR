@@ -136,9 +136,9 @@
         <button class="btn btn-outline-secondary me-2" onclick="resetForm()">
           <i class="bi bi-x-lg me-1"></i>Reset
         </button>
-        <button class="btn btn-success btn-lg" id="btnSubmitMrr" onclick="submitMrr()">
-          <i class="bi bi-check-circle me-1"></i>Submit MRR
-        </button>
+        <button class="btn btn-success btn-lg" id="btnSubmitMrr" onclick="if(!this.disabled){ this.disabled=true; submitMrr(this); }">
+  <i class="bi bi-check-circle me-1"></i>Submit MRR
+</button>
       </div>
     </div>
   </div>
