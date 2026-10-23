@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GEMCOR ERP — Manual MRR</title>
+<title>GEMCOR ERP — New MRR</title>
 
   <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1e3a5f">
@@ -56,10 +56,10 @@
 
   <div class="erp-card" style="padding:24px;margin-bottom:20px;">
     <h3 style="margin-bottom:8px;">
-      <i class="bi bi-pencil-square me-2"></i>Manual MRR Entry
+      <i class="bi bi-pencil-square me-2"></i>Create New MRR
     </h3>
     <p class="text-muted mb-0">
-      For legacy docs without PO or for special/off-record receipts. All fields editable.
+      Materials Receiving Report. Enter the details and add items manually.
     </p>
   </div>
 
@@ -168,26 +168,21 @@
         <label>Description</label>
         <input type="text" class="form-control item-desc-input" readonly>
       </div>
+      <!-- ✅ PINALITAN ANG LABEL DITO -->
       <div class="erp-item-field">
-        <label>Rec. Qty <span class="text-danger">*</span></label>
+        <label>PO Qty <span class="text-danger">*</span></label>
         <input type="number" class="form-control item-qty-input" min="0.01" step="0.01" value="1">
       </div>
+      <!-- ✅ PINALITAN ANG LABEL DITO -->
       <div class="erp-item-field">
-        <label>ATL Qty</label>
+        <label>Received Qty</label>
         <input type="number" class="form-control item-atl-input" min="0" step="0.01" value="1">
       </div>
       <div class="erp-item-field">
         <label>Unit</label>
         <select class="form-select item-unit-input">
           <option value="PIECE">PIECE</option>
-          <option value="PCS">PCS</option>
-          <option value="PAIR">PAIR</option>
-          <option value="SET">SET</option>
-          <option value="BOX">BOX</option>
-          <option value="KG">KG</option>
-          <option value="METER">METER</option>
-          <option value="MM">MM</option>
-          <option value="ROLL">ROLL</option>
+          <!-- ... iba pang options ... -->
         </select>
       </div>
       <div class="erp-item-field erp-item-remarks-field">
@@ -197,7 +192,6 @@
     </div>
   </div>
 </template>
-
 <!-- SUCCESS MODAL -->
 <div class="modal fade" id="successModal" tabindex="-1" data-bs-backdrop="static">
   <div class="modal-dialog modal-dialog-centered">
