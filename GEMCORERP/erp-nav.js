@@ -1,19 +1,10 @@
 // ============================================================
-// GEMCOR ERP — Navigation & Layout System v8.4
-// Professional Enterprise Design
-// Clean, Minimal, Self-Contained
-// v8.2 — Added Edit Requests nav item
-// v8.3 — FIXED: Duplicate items: [ in inventory section
-// v8.4 — Added Supabase Admin Console (admin-only)
+// GEMCOR ERP — Navigation & Layout System v8.5
 // ============================================================
 
 (function() {
   'use strict';
 
-  // ═══════════════════════════════════════════════════════════
-  // NAVIGATION STRUCTURE
-  // Grouped, role-based, priority-ordered
-  // ═══════════════════════════════════════════════════════════
   var NAV_GROUPS = [
     {
       id: 'main',
@@ -104,6 +95,14 @@
           href: 'mrif-list.html',
           roles: ['warehouse']
         },
+        // ✅ ITO ANG BAGONG NEW MRR (Dating Manual)
+        {
+          id: 'new-mrr',
+          label: 'New MRR',
+          icon: 'bi-box-arrow-in-down',
+          href: 'new-mrr-manual.html',
+          roles: ['warehouse', 'production']
+        },
         {
           id: 'mrr-list',
           label: 'MRR — Receiving',
@@ -111,7 +110,7 @@
           href: 'mrr-list.html',
           roles: ['warehouse']
         },
-                {
+        {
           id: 'mrs-list',
           label: 'MRS — Returns',
           icon: 'bi-arrow-counterclockwise',
@@ -271,9 +270,6 @@
     }
   ];
 
-  // ═══════════════════════════════════════════════════════════
-  // PAGE TITLES
-  // ═══════════════════════════════════════════════════════════
   var PAGE_TITLES = {
     'management-dashboard': 'Management Dashboard',
     'stock-monitor': 'Stock Monitor',
@@ -285,11 +281,12 @@
     'barcode-generator': 'Barcode Generator',
     'all-requests': 'All Requests',
     'mrif-list': 'MRIF List',
+    'new-mrr-manual': 'New MRR', // ✅ Idinagdag para lumabas sa Topbar
     'mrr-list': 'MRR List',
     'mrs-list': 'MRS List',
     'prf-monitor': 'PRF Monitor',
     'edit-requests': 'Edit Requests',
-        'sof-tracker': 'SOF Tracker',
+    'sof-tracker': 'SOF Tracker',
     'mrif-monitoring': 'MRIF Monitoring',
     'mrr-monitoring': 'MRR Monitoring',
     'mrs-monitoring': 'MRS Monitoring',
@@ -310,16 +307,8 @@
     theme: 'erp_theme'
   };
 
-  // ═══════════════════════════════════════════════════════════
-  // HELPERS
-  // ═══════════════════════════════════════════════════════════
-
   function _getUserRole() {
-    try {
-      return localStorage.getItem('ivm_userRole') || '';
-    } catch(e) {
-      return '';
-    }
+    try { return localStorage.getItem('ivm_userRole') || ''; } catch(e) { return ''; }
   }
 
   function _getCurrentPage() {
@@ -341,19 +330,12 @@
   }
 
   function _getUserInfo() {
-    var info = {
-      username: '',
-      fullname: '',
-      role: '',
-      department: '',
-      initials: ''
-    };
+    var info = { username: '', fullname: '', role: '', department: '', initials: '' };
     try {
       info.username = localStorage.getItem('ivm_username') || '';
       info.fullname = localStorage.getItem('ivm_userFullname') || info.username;
       info.role = localStorage.getItem('ivm_userRole') || '';
       info.department = localStorage.getItem('ivm_userDepartment') || '';
-
       if (info.fullname) {
         var parts = info.fullname.trim().split(/\s+/);
         if (parts.length >= 2) {
@@ -367,57 +349,26 @@
   }
 
   function _isCollapsed() {
-    try {
-      return localStorage.getItem(STORAGE_KEYS.sidebarCollapsed) === 'true';
-    } catch(e) {
-      return false;
-    }
+    try { return localStorage.getItem(STORAGE_KEYS.sidebarCollapsed) === 'true'; } catch(e) { return false; }
   }
 
   function _setCollapsed(collapsed) {
-    try {
-      localStorage.setItem(STORAGE_KEYS.sidebarCollapsed, String(collapsed));
-    } catch(e) {}
+    try { localStorage.setItem(STORAGE_KEYS.sidebarCollapsed, String(collapsed)); } catch(e) {}
   }
 
   function _escapeHtml(str) {
     if (str === null || str === undefined) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // CLEANUP
-  // ═══════════════════════════════════════════════════════════
-
   function _removeOldNav() {
-    var selectors = [
-      'nav.erp-topbar',
-      '.erp-topbar',
-      '#erpNavBar',
-      '#erpSidebar',
-      '#erpThinTopbar',
-      '#erpSidebarBackdrop',
-      '.erp-mobile-menu-btn'
-    ];
-
+    var selectors = ['nav.erp-topbar', '.erp-topbar', '#erpNavBar', '#erpSidebar', '#erpThinTopbar', '#erpSidebarBackdrop', '.erp-mobile-menu-btn'];
     selectors.forEach(function(sel) {
-      document.querySelectorAll(sel).forEach(function(el) {
-        el.remove();
-      });
+      document.querySelectorAll(sel).forEach(function(el) { el.remove(); });
     });
-
     var oldNotif = document.getElementById('erpNotifContainer');
     if (oldNotif) oldNotif.remove();
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // BUILD SIDEBAR
-  // ═══════════════════════════════════════════════════════════
 
   function _buildSidebar(userRole, currentPage) {
     var sidebar = document.createElement('aside');
@@ -426,7 +377,6 @@
 
     var brand = document.createElement('div');
     brand.className = 'erp-sidebar-brand';
-
     var toggleIcon = _isCollapsed() ? 'bi bi-chevron-right' : 'bi bi-chevron-left';
 
     brand.innerHTML =
@@ -443,9 +393,7 @@
     toggleBtn.addEventListener('click', function(e) {
       e.preventDefault();
       e.stopPropagation();
-
       var willCollapse = !sidebar.classList.contains('collapsed');
-
       if (willCollapse) {
         sidebar.classList.add('collapsed');
         document.body.classList.add('erp-sidebar-collapsed');
@@ -453,13 +401,9 @@
         sidebar.classList.remove('collapsed');
         document.body.classList.remove('erp-sidebar-collapsed');
       }
-
       _setCollapsed(willCollapse);
-
       var icon = toggleBtn.querySelector('i');
-      if (icon) {
-        icon.className = willCollapse ? 'bi bi-chevron-right' : 'bi bi-chevron-left';
-      }
+      if (icon) icon.className = willCollapse ? 'bi bi-chevron-right' : 'bi bi-chevron-left';
     });
 
     sidebar.appendChild(brand);
@@ -468,10 +412,7 @@
     nav.className = 'erp-sidebar-nav';
 
     NAV_GROUPS.forEach(function(group) {
-      var allowedItems = group.items.filter(function(item) {
-        return _isAllowed(item, userRole);
-      });
-
+      var allowedItems = group.items.filter(function(item) { return _isAllowed(item, userRole); });
       if (allowedItems.length === 0) return;
 
       if (group.label) {
@@ -483,15 +424,10 @@
 
       allowedItems.forEach(function(item) {
         if (item.type === 'submenu' && item.items && item.items.length > 0) {
-          var allowedSubItems = item.items.filter(function(sub) {
-            return _isAllowed(sub, userRole);
-          });
+          var allowedSubItems = item.items.filter(function(sub) { return _isAllowed(sub, userRole); });
           if (allowedSubItems.length === 0) return;
 
-          var subActive = allowedSubItems.some(function(sub) {
-            return sub.id === currentPage;
-          });
-
+          var subActive = allowedSubItems.some(function(sub) { return sub.id === currentPage; });
           var subContainer = document.createElement('div');
           subContainer.className = 'erp-sidebar-submenu' + (subActive ? ' has-active' : '');
 
@@ -514,9 +450,7 @@
             subLink.className = 'erp-sidebar-subitem' + (subIsActive ? ' active' : '');
             subLink.title = sub.label;
             subLink.setAttribute('data-nav-id', sub.id);
-            subLink.innerHTML =
-              '<i class="bi ' + sub.icon + '"></i>' +
-              '<span>' + _escapeHtml(sub.label) + '</span>';
+            subLink.innerHTML = '<i class="bi ' + sub.icon + '"></i><span>' + _escapeHtml(sub.label) + '</span>';
             subList.appendChild(subLink);
           });
 
@@ -532,23 +466,14 @@
 
         } else {
           var isActive = (item.id === currentPage);
-
           var link = document.createElement('a');
           link.href = item.href;
           link.className = 'erp-sidebar-item' + (isActive ? ' active' : '');
           link.title = item.label;
           link.setAttribute('data-nav-id', item.id);
 
-          var badgeHtml = '';
-          if (item.badgeId) {
-            badgeHtml = '<span class="badge bg-danger d-none" id="' + item.badgeId + '">0</span>';
-          }
-
-          link.innerHTML =
-            '<i class="bi ' + item.icon + '"></i>' +
-            '<span class="erp-sidebar-item-label">' + _escapeHtml(item.label) + '</span>' +
-            badgeHtml;
-
+          var badgeHtml = item.badgeId ? '<span class="badge bg-danger d-none" id="' + item.badgeId + '">0</span>' : '';
+          link.innerHTML = '<i class="bi ' + item.icon + '"></i><span class="erp-sidebar-item-label">' + _escapeHtml(item.label) + '</span>' + badgeHtml;
           nav.appendChild(link);
         }
       });
@@ -558,47 +483,33 @@
 
     var footer = document.createElement('div');
     footer.className = 'erp-sidebar-footer';
-
     var version = 'v1.0.0';
-    try {
-      version = 'v' + (window.ERP_APP_VERSION || '1.0.0');
-    } catch(e) {}
-
+    try { version = 'v' + (window.ERP_APP_VERSION || '1.0.0'); } catch(e) {}
     footer.innerHTML = '<span class="erp-sidebar-version">' + version + '</span>';
     sidebar.appendChild(footer);
 
     return sidebar;
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // BUILD TOPBAR
-  // ═══════════════════════════════════════════════════════════
-
   function _buildTopbar(userInfo, currentPage) {
     var topbar = document.createElement('div');
     topbar.id = 'erpThinTopbar';
     topbar.className = 'erp-thin-topbar';
-
     var pageTitle = PAGE_TITLES[currentPage] || 'GEMCOR ERP';
-
     var customButtons = '';
 
     if (currentPage === 'prf-monitor') {
       customButtons +=
-        '<button class="erp-btn-outline-dark" onclick="prfSyncAndRecompute()" ' +
-          'title="Sync PO data from Google Sheet and recompute all statuses" ' +
-          'style="margin-right:6px;font-size:0.8rem;padding:6px 12px;">' +
+        '<button class="erp-btn-outline-dark" onclick="prfSyncAndRecompute()" title="Sync PO data" style="margin-right:6px;font-size:0.8rem;padding:6px 12px;">' +
           '<i class="bi bi-arrow-repeat"></i> Sync & Recompute' +
         '</button>';
     }
 
-        topbar.innerHTML =
+    topbar.innerHTML =
       '<div class="erp-thin-topbar-left">' +
         '<h1 class="erp-thin-page-title">' + _escapeHtml(pageTitle) + '</h1>' +
         '<div class="erp-search-bar" onclick="if(window.erpOpenSearch)erpOpenSearch()">' +
-          '<i class="bi bi-search"></i>' +
-          '<span>Search...</span>' +
-          '<kbd class="erp-search-kbd">⌘K</kbd>' +
+          '<i class="bi bi-search"></i><span>Search...</span><kbd class="erp-search-kbd">⌘K</kbd>' +
         '</div>' +
       '</div>' +
       '<div class="erp-thin-topbar-right">' +
@@ -619,21 +530,12 @@
           '<div class="erp-user-dropdown">' +
             '<div class="erp-user-dropdown-header">' +
               '<div class="fullname">' + _escapeHtml(userInfo.fullname || 'User') + '</div>' +
-              '<div class="meta">' +
-                '<i class="bi bi-person-badge"></i> ' + _escapeHtml(userInfo.username || '') +
-                (userInfo.department ? ' · ' + _escapeHtml(userInfo.department) : '') +
-              '</div>' +
+              '<div class="meta"><i class="bi bi-person-badge"></i> ' + _escapeHtml(userInfo.username || '') + (userInfo.department ? ' · ' + _escapeHtml(userInfo.department) : '') + '</div>' +
             '</div>' +
-            '<button class="erp-user-dropdown-item" type="button" onclick="erpUserRefresh()">' +
-              '<i class="bi bi-arrow-clockwise"></i> Refresh Data' +
-            '</button>' +
-            '<button class="erp-user-dropdown-item" type="button" onclick="erpUserSettings()">' +
-              '<i class="bi bi-gear"></i> Settings' +
-            '</button>' +
+            '<button class="erp-user-dropdown-item" type="button" onclick="erpUserRefresh()"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>' +
+            '<button class="erp-user-dropdown-item" type="button" onclick="erpUserSettings()"><i class="bi bi-gear"></i> Settings</button>' +
             '<div class="erp-user-dropdown-divider"></div>' +
-            '<button class="erp-user-dropdown-item danger" type="button" onclick="erpUserLogout()">' +
-              '<i class="bi bi-box-arrow-right"></i> Logout' +
-            '</button>' +
+            '<button class="erp-user-dropdown-item danger" type="button" onclick="erpUserLogout()"><i class="bi bi-box-arrow-right"></i> Logout</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -644,14 +546,8 @@
       userToggle.addEventListener('click', function(e) {
         e.stopPropagation();
         var isOpen = userMenu.classList.contains('open');
-
-        document.querySelectorAll('.erp-user-menu.open').forEach(function(m) {
-          m.classList.remove('open');
-        });
-        document.querySelectorAll('#erpNotifContainer.open').forEach(function(c) {
-          c.classList.remove('open');
-        });
-
+        document.querySelectorAll('.erp-user-menu.open').forEach(function(m) { m.classList.remove('open'); });
+        document.querySelectorAll('#erpNotifContainer.open').forEach(function(c) { c.classList.remove('open'); });
         if (!isOpen) userMenu.classList.add('open');
       });
     }
@@ -659,33 +555,22 @@
     return topbar;
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // NOTIFICATION CONTAINER
-  // ═══════════════════════════════════════════════════════════
-
   function _ensureNotifContainer() {
     var existing = document.getElementById('erpNotifContainer');
     if (existing) return existing;
-
     var container = document.createElement('div');
     container.id = 'erpNotifContainer';
     document.body.appendChild(container);
     return container;
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // HEALTH CHECK
-  // ═══════════════════════════════════════════════════════════
-
   async function _checkHealth() {
     var dot = document.getElementById('erpHealthDot');
     var text = document.getElementById('erpHealthText');
     if (!dot) return;
-
     try {
       if (typeof erpHealthCheck === 'function') {
         var result = await erpHealthCheck();
-
         if (result.success) {
           dot.className = 'erp-health-dot';
           dot.title = 'Connected (' + result.latency + 'ms)';
@@ -697,31 +582,21 @@
         }
       } else {
         dot.className = 'erp-health-dot pending';
-        dot.title = 'Checking...';
-        if (text) text.textContent = 'Checking...';
       }
     } catch (err) {
       dot.className = 'erp-health-dot offline';
-      dot.title = 'Error';
-      if (text) text.textContent = 'Error';
     }
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // MOBILE
-  // ═══════════════════════════════════════════════════════════
 
   function _buildBackdrop() {
     var backdrop = document.createElement('div');
     backdrop.id = 'erpSidebarBackdrop';
     backdrop.className = 'erp-sidebar-backdrop';
-
     backdrop.addEventListener('click', function() {
       var sidebar = document.getElementById('erpSidebar');
       if (sidebar) sidebar.classList.remove('mobile-open');
       backdrop.classList.remove('show');
     });
-
     return backdrop;
   }
 
@@ -729,53 +604,37 @@
     var btn = document.createElement('button');
     btn.className = 'erp-mobile-menu-btn';
     btn.type = 'button';
-    btn.setAttribute('aria-label', 'Open menu');
     btn.innerHTML = '<i class="bi bi-list"></i>';
-
     btn.addEventListener('click', function() {
       var sidebar = document.getElementById('erpSidebar');
       var backdrop = document.getElementById('erpSidebarBackdrop');
       if (sidebar) sidebar.classList.add('mobile-open');
       if (backdrop) backdrop.classList.add('show');
     });
-
     return btn;
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // MAIN RENDER
-  // ═══════════════════════════════════════════════════════════
-
-    function renderNav() {
+  function renderNav() {
     var current = _getCurrentPage();
     var userRole = _getUserRole();
     var userInfo = _getUserInfo();
 
     _removeOldNav();
-    
-    // ═══════════════════════════════════════════════════════════
-    // ✅ AUTO-INJECT THEME CSS (kung wala pa)
-    // ═══════════════════════════════════════════════════════════
+
     if (!document.querySelector('link[href*="erp-theme.css"]')) {
       var themeCss = document.createElement('link');
       themeCss.rel = 'stylesheet';
       themeCss.href = 'erp-theme.css';
       document.head.insertBefore(themeCss, document.head.firstChild);
-      console.log('[Nav] Auto-injected erp-theme.css');
     }
-    
-    // ═══════════════════════════════════════════════════════════
-    // ✅ AUTO-INJECT THEME JS (kung wala pa)
-    // ═══════════════════════════════════════════════════════════
+
     if (typeof window.erpToggleTheme !== 'function') {
       var themeJs = document.createElement('script');
       themeJs.src = 'erp-theme.js';
       themeJs.async = false;
       document.head.appendChild(themeJs);
-      console.log('[Nav] Auto-injected erp-theme.js');
     }
 
-    // ✅ Load global search if not yet loaded
     if (!document.getElementById('globalSearchScript') && typeof window.erpOpenSearch !== 'function') {
       var gsScript = document.createElement('script');
       gsScript.id = 'globalSearchScript';
@@ -797,118 +656,58 @@
     _ensureNotifContainer();
 
     document.body.classList.add('erp-has-sidebar');
-    if (_isCollapsed()) {
-      document.body.classList.add('erp-sidebar-collapsed');
-    }
+    if (_isCollapsed()) document.body.classList.add('erp-sidebar-collapsed');
 
     if (typeof initNotifications === 'function') {
-      setTimeout(function() {
-        try { initNotifications(); } catch(e) {
-          console.warn('[Nav] initNotifications error:', e);
-        }
-      }, 100);
+      setTimeout(function() { try { initNotifications(); } catch(e) {} }, 100);
     }
 
     setTimeout(_checkHealth, 500);
-
-    console.log('[Nav v8.4] Rendered. Page:', current, '| Role:', userRole, '| Admin:', localStorage.getItem('ivm_isAdmin') === 'true', '| Collapsed:', _isCollapsed());
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // GLOBAL EVENT LISTENERS
-  // ═══════════════════════════════════════════════════════════
 
   document.addEventListener('click', function(e) {
     if (!e.target.closest('.erp-user-menu')) {
-      document.querySelectorAll('.erp-user-menu.open').forEach(function(m) {
-        m.classList.remove('open');
-      });
+      document.querySelectorAll('.erp-user-menu.open').forEach(function(m) { m.classList.remove('open'); });
     }
-
     if (!e.target.closest('#erpNotifContainer') && !e.target.closest('#erpBellContainer')) {
-      document.querySelectorAll('#erpNotifContainer.open').forEach(function(c) {
-        c.classList.remove('open');
-      });
+      document.querySelectorAll('#erpNotifContainer.open').forEach(function(c) { c.classList.remove('open'); });
     }
   });
 
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
-      document.querySelectorAll('.erp-user-menu.open').forEach(function(m) {
-        m.classList.remove('open');
-      });
-      document.querySelectorAll('#erpNotifContainer.open').forEach(function(c) {
-        c.classList.remove('open');
-      });
-
+      document.querySelectorAll('.erp-user-menu.open').forEach(function(m) { m.classList.remove('open'); });
+      document.querySelectorAll('#erpNotifContainer.open').forEach(function(c) { c.classList.remove('open'); });
       var sidebar = document.getElementById('erpSidebar');
       var backdrop = document.getElementById('erpSidebarBackdrop');
       if (sidebar) sidebar.classList.remove('mobile-open');
       if (backdrop) backdrop.classList.remove('show');
     }
-
     if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
       e.preventDefault();
-      if (typeof window.erpOpenSearch === 'function') {
-        window.erpOpenSearch();
-      } else {
-        console.log('[Nav] Search not implemented yet');
-      }
+      if (typeof window.erpOpenSearch === 'function') window.erpOpenSearch();
     }
   });
 
-  // ═══════════════════════════════════════════════════════════
-  // GLOBAL USER ACTIONS
-  // ═══════════════════════════════════════════════════════════
-
   window.erpUserLogout = function() {
-    var userInfo = _getUserInfo();
-    var name = userInfo.fullname || 'user';
-
-    if (!confirm('Logout ' + name + '?')) return;
-
+    if (!confirm('Logout ' + _getUserInfo().fullname + '?')) return;
     try {
-      var keysToRemove = [
-        'ivm_username',
-        'ivm_userFullname',
-        'ivm_userRole',
-        'ivm_allowedRoles',
-        'ivm_requestorName',
-        'ivm_userDepartment',
-        'ivm_chatUnread',
-        'ivm_editReqCount',
-        'ivm_isAdmin'
-      ];
-      keysToRemove.forEach(function(k) {
-        localStorage.removeItem(k);
-      });
+      var keysToRemove = ['ivm_username', 'ivm_userFullname', 'ivm_userRole', 'ivm_allowedRoles', 'ivm_requestorName', 'ivm_userDepartment', 'ivm_chatUnread', 'ivm_editReqCount', 'ivm_isAdmin'];
+      keysToRemove.forEach(function(k) { localStorage.removeItem(k); });
       sessionStorage.clear();
     } catch(e) {}
-
     window.location.href = 'login.html';
   };
 
   window.erpUserRefresh = function() {
-    if (typeof erpClearCache === 'function') {
-      erpClearCache();
-    }
-    if (typeof erpClearInventoryCache === 'function') {
-      erpClearInventoryCache();
-    }
+    if (typeof erpClearCache === 'function') erpClearCache();
+    if (typeof erpClearInventoryCache === 'function') erpClearInventoryCache();
     location.reload();
   };
 
   window.erpUserSettings = function() {
-    if (typeof erpShowToast === 'function') {
-      erpShowToast('Settings — coming soon', 'info');
-    } else {
-      alert('Settings — coming soon');
-    }
+    if (typeof erpShowToast === 'function') erpShowToast('Settings — coming soon', 'info');
   };
-
-  // ═══════════════════════════════════════════════════════════
-  // EXPOSE GLOBALS
-  // ═══════════════════════════════════════════════════════════
 
   window.erpRenderNav = renderNav;
   window.erpNavState = {
@@ -920,15 +719,11 @@
     getPageTitles: function() { return PAGE_TITLES; }
   };
 
-  // ═══════════════════════════════════════════════════════════
-  // BOOT
-  // ═══════════════════════════════════════════════════════════
-
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', renderNav);
   } else {
     renderNav();
   }
 
-  console.log('✅ erp-nav.js v8.4 loaded (with Supabase Admin Console)');
+  console.log('✅ erp-nav.js v8.5 loaded (New MRR updated)');
 })();
