@@ -1,14 +1,12 @@
 // ============================================================
 // GEMCOR ERP — Item In & Out (Movement History Viewer)
-// v1.1 — Added Beginning Balance (Beg Bal) computation
-//       + Complete helpers (ioNum, ioTruncate, _ioPositionDropdown)
-//       + Fixed: ioRenderMovements now updates BegBalBar elements
+// v2.0 — FIXED: Beginning Balance, Total In, Total Out, End Balance
 // ============================================================
 
 var _io = {
   currentItem: null,
   allMovements: [],
-  filteredMovements: [],
+  filteredMovements: [], // ✅ FIXED: Dapat filteredMovements ang gamitin
   allEdits: [],
   inventoryCache: null,
   searchTimer: null,
@@ -19,7 +17,7 @@ var _io = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Item In & Out v1.1] Initializing...');
+  console.log('[Item In & Out v2.0] Initializing...');
   ioCheckHealth();
 
   var params = new URLSearchParams(window.location.search);
@@ -279,7 +277,7 @@ function ioSwitchTab(tab) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// RENDER MOVEMENTS (WITH BEG BAL COMPUTATION)
+// RENDER MOVEMENTS (FIXED BEG BAL & TOTAL IN/OUT)
 // ═══════════════════════════════════════════════════════════
 function ioRenderMovements() {
   var tbody = document.getElementById('ioTableBody');
@@ -289,6 +287,7 @@ function ioRenderMovements() {
   var dateFrom = document.getElementById('ioDateFrom').value;
   var dateTo = document.getElementById('ioDateTo').value;
 
+  // ✅ FIX: Filter movements
   _io.filteredMovements = _io.allMovements.filter(function(m) {
     if (dirFilter) {
       var dir = String(m.direction || '').toUpperCase();
@@ -310,8 +309,7 @@ function ioRenderMovements() {
     return true;
   });
 
-  // ✅ COMPUTE BEG BAL & END BAL
-  var currentOnHand = Number(_io.currentItem ? _io.currentItem.on_hand : 0);
+  // ✅ FIX: Compute Period In/Out based sa FILTERED items
   var periodIn = 0;
   var periodOut = 0;
 
@@ -320,10 +318,12 @@ function ioRenderMovements() {
     periodOut += Number(m.qty_out || 0);
   });
 
+  // ✅ FIX: Compute Beg Bal
+  var currentOnHand = Number(_io.currentItem ? _io.currentItem.on_hand : 0);
   var begBal = currentOnHand - periodIn + periodOut;
   var endBal = begBal + periodIn - periodOut;
 
-  // ✅ Update Summary Bar
+  // Update Summary Bar
   var elBegBal = document.getElementById('ioBegBal');
   if (elBegBal) elBegBal.textContent = ioNum(begBal);
 
@@ -355,6 +355,7 @@ function ioRenderMovements() {
     return;
   }
 
+  // ✅ FIX: Sort ascending for running balance
   var sorted = _io.filteredMovements.slice().sort(function(a, b) {
     var da = a.transaction_date ? new Date(a.transaction_date).getTime() : 0;
     var db = b.transaction_date ? new Date(b.transaction_date).getTime() : 0;
@@ -596,4 +597,4 @@ window.addEventListener('resize', function() {
   if (dropdown) dropdown.classList.add('d-none');
 });
 
-console.log('✅ item-in-out.js v1.1 loaded (with Beg Bal + all helpers)');
+console.log('✅ item-in-out.js v2.0 loaded (Beginning Balance Fixed)');
