@@ -682,6 +682,39 @@ console.log('✅ erp-supabase.js loaded — v3 (with deprecated filters)');
 
 
 // ═══════════════════════════════════════════════════════════
+// CREATE PRF — iisang daan para sa Replenishment at New PRF
+// Calls the all-or-nothing RPC erp_create_prf (see sql/01_replenishment_prf.sql)
+// opts: { items:[{item_code, qty, unit?, remarks?, category?}], header:{...},
+//         splitByCategory:bool, maxItems:int, force:bool }
+// Returns the RPC json: {success:true, prfs:[...]} | {success:false, code, message, conflicts?}
+// Walang auto-retry: ang retry ng sulat ay puwedeng gumawa ng dobleng PRF.
+// ═══════════════════════════════════════════════════════════
+async function erpCreatePrf(opts) {
+  var res = await fetch(ERP_SUPABASE_URL + '/rest/v1/rpc/erp_create_prf', {
+    method: 'POST',
+    headers: erpHeaders({ 'Prefer': 'return=representation' }),
+    cache: 'no-store',
+    body: JSON.stringify({
+      p_items: opts.items || [],
+      p_header: opts.header || {},
+      p_split_by_category: opts.splitByCategory !== false,
+      p_max_items: opts.maxItems || 30,
+      p_force: opts.force === true
+    })
+  });
+  var text = await res.text();
+  var data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (e) {}
+  if (!res.ok) {
+    var msg = (data && (data.message || data.error)) || ('HTTP ' + res.status);
+    if (res.status === 404) msg = 'erp_create_prf not found — run sql/01_replenishment_prf.sql in Supabase first';
+    throw new Error(msg);
+  }
+  return data;
+}
+window.erpCreatePrf = erpCreatePrf;
+
+// ═══════════════════════════════════════════════════════════
 // GLOBAL SAFETY NET — hindi na tahimik ang mga hindi nahuling error
 // ═══════════════════════════════════════════════════════════
 (function() {
