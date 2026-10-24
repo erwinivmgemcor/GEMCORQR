@@ -1482,6 +1482,18 @@ async function erpSaveEditedCell() {
 }
 
 // ─── CSV bulk import ───
+// Add + Update ng items (HINDI nagbubura). Para sa starting inventory ng buwan.
+// Ang on_hand ay dumadaan sa Stock Ledger (ADJUSTMENT) kaya may opening balance sa Item In & Out.
+// Blank na cell = huwag galawin ang existing na value.
+var _CSV_HEADERS = ['Item Code', 'Description', 'Category', 'Location', 'On-Hand', 'Buffer', 'Unit', 'Unit Cost', 'Active Mo', 'Ave/Mo', 'Ave/Day', 'ABC', 'Movement'];
+
+function _csvDefaultStartMonth() {
+  var now = new Date();
+  var y = now.getFullYear(), m = now.getMonth() + 1;
+  if (now.getDate() >= 20) { m++; if (m > 12) { m = 1; y++; } }
+  return y + '-' + (m < 10 ? '0' + m : m);
+}
+
 function erpOpenCsvImport() {
   _csvImportData = null;
   document.getElementById('csvStepUpload').style.display = '';
@@ -1490,18 +1502,38 @@ function erpOpenCsvImport() {
   document.getElementById('btnCsvImport').style.display = 'none';
   document.getElementById('csvFileInput').value = '';
   document.getElementById('csvImportReason').value = '';
+  var sm = document.getElementById('csvStartMonth');
+  if (sm && !sm.value) sm.value = _csvDefaultStartMonth();
+  var lk = document.getElementById('csvLockBuffer');
+  if (lk) lk.checked = false;
+  var st = document.getElementById('csvUploadStatus');
+  if (st) st.innerHTML = '';
   bootstrap.Modal.getOrCreateInstance(document.getElementById('csvImportModal')).show();
 }
 
 function erpDownloadCsvTemplate() {
-  var csv = 'item_code,on_hand,unit_cost,buffer_stock\nGEM-XXX,0,0,0\n';
+  var csv = '\uFEFF' + _CSV_HEADERS.join(',') + '\n' +
+    'GEM-XXX,Sample item description,CONSUMABLES,GEMCATM001,100,35,PIECE,12.50,4,20,0.67,B,MODERATE MOVING\n';
   var link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
   link.download = 'stock_import_template.csv';
   document.body.appendChild(link); link.click(); document.body.removeChild(link);
 }
 
+// Full-file parser: BOM, quoted cells na may comma/line-break, CRLF, auto-detect ng delimiter.
 function _csvParse(text) {
+  text = String(text || '').replace(/^\uFEFF/, '');
+  var first = text.split(/\r\n|\n|\r/)[0] || '';
+  var counts = { ',': 0, ';': 0, '\t': 0 }, q0 = false;
+  for (var k = 0; k < first.length; k++) {
+    var ch = first[k];
+    if (ch === '"') q0 = !q0;
+    else if (!q0 && counts[ch] !== undefined) counts[ch]++;
+  }
+  var delim = ',';
+  if (counts[';'] > counts[delim]) delim = ';';
+  if (counts['\t'] > counts[delim]) delim = '\t';
+
   var rows = [], row = [], cur = '', q = false;
   for (var i = 0; i < text.length; i++) {
     var c = text[i];
@@ -1510,88 +1542,276 @@ function _csvParse(text) {
       else if (c === '"') q = false;
       else cur += c;
     } else if (c === '"') q = true;
-    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === delim) { row.push(cur.trim()); cur = ''; }
     else if (c === '\n' || c === '\r') {
       if (c === '\r' && text[i + 1] === '\n') i++;
-      row.push(cur); cur = '';
-      if (row.some(function(x) { return x.trim() !== ''; })) rows.push(row);
+      row.push(cur.trim()); cur = '';
+      if (row.some(function(x) { return x !== ''; })) rows.push(row);
       row = [];
     } else cur += c;
   }
-  row.push(cur);
-  if (row.some(function(x) { return x.trim() !== ''; })) rows.push(row);
+  row.push(cur.trim());
+  if (row.some(function(x) { return x !== ''; })) rows.push(row);
   return rows;
 }
 
-function erpHandleCsvUpload(event) {
+function _csvNormHeader(h) {
+  return String(h || '').replace(/^\uFEFF/, '').toLowerCase().replace(/\s*\/\s*/g, '/').replace(/\s+/g, ' ').trim();
+}
+
+// Blank/"-"/"N/A" => null (hindi 0). Invalid text => NaN (error). Tumatanggap ng "1,234.50", "₱12".
+function _csvNum(v) {
+  if (v === undefined || v === null) return null;
+  var t = String(v).trim();
+  if (t === '' || t === '-' || t === '—' || /^n\/?a$/i.test(t)) return null;
+  t = t.replace(/[₱$,\s%]/g, '');
+  if (t === '') return null;
+  var n = Number(t);
+  return isNaN(n) ? NaN : n;
+}
+
+var _CSV_ALIASES = {
+  item_code: ['item code', 'item_code', 'itemcode', 'code'],
+  description: ['description', 'desc', 'item description'],
+  category: ['category', 'cat'],
+  location: ['location', 'loc'],
+  on_hand: ['on-hand', 'on hand', 'on_hand', 'onhand', 'stock'],
+  buffer_stock: ['buffer', 'buffer stock', 'buffer_stock'],
+  base_unit: ['unit', 'base unit', 'base_unit', 'uom'],
+  unit_cost: ['unit cost', 'unit_cost', 'unitcost', 'cost', 'price'],
+  active_consumption_months: ['active mo', 'active mos', 'active_mo', 'active months', 'active month', 'active_consumption_months'],
+  ave_monthly_consumption: ['ave/mo', 'ave_mo', 'ave mo', 'ave monthly', 'avg/mo', 'avg mo', 'average/mo', 'ave_monthly_consumption'],
+  ave_daily_consumption: ['ave/day', 'ave_day', 'ave day', 'ave daily', 'avg/day', 'avg day', 'average/day', 'ave_daily_consumption'],
+  abc_classification: ['abc', 'abc classification', 'abc_classification'],
+  inventory_movement: ['movement', 'inventory movement', 'inventory_movement']
+};
+
+// Kunin lahat ng existing items (kasama ang naka-soft-delete) — hindi umaasa sa filter ng table
+async function _csvFetchExisting() {
+  var all = [], offset = 0, size = 1000, selectCols =
+    'item_code,description,category,location,base_unit,on_hand,unit_cost,buffer_stock,' +
+    'active_consumption_months,ave_monthly_consumption,ave_daily_consumption,' +
+    'abc_classification,inventory_movement,is_deleted,baseline_from_ym';
+  for (var page = 0; page < 30; page++) {
+    var rows = await erpFetch('erp_items', 'select=' + selectCols + '&order=item_code.asc&limit=' + size + '&offset=' + offset);
+    if (!rows || !rows.length) break;
+    all = all.concat(rows);
+    offset += rows.length;
+    if (rows.length < size) break;
+  }
+  var map = {};
+  all.forEach(function(it) { map[String(it.item_code).toLowerCase()] = it; });
+  return map;
+}
+
+async function erpHandleCsvUpload(event) {
   var file = event.target.files && event.target.files[0];
   if (!file) return;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var rows = _csvParse(String(e.target.result || '').replace(/^﻿/, ''));
-    if (rows.length < 2) { erpShowToast('Walang laman ang CSV', 'warning'); return; }
-    var head = rows[0].map(function(h) { return h.trim().toLowerCase(); });
-    var idx = { code: head.indexOf('item_code'), oh: head.indexOf('on_hand'), cost: head.indexOf('unit_cost'), buf: head.indexOf('buffer_stock') };
-    if (idx.code === -1) { erpShowToast('Kailangan ng item_code column', 'warning'); return; }
-    var byCode = {};
-    _erpAllItems.forEach(function(it) { byCode[it.item_code] = it; });
-    var num = function(r, i) { if (i === -1 || r[i] === undefined || String(r[i]).trim() === '') return null; var n = Number(r[i]); return isNaN(n) ? null : n; };
-    _csvImportData = [];
-    var html = '';
-    rows.slice(1).forEach(function(r, n) {
-      var code = (r[idx.code] || '').trim();
-      var item = byCode[code];
-      var rec = { code: code, item: item, on_hand: num(r, idx.oh), unit_cost: num(r, idx.cost), buffer_stock: num(r, idx.buf) };
-      var changes = [];
-      if (item) {
-        if (rec.on_hand !== null && rec.on_hand !== Number(item.on_hand || 0)) changes.push('on_hand');
-        if (rec.unit_cost !== null && rec.unit_cost !== Number(item.unit_cost || 0)) changes.push('unit_cost');
-        if (rec.buffer_stock !== null && rec.buffer_stock !== Number(item.buffer_stock || 0)) changes.push('buffer_stock');
+  var statusEl = document.getElementById('csvUploadStatus');
+  var setStatus = function(html) { if (statusEl) statusEl.innerHTML = html; };
+  setStatus('<div class="alert alert-info small py-2"><span class="spinner-border spinner-border-sm me-1"></span>Binabasa ang CSV...</div>');
+
+  try {
+    var rows = _csvParse(await file.text());
+    if (rows.length < 2) { setStatus('<div class="alert alert-warning small py-2">Walang laman ang CSV (kailangan ng header + 1 row).</div>'); return; }
+
+    var headerMap = {};
+    rows[0].forEach(function(h, i) { var k = _csvNormHeader(h); if (headerMap[k] === undefined) headerMap[k] = i; });
+    var col = {};
+    Object.keys(_CSV_ALIASES).forEach(function(f) {
+      col[f] = undefined;
+      for (var a = 0; a < _CSV_ALIASES[f].length; a++) {
+        if (headerMap[_CSV_ALIASES[f][a]] !== undefined) { col[f] = headerMap[_CSV_ALIASES[f][a]]; break; }
       }
-      rec.changes = changes;
-      _csvImportData.push(rec);
-      var st = !item ? '<span class="badge bg-danger">NOT FOUND</span>' : (changes.length ? '<span class="badge bg-warning text-dark">CHANGE</span>' : '<span class="badge bg-secondary">NO CHANGE</span>');
-      html += '<tr><td>' + (n + 1) + '</td><td><code>' + erpEsc(code) + '</code></td><td>' + erpEsc(item ? item.description : '—') + '</td>' +
-        '<td>' + (rec.on_hand === null ? '—' : erpNum(rec.on_hand)) + '</td><td>' + (rec.unit_cost === null ? '—' : erpNum(rec.unit_cost)) + '</td>' +
-        '<td>' + (rec.buffer_stock === null ? '—' : erpNum(rec.buffer_stock)) + '</td><td>' + st + '</td></tr>';
     });
+    if (col.item_code === undefined) {
+      setStatus('<div class="alert alert-danger small py-2">Kailangan ng <b>Item Code</b> column. Nakita: ' + erpEsc(rows[0].join(' | ')) + '</div>');
+      return;
+    }
+
+    var existing;
+    try {
+      existing = await _csvFetchExisting();
+    } catch (e) {
+      setStatus('<div class="alert alert-danger small py-2"><b>Hindi mabasa ang items:</b> ' + erpEsc(e.message || String(e)) +
+        '<br>Kung "baseline_from_ym does not exist", i-run muna ang <code>FIX_NOVEMBER_START.sql</code> sa Supabase.</div>');
+      return;
+    }
+
+    var txt = function(r, f) { return col[f] === undefined ? '' : String(r[col[f]] === undefined ? '' : r[col[f]]).trim(); };
+    var numFields = ['on_hand', 'buffer_stock', 'unit_cost', 'active_consumption_months', 'ave_monthly_consumption', 'ave_daily_consumption'];
+    var seen = {};
+    _csvImportData = [];
+    var counts = { add: 0, change: 0, same: 0, error: 0, dup: 0, reactivate: 0, warnBuf: 0 };
+
+    rows.slice(1).forEach(function(r, n) {
+      var code = txt(r, 'item_code');
+      if (!code) return;
+      var key = code.toLowerCase();
+      var rec = {
+        row: n + 2, code: code, status: '', msg: '', send: false,
+        payload: { item_code: code }
+      };
+
+      if (seen[key]) { rec.status = 'DUPLICATE'; rec.msg = 'Doble ang Item Code — unang row lang ang gagamitin'; counts.dup++; _csvImportData.push(rec); return; }
+      seen[key] = true;
+
+      ['description', 'category', 'location', 'base_unit', 'abc_classification', 'inventory_movement'].forEach(function(f) {
+        var v = txt(r, f);
+        if (f === 'inventory_movement') v = v.toUpperCase();
+        if (v !== '') rec.payload[f] = v;
+      });
+      var bad = [];
+      numFields.forEach(function(f) {
+        if (col[f] === undefined) return;
+        var v = _csvNum(r[col[f]]);
+        if (v === null) return;                       // blank → hindi gagalawin
+        if (isNaN(v)) { bad.push(f + ' ("' + r[col[f]] + '" ay hindi numero)'); return; }
+        if (v < 0) { bad.push(f + ' ay negatibo'); return; }
+        rec.payload[f] = (f === 'active_consumption_months') ? Math.round(v) : v;
+      });
+      if (bad.length) { rec.status = 'ERROR'; rec.msg = bad.join('; '); counts.error++; _csvImportData.push(rec); return; }
+
+      var p = rec.payload, it = existing[key];
+      rec.item = it;
+      if (p.buffer_stock !== undefined && p.ave_monthly_consumption === undefined && p.active_consumption_months === undefined) {
+        counts.warnBuf++; rec.warn = true;
+      }
+      if (!it) {
+        rec.status = 'ADD'; rec.send = true; counts.add++;
+      } else if (it.is_deleted === true) {
+        rec.status = 'REACTIVATE'; rec.send = true; counts.reactivate++;
+      } else {
+        var diffs = [];
+        var eq = function(a, b) { return Math.abs(Number(a || 0) - Number(b || 0)) < 0.00001; };
+        ['on_hand', 'buffer_stock', 'active_consumption_months', 'ave_monthly_consumption', 'ave_daily_consumption'].forEach(function(f) {
+          if (p[f] !== undefined && !eq(p[f], it[f])) diffs.push(f);
+        });
+        if (p.unit_cost !== undefined && p.unit_cost !== 0 && !eq(p.unit_cost, it.unit_cost)) diffs.push('unit_cost');
+        ['description', 'category', 'location', 'base_unit', 'abc_classification', 'inventory_movement'].forEach(function(f) {
+          if (p[f] !== undefined && String(p[f]) !== String(it[f] || '')) diffs.push(f);
+        });
+        if ((p.ave_monthly_consumption !== undefined || p.active_consumption_months !== undefined) && it.baseline_from_ym == null) diffs.push('baseline');
+        rec.changes = diffs;
+        if (diffs.length) { rec.status = 'CHANGE'; rec.send = true; counts.change++; }
+        else { rec.status = 'NO CHANGE'; counts.same++; }
+      }
+      _csvImportData.push(rec);
+    });
+
+    // Preview
+    var badge = {
+      'ADD': 'bg-success', 'REACTIVATE': 'bg-info text-dark', 'CHANGE': 'bg-warning text-dark',
+      'NO CHANGE': 'bg-secondary', 'ERROR': 'bg-danger', 'DUPLICATE': 'bg-dark'
+    };
+    var html = '', shown = 0;
+    _csvImportData.forEach(function(rec) {
+      if (shown >= 500) return;
+      shown++;
+      var p = rec.payload, it = rec.item || {};
+      var cell = function(f) {
+        if (p[f] === undefined) return '<span class="text-muted">—</span>';
+        var nv = erpNum(p[f]);
+        if (rec.item && rec.status === 'CHANGE' && rec.changes && rec.changes.indexOf(f) !== -1)
+          return '<span class="text-muted text-decoration-line-through">' + erpNum(it[f]) + '</span> → <b>' + nv + '</b>';
+        return nv;
+      };
+      html += '<tr' + (rec.status === 'ERROR' ? ' class="table-danger"' : '') + '>' +
+        '<td>' + rec.row + '</td><td><code>' + erpEsc(rec.code) + '</code></td>' +
+        '<td>' + erpEsc(p.description || it.description || '—') + '</td>' +
+        '<td>' + cell('on_hand') + '</td><td>' + cell('unit_cost') + '</td><td>' + cell('buffer_stock') + '</td>' +
+        '<td>' + cell('ave_monthly_consumption') + '</td>' +
+        '<td><span class="badge ' + badge[rec.status] + '">' + rec.status + '</span>' +
+          (rec.warn ? ' <i class="bi bi-exclamation-triangle-fill text-warning" title="May Buffer pero walang Ave/Mo o Active Mo"></i>' : '') +
+          (rec.msg ? '<div class="small text-danger">' + erpEsc(rec.msg) + '</div>' : '') + '</td></tr>';
+    });
+    if (_csvImportData.length > 500) {
+      html += '<tr><td colspan="8" class="text-center text-muted small">Unang 500 lang ang ipinapakita — ang lahat ng ' + _csvImportData.length + ' row ay isasama sa import.</td></tr>';
+    }
     document.getElementById('csvPreviewBody').innerHTML = html;
     document.getElementById('csvPreviewCount').textContent = _csvImportData.length;
+    var sum = document.getElementById('csvPreviewSummary');
+    if (sum) {
+      sum.innerHTML =
+        '<span class="badge bg-success me-1">ADD ' + counts.add + '</span>' +
+        '<span class="badge bg-info text-dark me-1">REACTIVATE ' + counts.reactivate + '</span>' +
+        '<span class="badge bg-warning text-dark me-1">CHANGE ' + counts.change + '</span>' +
+        '<span class="badge bg-secondary me-1">NO CHANGE ' + counts.same + '</span>' +
+        (counts.error ? '<span class="badge bg-danger me-1">ERROR ' + counts.error + '</span>' : '') +
+        (counts.dup ? '<span class="badge bg-dark me-1">DUPLICATE ' + counts.dup + '</span>' : '') +
+        (counts.warnBuf ? '<div class="small text-warning-emphasis mt-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>' + counts.warnBuf +
+          ' item ang may Buffer pero walang Ave/Mo o Active Mo — mare-recompute ang buffer nila sa unang MRIF maliban kung i-check ang "Lock imported Buffer".</div>' : '');
+    }
+    setStatus('');
     document.getElementById('csvStepUpload').style.display = 'none';
     document.getElementById('csvStepPreview').style.display = '';
     document.getElementById('btnCsvImport').style.display = '';
-  };
-  reader.readAsText(file);
+  } catch (err) {
+    console.error('[erpHandleCsvUpload]', err);
+    setStatus('<div class="alert alert-danger small py-2">Error: ' + erpEsc(err.message || String(err)) + '</div>');
+  }
 }
 
 async function erpConfirmCsvImport() {
   var reason = (document.getElementById('csvImportReason').value || '').trim();
   if (!_csvImportData) return;
-  if (!reason) { erpShowToast('Reason is required', 'warning'); return; }
-  var todo = _csvImportData.filter(function(r) { return r.item && r.changes.length; });
+  if (!reason) {
+    erpShowToast('Reason is required', 'warning');
+    // nasa Step 1 ang reason field — bumalik doon kung nakatago
+    document.getElementById('csvStepPreview').style.display = 'none';
+    document.getElementById('csvStepUpload').style.display = '';
+    document.getElementById('btnCsvImport').style.display = 'none';
+    document.getElementById('csvImportReason').focus();
+    return;
+  }
+  var todo = _csvImportData.filter(function(r) { return r.send; });
   if (!todo.length) { erpShowToast('Walang babaguhin', 'info'); return; }
-  if (!confirm('Mag-a-update ng ' + todo.length + ' item(s). Tuloy?')) return;
+
+  var startVal = (document.getElementById('csvStartMonth') || {}).value || _csvDefaultStartMonth();
+  var startYm = parseInt(startVal.replace('-', ''), 10);
+  if (!startYm || (startYm % 100) < 1 || (startYm % 100) > 12) { erpShowToast('Piliin ang tamang "First month of real usage"', 'warning'); return; }
+  var lock = !!((document.getElementById('csvLockBuffer') || {}).checked);
+
+  if (!confirm('Mag-i-import ng ' + todo.length + ' item(s).\n' +
+    'Real usage starts: ' + startVal + '\nLock imported Buffer: ' + (lock ? 'YES' : 'NO') +
+    '\n\nAng On-Hand ay itatala sa Stock Ledger. Walang item na buburahin.\nTuloy?')) return;
+
   var btn = document.getElementById('btnCsvImport');
   btn.disabled = true;
-  var ok = 0, fail = 0;
-  for (var i = 0; i < todo.length; i++) {
-    for (var j = 0; j < todo[i].changes.length; j++) {
-      var f = todo[i].changes[j];
-      try {
-        var res = await fetch(erpUrl('rpc/erp_manual_edit_item'), {
-          method: 'POST', headers: erpHeaders(),
-          body: JSON.stringify({ p_item_code: todo[i].code, p_field_name: f, p_new_value: String(todo[i][f]), p_reason: 'CSV import: ' + reason, p_edited_by: _erpUser() })
-        });
-        var d = res.ok ? await res.json() : null;
-        if (res.ok && !(d && d.success === false)) ok++; else fail++;
-      } catch (e) { fail++; }
+  var agg = { added: 0, updated: 0, errors: 0, details: [] };
+  var CHUNK = 150;
+  try {
+    for (var i = 0; i < todo.length; i += CHUNK) {
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + Math.min(i + CHUNK, todo.length) + ' / ' + todo.length;
+      var items = todo.slice(i, i + CHUNK).map(function(r) {
+        return lock ? Object.assign({}, r.payload, { lock_buffer: true }) : r.payload;
+      });
+      var res = await fetch(erpUrl('rpc/erp_bulk_import_items'), {
+        method: 'POST', headers: erpHeaders(),
+        body: JSON.stringify({ p_items: items, p_performed_by: _erpUser(), p_reason: 'CSV import: ' + reason, p_start_ym: startYm })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + (await res.text()).substring(0, 300) +
+        (res.status === 404 ? ' — i-run muna ang FIX_NOVEMBER_START.sql sa Supabase' : ''));
+      var d = await res.json();
+      if (!d || d.success === false) throw new Error((d && d.error) || 'Unknown error');
+      agg.added += d.added || 0; agg.updated += d.updated || 0; agg.errors += d.errors || 0;
+      (d.error_details || []).forEach(function(e) { agg.details.push(e.item_code + ': ' + e.error); });
     }
+  } catch (err) {
+    console.error('[erpConfirmCsvImport]', err);
+    erpShowToast('Import stopped: ' + err.message, 'danger');
+    agg.details.push('STOPPED: ' + err.message);
+    agg.errors++;
   }
   btn.disabled = false;
+  btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Confirm Import';
   document.getElementById('csvStepPreview').style.display = 'none';
   document.getElementById('csvStepResult').style.display = '';
   btn.style.display = 'none';
-  document.getElementById('csvResultSummary').textContent = ok + ' field(s) updated, ' + fail + ' failed.';
+  var out = agg.added + ' added, ' + agg.updated + ' updated, ' + agg.errors + ' failed.';
+  document.getElementById('csvResultSummary').innerHTML = erpEsc(out) +
+    (agg.details.length ? '<div class="text-start small text-danger mt-2" style="max-height:160px;overflow:auto;">' +
+      agg.details.slice(0, 30).map(function(x) { return erpEsc(x); }).join('<br>') + '</div>' : '');
   await erpLoadItems();
 }
 
