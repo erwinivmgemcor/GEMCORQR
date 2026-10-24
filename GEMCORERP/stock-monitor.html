@@ -1010,8 +1010,16 @@
         <div id="csvStepUpload">
           <div class="alert alert-info small">
             <i class="bi bi-info-circle me-1"></i>
-            Upload a CSV file with columns: <code>item_code</code>, <code>on_hand</code>, <code>unit_cost</code>, <code>buffer_stock</code>
+            <strong>Mga column:</strong>
+            <code>Item Code</code> (required), <code>Description</code>, <code>Category</code>, <code>Location</code>, <code>On-Hand</code>, <code>Buffer</code>,
+            <code>Unit</code>, <code>Unit Cost</code>, <code>Active Mo</code>, <code>Ave/Mo</code>, <code>Ave/Day</code>, <code>ABC</code>, <code>Movement</code>.
+            <div class="mt-1">
+              Gagawa ng bagong item kung wala pa, at mag-a-update kung meron na. <strong>Walang buburahin.</strong>
+              Ang <strong>blank</strong> na cell ay hindi babago sa existing na value.
+              Ang On-Hand ay itatala sa Stock Ledger (opening balance). Ang Reorder Status at On-Hand Cost ay kinukuwenta ng system.
+            </div>
           </div>
+          <div id="csvUploadStatus"></div>
           
           <div class="mb-3">
             <label class="form-label fw-bold">CSV File</label>
@@ -1019,8 +1027,23 @@
           </div>
           
           <div class="mb-3">
-            <label class="form-label fw-bold">Reason for Change</label>
-            <input type="text" class="form-control" id="csvImportReason" placeholder="e.g., Physical count 2026, Price update" maxlength="200">
+            <label class="form-label fw-bold">Reason for Change <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="csvImportReason" placeholder="e.g., November 2026 starting inventory" maxlength="200">
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-bold">First month of real usage</label>
+              <input type="month" class="form-control" id="csvStartMonth">
+              <div class="form-text">Ang MRIF/MRS usage mula sa buwang ito pataas ang idadagdag sa Ave/Mo na ini-import mo.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold d-block">Buffer</label>
+              <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" id="csvLockBuffer">
+                <label class="form-check-label" for="csvLockBuffer">Lock imported Buffer (hindi ma-o-overwrite ng auto-recompute)</label>
+              </div>
+            </div>
           </div>
           
           <div class="d-flex gap-2">
@@ -1035,19 +1058,21 @@
           <div class="alert alert-warning small">
             <i class="bi bi-exclamation-triangle me-1"></i>
             Review before importing. <span id="csvPreviewCount">0</span> rows detected.
+            <div id="csvPreviewSummary" class="mt-1"></div>
           </div>
           
-          <div class="table-responsive" style="max-height:300px;">
+          <div class="table-responsive" style="max-height:340px;">
            <table class="table table-sm">
   <thead>
     <tr>
-      <th style="width:5%">#</th>
-      <th style="width:15%">Item Code</th>
-      <th style="width:35%">Description</th>
-      <th style="width:10%">On-Hand</th>
-      <th style="width:12%">Unit Cost</th>
+      <th style="width:5%">Row</th>
+      <th style="width:13%">Item Code</th>
+      <th style="width:25%">Description</th>
+      <th style="width:12%">On-Hand</th>
+      <th style="width:10%">Unit Cost</th>
       <th style="width:10%">Buffer</th>
-      <th style="width:13%">Status</th>
+      <th style="width:9%">Ave/Mo</th>
+      <th style="width:16%">Status</th>
     </tr>
   </thead>
   <tbody id="csvPreviewBody"></tbody>
