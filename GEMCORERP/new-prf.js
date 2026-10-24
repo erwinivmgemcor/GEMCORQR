@@ -1274,49 +1274,14 @@ async function submitPrf() {
     return;
   }
 
-  var batches = [];
-  if (allItems.length > MAX_ITEMS_PER_PRF) {
-    for (var i = 0; i < allItems.length; i += MAX_ITEMS_PER_PRF) {
-      batches.push(allItems.slice(i, i + MAX_ITEMS_PER_PRF));
-    }
-  } else {
-    batches.push(allItems);
-  }
-
-  // ✅ CHECK BASE PRF NO AVAILABILITY
-  var basePrfNo = prfNo; 
-  var isAvailable = await checkPrfNoAvailable(basePrfNo);
-  if (!isAvailable) {
-    basePrfNo = await generateUniquePrfNo(basePrfNo);
-    erpShowToast('PRF No. adjusted to ' + basePrfNo, 'info');
-  }
-
-  // ✅ ASSIGN UNIQUE BATCH PRF NUMBERS (No versions)
-  for (var bIdx = 0; bIdx < batches.length; bIdx++) {
-    if (bIdx === 0) {
-      batches[bIdx]._prfNo = basePrfNo;
-    } else {
-      var suffix = bIdx + 1;
-      var batchNo = basePrfNo + '.' + suffix;
-      var counter = 1;
-      var finalBatchNo = batchNo;
-      while (!(await checkPrfNoAvailable(finalBatchNo))) {
-        counter++;
-        finalBatchNo = batchNo + '-' + counter;
-      }
-      batches[bIdx]._prfNo = finalBatchNo;
-    }
-  }
-
+  // Isang RPC (erp_create_prf) ang gumagawa ng PRF: all-or-nothing, server ang nagbibigay
+  // ng PRF No. (walang banggaan), at ang split sa batches ay ginagawa ng database.
+  var nBatches = Math.ceil(allItems.length / MAX_ITEMS_PER_PRF);
   var confirmMsg = 'Create PRF with ' + allItems.length + ' item(s)?\n\n';
-  if (batches.length > 1) {
-    confirmMsg += 'Will be split into ' + batches.length + ' distinct PRFs:\n';
-    batches.forEach(function(b) {
-      confirmMsg += '  • ' + b._prfNo + ' (' + b.length + ' items)\n';
-    });
-    confirmMsg += '\n';
+  if (nBatches > 1) {
+    confirmMsg += 'Will be split into ' + nBatches + ' PRFs (max ' + MAX_ITEMS_PER_PRF + ' items each).\n\n';
   }
-  confirmMsg += 'Base PRF No.: ' + basePrfNo;
+  confirmMsg += 'Requested PRF No.: ' + prfNo + ' (adjusted automatically if already used)';
 
   if (!confirm(confirmMsg)) return;
 
@@ -1327,15 +1292,33 @@ async function submitPrf() {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
 
   try {
-    var createdPrfs = [];
-    for (var bIdx2 = 0; bIdx2 < batches.length; bIdx2++) {
-      var batch = batches[bIdx2];
-      var batchPrfNo = batch._prfNo;
-      var result = await createSinglePrf(
-        batchPrfNo, basePrfNo, bIdx2 + 1, batch,
-        category, preparedBy, department, notedBy, approvedBy, notes
-      );
-      createdPrfs.push(result);
+    // force:true — itong page ay may sariling "pending PRF" babala; dito ang user ang nagpapasya
+    var res = await erpCreatePrf({
+      items: allItems.map(function(it) {
+        return { item_code: it.item_code, qty: it.qty_for_order, unit: it.unit, remarks: it.remarks, category: it.category };
+      }),
+      header: {
+        category: category,
+        base_prf_no: prfNo,
+        prepared_by: preparedBy,
+        department: department,
+        noted_by: notedBy,
+        approved_by: approvedBy,
+        notes: notes,
+        purpose: 'STOCK'
+      },
+      splitByCategory: false,
+      maxItems: MAX_ITEMS_PER_PRF,
+      force: true
+    });
+
+    if (!res || res.success !== true) {
+      throw new Error((res && res.message) || 'PRF was not created');
+    }
+
+    var createdPrfs = res.prfs || [];
+    if (createdPrfs.length && createdPrfs[0].prf_no !== prfNo) {
+      erpShowToast('PRF No. adjusted to ' + createdPrfs[0].prf_no, 'info');
     }
 
     document.getElementById('successPrfNo').textContent = createdPrfs.map(function(p) { return p.prf_no; }).join(', ');
@@ -1346,7 +1329,7 @@ async function submitPrf() {
 
   } catch(err) {
     console.error('[submitPrf]', err);
-    erpShowToast('Failed: ' + err.message, 'danger');
+    erpShowToast('Failed — nothing was created. ' + err.message, 'danger');
     btn.disabled = false;
     btn.innerHTML = originalHtml;
   } finally {
@@ -1354,67 +1337,6 @@ async function submitPrf() {
   }
 }
 window.submitPrf = submitPrf;
-
-async function createSinglePrf(prfNo, basePrfNo, batchNumber, items, category, preparedBy, department, notedBy, approvedBy, notes) {
-  var totalQty = items.reduce(function(s, it) { return s + (it.qty_for_order || 0); }, 0);
-
-  var docRes = await fetch(erpUrl('prf_documents'), {
-    method: 'POST',
-    headers: erpHeaders({ 'Prefer': 'return=representation' }),
-    body: JSON.stringify({
-      prf_no: prfNo,
-      base_prf_no: prfNo,          // ✅ ITO ANG FIX: Gawing sariling ID niya ang base.
-      version_number: 1,           // ✅ Laging version 1 sa umpisa
-      batch_number: batchNumber,
-      category: category,
-      requestor: preparedBy,
-      department: department,
-      notes: notes,
-      purpose: 'STOCK',
-      total_items: items.length,
-      total_qty: totalQty,
-      prepared_by: preparedBy,
-      noted_by: notedBy,
-      approved_by: approvedBy,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    })
-  });
-  
-  // ... (yung natitirang code sa ibaba, hayaan mo lang)
-  if (!docRes.ok) throw new Error('Insert PRF failed: ' + docRes.status);
-  var docArr = await docRes.json();
-  var doc = docArr[0];
-  if (!doc || !doc.id) throw new Error('No PRF ID');
-
-  var itemPayloads = items.map(function(it, idx) {
-    return {
-      prf_id: doc.id,
-      prf_no: prfNo,
-      line_no: idx + 1,
-      item_code: it.item_code,
-      description: it.description || '',
-      category: it.category || category,
-      location: it.location || '',
-      average_consumption: Number(it.average_consumption || 0),
-      buffer_stock: Number(it.buffer_stock || 0),
-      stock_on_hand: Number(it.stock_on_hand || 0),
-      qty_for_order: Number(it.qty_for_order || 0),
-      unit: it.unit || 'PIECE',
-      status: 'UNSERVED',
-      remarks: it.remarks || ''
-    };
-  });
-
-  var itemsRes = await fetch(erpUrl('prf_items'), {
-    method: 'POST',
-    headers: erpHeaders(),
-    body: JSON.stringify(itemPayloads)
-  });
-
-  if (!itemsRes.ok) throw new Error('Insert items failed: ' + itemsRes.status);
-  return { prf_no: prfNo, items: items.length };
-}
 
 function closeSuccessAndReset() {
   var modal = bootstrap.Modal.getInstance(document.getElementById('successModal'));
