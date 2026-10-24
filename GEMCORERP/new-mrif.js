@@ -464,6 +464,39 @@ async function submitMrif() {
   
   var validItems = [];
   var rows = document.querySelectorAll('.erp-item-row');
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var code = row.querySelector('.item-code-input').value.trim();
+    var desc = row.querySelector('.item-desc-input').value.trim();
+    var qty = parseFloat(row.querySelector('.item-qty-input').value) || 0;
+    var unit = row.querySelector('.item-unit-input').value;
+    var remarksEl = row.querySelector('.item-remarks-input');
+    var remarks = remarksEl ? remarksEl.value.trim() : '';
+
+    if (!code) {
+      erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning');
+      return;
+    }
+    if (qty <= 0) {
+      erpShowToast('Item #' + (i + 1) + ' has invalid quantity', 'warning');
+      return;
+    }
+    validItems.push({ code: code, description: desc, qty: qty, unit: unit, remarks: remarks });
+  }
+  if (validItems.length === 0) {
+    erpShowToast('Please add at least one item', 'warning');
+    return;
+  }
+
+  // Double-submit lock
+  var btn = document.getElementById('btnSubmitMrif');
+  var originalHtml = btn ? btn.innerHTML : '';
+  _mrifState.isSubmitting = true;
+  _mrifState.lastSubmittedAt = Date.now();
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
+  }
 
   try {
     // Step 1: RPC for doc number
@@ -499,7 +532,8 @@ async function submitMrif() {
         requestor: _mrifState.requestor,
         department: department,
         jo_no: _mrifState.joNo,
-        gem_so_no: _mrifState.gemSoNo,
+        gem_so_no: _mrifState.gemSoNo || _mrifState.sofNo,
+        item_count: validItems.length,
         client_name: _mrifState.clientName,
         project: _mrifState.project,
         sof_no: _mrifState.sofNo,                    // ✅ NEW
@@ -560,8 +594,7 @@ async function submitMrif() {
     erpShowToast('Failed: ' + err.message, 'danger');
   } finally {
     _mrifState.isSubmitting = false;
-    btn.disabled = false;
-    btn.innerHTML = originalHtml;
+    if (btn) { btn.disabled = false; btn.innerHTML = originalHtml; }
   }
 }
 
