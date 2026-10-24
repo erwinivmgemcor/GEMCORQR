@@ -459,18 +459,31 @@ function updateProgress() {
   var btn = document.getElementById('btnSubmitProcess');
   if (!btn) return;
 
+  var s = processGetSummary();
   if (verified === 0) {
     btn.disabled = true;
     btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Verify items first';
-  } else if (verified === total) {
+  } else if (s.isMatch) {
     btn.disabled = false;
-    btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Submit Complete (' + verified + ')';
+    btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Submit Returns (' + verified + ')';
     btn.className = 'btn btn-success btn-lg';
   } else {
+    // Hindi tugma ang actual returned sa requested: i-confirm na final ito
     btn.disabled = false;
-    btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Submit Partial (' + verified + '/' + total + ')';
+    btn.innerHTML = '<i class="bi bi-check2-square me-1"></i>Confirm & Submit Actual Returned (' + verified + '/' + total + ')';
     btn.className = 'btn btn-warning btn-lg';
   }
+}
+
+// Tugma lang kung lahat verified at ang actual returned == requested.
+function processGetSummary() {
+  var total = _process.items.length;
+  var unverified = 0, diff = 0;
+  _process.items.forEach(function(it) {
+    if (!it.verified) unverified++;
+    else if (Number(it.issuedQty) !== Number(it.requestedQty)) diff++;
+  });
+  return { total: total, unverified: unverified, diff: diff, isMatch: total > 0 && unverified === 0 && diff === 0 };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -485,7 +498,16 @@ async function submitProcess() {
     return;
   }
 
-  if (!confirm('Submit ' + verifiedItems.length + ' item(s)?\n\nThis will add the actual returned quantities to stock.')) return;
+  var sum = processGetSummary();
+  var msg = 'Submit ' + verifiedItems.length + ' item(s)?\n\nIdadagdag sa stock ang ACTUAL returned quantities.';
+  if (!sum.isMatch) {
+    msg = 'CONFIRM ACTUAL RETURNED\n\n' +
+      (sum.diff ? '• ' + sum.diff + ' item(s) ay hindi tugma ang actual returned sa requested\n' : '') +
+      (sum.unverified ? '• ' + sum.unverified + ' item(s) hindi na-verify (ituturing na 0 returned)\n' : '') +
+      '\nFinal na ito: mawawala na ang MRS sa All Requests at hindi na ma-e-edit ang returned qty.\n' +
+      'Idadagdag sa stock ang ACTUAL returned lang. Ituloy?';
+  }
+  if (!confirm(msg)) return;
 
   _process.isSubmitting = true;
   var btn = document.getElementById('btnSubmitProcess');
@@ -524,10 +546,27 @@ async function submitProcess() {
       throw new Error(data.error || 'Failed to process');
     }
 
-    document.getElementById('successDocNo').textContent = _process.docNo;
-    document.getElementById('successStatus').textContent = data.status;
+    // Ang MRS ay one-shot: kahit hindi tugma ang actual returned, tapos na ito.
+    // Siguraduhing COMPLETED + may processed_at para mawala sa All Requests (PENDING/PARTIAL queue).
+    var finalStatus = data.status;
+    if (String(data.status || '').toUpperCase() !== 'COMPLETED') {
+      try {
+        var patch = await fetch(erpUrl('documents?doc_no=eq.' + encodeURIComponent(_process.docNo)), {
+          method: 'PATCH',
+          headers: erpHeaders(),
+          body: JSON.stringify({ status: 'COMPLETED', processed_at: new Date().toISOString(), processed_by: currentUser })
+        });
+        if (patch.ok) finalStatus = 'COMPLETED (actual returned confirmed)';
+        else console.warn('[submitProcess] finalize PATCH HTTP ' + patch.status);
+      } catch (pe) {
+        console.warn('[submitProcess] finalize PATCH failed:', pe.message);
+      }
+    }
 
-    erpShowToast('✅ MRS Processed: ' + data.status, 'success');
+    document.getElementById('successDocNo').textContent = _process.docNo;
+    document.getElementById('successStatus').textContent = finalStatus;
+
+    erpShowToast('✅ MRS Processed: ' + finalStatus, 'success');
     
     var modal = new bootstrap.Modal(document.getElementById('successModal'));
     modal.show();
