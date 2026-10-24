@@ -17,7 +17,8 @@
     'new-mrs.html',
     'new-mrif-manual.html',
     'chat.html',
-    'new-mrs-manual.html'
+    'new-mrs-manual.html',
+    'project-costing.html'
   ];
   
   // ✅ NEW: Admin-only pages
