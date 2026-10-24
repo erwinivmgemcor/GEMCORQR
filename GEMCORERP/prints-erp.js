@@ -524,7 +524,9 @@ async function erpFetchDocWithItems(docNo, docType) {
       'Requestor': doc.requestor || '',
       'Department': doc.department || '',
       'JO No.': doc.jo_no || '',
-      'GEM SO No.': doc.gem_so_no || '',
+      'GEM SO No.': doc.gem_so_no || doc.sof_no || '',   // SOF# ang GEM SO No.
+      'Status': doc.status || '',
+      'Date Created': doc.created_at || '',
       'Client Name': doc.client_name || '',
       'Project': doc.project || '',
       'Date': doc.date_prepared || '',
@@ -560,7 +562,7 @@ async function erpFetchDocWithItems(docNo, docType) {
         atlQty: Number(it.issued_qty || it.received_qty || it.returned_qty || 0),
         issuedQty: Number(it.issued_qty || it.received_qty || it.returned_qty || 0),
         unit: it.unit || 'PIECE',
-        remarks: it.remarks || 'PENDING'
+        remarks: it.remarks || ''
       };
     });
     
