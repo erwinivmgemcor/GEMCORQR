@@ -570,7 +570,12 @@
         <div class="alert alert-info small py-2 mb-3">
           <i class="bi bi-info-circle me-1"></i>
           <strong>Expected CSV Columns:</strong>
-          <code class="small">Item Code | Description | Category | Location | On-Hand | Buffer | Unit | Active Mo | Ave/Mo | Ave/Day | Reorder Status | ABC | Movement</code>
+          <code class="small">Item Code | Description | Category | Location | On-Hand | Buffer | Unit | Unit Cost | Active Mo | Ave/Mo | Ave/Day | ABC | Movement</code>
+          <div class="mt-1">
+            Ang <strong>Reorder Status</strong> at <strong>On-Hand Cost</strong> ay kinukuwenta ng system — hindi kailangan sa CSV.
+            Ang <strong>blank</strong> na cell ay hindi babago sa existing na value. Ang <strong>On-Hand</strong> ay itatala sa Stock Ledger (opening balance).
+            Ang Ave/Mo, Active Mo at Ave/Day ay magiging <strong>baseline</strong> na hahaluan ng totoong MRIF/MRS usage.
+          </div>
         </div>
         
         <div class="mb-3">
@@ -584,6 +589,21 @@
             placeholder="e.g., November 2026 starting inventory (Month-End Cutover)" maxlength="300">
         </div>
         
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label fw-bold">First month of real usage <span class="text-danger">*</span></label>
+            <input type="month" id="cutoverStartMonth" class="form-control">
+            <div class="form-text">Ang usage mula sa buwang ito pataas ang idadagdag sa baseline (hal. 2026-11 para sa Nobyembre).</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-bold d-block">Buffer</label>
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" id="cutoverLockBuffer">
+              <label class="form-check-label" for="cutoverLockBuffer">Lock imported Buffer (hindi ma-o-overwrite ng auto-recompute)</label>
+            </div>
+          </div>
+        </div>
+
         <div id="cutoverUploadStatus"></div>
       </div>
     </div>
