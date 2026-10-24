@@ -201,8 +201,14 @@ async function ioLoadItem(itemCode) {
     var movements = results[0];
     var edits = results[1];
 
-    _io.allMovements = movements || [];
     _io.allEdits = edits || [];
+    // I-merge ang manual On-Hand edits bilang ADJ rows para kumpleto ang takbo ng item
+    var onHandEdits = (_io.allEdits || []).filter(function(e) {
+      return String(e.field_name || '').toLowerCase() === 'on_hand';
+    });
+    _io.allMovements = (typeof erpMergeManualAdjustments === 'function')
+      ? erpMergeManualAdjustments(movements || [], onHandEdits)
+      : (movements || []);
 
     console.log('[Item In & Out] Movements:', _io.allMovements.length, '| Edits:', _io.allEdits.length);
 
