@@ -432,18 +432,41 @@ function updateProgress() {
   document.getElementById('progressLabel').textContent = verified + ' / ' + total + ' verified';
 
   var btn = document.getElementById('btnSubmitProcess');
+  if (!btn) return;
+
+  var s = processGetSummary();
   if (verified === 0) {
     btn.disabled = true;
     btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Verify items first';
-  } else if (verified === total) {
+  } else if (s.isComplete) {
     btn.disabled = false;
     btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Submit Complete (' + verified + ')';
     btn.className = 'btn btn-success btn-lg';
   } else {
+    // PARTIAL: may hindi pa na-verify, o mas kaunti ang issued kaysa requested
+    var parts = [];
+    if (s.unverified > 0) parts.push(s.unverified + ' not verified');
+    if (s.short > 0) parts.push(s.short + ' short');
     btn.disabled = false;
-    btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Submit Partial (' + verified + '/' + total + ')';
+    btn.innerHTML = '<i class="bi bi-exclamation-circle me-1"></i>Submit Partial (' + parts.join(', ') + ')';
     btn.className = 'btn btn-warning btn-lg';
   }
+}
+
+// Complete lang kung LAHAT verified AT lahat ay buo ang issued (issued >= requested).
+function processGetSummary() {
+  var total = _process.items.length;
+  var unverified = 0, short = 0;
+  _process.items.forEach(function(it) {
+    if (!it.verified) unverified++;
+    else if (Number(it.issuedQty) < Number(it.requestedQty)) short++;
+  });
+  return {
+    total: total,
+    unverified: unverified,
+    short: short,
+    isComplete: total > 0 && unverified === 0 && short === 0
+  };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -505,9 +528,15 @@ async function submitProcess() {
     }
   }
 
-  if (!confirm('Submit ' + verifiedItems.length + ' item(s)?')) return;
-
-  // ... (yung natitirang code ng submitProcess, hayaan mo lang) ...
+  var sum = processGetSummary();
+  var confirmMsg = sum.isComplete
+    ? 'Submit COMPLETE: ' + verifiedItems.length + ' item(s)?'
+    : 'Submit PARTIAL?\n\n' +
+      '• Issued items: ' + verifiedItems.length + '\n' +
+      (sum.unverified ? '• Hindi pa na-verify: ' + sum.unverified + '\n' : '') +
+      (sum.short ? '• Kulang ang issued vs requested: ' + sum.short + '\n' : '') +
+      '\nAng natitirang qty ay mapupunta sa Balance document.';
+  if (!confirm(confirmMsg)) return;
 
   _process.isSubmitting = true;
   var btn = document.getElementById('btnSubmitProcess');
