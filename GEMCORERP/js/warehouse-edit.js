@@ -334,6 +334,7 @@ function _renderWhEditItems() {
   });
 
   tbody.innerHTML = html;
+  _whAcInit(tbody);
 
   var countEl = document.getElementById('whEditItemCount');
   if (countEl) countEl.textContent = items.length;
@@ -734,4 +735,196 @@ function _escWh(s) {
     .replace(/'/g, '&#39;');
 }
 
-console.log('✅ warehouse-edit.js v1.2 loaded (oninput + force sync)');
+// ═══════════════════════════════════════════════════════════
+// ITEM AUTO-SUGGEST — v1.3
+// Habang nagta-type sa Item Code, lalabas ang mga tugmang item.
+// Pag pinili: auto-fill ang Item Code, Description at Unit.
+// Gumagana sa MRIF, MRR at MRS edit (iisang modal).
+// ═══════════════════════════════════════════════════════════
+var _whAc = { list: null, loading: null, box: null, input: null, matches: [], active: -1, hideTimer: null };
+
+function _whAcLoad() {
+  if (_whAc.list) return Promise.resolve(_whAc.list);
+  if (_whAc.loading) return _whAc.loading;
+  if (typeof erpGetInventoryListForDropdown !== 'function') return Promise.resolve([]);
+  _whAc.loading = erpGetInventoryListForDropdown().then(function(list) {
+    _whAc.list = (list || []).map(function(r) {
+      r._k = (String(r.code || '') + ' ' + String(r.description || '')).toLowerCase();
+      return r;
+    });
+    _whAc.loading = null;
+    return _whAc.list;
+  }).catch(function(err) {
+    console.warn('[WarehouseEdit] Inventory load failed:', err && err.message);
+    _whAc.loading = null;
+    return [];
+  });
+  return _whAc.loading;
+}
+
+function _whAcSearch(q) {
+  q = String(q || '').trim().toLowerCase();
+  if (!q || !_whAc.list) return [];
+  var tokens = q.split(/\s+/);
+  var out = [];
+  for (var i = 0; i < _whAc.list.length; i++) {
+    var it = _whAc.list[i];
+    var ok = true;
+    for (var t = 0; t < tokens.length; t++) {
+      if (it._k.indexOf(tokens[t]) === -1) { ok = false; break; }
+    }
+    if (!ok) continue;
+    var code = String(it.code || '').toLowerCase();
+    var rank = code === q ? 0 : (code.indexOf(q) === 0 ? 1 : (code.indexOf(q) > -1 ? 2 : 3));
+    out.push({ it: it, rank: rank });
+  }
+  out.sort(function(a, b) { return a.rank - b.rank || String(a.it.code).localeCompare(String(b.it.code)); });
+  return out.slice(0, 30).map(function(o) { return o.it; });
+}
+
+function _whAcBox() {
+  if (_whAc.box && document.body.contains(_whAc.box)) return _whAc.box;
+  var b = document.createElement('div');
+  b.id = 'whAcBox';
+  b.style.cssText = 'position:fixed;display:none;z-index:2147483000;background:#fff;border:1px solid #cbd5e1;' +
+    'border-radius:8px;box-shadow:0 8px 24px rgba(15,23,42,.18);overflow-y:auto;font-size:.82rem;';
+  b.addEventListener('mousedown', function(e) {
+    e.preventDefault(); // huwag mawala ang focus ng input
+    var row = e.target.closest('[data-ac]');
+    if (row) _whAcPick(parseInt(row.getAttribute('data-ac'), 10));
+  });
+  document.body.appendChild(b);
+  _whAc.box = b;
+  return b;
+}
+
+function _whAcPosition() {
+  var inp = _whAc.input, b = _whAc.box;
+  if (!inp || !b || b.style.display === 'none') return;
+  var r = inp.getBoundingClientRect();
+  var width = Math.min(Math.max(r.width, 520), window.innerWidth - 20);
+  var left = Math.max(10, Math.min(r.left, window.innerWidth - width - 10));
+  var below = window.innerHeight - r.bottom, above = r.top;
+  b.style.left = left + 'px';
+  b.style.width = width + 'px';
+  if (below < 240 && above > below) {
+    b.style.top = 'auto';
+    b.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+    b.style.maxHeight = Math.min(above - 16, 300) + 'px';
+  } else {
+    b.style.bottom = 'auto';
+    b.style.top = (r.bottom + 4) + 'px';
+    b.style.maxHeight = Math.min(below - 16, 300) + 'px';
+  }
+}
+
+function _whAcRender() {
+  var b = _whAcBox();
+  if (!_whAc.matches.length) {
+    b.innerHTML = '<div style="padding:10px 12px;color:#64748b;">Walang tugmang item sa inventory</div>';
+  } else {
+    b.innerHTML = _whAc.matches.map(function(it, i) {
+      return '<div data-ac="' + i + '" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;' +
+        (i === _whAc.active ? 'background:#e0ecff;' : '') + '">' +
+        '<div><strong>' + _escWh(it.code) + '</strong> <span style="color:#64748b;">· ' + _escWh(it.unit || 'PIECE') + '</span></div>' +
+        '<div style="color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _escWh(it.description) + '</div></div>';
+    }).join('');
+  }
+  b.style.display = 'block';
+  _whAcPosition();
+  var act = b.querySelector('[data-ac="' + _whAc.active + '"]');
+  if (act && act.scrollIntoView) act.scrollIntoView({ block: 'nearest' });
+}
+
+function _whAcHide() {
+  if (_whAc.box) _whAc.box.style.display = 'none';
+  _whAc.matches = [];
+  _whAc.active = -1;
+}
+
+async function _whAcShow(input) {
+  _whAc.input = input;
+  await _whAcLoad();
+  if (_whAc.input !== input || document.activeElement !== input) return;
+  _whAc.matches = _whAcSearch(input.value);
+  _whAc.active = _whAc.matches.length ? 0 : -1;
+  if (!String(input.value || '').trim()) { _whAcHide(); return; }
+  _whAcRender();
+}
+
+function _whAcPick(i) {
+  var it = _whAc.matches[i], input = _whAc.input;
+  if (!it || !input) return;
+  var row = input.closest('tr');
+  var idx = row ? parseInt(row.getAttribute('data-idx'), 10) : -1;
+  var setField = function(field, val) {
+    var el = row.querySelector('input[data-field="' + field + '"]');
+    if (el) el.value = val;
+    if (idx > -1) _whUpdateItem(idx, field, val);
+  };
+  if (row) {
+    setField('itemCode', it.code);
+    setField('description', it.description || '');
+    setField('unit', it.unit || 'PIECE');
+  }
+  _whAcHide();
+  var qty = row && row.querySelector('input[data-field="qty"]');
+  if (qty) { qty.focus(); qty.select(); }
+}
+
+function _whAcInit(tbody) {
+  if (!tbody || tbody._whAc) return;
+  tbody._whAc = true;
+  _whAcLoad(); // i-preload para mabilis ang unang suggest
+
+  tbody.addEventListener('input', function(e) {
+    if (e.target.getAttribute('data-field') === 'itemCode') _whAcShow(e.target);
+  });
+  tbody.addEventListener('focusin', function(e) {
+    var t = e.target;
+    if (t.getAttribute && t.getAttribute('data-field') === 'itemCode' && t.value.trim()) _whAcShow(t);
+  });
+  tbody.addEventListener('focusout', function(e) {
+    var t = e.target;
+    if (!t.getAttribute || t.getAttribute('data-field') !== 'itemCode') return;
+    // Kapag eksaktong code ang tinype at blangko ang description, auto-fill pa rin
+    var code = t.value.trim().toLowerCase();
+    var row = t.closest('tr');
+    var idx = row ? parseInt(row.getAttribute('data-idx'), 10) : -1;
+    if (code && _whAc.list && row && _whEditState.currentItems[idx]) {
+      var hit = _whAc.list.filter(function(r) { return String(r.code).toLowerCase() === code; })[0];
+      var descEl = row.querySelector('input[data-field="description"]');
+      if (hit && descEl && !descEl.value.trim()) {
+        descEl.value = hit.description || '';
+        _whUpdateItem(idx, 'description', descEl.value);
+        var unitEl = row.querySelector('input[data-field="unit"]');
+        if (unitEl) { unitEl.value = hit.unit || 'PIECE'; _whUpdateItem(idx, 'unit', unitEl.value); }
+      }
+    }
+    clearTimeout(_whAc.hideTimer);
+    _whAc.hideTimer = setTimeout(_whAcHide, 150);
+  });
+  tbody.addEventListener('keydown', function(e) {
+    var t = e.target;
+    if (!t.getAttribute || t.getAttribute('data-field') !== 'itemCode') return;
+    var open = _whAc.box && _whAc.box.style.display === 'block' && _whAc.matches.length;
+    if (e.key === 'ArrowDown' && open) {
+      e.preventDefault();
+      _whAc.active = (_whAc.active + 1) % _whAc.matches.length; _whAcRender();
+    } else if (e.key === 'ArrowUp' && open) {
+      e.preventDefault();
+      _whAc.active = (_whAc.active - 1 + _whAc.matches.length) % _whAc.matches.length; _whAcRender();
+    } else if (e.key === 'Enter' && open) {
+      e.preventDefault();
+      _whAcPick(_whAc.active);
+    } else if (e.key === 'Escape' && open) {
+      e.stopPropagation();
+      _whAcHide();
+    }
+  });
+}
+
+window.addEventListener('scroll', _whAcPosition, true);
+window.addEventListener('resize', _whAcPosition);
+
+console.log('✅ warehouse-edit.js v1.3 loaded (oninput + force sync + item auto-suggest)');
