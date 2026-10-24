@@ -144,3 +144,101 @@ body .erp-form-section-title { font-weight: 700; color: var(--ui-navy); }
   body .erp-table-header .erp-btn-primary, body .erp-table-header .erp-btn-outline-dark { flex: 1 1 auto; }
 }
 @media (prefers-reduced-motion: reduce) { body * { transition: none !important; } }
+
+/* ============================================================
+   FORCE LAYER (v2.1)
+   Bakit ito kailangan: ang erp-design-system.css at erp-theme.css
+   ay may !important sa .erp-btn-primary (lilang gradient),
+   .erp-btn-outline-dark, .btn-outline-*, at .kpi-label.
+   Hindi kayang talunin ng rules na walang !important, kaya
+   dito ay gumagamit din tayo ng !important + mas mataas na specificity.
+   ============================================================ */
+
+/* ---- PRIMARY BUTTON: navy, hindi na lila ---- */
+html body :is(.erp-btn-primary, .btn-primary, .mdash-export-btn) {
+  background: var(--ui-navy) !important;
+  background-image: none !important;
+  border: 1.5px solid var(--ui-navy) !important;
+  color: #fff !important;
+  min-height: 40px !important;
+  padding: 0 18px !important;
+  border-radius: 10px !important;
+  font-size: .875rem !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .18), 0 4px 10px rgba(30, 58, 95, .22) !important;
+  transform: none !important;
+}
+html body :is(.erp-btn-primary, .btn-primary, .mdash-export-btn):hover {
+  background: var(--ui-navy-dark) !important;
+  background-image: none !important;
+  border-color: var(--ui-navy-dark) !important;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, .2), 0 8px 18px rgba(30, 58, 95, .28) !important;
+  transform: translateY(-1px) !important;
+}
+html body :is(.erp-btn-primary, .btn-primary, .mdash-export-btn):active {
+  transform: translateY(1px) !important;
+  box-shadow: none !important;
+}
+
+/* ---- OUTLINE BUTTON: puti, may border; napupunan kapag hover ---- */
+html body :is(.erp-btn-outline-dark, .erp-btn-outline, .erp-btn-outline-secondary,
+              .btn-outline-secondary, .btn-outline-dark, .btn-outline-primary,
+              .mdash-refresh-btn, .mdash-print-btn) {
+  background: #fff !important;
+  color: var(--ui-navy) !important;
+  border: 1.5px solid #b9c7dc !important;
+  min-height: 40px !important;
+  padding: 0 16px !important;
+  border-radius: 10px !important;
+  font-size: .875rem !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+html body :is(.erp-btn-outline-dark, .erp-btn-outline, .erp-btn-outline-secondary,
+              .btn-outline-secondary, .btn-outline-dark, .btn-outline-primary,
+              .mdash-refresh-btn, .mdash-print-btn):hover {
+  background: var(--ui-navy) !important;
+  color: #fff !important;
+  border-color: var(--ui-navy) !important;
+  box-shadow: 0 4px 10px rgba(30, 58, 95, .2) !important;
+}
+
+/* ---- GHOST (Clear filters, Cancel) ---- */
+html body .erp-btn-clear {
+  background: transparent !important;
+  color: var(--ui-muted) !important;
+  border: 1.5px solid transparent !important;
+  box-shadow: none !important;
+}
+html body .erp-btn-clear:hover { background: #eef1f6 !important; color: var(--ui-ink) !important; }
+
+/* ---- KPI labels: hindi na ALL CAPS, mas madaling basahin ---- */
+html body :is(.kpi-label, .erp-kpi-card .kpi-label) {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-size: .82rem !important;
+  font-weight: 600 !important;
+}
+
+/* ---- TABLE HEADERS: hindi na ALL CAPS ---- */
+html body :is(.erp-table, .table, .erp-reorder-table) thead th,
+html body .erp-reorder-table th {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-size: .8rem !important;
+  font-weight: 700 !important;
+  color: #475569 !important;
+  background: #f1f5f9 !important;
+}
+
+/* ---- Dark mode: panatilihing nababasa ---- */
+html[data-theme="dark"] body :is(.erp-btn-outline-dark, .erp-btn-outline, .erp-btn-outline-secondary,
+                                 .btn-outline-secondary, .btn-outline-dark, .btn-outline-primary,
+                                 .mdash-refresh-btn, .mdash-print-btn) {
+  background: transparent !important; color: #e2e8f0 !important; border-color: #475569 !important;
+}
+html[data-theme="dark"] body :is(.erp-table, .table, .erp-reorder-table) thead th,
+html[data-theme="dark"] body .erp-reorder-table th {
+  background: #1e293b !important; color: #cbd5e1 !important;
+}
