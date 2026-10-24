@@ -129,6 +129,13 @@
           icon: 'bi-file-earmark-ruled',
           href: 'sof-tracker.html',
           roles: ['warehouse']
+        },
+        {
+          id: 'project-costing',
+          label: 'Project Costing',
+          icon: 'bi-cash-coin',
+          href: 'project-costing.html',
+          roles: ['warehouse']
         }
       ]
     },
@@ -213,6 +220,13 @@
           roles: ['production']
         },
         {
+          id: 'project-costing',
+          label: 'Project Costing',
+          icon: 'bi-cash-coin',
+          href: 'project-costing.html',
+          roles: ['production']
+        },
+        {
           id: 'new-mrif-group',
           label: 'New MRIF',
           icon: 'bi-box-arrow-up-right',
@@ -279,6 +293,7 @@
     'prf-monitor': 'PRF Monitor',
     'edit-requests': 'Edit Requests',
     'sof-tracker': 'SOF Tracker',
+    'project-costing': 'Project Costing',
     'mrif-monitoring': 'MRIF Monitoring',
     'mrr-monitoring': 'MRR Monitoring',
     'mrs-monitoring': 'MRS Monitoring',
