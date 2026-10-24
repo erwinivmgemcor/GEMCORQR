@@ -64,6 +64,13 @@ async function erpLoadSummary() {
   var s = result.summary || {};
   document.getElementById('kpiTotalItems').textContent = erpNum(s.total_items);
   document.getElementById('kpiStockValue').textContent = erpPeso(s.total_stock_value);
+  (function () { // i-shrink ang font kung kulang pa rin ang lapad (para di maputol)
+    var el = document.getElementById('kpiStockValue');
+    el.title = erpPeso(s.total_stock_value);
+    el.style.fontSize = '';
+    var box = el.parentElement, size = parseFloat(getComputedStyle(el).fontSize);
+    while (el.scrollWidth > box.clientWidth && size > 14) { size -= 1; el.style.fontSize = size + 'px'; }
+  })();
   document.getElementById('kpiBelowReorder').textContent = erpNum(s.below_reorder);
   document.getElementById('kpiNewBelowBuffer').textContent = erpNum(s.new_below_buffer || 0);
   document.getElementById('kpiZeroStock').textContent = erpNum(s.zero_stock_items);
