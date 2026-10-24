@@ -64,6 +64,25 @@ async function usageTrendLoad() {
     _trendData.topItems = topItemsRes || [];
     _trendData.category = categoryRes || [];
 
+    // Kung walang laman ang usage views (hal. bagong reset, wala pang CSV import),
+    // kunin ang usage direkta sa stock ledger: MRIF issued (OUT) minus MRS returns (IN).
+    var viewTotal = _trendData.monthly.reduce(function(a, m) { return a + Number(m.total_quantity || 0); }, 0);
+    _trendData.source = 'views';
+    if (viewTotal <= 0) {
+      try {
+        var fb = await usageTrendBuildFromLedger(year, category);
+        if (fb.monthly.length > 0) {
+          _trendData.monthly = fb.monthly;
+          _trendData.topItems = fb.topItems;
+          _trendData.category = fb.category;
+          _trendData.source = 'ledger';
+        }
+      } catch (fbErr) {
+        console.warn('[Usage Trend] Ledger fallback failed:', fbErr.message);
+      }
+    }
+    usageTrendShowSource();
+
     // Populate category filter
     usageTrendPopulateCategoryFilter();
 
@@ -88,6 +107,92 @@ async function usageTrendLoad() {
     console.error('[usageTrendLoad]', err);
     erpUsageToast('Failed to load: ' + err.message);
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+// LEDGER FALLBACK (MRIF out − MRS returns)
+// ═══════════════════════════════════════════════════════════
+async function usageTrendBuildFromLedger(year, categoryFilter) {
+  var y = parseInt(year, 10);
+  var ledger = await erpFetch('erp_stock_ledger',
+    'select=item_code,qty_in,qty_out,transaction_type,reference_doc,transaction_date' +
+    '&transaction_date=gte.' + y + '-01-01T00:00:00' +
+    '&transaction_date=lt.' + (y + 1) + '-01-01T00:00:00' +
+    '&order=transaction_date.asc&limit=50000');
+
+  var perItemMonth = {};   // code -> month -> net qty
+  (ledger || []).forEach(function(tx) {
+    var tag = (String(tx.transaction_type || '') + ' ' + String(tx.reference_doc || '')).toUpperCase();
+    var net = 0;
+    if (tag.indexOf('MRIF') !== -1) net = Number(tx.qty_out || 0) - Number(tx.qty_in || 0);
+    else if (/\bMRS\b|MRS-|MRS_/.test(tag)) net = -Number(tx.qty_in || 0) + Number(tx.qty_out || 0);
+    if (!net || !tx.transaction_date) return;
+    var mo = new Date(tx.transaction_date).getMonth() + 1;
+    var code = tx.item_code;
+    if (!perItemMonth[code]) perItemMonth[code] = {};
+    perItemMonth[code][mo] = (perItemMonth[code][mo] || 0) + net;
+  });
+
+  var codes = Object.keys(perItemMonth);
+  if (codes.length === 0) return { monthly: [], topItems: [], category: [] };
+
+  var meta = {};
+  var itemRows = await erpFetchAll('erp_items', 'select=item_code,description,category&order=item_code.asc');
+  (itemRows || []).forEach(function(it) { meta[it.item_code] = it; });
+
+  var names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var monthAgg = {}, itemTotals = {}, catAgg = {};
+
+  codes.forEach(function(code) {
+    var m = meta[code] || {};
+    var cat = m.category || 'Uncategorized';
+    if (categoryFilter && cat !== categoryFilter) return;
+    Object.keys(perItemMonth[code]).forEach(function(mo) {
+      var q = Math.max(0, perItemMonth[code][mo]);   // net negative = return > issued, huwag bilangin
+      if (q <= 0) return;
+      var a = monthAgg[mo] || (monthAgg[mo] = { total: 0, items: 0, max: 0, min: Infinity });
+      a.total += q; a.items++; a.max = Math.max(a.max, q); a.min = Math.min(a.min, q);
+      itemTotals[code] = (itemTotals[code] || 0) + q;
+      var c = catAgg[cat] || (catAgg[cat] = { total: 0, items: {} });
+      c.total += q; c.items[code] = true;
+    });
+  });
+
+  var monthly = Object.keys(monthAgg).map(Number).sort(function(a, b) { return a - b; }).map(function(mo) {
+    var a = monthAgg[mo];
+    return {
+      year: y, month: mo, month_name: names[mo - 1], month_short: names[mo - 1].substring(0, 3),
+      total_quantity: a.total, unique_items: a.items,
+      avg_per_item: a.items ? a.total / a.items : 0,
+      max_single_usage: a.max, min_single_usage: a.min === Infinity ? 0 : a.min
+    };
+  });
+
+  var topItems = Object.keys(itemTotals).map(function(code) {
+    return { item_code: code, description: (meta[code] || {}).description || '', total_quantity: itemTotals[code] };
+  }).sort(function(a, b) { return b.total_quantity - a.total_quantity; }).slice(0, 10);
+
+  var category = Object.keys(catAgg).map(function(cat) {
+    return { category: cat, total_quantity: catAgg[cat].total, unique_items: Object.keys(catAgg[cat].items).length };
+  }).sort(function(a, b) { return b.total_quantity - a.total_quantity; });
+
+  return { monthly: monthly, topItems: topItems, category: category };
+}
+
+function usageTrendShowSource() {
+  var el = document.getElementById('trendSourceNote');
+  if (!el) {
+    var anchor = document.getElementById('trendKpiTotal');
+    var host = anchor && anchor.closest ? (anchor.closest('.row') || anchor.parentElement) : null;
+    if (!host || !host.parentElement) return;
+    el = document.createElement('div');
+    el.id = 'trendSourceNote';
+    el.className = 'small text-muted mb-2';
+    host.parentElement.insertBefore(el, host);
+  }
+  el.innerHTML = _trendData.source === 'ledger'
+    ? '<i class="bi bi-info-circle me-1"></i>Source: Stock Ledger (MRIF issued − MRS returns). Wala pang monthly usage import.'
+    : '';
 }
 
 // ═══════════════════════════════════════════════════════════
