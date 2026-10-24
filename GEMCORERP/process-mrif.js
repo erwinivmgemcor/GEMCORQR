@@ -572,62 +572,29 @@ async function submitProcess() {
                 })
               });
 
+              if (!updateRes.ok) {
+                throw new Error('SOF update failed: HTTP ' + updateRes.status + ' ' + (await updateRes.text()));
+              }
               var updateData = await updateRes.json();
-              console.log('[SOF Ultimate Update]:', updateData);
-              
-              var overAllocated = newUsedQty - currentAllocated;
-              
-              if (overAllocated > 0) {
-                console.log('[SOF] ⚠️ Over-allocated by ' + overAllocated + '. Deducting from Physical Stock.');
-                await fetch(erpUrl('rpc/erp_final_adjust_stock'), {
-                  method: 'POST',
-                  headers: erpHeaders(),
-                  body: JSON.stringify({
-                    p_item_code: item.itemCode,
-                    p_qty: overAllocated
-                  })
-                }).catch(function(e) { console.warn('Physical stock adjust failed:', e); });
+              console.log('[SOF Update]:', updateData);
+              if (updateData && updateData.success === false) {
+                throw new Error('SOF update failed: ' + (updateData.error || 'unknown'));
               }
-              
-              console.log('[SOF] ✅ Updated Item:', item.itemCode, '| New Used:', newUsedQty);
 
-              // ✅ LEDGER VIA RPC (Gamit ang RPC na may SECURITY DEFINER)
-              try {
-                var ledgerPayload = {
-                  p_item_code: item.itemCode.trim(),
-                  p_qty: qtyToDeduct,
-                  p_reference_doc: _process.docNo,
-                  p_performed_by: currentUser,
-                  p_remarks: 'Issued via SOF: ' + sofNo
-                };
-                
-                console.log('[Ledger] Calling RPC with payload:', ledgerPayload);
-
-                var ledgerRes = await fetch(erpUrl('rpc/erp_insert_stock_ledger'), {
-                  method: 'POST',
-                  headers: erpHeaders(),
-                  body: JSON.stringify(ledgerPayload)
-                });
-                
-                if (!ledgerRes.ok) {
-                  var ledgerErrText = await ledgerRes.text();
-                  throw new Error('Ledger RPC failed: ' + ledgerRes.status + ' ' + ledgerErrText);
-                }
-                
-                var ledgerData = await ledgerRes.json();
-                console.log('[Ledger RPC Success]:', ledgerData);
-              } catch(ledgerErr) {
-                console.error('[Ledger] ❌ FAILED TO INSERT MOVEMENT:', ledgerErr);
-              }
+              // HINDI na tinatawag dito ang erp_insert_stock_ledger at erp_final_adjust_stock.
+              // Ang erp_process_mrif na ang nagbabawas sa physical on_hand (ledger -> trigger).
+              // Pag tinawag pa ulit dito, doble ang bawas. Ang SOF dito ay reservation (used_qty) lang.
+              console.log('[SOF] ✅ Updated Item:', item.itemCode, '| New Used:', newUsedQty,
+                (newUsedQty > currentAllocated ? '| Over-allocated by ' + (newUsedQty - currentAllocated) : ''));
             }
           }
-          erpShowToast('✅ SOF Allocated & Stock updated!', 'success');
+          erpShowToast('✅ MRIF processed. SOF allocation updated.', 'success');
         } else {
           console.log('[SOF] No SOF allocation found for:', sofNo);
         }
       } catch(sofErr) {
         console.error('[MRIF Process] SOF deduction error:', sofErr);
-        erpShowToast('Failed to deduct SOF, but MRIF was saved', 'warning');
+        erpShowToast('Na-save ang MRIF pero pumalya ang SOF update: ' + sofErr.message + ' — i-check ang SOF Tracker.', 'warning');
       }
     }
     // ═══════════════════════════════════════════════════════════
