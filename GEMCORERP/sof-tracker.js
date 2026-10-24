@@ -63,6 +63,7 @@ async function sofTrackerLoad() {
     var data = await res.json();
     
     _sofTracker.allAllocations = (data && data.allocations) ? data.allocations : [];
+    await sofTrackerEnrich(_sofTracker.allAllocations);
     console.log('[SOF Tracker] Loaded ' + _sofTracker.allAllocations.length + ' allocations in ' + (Date.now() - t0) + 'ms');
 
     sofTrackerComputeKPIs();
@@ -77,6 +78,44 @@ async function sofTrackerLoad() {
 }
 
 window.sofTrackerLoad = sofTrackerLoad;
+
+// ═══════════════════════════════════════════════════════════
+// ENRICH — punan ang Project / JO No. / Client na blangko
+// Source order: allocation mismo → erp_sof_cache → MRIF documents
+// ═══════════════════════════════════════════════════════════
+async function sofTrackerEnrich(list) {
+  try {
+    var missing = list.filter(function(a) {
+      return a.sof_no && (!a.project_name || !a.jo_no || !a.client_name);
+    }).map(function(a) { return String(a.sof_no); });
+    if (missing.length === 0) return;
+
+    var cacheBySof = {}, mrifBySof = {};
+    for (var i = 0; i < missing.length; i += 40) {
+      var chunk = missing.slice(i, i + 40);
+      var inList = '(' + chunk.map(function(x) { return '"' + x.replace(/"/g, '') + '"'; }).join(',') + ')';
+      try {
+        var cache = await erpFetch('erp_sof_cache', 'select=sof_no,jo_no,client_name,project_name&sof_no=in.' + encodeURIComponent(inList));
+        (cache || []).forEach(function(r) { if (!cacheBySof[r.sof_no]) cacheBySof[r.sof_no] = r; });
+      } catch(e) { console.warn('[SOF enrich] cache', e.message); }
+      try {
+        var docs = await erpFetch('documents', 'select=sof_no,jo_no,client_name,project&doc_type=eq.MRIF&order=created_at.desc&sof_no=in.' + encodeURIComponent(inList));
+        (docs || []).forEach(function(r) { if (!mrifBySof[r.sof_no]) mrifBySof[r.sof_no] = r; });
+      } catch(e) { console.warn('[SOF enrich] docs', e.message); }
+    }
+
+    list.forEach(function(a) {
+      var c = cacheBySof[a.sof_no] || {};
+      var m = mrifBySof[a.sof_no] || {};
+      if (!a.client_name)  a.client_name  = c.client_name  || m.client_name || '';
+      if (!a.project_name) a.project_name = c.project_name || m.project     || '';
+      if (!a.jo_no)        a.jo_no        = c.jo_no        || m.jo_no       || '';
+    });
+  } catch(err) {
+    console.warn('[sofTrackerEnrich]', err);
+  }
+}
+
 
 // ═══════════════════════════════════════════════════════════
 // KPIs
