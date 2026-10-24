@@ -32,6 +32,18 @@
 <script defer src="stock-monitor.js"></script>
   <script defer src="notifications.js"></script>
   <script defer src="js/update.js"></script>
+  <style>
+    /* Stock Value card: mas malapad + hindi mapuputol ang number */
+    body .erp-kpi-row.kpi-row-sm { grid-template-columns: 1fr 1.8fr 1fr 1fr 1fr 1fr !important; }
+    body .erp-kpi-row.kpi-row-sm .kpi-content { min-width: 0; }
+    body #kpiStockValue { white-space: nowrap; font-size: clamp(1.25rem, 1.9vw, 1.75rem); }
+    @media (max-width: 1400px) {
+      body .erp-kpi-row.kpi-row-sm { grid-template-columns: repeat(3, 1fr) !important; }
+    }
+    @media (max-width: 992px) {
+      body .erp-kpi-row.kpi-row-sm { grid-template-columns: repeat(2, 1fr) !important; }
+    }
+  </style>
 </head>
 <body>
 
@@ -67,7 +79,7 @@
 <!-- KPI CARDS -->
 <!-- ═══════════════════════════════════════════════════════════ -->
 <div class="erp-container">
-  <div class="erp-kpi-row" style="grid-template-columns: repeat(5, 1fr);">
+  <div class="erp-kpi-row kpi-row-sm">
     <!-- CARD 1: Total Items -->
     <div class="erp-kpi-card kpi-blue">
       <div class="kpi-icon"><i class="bi bi-box-seam-fill"></i></div>
