@@ -123,8 +123,17 @@ async function allRequestsLoad() {
     query += '&order=created_at.desc&limit=2000';
     
     var rows = await erpFetch('documents', query);
-    _allRequests.allDocs = rows || [];
-    
+    rows = rows || [];
+
+    // Processed na ang MRS (one-shot) kahit hindi tugma ang returned — alisin sa pending/partial queue.
+    var sf = String(statusFilter || '').toUpperCase();
+    if (sf.indexOf('PENDING') !== -1 || sf.indexOf('PARTIAL') !== -1) {
+      rows = rows.filter(function(d) {
+        return !(String(d.doc_type || '').toUpperCase() === 'MRS' && d.processed_at);
+      });
+    }
+    _allRequests.allDocs = rows;
+
     console.log('[All Requests] Loaded ' + _allRequests.allDocs.length + ' requests');
     
     allRequestsComputeKPIs();
@@ -311,7 +320,8 @@ async function viewRequestDetails(docNo, docType) {
     
     // Show Process button if status is PENDING or PARTIAL
     var status = String(doc.status || '').toUpperCase();
-    if (status === 'PENDING' || status === 'PARTIAL') {
+    var mrsDone = String(doc.doc_type || '').toUpperCase() === 'MRS' && doc.processed_at;
+    if ((status === 'PENDING' || status === 'PARTIAL') && !mrsDone) {
       document.getElementById('btnProcessRequest').style.display = 'inline-flex';
     }
     
