@@ -6,8 +6,8 @@
 //  - Auto-cleanup of old caches
 // ============================================================
 
-const CACHE_NAME = 'gemcor-erp-v1.0.1';
-const RUNTIME_CACHE = 'gemcor-erp-runtime-v1.0.1';
+const CACHE_NAME = 'gemcor-erp-v1.0.2';
+const RUNTIME_CACHE = 'gemcor-erp-runtime-v1.0.2';
 
 // ═══════════════════════════════════════════════════════════
 // STATIC ASSETS — Pre-cache on install
