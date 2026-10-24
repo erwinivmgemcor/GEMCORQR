@@ -18,7 +18,7 @@ var _process = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Process MRIF] Initializing v3.4...');
+  console.log('[Process MRIF] Initializing v3.5...');
 
   var urlParams = new URLSearchParams(window.location.search);
   _process.docNo = urlParams.get('doc') || '';
@@ -535,68 +535,11 @@ async function submitProcess() {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // ✅ STEP 2: SOF PRIORITY DEDUCTION + LEDGER RPC
-    // ═══════════════════════════════════════════════════════════
-    if (sofNo && sofNo.trim() !== '') {
-      try {
-        console.log('[MRIF Process] Starting SOF Priority Deduction for:', sofNo);
-        
-        var sofAllocRes = await erpFetch('erp_sof_allocations', 'select=id&sof_no=eq.' + encodeURIComponent(sofNo.trim()) + '&limit=1');
-        
-        if (sofAllocRes && sofAllocRes.length > 0) {
-          var sofId = sofAllocRes[0].id;
-          
-          for (var i = 0; i < verifiedItems.length; i++) {
-            var item = verifiedItems[i];
-            var qtyToDeduct = Number(item.issuedQty);
-            
-            var allocItemRes = await erpFetch('erp_sof_allocation_items', 
-              'select=id,allocated_qty,used_qty&sof_id=eq.' + sofId + 
-              '&item_code=eq.' + encodeURIComponent(item.itemCode.trim()) + '&limit=1');
-            
-            if (allocItemRes && allocItemRes.length > 0) {
-              var allocItem = allocItemRes[0];
-              var currentUsed = Number(allocItem.used_qty || 0);
-              var currentAllocated = Number(allocItem.allocated_qty || 0);
-              
-              var newUsedQty = currentUsed + qtyToDeduct;
-              
-              // Update SOF via RPC (Bypass triggers)
-              var updateRes = await fetch(erpUrl('rpc/erp_sof_final_update'), {
-                method: 'POST',
-                headers: erpHeaders(),
-                body: JSON.stringify({
-                  p_item_code: item.itemCode.trim(),
-                  p_sof_no: sofNo.trim(),
-                  p_new_used_qty: newUsedQty
-                })
-              });
-
-              if (!updateRes.ok) {
-                throw new Error('SOF update failed: HTTP ' + updateRes.status + ' ' + (await updateRes.text()));
-              }
-              var updateData = await updateRes.json();
-              console.log('[SOF Update]:', updateData);
-              if (updateData && updateData.success === false) {
-                throw new Error('SOF update failed: ' + (updateData.error || 'unknown'));
-              }
-
-              // HINDI na tinatawag dito ang erp_insert_stock_ledger at erp_final_adjust_stock.
-              // Ang erp_process_mrif na ang nagbabawas sa physical on_hand (ledger -> trigger).
-              // Pag tinawag pa ulit dito, doble ang bawas. Ang SOF dito ay reservation (used_qty) lang.
-              console.log('[SOF] ✅ Updated Item:', item.itemCode, '| New Used:', newUsedQty,
-                (newUsedQty > currentAllocated ? '| Over-allocated by ' + (newUsedQty - currentAllocated) : ''));
-            }
-          }
-          erpShowToast('✅ MRIF processed. SOF allocation updated.', 'success');
-        } else {
-          console.log('[SOF] No SOF allocation found for:', sofNo);
-        }
-      } catch(sofErr) {
-        console.error('[MRIF Process] SOF deduction error:', sofErr);
-        erpShowToast('Na-save ang MRIF pero pumalya ang SOF update: ' + sofErr.message + ' — i-check ang SOF Tracker.', 'warning');
-      }
-    }
+    // WALA nang STEP 2 dito. Ang erp_process_mrif na mismo ang:
+    //   - nagbabawas ng physical on_hand (ledger -> trigger), at
+    //   - nag-a-update ng SOF used_qty.
+    // Ang dating "SOF priority deduction" + erp_insert_stock_ledger sa client ay
+    // nagdodoble: 10 -> 5 -> 0 sa on_hand at used_qty 5 -> 10 sa isang 5-qty MRIF.
     // ═══════════════════════════════════════════════════════════
 
     document.getElementById('successDocNo').textContent = _process.docNo;
@@ -684,4 +627,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4000 }).show();
 }
 
-console.log('✅ process-mrif.js v3.4 loaded (SOF + Ledger RPC)');
+console.log('✅ process-mrif.js v3.5 loaded (single RPC, no client SOF/ledger)');
