@@ -18,7 +18,7 @@ var _process = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Process MRIF] Initializing v3.5...');
+  console.log('[Process MRIF] Initializing v3.6...');
 
   var urlParams = new URLSearchParams(window.location.search);
   _process.docNo = urlParams.get('doc') || '';
@@ -470,14 +470,37 @@ async function submitProcess() {
     var stockMap = {};
     (allItems || []).forEach(function(it) { stockMap[it.item_code] = Number(it.on_hand || 0); });
 
+    // Naka-reserve para sa mga SOF (allocated - used). Hindi ito pwedeng gamitin ng MRIF na walang SOF.
+    var reservedMap = {};
+    try {
+      var allocRows = await erpFetchAll('erp_sof_allocation_items',
+        'select=id,item_code,allocated_qty,used_qty&item_code=in.(' + encodeURIComponent(codeList.join(',')) + ')&order=id.asc');
+      (allocRows || []).forEach(function(r) {
+        var rem = Number(r.allocated_qty || 0) - Number(r.used_qty || 0);
+        if (rem > 0) reservedMap[r.item_code] = (reservedMap[r.item_code] || 0) + rem;
+      });
+    } catch (resErr) {
+      console.warn('[submitProcess] Could not load SOF reservations:', resErr.message);
+      erpShowToast('Hindi ma-check ang SOF reservations. Subukan ulit.', 'danger');
+      return;
+    }
+
     for (var i = 0; i < verifiedItems.length; i++) {
       var item = verifiedItems[i];
       var currentStock = stockMap[item.itemCode] || 0;
+      var reserved = reservedMap[item.itemCode] || 0;
+      var available = currentStock - reserved;
       var issueQty = Number(item.issuedQty);
 
       if (currentStock < issueQty) {
         erpShowToast('❌ Insufficient stock for ' + item.itemCode + '. Current: ' + currentStock + ', Attempted: ' + issueQty, 'danger');
         return; // Pigilan ang submission
+      }
+      if (available < issueQty) {
+        erpShowToast('❌ ' + item.itemCode + ': ' + currentStock + ' on-hand pero ' + reserved +
+          ' ay naka-reserve sa SOF. Available lang: ' + available + ', hinihingi: ' + issueQty +
+          '. Gumamit ng MRIF na may SOF para sa reserved stock.', 'danger');
+        return;
       }
     }
   }
@@ -627,4 +650,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4000 }).show();
 }
 
-console.log('✅ process-mrif.js v3.5 loaded (single RPC, no client SOF/ledger)');
+console.log('✅ process-mrif.js v3.6 loaded (single RPC + reserved-stock check)');
