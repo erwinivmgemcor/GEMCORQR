@@ -1,8 +1,10 @@
 // ============================================================
-// GEMCOR ERP — Inventory Count (v1.2)
+// GEMCOR ERP — Inventory Count (v1.3)
 // ✅ NEW: Auto-suggest for manual input field
 // ✅ SUM-based counting + keyboard navigation
 // ✅ FIXED: Approve/Reject buttons hide correctly after action
+// ✅ v1.3: atomic RPCs (create/save/submit/approve/reject/reopen/cancel), variance ayon sa galaw pagkatapos ng bilang,
+//          uncounted ≠ counted (counted_at marker), SPOT count, Reopen/Cancel
 // ============================================================
 
 var _ic = {
@@ -11,20 +13,90 @@ var _ic = {
   currentSession: null,
   currentItems: [],
   filteredItems: [],
+  preview: {},          // item.id -> { expected_qty, delta } (galing sa erp_ic_preview kapag PENDING_REVIEW)
   scanner: null,
   scannerActive: false,
   currentQtyItem: null,
   searchTimer: null,
   dropdownTimer: null,
   isSubmitting: false,
+  isSaving: false,
   view: 'list'
 };
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS (v1.3)
+// ═══════════════════════════════════════════════════════════
+// Tumatawag ng Supabase RPC. Nagtatapon ng Error kapag HTTP error o success:false.
+async function icRpc(name, body) {
+  var res = await fetch(erpUrl('rpc/' + name), {
+    method: 'POST',
+    headers: erpHeaders(),
+    body: JSON.stringify(body || {})
+  });
+  var text = await res.text();
+  var data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (e) {}
+  if (!res.ok) {
+    var msg = (data && (data.message || data.error || data.details)) || text || ('HTTP ' + res.status);
+    throw new Error(msg);
+  }
+  if (data && data.success === false) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+// "Counted" = may counted_at (kaya legit ang bilang na 0; ang uncounted ay walang counted_at).
+function icIsCounted(it) { return !!(it && it.counted_at); }
+
+function icCurrentUser(fallback) {
+  return localStorage.getItem('ivm_userFullname') || fallback || 'WAREHOUSE';
+}
+
+function icIsAdmin() { return localStorage.getItem('ivm_isAdmin') === 'true'; }
+
+// Expected (system) qty sa oras ng bilang:
+//  PENDING_REVIEW -> live preview mula sa server (kasama ang galaw pagkatapos ng bilang)
+//  APPROVED       -> ang expected_qty na na-save sa approval
+//  iba            -> ang snapshot system_qty
+function icExpectedQty(it) {
+  var p = _ic.preview[it.id];
+  if (p && p.expected_qty !== null && p.expected_qty !== undefined) return Number(p.expected_qty);
+  if (it.expected_qty !== null && it.expected_qty !== undefined) return Number(it.expected_qty);
+  return Number(it.system_qty || 0);
+}
+
+function icEffectiveVariance(it) {
+  if (!icIsCounted(it)) return 0;
+  return Math.round((Number(it.counted_qty || 0) - icExpectedQty(it)) * 10000) / 10000;
+}
+
+function icApplyItem(srv) {
+  if (!srv) return;
+  var local = _ic.currentItems.find(function(it) { return it.id === srv.id; });
+  if (!local) return;
+  local.counted_qty = srv.counted_qty;
+  local.variance = srv.variance;
+  local.scan_count = srv.scan_count;
+  local.remarks = srv.remarks;
+  local.counted_at = srv.counted_at;
+  local.counted_by = srv.counted_by;
+  local.expected_qty = null;
+  local.adjusted_qty = null;
+}
+
+function icApplyStats(st) {
+  if (!st || !_ic.currentSession) return;
+  _ic.currentSession.total_items = st.total_items;
+  _ic.currentSession.counted_items = st.counted_items;
+  _ic.currentSession.variance_count = st.variance_count;
+  _ic.currentSession.variance_total_qty = st.variance_total_qty;
+}
 
 // ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Inventory Count v1.2] Initializing...');
+  console.log('[Inventory Count v1.3] Initializing...');
 
   icCheckHealth();
   icLoadSessions();
@@ -121,6 +193,7 @@ function icRenderSessionList() {
     return;
   }
 
+  var isAdmin = icIsAdmin();
   var html = '';
   _ic.filteredSessions.forEach(function(s) {
     var dateStr = s.created_at ? new Date(s.created_at).toLocaleDateString('en-US', {
@@ -157,9 +230,14 @@ function icRenderSessionList() {
         '<button class="erp-action-btn" onclick="icViewSessionDetails(' + s.id + ')" title="View Details">' +
           '<i class="bi bi-eye"></i>' +
         '</button>' +
-        (s.status === 'REJECTED' && localStorage.getItem('ivm_isAdmin') === 'true'
+        (s.status === 'REJECTED' && isAdmin
           ? '<button class="erp-action-btn" style="background:#10b981; color:#fff;" onclick="icReopenSession(' + s.id + ')" title="Reopen for Recount">' +
               '<i class="bi bi-arrow-counterclockwise"></i>' +
+            '</button>'
+          : '') +
+        ((s.status === 'IN_PROGRESS' || (isAdmin && (s.status === 'PENDING_REVIEW' || s.status === 'REJECTED')))
+          ? '<button class="erp-action-btn" style="background:#6b7280; color:#fff;" onclick="icCancelSession(' + s.id + ')" title="Cancel this count">' +
+              '<i class="bi bi-x-octagon"></i>' +
             '</button>'
           : '') +
       '</td>' +
@@ -175,6 +253,8 @@ function openNewCountModal() {
   document.getElementById('newCountType').value = 'CYCLE';
   document.getElementById('newCountCategory').value = '';
   document.getElementById('newCountNotes').value = '';
+  var spotEl = document.getElementById('newCountSpotCodes');
+  if (spotEl) spotEl.value = '';
   icOnCountTypeChange();
 
   var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('newCountModal'));
@@ -186,7 +266,9 @@ window.openNewCountModal = openNewCountModal;
 function icOnCountTypeChange() {
   var type = document.getElementById('newCountType').value;
   var catGroup = document.getElementById('newCountCategoryGroup');
+  var spotGroup = document.getElementById('newCountSpotGroup');
   if (catGroup) catGroup.style.display = (type === 'CYCLE') ? 'block' : 'none';
+  if (spotGroup) spotGroup.style.display = (type === 'SPOT') ? 'block' : 'none';
 }
 
 window.icOnCountTypeChange = icOnCountTypeChange;
@@ -197,13 +279,32 @@ async function icCreateSession() {
   var type = document.getElementById('newCountType').value;
   var category = document.getElementById('newCountCategory').value;
   var notes = document.getElementById('newCountNotes').value.trim();
+  var codes = null;
 
   if (type === 'CYCLE' && !category) {
     icShowToast('Please select a category', 'warning');
     return;
   }
 
-  if (!confirm('Create new count session?\n\nType: ' + type + '\n' + (category ? 'Category: ' + category : 'Scope: All items'))) return;
+  if (type === 'SPOT') {
+    var spotEl = document.getElementById('newCountSpotCodes');
+    var raw = spotEl ? spotEl.value : '';
+    var seen = {};
+    codes = raw.split(/[\s,;]+/).map(function(c) { return c.trim().toUpperCase(); }).filter(function(c) {
+      if (!c || seen[c]) return false;
+      seen[c] = true;
+      return true;
+    });
+    if (codes.length === 0) {
+      icShowToast('Maglagay ng kahit isang item code para sa Spot count', 'warning');
+      return;
+    }
+  }
+
+  var scopeTxt = type === 'CYCLE' ? 'Category: ' + category
+               : type === 'SPOT' ? 'Items: ' + codes.length + ' item code(s)'
+               : 'Scope: All items';
+  if (!confirm('Create new count session?\n\nType: ' + type + '\n' + scopeTxt)) return;
 
   _ic.isSubmitting = true;
   var btn = document.getElementById('btnCreateCount');
@@ -214,124 +315,26 @@ async function icCreateSession() {
   }
 
   try {
-    var now = new Date();
-    var yy = now.getFullYear();
-    var mm = String(now.getMonth() + 1).padStart(2, '0');
-
-    var existingRows = await erpFetch('erp_inventory_counts',
-      'select=count_no&count_no=like.IC-' + yy + '-' + mm + '-*&order=count_no.desc&limit=1');
-
-    var nextNum = 1;
-    if (existingRows && existingRows.length > 0) {
-      var parts = existingRows[0].count_no.split('-');
-      var lastSeq = parseInt(parts[parts.length - 1]) || 0;
-      nextNum = lastSeq + 1;
-    }
-
-    var countNo = 'IC-' + yy + '-' + mm + '-' + String(nextNum).padStart(3, '0');
-
-    var itemsQuery = 'select=item_code,description,category,base_unit,on_hand' +
-                     '&is_active=eq.true&order=item_code.asc';
-
-    if (type === 'CYCLE' && category) {
-      itemsQuery += '&category=eq.' + encodeURIComponent(category);
-    }
-
-    var allItems = [];
-    var pageSize = 1000;
-    var offset = 0;
-    var hasMore = true;
-
-    while (hasMore) {
-      var pageQuery = itemsQuery + '&limit=' + pageSize + '&offset=' + offset;
-      var pageRows = await erpFetch('erp_items', pageQuery);
-
-      if (!pageRows || pageRows.length === 0) {
-        hasMore = false;
-        break;
-      }
-
-      allItems = allItems.concat(pageRows);
-      offset += pageRows.length;
-
-      if (pageRows.length < pageSize) hasMore = false;
-      if (hasMore) await new Promise(function(r) { setTimeout(r, 100); });
-    }
-
-    if (allItems.length === 0) throw new Error('No items found for the selected scope');
-
-    console.log('[IC] Snapshot items:', allItems.length);
-
-    var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
-
-    var sessionRes = await fetch(erpUrl('erp_inventory_counts'), {
-      method: 'POST',
-      headers: erpHeaders({ 'Prefer': 'return=representation' }),
-      body: JSON.stringify({
-        count_no: countNo,
-        count_type: type,
-        scope_category: category || null,
-        count_method: 'MIXED',
-        status: 'IN_PROGRESS',
-        total_items: allItems.length,
-        counted_items: 0,
-        variance_count: 0,
-        variance_total_qty: 0,
-        counted_by: currentUser,
-        started_at: new Date().toISOString(),
-        notes: notes,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+    // Atomic sa database: count_no + session + lahat ng items sa isang transaksyon
+    var r = await icRpc('erp_ic_create_count', {
+      p_type: type,
+      p_category: type === 'CYCLE' ? category : null,
+      p_notes: notes,
+      p_user: icCurrentUser(),
+      p_item_codes: codes
     });
 
-    if (!sessionRes.ok) throw new Error('Failed to create session');
-
-    var sessionArr = await sessionRes.json();
-    var session = sessionArr[0];
-    if (!session || !session.id) throw new Error('No session ID');
-
-    var itemPayloads = allItems.map(function(it, idx) {
-      return {
-        count_id: session.id,
-        count_no: countNo,
-        line_no: idx + 1,
-        item_code: it.item_code,
-        description: it.description || '',
-        category: it.category || '',
-        unit: it.base_unit || 'PCS',
-        system_qty: Number(it.on_hand || 0),
-        counted_qty: 0,
-        variance: 0,
-        scan_count: 0,
-        remarks: '',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-    });
-
-    var batchSize = 500;
-    for (var i = 0; i < itemPayloads.length; i += batchSize) {
-      var batch = itemPayloads.slice(i, i + batchSize);
-      var batchRes = await fetch(erpUrl('erp_inventory_count_items'), {
-        method: 'POST',
-        headers: erpHeaders(),
-        body: JSON.stringify(batch)
-      });
-      if (!batchRes.ok) throw new Error('Failed to insert items batch ' + (i / batchSize));
-      console.log('[IC] Inserted batch:', i + batch.length, '/', itemPayloads.length);
+    var msg = '✅ Count created: ' + r.count_no + ' (' + r.total_items + ' items)';
+    if (codes && r.total_items < codes.length) {
+      msg += ' — ' + (codes.length - r.total_items) + ' code(s) hindi nahanap / inactive';
     }
-
-    icShowToast('✅ Count created: ' + countNo + ' (' + allItems.length + ' items)', 'success');
+    icShowToast(msg, codes && r.total_items < codes.length ? 'warning' : 'success');
 
     var modal = bootstrap.Modal.getInstance(document.getElementById('newCountModal'));
     if (modal) modal.hide();
 
     await icLoadSessions();
-
-    setTimeout(function() {
-      icOpenSession(session.id);
-    }, 500);
+    setTimeout(function() { icOpenSession(r.id); }, 500);
 
   } catch(err) {
     console.error('[icCreateSession]', err);
@@ -384,6 +387,17 @@ async function icOpenSession(sessionId) {
     }
 
     _ic.currentItems = allItems;
+
+    // Para sa PENDING_REVIEW: kunin ang expected qty (live on_hand - galaw pagkatapos ng bilang)
+    _ic.preview = {};
+    if (_ic.currentSession.status === 'PENDING_REVIEW') {
+      try {
+        var pv = await icRpc('erp_ic_preview', { p_count_id: sessionId });
+        (pv || []).forEach(function(p) { _ic.preview[p.id] = p; });
+      } catch (pvErr) {
+        console.warn('[IC] Preview failed (snapshot ang gagamitin):', pvErr.message);
+      }
+    }
     console.log('[IC] Session loaded:', _ic.currentSession.count_no, '| Items:', allItems.length);
 
     var status = _ic.currentSession.status;
@@ -422,29 +436,46 @@ function icShowReviewView() {
   document.getElementById('viewCounting').style.display = 'none';
   document.getElementById('viewReview').style.display = 'block';
 
-  document.getElementById('icReviewHeader').textContent = 
+  document.getElementById('icReviewHeader').textContent =
     _ic.currentSession.count_no + ' | ' + _ic.currentSession.status;
 
-  var isAdmin = localStorage.getItem('ivm_isAdmin') === 'true';
-  var actionCard = document.getElementById('icReviewActionCard');
+  var isAdmin = icIsAdmin();
+  var status = _ic.currentSession.status;
   var actionButtons = document.getElementById('icReviewActionButtons');
   var actionMessage = document.getElementById('icReviewActionMessage');
+  var btnApprove = document.getElementById('btnReviewApprove');
+  var btnReject = document.getElementById('btnReviewReject');
 
-  if (_ic.currentSession.status === 'APPROVED') {
-    if (actionButtons) actionButtons.style.display = 'none';
-    if (actionMessage) {
-      actionMessage.innerHTML = '<i class="bi bi-check-circle-fill text-success me-1"></i> <strong>This count has been APPROVED.</strong> Stock has been adjusted.';
+  function setMsg(html) { if (actionMessage) actionMessage.innerHTML = html; }
+  function showButtons(approve, reject, rejectLabel) {
+    if (actionButtons) actionButtons.style.display = (approve || reject) ? 'block' : 'none';
+    if (btnApprove) btnApprove.style.display = approve ? '' : 'none';
+    if (btnReject) {
+      btnReject.style.display = reject ? '' : 'none';
+      btnReject.innerHTML = '<i class="bi bi-x-circle me-1"></i>' + rejectLabel;
     }
-  } else if (!isAdmin) {
-    if (actionButtons) actionButtons.style.display = 'none';
-    if (actionMessage) {
-      actionMessage.innerHTML = '<i class="bi bi-shield-lock me-1 text-danger"></i> <strong>Awaiting Admin Review.</strong> Only admins can approve or reject this count.';
+  }
+
+  if (status === 'PENDING_REVIEW') {
+    if (isAdmin) {
+      showButtons(true, true, 'Reject');
+      setMsg('<i class="bi bi-info-circle me-1"></i> Approve to auto-adjust stock, or reject to return for recount. ' +
+             'Ang <strong>System</strong> column ay ang stock sa oras ng bilang (kasama na ang mga MRIF/MRR/MRS pagkatapos nito).');
+    } else {
+      showButtons(false, false, 'Reject');
+      setMsg('<i class="bi bi-shield-lock me-1 text-danger"></i> <strong>Awaiting Admin Review.</strong> Only admins can approve or reject this count.');
     }
+  } else if (status === 'APPROVED') {
+    showButtons(false, isAdmin, 'Reverse Approval');
+    setMsg('<i class="bi bi-check-circle-fill text-success me-1"></i> <strong>This count has been APPROVED.</strong> Stock has been adjusted.' +
+           (isAdmin ? ' Kung nagkamali, i-click ang Reverse Approval para ibalik ang eksaktong adjustment.' : ''));
+  } else if (status === 'REJECTED') {
+    showButtons(false, false, 'Reject');
+    setMsg('<i class="bi bi-x-circle-fill text-danger me-1"></i> <strong>REJECTED:</strong> ' + icEsc(_ic.currentSession.rejected_reason || '—') +
+           (isAdmin ? '<br>Gamitin ang <i class="bi bi-arrow-counterclockwise"></i> Reopen sa listahan para sa recount.' : ''));
   } else {
-    if (actionButtons) actionButtons.style.display = 'block';
-    if (actionMessage) {
-      actionMessage.innerHTML = '<i class="bi bi-info-circle me-1"></i> Reviewing as supervisor. Approve to auto-adjust stock, or reject to return for recount.';
-    }
+    showButtons(false, false, 'Reject');
+    setMsg('<i class="bi bi-slash-circle me-1 text-muted"></i> This count is ' + icEsc(status) + '.');
   }
 
   icRenderReviewView();
@@ -775,7 +806,7 @@ function icOpenQtyInputModal(item) {
   var previous = Number(item.counted_qty || 0);
   var prevBox = document.getElementById('previousQtyBox');
   var prevVal = document.getElementById('previousQtyValue');
-  if (previous > 0) {
+  if (icIsCounted(item)) {
     prevBox.style.display = 'block';
     prevVal.textContent = icNum(previous) + ' ' + (item.unit || 'PCS');
   } else {
@@ -813,7 +844,7 @@ function icUpdateQtyPreview() {
 window.icUpdateQtyPreview = icUpdateQtyPreview;
 
 async function icSaveCountedQty() {
-  if (!_ic.currentQtyItem) return;
+  if (!_ic.currentQtyItem || _ic.isSaving) return;
 
   var input = document.getElementById('qtyInputValue');
   var locationInput = document.getElementById('qtyInputLocation');
@@ -821,72 +852,35 @@ async function icSaveCountedQty() {
 
   var addQty = parseFloat(input.value) || 0;
   if (addQty < 0) { icShowToast('Quantity must be ≥ 0', 'warning'); return; }
-  if (addQty === 0 && !confirm('Add 0 quantity?')) return;
+  if (addQty === 0 && !confirm('Add 0 quantity?\n\n(Mamarkahan ang item na NABILANG kahit 0.)')) return;
 
   var location = locationInput ? locationInput.value.trim() : '';
   var remarks = remarksInput ? remarksInput.value.trim() : '';
-
   var item = _ic.currentQtyItem;
-  var oldQty = Number(item.counted_qty || 0);
-  var newQty = oldQty + addQty;
-  var variance = newQty - Number(item.system_qty || 0);
 
-  var finalRemarks = item.remarks || '';
-  if (location) finalRemarks = finalRemarks ? finalRemarks + ', ' + location : location;
-  if (remarks) finalRemarks = finalRemarks ? finalRemarks + ' | ' + remarks : remarks;
-
+  _ic.isSaving = true;
   try {
-    var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
-
-    var itemRes = await fetch(erpUrl('erp_inventory_count_items?id=eq.' + item.id), {
-      method: 'PATCH',
-      headers: erpHeaders(),
-      body: JSON.stringify({
-        counted_qty: newQty,
-        variance: variance,
-        scan_count: (item.scan_count || 0) + 1,
-        remarks: finalRemarks,
-        counted_at: new Date().toISOString(),
-        counted_by: currentUser,
-        updated_at: new Date().toISOString()
-      })
+    // Atomic increment sa server (ligtas kahit dalawang tao ang nag-scan ng iisang item)
+    var r = await icRpc('erp_ic_save_count', {
+      p_count_id: _ic.currentSession.id,
+      p_item_id: item.id,
+      p_qty: addQty,
+      p_mode: 'ADD',
+      p_location: location,
+      p_remarks: remarks,
+      p_user: icCurrentUser()
     });
 
-    if (!itemRes.ok) throw new Error('Failed to save item');
-
-    await fetch(erpUrl('erp_inventory_count_logs'), {
-      method: 'POST',
-      headers: erpHeaders(),
-      body: JSON.stringify([{
-        count_id: _ic.currentSession.id,
-        count_no: _ic.currentSession.count_no,
-        item_code: item.item_code,
-        action: 'SCAN',
-        old_qty: oldQty,
-        added_qty: addQty,
-        new_qty: newQty,
-        location_note: location,
-        remarks: remarks,
-        logged_by: currentUser,
-        logged_at: new Date().toISOString()
-      }])
-    });
-
-    item.counted_qty = newQty;
-    item.variance = variance;
-    item.scan_count = (item.scan_count || 0) + 1;
-    item.remarks = finalRemarks;
-    item.counted_at = new Date().toISOString();
-    item.counted_by = currentUser;
+    icApplyItem(r.item);
+    icApplyStats(r.stats);
 
     bootstrap.Modal.getInstance(document.getElementById('qtyInputModal')).hide();
 
-    await icUpdateSessionStats();
     icUpdateProgress();
     icUpdateRecentScans();
     icUpdateVarianceSummary();
 
-    icShowToast('✓ ' + item.item_code + ' saved (+' + icNum(addQty) + ')', 'success');
+    icShowToast('✓ ' + item.item_code + ' saved (+' + icNum(addQty) + ') → total ' + icNum(r.item.counted_qty), 'success');
 
     setTimeout(function() {
       icUpdateScanStatus('Ready to scan', 'info');
@@ -894,14 +888,16 @@ async function icSaveCountedQty() {
 
     if (!_ic.scannerActive) {
       setTimeout(function() {
-        var input = document.getElementById('icManualInput');
-        if (input) input.focus();
+        var mi = document.getElementById('icManualInput');
+        if (mi) mi.focus();
       }, 300);
     }
 
   } catch(err) {
     console.error('[icSaveCountedQty]', err);
     icShowToast('Failed: ' + err.message, 'danger');
+  } finally {
+    _ic.isSaving = false;
   }
 }
 
@@ -910,34 +906,17 @@ window.icSaveCountedQty = icSaveCountedQty;
 // ═══════════════════════════════════════════════════════════
 // SESSION STATS
 // ═══════════════════════════════════════════════════════════
-async function icUpdateSessionStats() {
-  var countedItems = _ic.currentItems.filter(function(it) {
-    return Number(it.counted_qty || 0) > 0 || it.scan_count > 0;
-  }).length;
-
-  var varianceItems = _ic.currentItems.filter(function(it) {
+// Lokal na recompute lang (ang server na ang nagsusulat ng stats sa bawat save).
+function icUpdateSessionStats() {
+  var counted = _ic.currentItems.filter(icIsCounted);
+  var varianceItems = counted.filter(function(it) {
     return Math.abs(Number(it.variance || 0)) > 0.0001;
   });
-
-  var varianceCount = varianceItems.length;
-  var varianceTotalQty = varianceItems.reduce(function(sum, it) {
+  _ic.currentSession.counted_items = counted.length;
+  _ic.currentSession.variance_count = varianceItems.length;
+  _ic.currentSession.variance_total_qty = varianceItems.reduce(function(sum, it) {
     return sum + Number(it.variance || 0);
   }, 0);
-
-  _ic.currentSession.counted_items = countedItems;
-  _ic.currentSession.variance_count = varianceCount;
-  _ic.currentSession.variance_total_qty = varianceTotalQty;
-
-  await fetch(erpUrl('erp_inventory_counts?id=eq.' + _ic.currentSession.id), {
-    method: 'PATCH',
-    headers: erpHeaders(),
-    body: JSON.stringify({
-      counted_items: countedItems,
-      variance_count: varianceCount,
-      variance_total_qty: varianceTotalQty,
-      updated_at: new Date().toISOString()
-    })
-  });
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -945,9 +924,7 @@ async function icUpdateSessionStats() {
 // ═══════════════════════════════════════════════════════════
 function icUpdateProgress() {
   var total = _ic.currentItems.length;
-  var counted = _ic.currentItems.filter(function(it) {
-    return Number(it.counted_qty || 0) > 0 || (it.scan_count || 0) > 0;
-  }).length;
+  var counted = _ic.currentItems.filter(icIsCounted).length;
 
   var pct = total > 0 ? (counted / total) * 100 : 0;
 
@@ -964,9 +941,7 @@ function icUpdateRecentScans() {
   var container = document.getElementById('icScanHistory');
   if (!container) return;
 
-  var scanned = _ic.currentItems.filter(function(it) {
-    return Number(it.counted_qty || 0) > 0;
-  }).sort(function(a, b) {
+  var scanned = _ic.currentItems.filter(icIsCounted).sort(function(a, b) {
     var ta = a.counted_at ? new Date(a.counted_at).getTime() : 0;
     var tb = b.counted_at ? new Date(b.counted_at).getTime() : 0;
     return tb - ta;
@@ -1007,7 +982,7 @@ function icUpdateVarianceSummary() {
   var variance = 0;
 
   _ic.currentItems.forEach(function(it) {
-    if (Number(it.counted_qty || 0) === 0 && (it.scan_count || 0) === 0) return;
+    if (!icIsCounted(it)) return;
     var v = Number(it.variance || 0);
     if (Math.abs(v) < 0.0001) matched++;
     else variance++;
@@ -1034,41 +1009,30 @@ async function icSubmitForReview() {
     return;
   }
 
-  var counted = _ic.currentItems.filter(function(it) {
-    return Number(it.counted_qty || 0) > 0 || (it.scan_count || 0) > 0;
-  }).length;
-
   var total = _ic.currentItems.length;
+  var counted = _ic.currentItems.filter(icIsCounted).length;
   var uncounted = total - counted;
+
+  if (counted === 0) {
+    icShowToast('Walang na-count na item. Magbilang muna bago mag-submit.', 'warning');
+    return;
+  }
 
   var msg = 'Submit for review?\n\n';
   msg += 'Counted: ' + counted + ' / ' + total + ' items\n';
-  if (uncounted > 0) msg += 'Uncounted: ' + uncounted + ' items (will be treated as 0)\n';
-  msg += '\nContinue?';
+  if (uncounted > 0) {
+    msg += 'Not counted: ' + uncounted + ' items — HINDI ito iaadjust (mananatili ang kasalukuyang stock nila).\n';
+  }
+  msg += '\nHindi na pwedeng baguhin ang bilang pagkatapos mag-submit. Continue?';
 
   if (!confirm(msg)) return;
 
   try {
-    var res = await fetch(erpUrl('erp_inventory_counts?id=eq.' + _ic.currentSession.id), {
-      method: 'PATCH',
-      headers: erpHeaders(),
-      body: JSON.stringify({
-        status: 'PENDING_REVIEW',
-        submitted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-    });
-
-    if (!res.ok) throw new Error('Submit failed');
-
-    _ic.currentSession.status = 'PENDING_REVIEW';
+    await icRpc('erp_ic_submit', { p_count_id: _ic.currentSession.id, p_user: icCurrentUser() });
     icShowToast('✅ Submitted for review', 'success');
-
-    setTimeout(function() {
-      icShowReviewView();
-    }, 500);
-
+    await icOpenSession(_ic.currentSession.id);   // reload (kasama ang preview)
   } catch(err) {
+    console.error('[icSubmitForReview]', err);
     icShowToast('Failed: ' + err.message, 'danger');
   }
 }
@@ -1080,9 +1044,11 @@ function icRenderReviewView() {
   var matched = 0;
   var varianceCount = 0;
   var varianceQty = 0;
+  var uncounted = 0;
 
   _ic.currentItems.forEach(function(it) {
-    var v = Number(it.variance || 0);
+    if (!icIsCounted(it)) { uncounted++; return; }
+    var v = icEffectiveVariance(it);
     if (Math.abs(v) < 0.0001) matched++;
     else { varianceCount++; varianceQty += v; }
   });
@@ -1090,6 +1056,8 @@ function icRenderReviewView() {
   document.getElementById('icReviewTotal').textContent = total;
   document.getElementById('icReviewMatched').textContent = matched;
   document.getElementById('icReviewVariance').textContent = varianceCount;
+  var ucEl = document.getElementById('icReviewUncounted');
+  if (ucEl) ucEl.textContent = uncounted;
   document.getElementById('icReviewVarianceQty').textContent = varianceQty > 0 ? '+' + icNum(varianceQty) : icNum(varianceQty);
 
   icRenderReviewItems();
@@ -1102,10 +1070,11 @@ function icRenderReviewItems() {
   var filter = document.getElementById('icReviewFilter').value;
 
   var items = _ic.currentItems.filter(function(it) {
-    var v = Number(it.variance || 0);
-    var hasVariance = Math.abs(v) > 0.0001;
+    var counted = icIsCounted(it);
+    var hasVariance = counted && Math.abs(icEffectiveVariance(it)) > 0.0001;
     if (filter === 'variance' && !hasVariance) return false;
-    if (filter === 'matched' && hasVariance) return false;
+    if (filter === 'matched' && !(counted && !hasVariance)) return false;
+    if (filter === 'uncounted' && counted) return false;
     return true;
   });
 
@@ -1116,10 +1085,12 @@ function icRenderReviewItems() {
 
   var html = '';
   items.forEach(function(it, idx) {
-    var variance = Number(it.variance || 0);
-    var hasVariance = Math.abs(variance) > 0.0001;
+    var counted = icIsCounted(it);
+    var variance = icEffectiveVariance(it);
+    var hasVariance = counted && Math.abs(variance) > 0.0001;
 
-    var varDisplay = !hasVariance ? '0' : (variance > 0 ? '+' + icNum(variance) : icNum(variance));
+    var varDisplay = !counted ? '<span class="badge bg-secondary">Not counted</span>'
+                   : '<strong>' + (!hasVariance ? '0' : (variance > 0 ? '+' + icNum(variance) : icNum(variance))) + '</strong>';
     var varClass = !hasVariance ? '' : (variance > 0 ? 'text-danger' : 'text-primary');
     var rowClass = hasVariance ? 'has-variance' : '';
 
@@ -1127,9 +1098,9 @@ function icRenderReviewItems() {
       '<td>' + (idx + 1) + '</td>' +
       '<td><code>' + icEsc(it.item_code) + '</code></td>' +
       '<td>' + icEsc(it.description || '—') + '</td>' +
-      '<td class="text-center">' + icNum(it.system_qty) + '</td>' +
-      '<td class="text-center fw-bold">' + icNum(it.counted_qty) + '</td>' +
-      '<td class="text-center ' + varClass + '"><strong>' + varDisplay + '</strong></td>' +
+      '<td class="text-center">' + icNum(icExpectedQty(it)) + '</td>' +
+      '<td class="text-center fw-bold">' + (counted ? icNum(it.counted_qty) : '—') + '</td>' +
+      '<td class="text-center ' + varClass + '">' + varDisplay + '</td>' +
       '<td class="text-center">' + icEsc(it.unit || 'PCS') + '</td>' +
       '<td><small>' + icEsc(it.remarks || '—') + '</small></td>' +
     '</tr>';
@@ -1141,152 +1112,49 @@ window.icRenderReviewItems = icRenderReviewItems;
 
 
 // ═══════════════════════════════════════════════════════════
-// STOCK ADJUSTMENT HELPERS
-// IMPORTANT: Ang trigger na trg_apply_stock_movement (BEFORE INSERT sa
-// erp_stock_ledger) ang nag-a-update ng erp_items.on_hand. Kaya ledger
-// insert LANG ang gagawin — HUWAG nang i-PATCH ang on_hand (dati nagdodoble).
+// APPROVE / REJECT / REOPEN / CANCEL — lahat ay atomic RPC sa database.
+// Ledger lang ang gumagalaw ng on_hand (trigger fn_apply_stock_movement) — walang direktang PATCH sa on_hand.
 // ═══════════════════════════════════════════════════════════
-async function _icCheckedFetch(url, opts, label) {
-  var res = await fetch(url, opts);
-  if (!res.ok) {
-    var t = '';
-    try { t = await res.text(); } catch (e) {}
-    throw new Error(label + ' failed: HTTP ' + res.status + ' ' + t);
-  }
-  return res;
-}
-
-async function _icGetLiveOnHand(itemCode) {
-  var res = await _icCheckedFetch(
-    erpUrl('erp_items?select=on_hand&item_code=eq.' + encodeURIComponent(itemCode) + '&limit=1'),
-    { method: 'GET', headers: erpHeaders(), cache: 'no-store' }, 'Read on_hand');
-  var rows = await res.json();
-  if (!rows || rows.length === 0) throw new Error('Item not found: ' + itemCode);
-  return Number(rows[0].on_hand || 0);
-}
-
-// Ilagay ang on_hand sa `target` sa pamamagitan ng isang ledger entry. Returns { before, delta }.
-async function _icSetStockViaLedger(itemCode, target, refDoc, remarks) {
-  var live = await _icGetLiveOnHand(itemCode);
-  var delta = Math.round((target - live) * 10000) / 10000;
-  if (delta !== 0) {
-    var row = {
-      item_code: itemCode,
-      transaction_type: 'ADJUSTMENT',
-      qty_in: delta > 0 ? delta : 0,
-      qty_out: delta < 0 ? Math.abs(delta) : 0,
-      reference_doc: refDoc,
-      transaction_date: new Date().toISOString(),
-      created_at: new Date().toISOString()
-    };
-    if (remarks) row.remarks = remarks;
-    await _icCheckedFetch(erpUrl('erp_stock_ledger'), {
-      method: 'POST',
-      headers: erpHeaders(),
-      body: JSON.stringify([row])
-    }, 'Ledger insert');
-  }
-  return { before: live, delta: delta };
-}
-
 async function icApproveCount() {
   if (!_ic.currentSession) return;
 
-  if (_ic.currentSession.status === 'APPROVED') {
-    icShowToast('Naka-approve na ang count na ito.', 'info');
+  if (_ic.currentSession.status !== 'PENDING_REVIEW') {
+    icShowToast('Hindi pwedeng i-approve: ' + _ic.currentSession.status, 'info');
+    return;
+  }
+  if (!icIsAdmin()) {
+    icShowToast('Admin lang ang pwedeng mag-approve.', 'warning');
     return;
   }
 
   var countNo = _ic.currentSession.count_no;
-  
-  var varianceItems = _ic.currentItems.filter(function(it) {
-    var isCounted = (it.scan_count > 0 || Number(it.counted_qty) > 0);
-    var hasVariance = Math.abs(Number(it.variance || 0)) > 0.0001;
-    return isCounted && hasVariance;
+  var adjust = 0, matched = 0, uncounted = 0;
+  _ic.currentItems.forEach(function(it) {
+    if (!icIsCounted(it)) { uncounted++; return; }
+    if (Math.abs(icEffectiveVariance(it)) > 0.0001) adjust++; else matched++;
   });
 
-  if (varianceItems.length === 0) {
-    icShowToast('Walang variance na ma-adjust. All matched.', 'info');
-    return;
+  if (adjust === 0) {
+    if (!confirm('Walang variance na ma-aadjust (' + matched + ' matched, ' + uncounted + ' not counted).\n\nI-approve pa rin at isara ang count?')) return;
+  } else {
+    var msg = 'Approve this count and adjust stock?\n\n' +
+      'Count No.: ' + countNo + '\n' +
+      'Items to adjust: ' + adjust + '\n' +
+      'Matched: ' + matched + '\n' +
+      'Not counted (hindi gagalawin): ' + uncounted + '\n\n' +
+      'Ia-adjust ang stock base sa bilang MINUS ang mga galaw (MRIF/MRR/MRS) pagkatapos ng bilang.\n' +
+      'Lahat o wala: kapag may pumalya, walang magbabago.\n\nContinue?';
+    if (!confirm(msg)) return;
   }
 
-  var msg = 'Approve this count and adjust stock?\n\n';
-  msg += 'Count No.: ' + countNo + '\n';
-  msg += 'Items to adjust: ' + varianceItems.length + '\n\n';
-  msg += 'This will:\n• Update on_hand values in erp_items\n• Create stock ledger entries\n• Log all changes to audit trail\n\nContinue?';
-
-  if (!confirm(msg)) return;
-
-  var btn = document.querySelector('button[onclick="icApproveCount()"]');
+  var btn = document.getElementById('btnReviewApprove');
   var originalHtml = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Approving...'; }
 
   try {
-    var currentUser = localStorage.getItem('ivm_userFullname') || 'SUPERVISOR';
-    var adjustCount = 0;
-
-    for (var i = 0; i < varianceItems.length; i++) {
-      var item = varianceItems[i];
-      var newOnHand = Number(item.counted_qty || 0);
-      var snapshotQty = Number(item.system_qty || 0);
-      var computedVariance = newOnHand - snapshotQty;
-
-      // 1. Stock adjustment via ledger (trigger ang mag-a-update ng on_hand)
-      var adj = await _icSetStockViaLedger(item.item_code, newOnHand, countNo);
-
-      // 2. Audit records
-      await _icCheckedFetch(erpUrl('erp_inventory_variances'), {
-        method: 'POST',
-        headers: erpHeaders(),
-        body: JSON.stringify([{
-          count_no: countNo,
-          item_code: item.item_code,
-          description: item.description,
-          system_qty: snapshotQty,
-          counted_qty: newOnHand,
-          variance_qty: computedVariance,
-          unit: item.unit || 'PIECE',
-          approved_by: currentUser
-        }])
-      }, 'Variance record');
-
-      await _icCheckedFetch(erpUrl('erp_stock_adjustments'), {
-        method: 'POST',
-        headers: erpHeaders(),
-        body: JSON.stringify([{
-          adjustment_no: 'ADJ-' + countNo,
-          item_code: item.item_code,
-          old_on_hand: adj.before,
-          new_on_hand: newOnHand,
-          variance: adj.delta,
-          reason: 'Inventory Count Adjustment',
-          reference_doc: countNo,
-          adjusted_by: currentUser,
-          adjusted_at: new Date().toISOString()
-        }])
-      }, 'Adjustment record');
-
-      adjustCount++;
-    }
-
-    await _icCheckedFetch(erpUrl('erp_inventory_counts?id=eq.' + _ic.currentSession.id), {
-      method: 'PATCH',
-      headers: erpHeaders(),
-      body: JSON.stringify({
-        status: 'APPROVED',
-        approved_by: currentUser,
-        approved_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-    });
-
-    _ic.currentSession.status = 'APPROVED';
-    icShowToast('✅ Approved! Adjusted ' + adjustCount + ' items', 'success');
-
-    setTimeout(function() { 
-      icBackToList(); 
-    }, 1500);
-
+    var r = await icRpc('erp_ic_approve', { p_count_id: _ic.currentSession.id, p_user: icCurrentUser('SUPERVISOR') });
+    icShowToast('✅ Approved! Adjusted ' + r.adjusted + ' item(s), ' + r.matched + ' matched, ' + r.not_counted + ' not counted', 'success');
+    setTimeout(function() { icBackToList(); }, 1500);
   } catch(err) {
     console.error('[icApproveCount]', err);
     icShowToast('Failed: ' + err.message, 'danger');
@@ -1295,65 +1163,74 @@ async function icApproveCount() {
   }
 }
 
-window.icApproveCount = icApproveCount;
-
 async function icRejectCount() {
   if (!_ic.currentSession) return;
-
-  var reason = prompt('Rejection reason (required):', '');
-  if (reason === null) return;
-  reason = String(reason).trim();
-  if (!reason) { icShowToast('Rejection reason is required', 'warning'); return; }
+  if (!icIsAdmin()) { icShowToast('Admin lang ang pwedeng mag-reject.', 'warning'); return; }
 
   var isApproved = _ic.currentSession.status === 'APPROVED';
 
+  var reason = prompt((isApproved ? 'Reason for REVERSING this approved count (required):' : 'Rejection reason (required):'), '');
+  if (reason === null) return;
+  reason = String(reason).trim();
+  if (!reason) { icShowToast('Reason is required', 'warning'); return; }
+
   if (isApproved) {
-    if (!confirm('⚠️ WARNING: This count is already APPROVED and stock has been adjusted.\n\nRejecting it will REVERSE the stock adjustments to restore the original quantities.\n\nContinue?')) {
+    if (!confirm('⚠️ WARNING: This count is already APPROVED and stock has been adjusted.\n\n' +
+                 'Ibabalik ang EKSAKTONG adjustment na ginawa ng count na ito (hindi mabubura ang ibang transaksyon pagkatapos).\n' +
+                 'Kapag nagamit na ang stock at hindi na kayang ibalik, mabibigo ang reversal at walang magbabago.\n\nContinue?')) {
       return;
     }
   }
 
   try {
-    var currentUser = localStorage.getItem('ivm_userFullname') || 'SUPERVISOR';
-
-    if (isApproved) {
-      var varianceItems = _ic.currentItems.filter(function(it) {
-        var isCounted = (it.scan_count > 0 || Number(it.counted_qty) > 0);
-        return isCounted && Math.abs(Number(it.variance || 0)) > 0.0001;
-      });
-
-      for (var i = 0; i < varianceItems.length; i++) {
-        var item = varianceItems[i];
-        var oldSystemQty = Number(item.system_qty || 0);
-        // Ibalik sa dating system qty sa pamamagitan ng ledger (huwag i-PATCH ang on_hand)
-        await _icSetStockViaLedger(item.item_code, oldSystemQty, 'REVERSE-' + _ic.currentSession.count_no,
-          'Reversal for rejected count: ' + reason);
-      }
-      console.log('Reversed stock adjustments for', varianceItems.length, 'items');
-    }
-
-    await fetch(erpUrl('erp_inventory_counts?id=eq.' + _ic.currentSession.id), {
-      method: 'PATCH',
-      headers: erpHeaders(),
-      body: JSON.stringify({
-        status: 'REJECTED',
-        rejected_reason: reason,
-        reviewed_by: currentUser,
-        reviewed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+    var r = await icRpc('erp_ic_reject', {
+      p_count_id: _ic.currentSession.id,
+      p_reason: reason,
+      p_user: icCurrentUser('SUPERVISOR')
     });
-
-    icShowToast('Count rejected' + (isApproved ? ' and stock restored!' : ''), 'info');
+    icShowToast('Count rejected' + (isApproved ? ' — ' + r.reversed + ' adjustment(s) reversed' : ''), 'info');
     setTimeout(function() { icBackToList(); }, 1000);
-
   } catch(err) {
     console.error('[icRejectCount]', err);
-    icShowToast('Failed to reject: ' + err.message, 'danger');
+    icShowToast('Failed: ' + err.message, 'danger');
   }
 }
 
+async function icReopenSession(sessionId) {
+  if (!icIsAdmin()) { icShowToast('Admin lang ang pwedeng mag-reopen.', 'warning'); return; }
+  if (!confirm('Reopen this count for recount?\n\nMananatili ang mga naunang bilang; pwede mo silang baguhin at mag-submit ulit.')) return;
+  try {
+    await icRpc('erp_ic_reopen', { p_count_id: sessionId, p_user: icCurrentUser('SUPERVISOR') });
+    icShowToast('Count reopened — pwede nang mag-recount', 'success');
+    await icLoadSessions();
+    icOpenSession(sessionId);
+  } catch(err) {
+    console.error('[icReopenSession]', err);
+    icShowToast('Failed: ' + err.message, 'danger');
+  }
+}
+
+async function icCancelSession(sessionId) {
+  var s = _ic.sessions.find(function(x) { return x.id === sessionId; });
+  var label = s ? s.count_no : ('#' + sessionId);
+  var reason = prompt('Cancel ' + label + '?\n\nWalang magbabago sa stock. Reason (required):', '');
+  if (reason === null) return;
+  reason = String(reason).trim();
+  if (!reason) { icShowToast('Reason is required', 'warning'); return; }
+  try {
+    await icRpc('erp_ic_cancel', { p_count_id: sessionId, p_reason: reason, p_user: icCurrentUser() });
+    icShowToast('Count cancelled', 'info');
+    await icLoadSessions();
+  } catch(err) {
+    console.error('[icCancelSession]', err);
+    icShowToast('Failed: ' + err.message, 'danger');
+  }
+}
+
+window.icApproveCount = icApproveCount;
 window.icRejectCount = icRejectCount;
+window.icReopenSession = icReopenSession;
+window.icCancelSession = icCancelSession;
 
 // ═══════════════════════════════════════════════════════════
 // MANUAL ENTRY MODAL
@@ -1385,15 +1262,17 @@ function icRenderManualEntry() {
     return;
   }
 
+  // Blangko = hindi pa nabilang. I-type ang 0 para markahang nabilang na 0.
   var html = '';
   items.forEach(function(it, idx) {
+    var counted = icIsCounted(it);
     html += '<tr>' +
       '<td>' + (idx + 1) + '</td>' +
       '<td><code>' + icEsc(it.item_code) + '</code></td>' +
       '<td>' + icEsc(it.description || '—') + '</td>' +
       '<td class="text-center">' + icNum(it.system_qty) + '</td>' +
       '<td><input type="number" class="form-control form-control-sm text-center manual-count-input" ' +
-        'data-item-id="' + it.id + '" value="' + (it.counted_qty || 0) + '" min="0" step="0.01" style="width:90px;margin:0 auto;">' +
+        'data-item-id="' + it.id + '" value="' + (counted ? it.counted_qty : '') + '" placeholder="—" min="0" step="0.01" style="width:90px;margin:0 auto;">' +
       '</td>' +
       '<td class="text-center">' + icEsc(it.unit || 'PCS') + '</td>' +
       '<td><input type="text" class="form-control form-control-sm manual-remarks-input" ' +
@@ -1407,69 +1286,59 @@ function icRenderManualEntry() {
 window.icFilterManualEntry = icRenderManualEntry;
 
 async function icSaveAllManualEntry() {
-  var inputs = document.querySelectorAll('.manual-count-input');
-  var changed = 0;
+  if (!_ic.currentSession || _ic.currentSession.status !== 'IN_PROGRESS') {
+    icShowToast('Hindi na pwedeng baguhin ang bilang: ' + (_ic.currentSession ? _ic.currentSession.status : ''), 'warning');
+    return;
+  }
 
-  for (var i = 0; i < inputs.length; i++) {
-    var input = inputs[i];
-    var itemId = parseInt(input.getAttribute('data-item-id'));
-    var newCount = parseFloat(input.value) || 0;
+  var inputs = document.querySelectorAll('.manual-count-input');
+  var rows = [];
+  var invalid = false;
+
+  inputs.forEach(function(input) {
+    var raw = String(input.value).trim();
+    if (raw === '') return;                       // blangko = hindi nabilang, walang gagalawin
+    var itemId = parseInt(input.getAttribute('data-item-id'), 10);
+    var newCount = parseFloat(raw);
+    if (isNaN(newCount) || newCount < 0) { invalid = true; return; }
 
     var item = _ic.currentItems.find(function(it) { return it.id === itemId; });
-    if (!item) continue;
-
-    if (Math.abs(Number(item.counted_qty || 0) - newCount) < 0.0001) continue;
+    if (!item) return;
 
     var remarksInput = document.querySelector('.manual-remarks-input[data-item-id="' + itemId + '"]');
     var remarks = remarksInput ? remarksInput.value.trim() : '';
-    var variance = newCount - Number(item.system_qty || 0);
 
-    await fetch(erpUrl('erp_inventory_count_items?id=eq.' + itemId), {
-      method: 'PATCH',
-      headers: erpHeaders(),
-      body: JSON.stringify({
-        counted_qty: newCount,
-        variance: variance,
-        remarks: remarks,
-        counted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+    var qtyChanged = !icIsCounted(item) || Math.abs(Number(item.counted_qty || 0) - newCount) >= 0.0001;
+    var remarksChanged = remarks !== String(item.remarks || '');
+    if (!qtyChanged && !remarksChanged) return;
+
+    rows.push({ id: itemId, counted_qty: newCount, remarks: remarks });
+  });
+
+  if (invalid) { icShowToast('May maling quantity (dapat 0 o higit pa)', 'warning'); return; }
+  if (rows.length === 0) { icShowToast('No changes to save', 'info'); return; }
+
+  try {
+    var r = await icRpc('erp_ic_save_manual', {
+      p_count_id: _ic.currentSession.id,
+      p_rows: rows,
+      p_user: icCurrentUser()
     });
 
-    var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
-    await fetch(erpUrl('erp_inventory_count_logs'), {
-      method: 'POST',
-      headers: erpHeaders(),
-      body: JSON.stringify([{
-        count_id: _ic.currentSession.id,
-        count_no: _ic.currentSession.count_no,
-        item_code: item.item_code,
-        action: 'MANUAL',
-        old_qty: item.counted_qty || 0,
-        added_qty: newCount - (item.counted_qty || 0),
-        new_qty: newCount,
-        remarks: remarks,
-        logged_by: currentUser,
-        logged_at: new Date().toISOString()
-      }])
-    });
+    (r.items || []).forEach(icApplyItem);
+    icApplyStats(r.stats);
 
-    item.counted_qty = newCount;
-    item.variance = variance;
-    item.remarks = remarks;
-    item.counted_at = new Date().toISOString();
-    changed++;
+    icShowToast('✅ Saved ' + rows.length + ' item(s)', 'success');
+    icUpdateProgress();
+    icUpdateRecentScans();
+    icUpdateVarianceSummary();
+
+    var m = bootstrap.Modal.getInstance(document.getElementById('manualEntryModal'));
+    if (m) m.hide();
+  } catch(err) {
+    console.error('[icSaveAllManualEntry]', err);
+    icShowToast('Failed: ' + err.message, 'danger');
   }
-
-  if (changed === 0) icShowToast('No changes to save', 'info');
-  else icShowToast('✅ Saved ' + changed + ' item(s)', 'success');
-
-  await icUpdateSessionStats();
-  icUpdateProgress();
-  icUpdateRecentScans();
-  icUpdateVarianceSummary();
-
-  bootstrap.Modal.getInstance(document.getElementById('manualEntryModal')).hide();
 }
 
 window.icSaveAllManualEntry = icSaveAllManualEntry;
@@ -1620,4 +1489,4 @@ window.icSubmitForReview = icSubmitForReview;
 window.icApproveCount = icApproveCount;
 window.icRejectCount = icRejectCount;
 
-console.log('✅ inventory-count.js v1.2 loaded (UI bugs fixed)');
+console.log('✅ inventory-count.js v1.3 loaded (atomic RPC flow)');
