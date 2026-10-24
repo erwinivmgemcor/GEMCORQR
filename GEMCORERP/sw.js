@@ -6,8 +6,8 @@
 //  - Auto-cleanup of old caches
 // ============================================================
 
-const CACHE_NAME = 'gemcor-erp-v1.0.0';
-const RUNTIME_CACHE = 'gemcor-erp-runtime-v1.0.0';
+const CACHE_NAME = 'gemcor-erp-v1.0.1';
+const RUNTIME_CACHE = 'gemcor-erp-runtime-v1.0.1';
 
 // ═══════════════════════════════════════════════════════════
 // STATIC ASSETS — Pre-cache on install
@@ -123,7 +123,24 @@ self.addEventListener('fetch', function(event) {
   // Only handle same-origin requests
   if (url.indexOf('/GEMCORQR/') === -1) return;
   
-  // ═══ Stale-while-revalidate ═══
+  // ═══ Network-first for HTML/JS/CSS — para laging bago ang code (iwas lumang JS) ═══
+  var path = url.split('?')[0];
+  if (/\.(js|html|css)$/i.test(path)) {
+    event.respondWith(
+      fetch(event.request).then(function(response) {
+        if (response && response.status === 200) {
+          var copy = response.clone();
+          caches.open(RUNTIME_CACHE).then(function(c) { c.put(event.request, copy); }).catch(function() {});
+        }
+        return response;
+      }).catch(function() {
+        return caches.match(event.request);
+      })
+    );
+    return;
+  }
+
+  // ═══ Stale-while-revalidate (images, etc.) ═══
   // Return cached version if available, fetch fresh in background
   event.respondWith(
     caches.open(RUNTIME_CACHE).then(function(cache) {
