@@ -244,11 +244,15 @@ async function mrifListView(docNo) {
     html += '<div><strong>Requestor:</strong> ' + erpEsc(info.Requestor || '—') + '</div>';
     html += '<div><strong>Department:</strong> ' + erpEsc(info.Department || '—') + '</div>';
     html += '<div><strong>JO No.:</strong> ' + erpEsc(info['JO No.'] || '—') + '</div>';
-    html += '<div><strong>GEM SO No.:</strong> ' + erpEsc(info['GEM SO No.'] || '—') + '</div>';
+    html += '<div><strong>GEM SO No. (SOF#):</strong> ' + erpEsc(info['GEM SO No.'] || '—') + '</div>';
+    html += '<div><strong>Client:</strong> ' + erpEsc(info['Client Name'] || '—') + '</div>';
+    html += '<div><strong>Project:</strong> ' + erpEsc(info.Project || '—') + '</div>';
+    html += '<div><strong>Date:</strong> ' + erpEsc(info.Date || '—') + '</div>';
+    html += '<div><strong>Status:</strong> ' + erpEsc(info.Status || '—') + '</div>';
     html += '</div>';
     
     html += '<table class="table table-sm table-bordered"><thead><tr>';
-    html += '<th>#</th><th>Item Code</th><th>Description</th><th>Qty</th><th>Unit</th><th>Remarks</th>';
+    html += '<th>#</th><th>Item Code</th><th>Description</th><th>Req. Qty</th><th>Issued Qty</th><th>Unit</th><th>Remarks</th>';
     html += '</tr></thead><tbody>';
     items.forEach(function(it, i) {
       html += '<tr>' +
@@ -256,6 +260,7 @@ async function mrifListView(docNo) {
         '<td><code>' + erpEsc(it.inventoryId) + '</code></td>' +
         '<td>' + erpEsc(it.description) + '</td>' +
         '<td>' + (it.expectedQty || 0) + '</td>' +
+        '<td>' + (it.issuedQty || 0) + '</td>' +
         '<td>' + erpEsc(it.unit) + '</td>' +
         '<td>' + erpEsc(it.remarks) + '</td>' +
         '</tr>';
@@ -445,4 +450,4 @@ function mrifListRefresh() {
   mrifCheckHealth();
 }
 
-console.log('✅ mrif-list.js v2.1 loaded (null-safe KPI updates)');
+console.log('✅ mrif-list.js v2.2 loaded (details modal + SOF#)');
