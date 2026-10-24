@@ -9,24 +9,61 @@
 // ═══════════════════════════════════════════════════════════
 async function erpFetch(table, query, opts) {
   opts = opts || {};
+  var method = (opts.method || 'GET').toUpperCase();
   var url = erpUrl(table);
   if (query) url += '?' + query;
-  
-  var res = await fetch(url, {
-    method: opts.method || 'GET',
-    headers: erpHeaders(opts.headers),
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-    cache: 'no-store'
-  });
-  
-  if (!res.ok) {
-    var errText = await res.text();
-    throw new Error('ERP API ' + table + ' failed: ' + res.status + ' ' + errText);
+
+  // Reliability: timeout para hindi mag-hang; retry para sa GET lang.
+  // Hindi nagre-retry ang POST/PATCH/DELETE para walang dobleng sulat.
+  var maxAttempts = (method === 'GET') ? 3 : 1;
+  var timeoutMs = opts.timeoutMs || 25000;
+  var lastErr;
+
+  for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function() { ctrl.abort(); }, timeoutMs) : null;
+    try {
+      var res = await fetch(url, {
+        method: method,
+        headers: erpHeaders(opts.headers),
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+        cache: 'no-store',
+        signal: ctrl ? ctrl.signal : undefined
+      });
+      if (timer) clearTimeout(timer);
+
+      if (!res.ok) {
+        var errText = await res.text();
+        var err = new Error('ERP API ' + table + ' failed: ' + res.status + ' ' + errText);
+        err.status = res.status;
+        // 5xx at 429 lang ang pwedeng subukan ulit
+        if ((res.status >= 500 || res.status === 429) && attempt < maxAttempts) {
+          lastErr = err;
+          await new Promise(function(r) { setTimeout(r, 400 * attempt); });
+          continue;
+        }
+        throw err;
+      }
+
+      if (method === 'DELETE') return { success: true };
+      return await res.json();
+    } catch (e) {
+      if (timer) clearTimeout(timer);
+      if (e && e.status) throw e; // HTTP error na, huwag nang i-wrap
+      // network error o timeout
+      lastErr = (e && e.name === 'AbortError')
+        ? new Error('ERP API ' + table + ' timed out after ' + Math.round(timeoutMs / 1000) + 's')
+        : new Error('ERP API ' + table + ' network error: ' + (e && e.message ? e.message : e));
+      if (attempt < maxAttempts) {
+        await new Promise(function(r) { setTimeout(r, 400 * attempt); });
+        continue;
+      }
+      throw lastErr;
+    }
   }
-  
-  if (opts.method === 'DELETE') return { success: true };
-  return await res.json();
+  throw lastErr;
 }
+
 
 // ═══════════════════════════════════════════════════════════
 // FETCH ALL (paginated) — Supabase/PostgREST caps each request at
@@ -580,3 +617,26 @@ function erpClearInventoryCache() {
 }
 
 console.log('✅ erp-supabase.js loaded — v3 (with deprecated filters)');
+
+
+// ═══════════════════════════════════════════════════════════
+// GLOBAL SAFETY NET — hindi na tahimik ang mga hindi nahuling error
+// ═══════════════════════════════════════════════════════════
+(function() {
+  if (window.__erpGlobalErrors) return;
+  window.__erpGlobalErrors = true;
+  var lastShown = 0;
+  function notify(msg) {
+    var now = Date.now();
+    if (now - lastShown < 5000) return; // iwas spam
+    lastShown = now;
+    try {
+      if (typeof erpShowToast === 'function') erpShowToast('Something went wrong: ' + msg, 'danger');
+    } catch(e) {}
+  }
+  window.addEventListener('unhandledrejection', function(ev) {
+    var m = ev && ev.reason && ev.reason.message ? ev.reason.message : String(ev && ev.reason);
+    console.error('[ERP unhandled]', ev && ev.reason);
+    notify(m.length > 140 ? m.slice(0, 140) + '…' : m);
+  });
+})();
