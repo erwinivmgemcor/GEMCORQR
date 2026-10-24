@@ -1281,8 +1281,8 @@ async function erpShowItemDetails(itemCode) {
   modal.show();
 
   try {
-    var results = await Promise.all([erpGetItemDetails(itemCode), erpGetItemMovements(itemCode, 20)]);
-    var dRes = results[0], mRes = results[1];
+    var results = await Promise.all([erpGetItemDetails(itemCode), erpGetItemMovements(itemCode, 50), erpGetManualOnHandEdits(itemCode, 100)]);
+    var dRes = results[0], mRes = results[1], editRows = results[2] || [];
     if (!dRes.success) {
       body.innerHTML = '<div class="text-center text-danger py-4">' + erpEsc(dRes.error) + '</div>';
       return;
@@ -1317,22 +1317,29 @@ async function erpShowItemDetails(itemCode) {
       '</div>';
 
     html += '<h6 class="fw-bold mt-3 mb-2"><i class="bi bi-clock-history me-1"></i>Recent Movements</h6>';
-    var mv = (mRes && mRes.movements) || [];
+    var mv = erpMergeManualAdjustments((mRes && mRes.movements) || [], editRows).slice(0, 50);
     if (mv.length === 0) {
       html += '<div class="text-muted small">Walang movements.</div>';
     } else {
       html += '<div class="table-responsive"><table class="erp-table"><thead><tr>' +
         '<th>Date</th><th>Type</th><th class="text-end">In</th><th class="text-end">Out</th>' +
-        '<th class="text-end">Balance</th><th>Reference</th></tr></thead><tbody>';
+        '<th class="text-end">Balance</th><th>Reference / Reason</th></tr></thead><tbody>';
       mv.forEach(function(m) {
         var d = m.transaction_date || m.created_at;
         var ds = d ? new Date(d).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
         var qin = Number(m.qty_in || 0), qout = Number(m.qty_out || 0);
-        html += '<tr><td>' + erpEsc(ds) + '</td><td>' + erpEsc(m.transaction_type || '—') + '</td>' +
+        var isAdj = m._synthetic || String(m.transaction_type || '').toUpperCase().indexOf('ADJ') !== -1;
+        var typeCell = isAdj
+          ? '<span class="badge bg-warning text-dark">ADJ</span>'
+          : erpEsc(m.transaction_type || '—');
+        var refCell = erpEsc(m.reference_doc || '') +
+          (m._synthetic && m.reason ? ' <span class="text-muted small">— ' + erpEsc(m.reason) + '</span>' : '') +
+          (m._synthetic && m.performed_by ? ' <span class="text-muted small">(' + erpEsc(m.performed_by) + ')</span>' : '');
+        html += '<tr' + (isAdj ? ' style="background:#fffbeb;"' : '') + '><td>' + erpEsc(ds) + '</td><td>' + typeCell + '</td>' +
           '<td class="text-end text-success">' + (qin ? '+' + erpNum(qin) : '') + '</td>' +
           '<td class="text-end text-danger">' + (qout ? '-' + erpNum(qout) : '') + '</td>' +
           '<td class="text-end">' + (m.balance_after !== null && m.balance_after !== undefined ? erpNum(m.balance_after) : '') + '</td>' +
-          '<td>' + erpEsc(m.reference_doc || '') + '</td></tr>';
+          '<td>' + refCell + '</td></tr>';
       });
       html += '</tbody></table></div>';
     }
