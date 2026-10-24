@@ -1,6 +1,6 @@
 // ============================================================
 // GEMCOR ERP — Process MRIF (Warehouse)
-// v4.0 — FINAL (Fixed Validation, Payload, & UI)
+// v3.4 — SOF Priority Deduction + Ledger via SECURITY DEFINER RPC
 // ============================================================
 
 var _process = {
@@ -18,7 +18,7 @@ var _process = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Process MRIF v4.0] Initializing...');
+  console.log('[Process MRIF] Initializing v3.4...');
 
   var urlParams = new URLSearchParams(window.location.search);
   _process.docNo = urlParams.get('doc') || '';
@@ -72,7 +72,7 @@ async function processCheckHealth() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// LOAD DOCUMENT
+// LOAD DOCUMENT + ITEMS
 // ═══════════════════════════════════════════════════════════
 async function loadDocument() {
   try {
@@ -97,12 +97,16 @@ async function loadDocument() {
         remarks: it.remarks || 'PENDING',
         verified: false,
         selected: false,
-        scanned: false
+        scanned: false,
+        originalQty: Number(it.issued_qty || 0),
+        originalRemarks: it.remarks || 'PENDING'
       };
     });
 
     _process.items.forEach(function(it) {
-      if (it.issuedQty > 0) it.verified = true;
+      if (it.issuedQty > 0) {
+        it.verified = true;
+      }
     });
 
     renderDocInfo();
@@ -443,7 +447,7 @@ function updateProgress() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUBMIT PROCESS
+// SUBMIT (SOF Priority Deduction + Ledger RPC)
 // ═══════════════════════════════════════════════════════════
 async function submitProcess() {
   if (_process.isSubmitting) return;
@@ -454,7 +458,33 @@ async function submitProcess() {
     return;
   }
 
+  // ✅ VALIDATION: Check kung sapat ang stock bago mag-submit
+  var sofNo = _process.doc.sof_no || _process.doc.gem_so_no || '';
+  
+  if (!sofNo) {
+    // Kung walang SOF, i-check ang physical on_hand
+    // Codes lang ng items na ipo-process ang kukunin (ang dating 'lahat ng items' ay naputol sa 1000 rows)
+    var codeList = verifiedItems.map(function(v) { return '"' + String(v.itemCode).replace(/"/g, '') + '"'; });
+    var allItems = await erpFetchAll('erp_items',
+      'select=item_code,on_hand&item_code=in.(' + encodeURIComponent(codeList.join(',')) + ')&order=item_code.asc');
+    var stockMap = {};
+    (allItems || []).forEach(function(it) { stockMap[it.item_code] = Number(it.on_hand || 0); });
+
+    for (var i = 0; i < verifiedItems.length; i++) {
+      var item = verifiedItems[i];
+      var currentStock = stockMap[item.itemCode] || 0;
+      var issueQty = Number(item.issuedQty);
+
+      if (currentStock < issueQty) {
+        erpShowToast('❌ Insufficient stock for ' + item.itemCode + '. Current: ' + currentStock + ', Attempted: ' + issueQty, 'danger');
+        return; // Pigilan ang submission
+      }
+    }
+  }
+
   if (!confirm('Submit ' + verifiedItems.length + ' item(s)?')) return;
+
+  // ... (yung natitirang code ng submitProcess, hayaan mo lang) ...
 
   _process.isSubmitting = true;
   var btn = document.getElementById('btnSubmitProcess');
@@ -464,16 +494,19 @@ async function submitProcess() {
 
   try {
     var currentUser = localStorage.getItem('ivm_userFullname') || 'WAREHOUSE';
+    var sofNo = _process.doc.sof_no || _process.doc.gem_so_no || '';
     
-    // ✅ Tamang payload format
+    // 1. I-process muna ang MRIF
     var itemsPayload = verifiedItems.map(function(it) {
       return {
         id: it.id,
-        issued_qty: Number(it.issuedQty),
+        issued_qty: it.issuedQty,
         remarks: it.remarks || ''
       };
     });
 
+    console.log('[submitProcess] Calling RPC erp_process_mrif...');
+    
     var res = await fetch(erpUrl('rpc/erp_process_mrif'), {
       method: 'POST',
       headers: erpHeaders(),
@@ -487,22 +520,131 @@ async function submitProcess() {
 
     if (!res.ok) {
       var errText = await res.text();
-      throw new Error('RPC Error: ' + res.status);
+      var errMsg = errText;
+      try {
+        var ej = JSON.parse(errText);
+        errMsg = [ej.message, ej.details, ej.hint].filter(Boolean).join(' | ') || errText;
+      } catch (pe) {}
+      console.error('[erp_process_mrif] HTTP ' + res.status + ' payload:', itemsPayload, 'response:', errText);
+      throw new Error(errMsg || ('RPC Error: HTTP ' + res.status));
     }
 
     var data = await res.json();
     if (!data || !data.success) {
-      throw new Error(data.error || 'Failed to process');
+      throw new Error((data && data.error) || 'Failed to process');
     }
 
-    // Success flow
+    // ═══════════════════════════════════════════════════════════
+    // ✅ STEP 2: SOF PRIORITY DEDUCTION + LEDGER RPC
+    // ═══════════════════════════════════════════════════════════
+    if (sofNo && sofNo.trim() !== '') {
+      try {
+        console.log('[MRIF Process] Starting SOF Priority Deduction for:', sofNo);
+        
+        var sofAllocRes = await erpFetch('erp_sof_allocations', 'select=id&sof_no=eq.' + encodeURIComponent(sofNo.trim()) + '&limit=1');
+        
+        if (sofAllocRes && sofAllocRes.length > 0) {
+          var sofId = sofAllocRes[0].id;
+          
+          for (var i = 0; i < verifiedItems.length; i++) {
+            var item = verifiedItems[i];
+            var qtyToDeduct = Number(item.issuedQty);
+            
+            var allocItemRes = await erpFetch('erp_sof_allocation_items', 
+              'select=id,allocated_qty,used_qty&sof_id=eq.' + sofId + 
+              '&item_code=eq.' + encodeURIComponent(item.itemCode.trim()) + '&limit=1');
+            
+            if (allocItemRes && allocItemRes.length > 0) {
+              var allocItem = allocItemRes[0];
+              var currentUsed = Number(allocItem.used_qty || 0);
+              var currentAllocated = Number(allocItem.allocated_qty || 0);
+              
+              var newUsedQty = currentUsed + qtyToDeduct;
+              
+              // Update SOF via RPC (Bypass triggers)
+              var updateRes = await fetch(erpUrl('rpc/erp_sof_final_update'), {
+                method: 'POST',
+                headers: erpHeaders(),
+                body: JSON.stringify({
+                  p_item_code: item.itemCode.trim(),
+                  p_sof_no: sofNo.trim(),
+                  p_new_used_qty: newUsedQty
+                })
+              });
+
+              var updateData = await updateRes.json();
+              console.log('[SOF Ultimate Update]:', updateData);
+              
+              var overAllocated = newUsedQty - currentAllocated;
+              
+              if (overAllocated > 0) {
+                console.log('[SOF] ⚠️ Over-allocated by ' + overAllocated + '. Deducting from Physical Stock.');
+                await fetch(erpUrl('rpc/erp_final_adjust_stock'), {
+                  method: 'POST',
+                  headers: erpHeaders(),
+                  body: JSON.stringify({
+                    p_item_code: item.itemCode,
+                    p_qty: overAllocated
+                  })
+                }).catch(function(e) { console.warn('Physical stock adjust failed:', e); });
+              }
+              
+              console.log('[SOF] ✅ Updated Item:', item.itemCode, '| New Used:', newUsedQty);
+
+              // ✅ LEDGER VIA RPC (Gamit ang RPC na may SECURITY DEFINER)
+              try {
+                var ledgerPayload = {
+                  p_item_code: item.itemCode.trim(),
+                  p_qty: qtyToDeduct,
+                  p_reference_doc: _process.docNo,
+                  p_performed_by: currentUser,
+                  p_remarks: 'Issued via SOF: ' + sofNo
+                };
+                
+                console.log('[Ledger] Calling RPC with payload:', ledgerPayload);
+
+                var ledgerRes = await fetch(erpUrl('rpc/erp_insert_stock_ledger'), {
+                  method: 'POST',
+                  headers: erpHeaders(),
+                  body: JSON.stringify(ledgerPayload)
+                });
+                
+                if (!ledgerRes.ok) {
+                  var ledgerErrText = await ledgerRes.text();
+                  throw new Error('Ledger RPC failed: ' + ledgerRes.status + ' ' + ledgerErrText);
+                }
+                
+                var ledgerData = await ledgerRes.json();
+                console.log('[Ledger RPC Success]:', ledgerData);
+              } catch(ledgerErr) {
+                console.error('[Ledger] ❌ FAILED TO INSERT MOVEMENT:', ledgerErr);
+              }
+            }
+          }
+          erpShowToast('✅ SOF Allocated & Stock updated!', 'success');
+        } else {
+          console.log('[SOF] No SOF allocation found for:', sofNo);
+        }
+      } catch(sofErr) {
+        console.error('[MRIF Process] SOF deduction error:', sofErr);
+        erpShowToast('Failed to deduct SOF, but MRIF was saved', 'warning');
+      }
+    }
+    // ═══════════════════════════════════════════════════════════
+
     document.getElementById('successDocNo').textContent = _process.docNo;
     document.getElementById('successStatus').textContent = data.status;
+
+    if (data.bal_doc) {
+      var successStatusEl = document.getElementById('successStatus');
+      successStatusEl.innerHTML += '<br><br><span class="text-warning fw-bold"><i class="bi bi-info-circle me-1"></i>Note: A Balance document was created: <u>' + data.bal_doc + '</u></span>';
+    }
+
     var modal = new bootstrap.Modal(document.getElementById('successModal'));
     modal.show();
     
   } catch(err) {
-    console.error('[submitProcess] ERROR:', err);
+    console.error('[submitProcess] ❌ ERROR:', err);
     erpShowToast('Submit failed: ' + err.message, 'danger');
     btn.disabled = false;
     btn.innerHTML = originalHtml;
@@ -575,4 +717,4 @@ function erpShowToast(msg, type) {
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4000 }).show();
 }
 
-console.log('✅ process-mrif.js v4.0 loaded (FINAL)');
+console.log('✅ process-mrif.js v3.4 loaded (SOF + Ledger RPC)');
