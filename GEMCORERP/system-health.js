@@ -1304,7 +1304,7 @@ async function shDownloadBackup() {
 
   try {
     // Get all data
-    var items = await erpFetch('erp_items', 'select=*&is_deleted=eq.false');
+    var items = await erpFetchAll('erp_items', 'select=*&is_deleted=eq.false&order=item_code.asc');
     var users = await erpFetch('users', 'select=*');
     var vendors = await erpFetch('vendors', 'select=*');
     var requestors = await erpFetch('requestors', 'select=*');
