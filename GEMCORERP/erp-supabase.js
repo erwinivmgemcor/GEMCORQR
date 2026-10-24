@@ -16,7 +16,589 @@ async function erpFetch(table, query, opts) {
     method: opts.method || 'GET',
     headers: erpHeaders(opts.headers),
     body: opts.body ? JSON.stringify(opts.body) : undefined,
+    cache: 'no-store'// ============================================================
+// GEMCOR ERP — Supabase API Layer (v3)
+// All reads/writes to erp_* tables
+// FIXED: Added is_deprecated_2026 + is_active filters
+// ============================================================
+
+// ═══════════════════════════════════════════════════════════
+// CORE FETCH
+// ═══════════════════════════════════════════════════════════
+async function erpFetch(table, query, opts) {
+  opts = opts || {};
+  var url = erpUrl(table);
+  if (query) url += '?' + query;
+  
+  var res = await fetch(url, {
+    method: opts.method || 'GET',
+    headers: erpHeaders(opts.headers),
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
     cache: 'no-store'
+  });
+  
+  if (!res.ok) {
+    var errText = await res.text();
+    throw new Error('ERP API ' + table + ' failed: ' + res.status + ' ' + errText);
+  }
+  
+  if (opts.method === 'DELETE') return { success: true };
+  return await res.json();
+}
+
+// ═══════════════════════════════════════════════════════════
+// FETCH ALL (paginated) — Supabase/PostgREST caps each request at
+// 1000 rows kahit mas mataas ang &limit=. Ito ang gamitin para sa
+// lahat ng query na maaaring lumampas ng 1000 rows.
+// Tip: laging may stable `order=` (may unique column) sa query.
+// ═══════════════════════════════════════════════════════════
+async function erpFetchAll(table, query, opts) {
+  var pageSize = 1000;
+  var maxPages = 100;
+  var base = String(query || '').replace(/(^|&)(limit|offset)=\d+/g, '').replace(/^&/, '');
+  var all = [];
+  for (var page = 0; page < maxPages; page++) {
+    var q = (base ? base + '&' : '') + 'limit=' + pageSize + '&offset=' + (page * pageSize);
+    var rows = await erpFetch(table, q, opts);
+    if (!rows || rows.length === 0) break;
+    all = all.concat(rows);
+    if (rows.length < pageSize) break;
+  }
+  return all;
+}
+window.erpFetchAll = erpFetchAll;
+
+// ═══════════════════════════════════════════════════════════
+// STOCK SUMMARY
+// ═══════════════════════════════════════════════════════════
+async function erpGetStockSummary(force) {
+  var cacheKey = 'stock_summary_v2';  // ★ Bumped version
+  if (!force) {
+    var cached = erpGetCache(cacheKey);
+    if (cached) return { success: true, summary: cached, _cached: true };
+  }
+  
+  try {
+    var rows = await erpFetch('erp_v_stock_summary', 'select=*&limit=1');
+    var summary = rows[0] || {};
+    erpSetCache(cacheKey, summary, ERP_CACHE_TTL.STOCK_SUMMARY);
+    return { success: true, summary: summary };
+  } catch(err) {
+    console.error('[erpGetStockSummary]', err);
+    return { success: false, error: err.message, summary: {} };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// ALL ITEMS
+// ★ FIXED: Added is_active, is_deleted, is_deprecated_2026 filters
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// ALL ITEMS — WITH PAGINATION (v2)
+// ✅ FIXED: Bypasses Supabase 1000-row limit
+// ✅ Fetches ALL items (2,384+) instead of just 1,000
+// ═══════════════════════════════════════════════════════════
+async function erpGetAllItems(filters) {
+  filters = filters || {};
+  
+  var allItems = [];
+  var pageSize = 1000;
+  var offset = 0;
+  var hasMore = true;
+  var maxPages = 20;  // Safety cap: 20,000 items max
+  var pageNum = 0;
+  
+  console.log('[erpGetAllItems] Starting paginated fetch...');
+  
+  while (hasMore && pageNum < maxPages) {
+    pageNum++;
+    
+    // ═══ Build query for this page ═══
+    var query = 'select=*&order=item_code.asc';
+    query += '&limit=' + pageSize;
+    query += '&offset=' + offset;
+    
+    // ═══ ALWAYS FILTER ═══
+    query += '&is_active=eq.true';
+    query += '&is_deleted=eq.false';
+    query += '&is_deprecated_2026=eq.false';
+    
+    // ═══ Optional filters ═══
+    if (filters.category) {
+      query += '&category=eq.' + encodeURIComponent(filters.category);
+    }
+    if (filters.location) {
+      query += '&location=eq.' + encodeURIComponent(filters.location);
+    }
+    if (filters.movement) {
+      query += '&inventory_movement=eq.' + encodeURIComponent(filters.movement);
+    }
+    if (filters.abc) {
+      query += '&abc_classification=eq.' + encodeURIComponent(filters.abc);
+    }
+    if (filters.search) {
+      query += '&or=(item_code.ilike.*' + encodeURIComponent(filters.search) + 
+               '*,description.ilike.*' + encodeURIComponent(filters.search) + '*)';
+    }
+    
+    try {
+      var rows = await erpFetch('erp_items', query);
+      
+      if (!rows || rows.length === 0) {
+        console.log('[erpGetAllItems] Page ' + pageNum + ': empty — done');
+        hasMore = false;
+        break;
+      }
+      
+      allItems = allItems.concat(rows);
+      offset += rows.length;
+      
+      console.log('[erpGetAllItems] Page ' + pageNum + ': fetched ' + 
+                  rows.length + ' items (total: ' + allItems.length + ')');
+      
+      // ═══ If fewer than pageSize, we've reached the end ═══
+      if (rows.length < pageSize) {
+        hasMore = false;
+      }
+      
+    } catch(err) {
+      console.error('[erpGetAllItems] Page ' + pageNum + ' failed:', err.message);
+      hasMore = false;
+    }
+  }
+  
+  console.log('[erpGetAllItems] ✅ COMPLETE — Total fetched: ' + allItems.length + ' items');
+  
+  return { 
+    success: true, 
+    items: allItems, 
+    count: allItems.length 
+  };
+}
+// ═══════════════════════════════════════════════════════════
+// ITEM DETAILS
+// ═══════════════════════════════════════════════════════════
+async function erpGetItemDetails(itemCode) {
+  try {
+    var rows = await erpFetch('erp_items',
+      'item_code=eq.' + encodeURIComponent(itemCode) +
+      '&is_active=eq.true' +
+      '&is_deleted=eq.false' +
+      '&is_deprecated_2026=eq.false' +
+      '&limit=1');
+    
+    if (!rows || rows.length === 0) {
+      return { success: false, error: 'Item not found or inactive' };
+    }
+    
+    return { success: true, item: rows[0] };
+  } catch(err) {
+    console.error('[erpGetItemDetails]', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// ITEM MOVEMENTS
+// ═══════════════════════════════════════════════════════════
+async function erpGetItemMovements(itemCode, limit) {
+  limit = limit || 50;
+  try {
+    var rows = await erpFetch('erp_stock_ledger',
+      'item_code=eq.' + encodeURIComponent(itemCode) +
+      '&order=transaction_date.desc&limit=' + limit);
+    return { success: true, movements: rows || [] };
+  } catch(err) {
+    return { success: false, error: err.message, movements: [] };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// REORDER LIST
+// ═══════════════════════════════════════════════════════════
+async function erpGetReorderList(force) {
+  var cacheKey = 'reorder_list_v2';
+  if (!force) {
+    var cached = erpGetCache(cacheKey);
+    if (cached) return { success: true, items: cached, _cached: true };
+  }
+  
+  try {
+    var rows = await erpFetch('erp_v_reorder_list', 'select=*');
+    erpSetCache(cacheKey, rows, ERP_CACHE_TTL.REORDER);
+    return { success: true, items: rows || [] };
+  } catch(err) {
+    console.error('[erpGetReorderList]', err);
+    return { success: false, error: err.message, items: [] };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// WEEKLY MOVEMENT (view-based)
+// ═══════════════════════════════════════════════════════════
+async function erpGetWeeklyMovement(force) {
+  var cacheKey = 'weekly_movement_v2';
+  if (!force) {
+    var cached = erpGetCache(cacheKey);
+    if (cached) return { success: true, items: cached, _cached: true };
+  }
+  
+  try {
+    var rows = await erpFetch('erp_v_weekly_movement', 'select=*&limit=5000');
+    erpSetCache(cacheKey, rows, ERP_CACHE_TTL.WEEKLY);
+    return { success: true, items: rows || [] };
+  } catch(err) {
+    console.error('[erpGetWeeklyMovement]', err);
+    return { success: false, error: err.message, items: [] };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// WEEKLY DATA FOR SPECIFIC WEEK (Mon-Sun)
+// ★ FIXED: Added is_deprecated_2026 filter
+// ═══════════════════════════════════════════════════════════
+async function erpGetWeeklyData(weekStartISO, weekEndISO) {
+  try {
+    // 1. Fetch all active items
+    var items = await erpFetchAll('erp_items',
+      'select=item_code,description,category,location,base_unit,on_hand,unit_cost,abc_classification,inventory_movement' +
+      '&is_active=eq.true' +
+      '&is_deleted=eq.false' +
+      '&is_deprecated_2026=eq.false' +
+      '&order=item_code.asc');
+    
+    // 2. Fetch all ledger entries within the week
+    var ledger = await erpFetch('erp_stock_ledger',
+      'select=item_code,qty_in,qty_out,transaction_type,transaction_date,balance_before,balance_after' +
+      '&transaction_date=gte.' + encodeURIComponent(weekStartISO) +
+      '&transaction_date=lt.' + encodeURIComponent(weekEndISO) +
+      '&order=transaction_date.asc&limit=50000');
+    
+    // 3. Build map: item_code → {in, out, opening, closing, tx count}
+    var movementMap = {};
+    
+    (ledger || []).forEach(function(tx) {
+      var code = tx.item_code;
+      if (!movementMap[code]) {
+        movementMap[code] = {
+          in: 0,
+          out: 0,
+          opening: Number(tx.balance_before || 0),
+          closing: Number(tx.balance_after || 0),
+          txCount: 0,
+          firstTxDate: tx.transaction_date,
+          lastTxDate: tx.transaction_date
+        };
+      }
+      movementMap[code].in += Number(tx.qty_in || 0);
+      movementMap[code].out += Number(tx.qty_out || 0);
+      movementMap[code].closing = Number(tx.balance_after || 0);
+      movementMap[code].txCount++;
+      movementMap[code].lastTxDate = tx.transaction_date;
+    });
+    
+    // 4. Combine items + movement
+    var result = (items || []).map(function(it) {
+      var mov = movementMap[it.item_code] || {
+        in: 0, out: 0, opening: null, closing: null, txCount: 0
+      };
+      
+      return {
+        item_code: it.item_code,
+        description: it.description,
+        category: it.category,
+        location: it.location,
+        base_unit: it.base_unit,
+        unit_cost: Number(it.unit_cost || 0),
+        abc_classification: it.abc_classification,
+        inventory_movement: it.inventory_movement,
+        current_on_hand: Number(it.on_hand || 0),
+        opening: mov.opening !== null ? mov.opening : Number(it.on_hand || 0),
+        qty_in: mov.in,
+        qty_out: mov.out,
+        closing: mov.closing !== null ? mov.closing : Number(it.on_hand || 0),
+        tx_count: mov.txCount
+      };
+    });
+    
+    return { success: true, items: result };
+  } catch(err) {
+    console.error('[erpGetWeeklyData]', err);
+    return { success: false, error: err.message, items: [] };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════════════════════════
+async function erpGetActiveAlerts(force) {
+  var cacheKey = 'active_alerts_v2';
+  if (!force) {
+    var cached = erpGetCache(cacheKey);
+    if (cached) return { success: true, alerts: cached, _cached: true };
+  }
+  
+  try {
+    var rows = await erpFetch('erp_alerts',
+      'is_resolved=eq.false&order=severity.desc,created_at.desc&limit=200');
+    erpSetCache(cacheKey, rows, ERP_CACHE_TTL.ALERTS);
+    return { success: true, alerts: rows || [] };
+  } catch(err) {
+    console.error('[erpGetActiveAlerts]', err);
+    return { success: false, error: err.message, alerts: [] };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// CATEGORY STATS
+// ★ FIXED: Added filters para hindi kasama deprecated items
+// ═══════════════════════════════════════════════════════════
+async function erpGetCategoryStats() {
+  try {
+    var rows = await erpFetchAll('erp_items',
+      'select=item_code,category,on_hand,unit_cost,abc_classification,inventory_movement' +
+      '&is_active=eq.true' +
+      '&is_deleted=eq.false' +
+      '&is_deprecated_2026=eq.false' +
+      '&order=item_code.asc');
+    
+    var byCategory = {};
+    var byABC = { A: 0, B: 0, C: 0, 'N/A': 0 };
+    var byMovement = {};
+    
+    (rows || []).forEach(function(it) {
+      var cat = it.category || 'UNCATEGORIZED';
+      if (!byCategory[cat]) byCategory[cat] = { count: 0, value: 0, units: 0 };
+      byCategory[cat].count++;
+      byCategory[cat].value += Number(it.on_hand || 0) * Number(it.unit_cost || 0);
+      byCategory[cat].units += Number(it.on_hand || 0);
+      
+      var abc = String(it.abc_classification || 'N/A').toUpperCase();
+      if (byABC[abc] === undefined) byABC[abc] = 0;
+      byABC[abc] += Number(it.on_hand || 0) * Number(it.unit_cost || 0);
+      
+      var mov = String(it.inventory_movement || 'UNCLASSIFIED').toUpperCase();
+      if (!byMovement[mov]) byMovement[mov] = 0;
+      byMovement[mov]++;
+    });
+    
+    return { success: true, byCategory: byCategory, byABC: byABC, byMovement: byMovement };
+  } catch(err) {
+    console.error('[erpGetCategoryStats]', err);
+    return { success: false, error: err.message, byCategory: {}, byABC: {}, byMovement: {} };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SOF LOOKUP
+// ═══════════════════════════════════════════════════════════
+async function erpGetSofByJo(joNo) {
+  try {
+    var rows = await erpFetch('erp_sof_cache', 'jo_no=eq.' + encodeURIComponent(joNo) + '&limit=1');
+    if (!rows || rows.length === 0) return { success: false, error: 'Not found' };
+    return { success: true, sof: rows[0] };
+  } catch(err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PRF PO LOOKUP
+// ═══════════════════════════════════════════════════════════
+async function erpGetPrfPoByPo(poNo) {
+  try {
+    var rows = await erpFetch('erp_prf_po_cache',
+      'po_no=eq.' + encodeURIComponent(poNo) + '&order=item_no.asc');
+    if (!rows || rows.length === 0) return { success: false, error: 'Not found' };
+    return { success: true, items: rows, total: rows.length };
+  } catch(err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// DISTINCT VALUES — With Pagination
+// ✅ Bypasses PostgREST 1000-row limit
+// ✅ Returns ALL unique values (e.g., all categories)
+// ═══════════════════════════════════════════════════════════
+async function erpGetDistinctValues(column) {
+  var docColumns = ['requestor', 'department', 'status', 'doc_type', 'jo_no', 'gem_so_no', 'client_name', 'project', 'po_no', 'vendor', 'dr_no', 'prepared_by'];
+  var itemColumns = ['category', 'location', 'inventory_movement', 'abc_classification', 'stock_classification', 'base_unit'];
+  
+  var table = null;
+  if (docColumns.indexOf(column) !== -1) table = 'documents';
+  else if (itemColumns.indexOf(column) !== -1) table = 'erp_items';
+  else {
+    console.warn('[erpGetDistinctValues] Unknown column:', column);
+    return { success: false, error: 'Unknown column', values: [] };
+  }
+  
+  try {
+    // ═══ PAGINATION LOOP ═══
+    var allRows = [];
+    var pageSize = 1000;
+    var offset = 0;
+    var hasMore = true;
+    var maxPages = 20;  // Safety: 20,000 rows max
+    var pageNum = 0;
+    
+    while (hasMore && pageNum < maxPages) {
+      pageNum++;
+      
+      var query = 'select=' + column + 
+                  '&' + column + '=not.is.null' +
+                  '&order=' + column + '.asc' +
+                  '&limit=' + pageSize +
+                  '&offset=' + offset;
+      
+      // Add filter only for erp_items queries
+      if (table === 'erp_items') {
+        query += '&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false';
+      }
+      
+      var rows = await erpFetch(table, query);
+      
+      if (!rows || rows.length === 0) {
+        hasMore = false;
+        break;
+      }
+      
+      allRows = allRows.concat(rows);
+      offset += rows.length;
+      
+      console.log('[DistinctValues] ' + column + ' Page ' + pageNum + ': fetched ' + 
+                  rows.length + ' (total: ' + allRows.length + ')');
+      
+      if (rows.length < pageSize) {
+        hasMore = false;
+      }
+    }
+    
+    // ═══ Extract unique values ═══
+    var seen = {};
+    var values = [];
+    allRows.forEach(function(r) {
+      var v = r[column];
+      if (v && String(v).trim() && !seen[v]) {
+        seen[v] = true;
+        values.push(v);
+      }
+    });
+    
+    console.log('[DistinctValues] ' + column + ' ✅ Complete: ' + values.length + ' unique from ' + allRows.length + ' rows');
+    
+    return { success: true, values: values };
+    
+  } catch(err) {
+    console.warn('[erpGetDistinctValues]', column, err.message);
+    return { success: false, error: err.message, values: [] };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// HEALTH CHECK
+// ═══════════════════════════════════════════════════════════
+async function erpHealthCheck() {
+  try {
+    var t0 = Date.now();
+    var res = await fetch(erpUrl('erp_items') + '?select=id&limit=1', {
+      headers: erpHeaders()
+    });
+    return { success: res.ok, latency: Date.now() - t0 };
+  } catch(err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SHARED: Get inventory list for dropdowns (paginated + cached)
+// ✅ Fetches ALL 2,384 items (bypasses Supabase 1000-row limit)
+// ✅ Cached — subsequent calls use memory, no re-fetch
+// ✅ Filters deprecated items (is_deprecated_2026 = false)
+// ═══════════════════════════════════════════════════════════
+var _inventoryListCache = null;
+var _inventoryListPromise = null;
+
+async function erpGetInventoryListForDropdown(forceRefresh) {
+  // Return cache if available (unless force refresh)
+  if (!forceRefresh && _inventoryListCache) {
+    return _inventoryListCache;
+  }
+  
+  // Prevent concurrent calls (return same promise)
+  if (_inventoryListPromise) {
+    return _inventoryListPromise;
+  }
+  
+  _inventoryListPromise = (async function() {
+    var allItems = [];
+    var pageSize = 1000;
+    var offset = 0;
+    var hasMore = true;
+    var maxPages = 20;  // Safety cap: 20,000 items
+    var pageNum = 0;
+    
+    console.log('[Inventory List] Starting paginated fetch...');
+    
+    while (hasMore && pageNum < maxPages) {
+      pageNum++;
+      
+      var query = 'select=item_code,description,base_unit,category,location' +
+                  '&is_active=eq.true' +
+                  '&is_deleted=eq.false' +
+                  '&is_deprecated_2026=eq.false' +
+                  '&order=item_code.asc' +
+                  '&limit=' + pageSize +
+                  '&offset=' + offset;
+      
+      var rows = await erpFetch('erp_items', query);
+      
+      if (!rows || rows.length === 0) {
+        hasMore = false;
+        break;
+      }
+      
+      allItems = allItems.concat(rows);
+      offset += rows.length;
+      
+      console.log('[Inventory List] Page ' + pageNum + ': fetched ' + 
+                  rows.length + ' items (total: ' + allItems.length + ')');
+      
+      if (rows.length < pageSize) {
+        hasMore = false;
+      }
+    }
+    
+    // ═══ Map to frontend format ═══
+    var mapped = allItems.map(function(r) {
+      return { 
+        code: r.item_code, 
+        description: r.description || '', 
+        unit: r.base_unit || 'PIECE',
+        category: r.category || '',
+        location: r.location || ''
+      };
+    });
+    
+    _inventoryListCache = mapped;
+    _inventoryListPromise = null;
+    
+    console.log('[Inventory List] ✅ COMPLETE — Total: ' + mapped.length + ' items');
+    return mapped;
+  })();
+  
+  return _inventoryListPromise;
+}
+
+// ═══ Clear cache (utility) ═══
+function erpClearInventoryCache() {
+  _inventoryListCache = null;
+  _inventoryListPromise = null;
+  console.log('[Inventory List] Cache cleared');
+}
+
+console.log('✅ erp-supabase.js loaded — v3 (with deprecated filters)');
+
   });
   
   if (!res.ok) {
