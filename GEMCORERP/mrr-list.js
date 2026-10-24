@@ -1,5 +1,6 @@
 // ============================================================
 // GEMCOR ERP — MRR List Logic
+// v2.2 — Edit sa kahit anong status + Void (CANCELLED) via js/mrr-edit.js
 // v2.1 — Null-safe KPI updates + Discuss button hidden for Production
 // (MRR discussions are warehouse-only)
 // ============================================================
@@ -11,7 +12,7 @@ var _mrrPageSize = 50;
 var _mrrSearchTimer = null;
 
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[MRR List v2.1] Initializing...');
+  console.log('[MRR List v2.2] Initializing...');
   mrrCheckHealth();
   mrrListLoad();
   mrrListPopulateFilterOptions();
@@ -80,21 +81,22 @@ async function mrrListLoad() {
 // KPI — Null-Safe
 // ═══════════════════════════════════════════════════════════
 function mrrListComputeKPIs() {
-  var total = _mrrAllDocs.length;
-  var pending = 0, completed = 0, partial = 0;
+  var pending = 0, completed = 0, partial = 0, cancelled = 0;
   _mrrAllDocs.forEach(function(d) {
     var s = String(d.status || '').toUpperCase();
-    if (s === 'PENDING') pending++;
+    if (s === 'CANCELLED') cancelled++;
+    else if (s === 'PENDING') pending++;
     else if (s === 'COMPLETED') completed++;
     else if (s === 'PARTIAL') partial++;
   });
   
   // ✅ Null-safe updates
+  var total = _mrrAllDocs.length - cancelled;   // CANCELLED hindi bilang sa Total
   var elTotal = document.getElementById('mrrKpiTotal');
   if (elTotal) elTotal.textContent = erpNum(total);
   
   var elTotalSub = document.getElementById('mrrKpiTotalSub');
-  if (elTotalSub) elTotalSub.textContent = total + ' receipts';
+  if (elTotalSub) elTotalSub.textContent = total + ' receipts' + (cancelled ? ' (' + cancelled + ' cancelled)' : '');
   
   var elPending = document.getElementById('mrrKpiPending');
   if (elPending) elPending.textContent = erpNum(pending);
@@ -170,10 +172,12 @@ function mrrListRender() {
     var statusClass = 'status-pending';
     if (statusUpper === 'COMPLETED') statusClass = 'status-completed';
     else if (statusUpper === 'PARTIAL') statusClass = 'status-partial';
+    else if (statusUpper === 'CANCELLED') statusClass = 'status-cancelled';
+    var isCancelled = (statusUpper === 'CANCELLED');
     
     var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
     
-    html += '<tr>' +
+    html += '<tr' + (isCancelled ? ' style="opacity:.6;"' : '') + '>' +
       '<td><code>' + erpEsc(d.doc_no) + '</code></td>' +
       '<td>' + erpEsc(dateStr) + '</td>' +
       '<td>' + erpEsc(d.po_no || '—') + '</td>' +
@@ -193,10 +197,13 @@ function mrrListRender() {
             '<i class="bi bi-chat-dots"></i>' +
           '</button>' 
           : '') +
-        (canEdit && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL') ?
-          '<button class="erp-action-btn" onclick="openWarehouseEdit(\'' + safeDoc + '\', \'MRR\')" title="Edit (Warehouse)">' +
+        (canEdit && !isCancelled ?
+          '<button class="erp-action-btn" onclick="openMrrEdit(\'' + safeDoc + '\')" title="Edit (Warehouse)">' +
             '<i class="bi bi-pencil-square"></i>' +
-          '</button>' 
+          '</button>' +
+          '<button class="erp-action-btn" onclick="mrrVoid(\'' + safeDoc + '\')" title="Void / Cancel" style="color:#dc2626;">' +
+            '<i class="bi bi-x-octagon"></i>' +
+          '</button>'
           : '') +
       '</td>' +
       '</tr>';
@@ -361,4 +368,4 @@ function mrrListRefresh() {
   mrrCheckHealth();
 }
 
-console.log('✅ mrr-list.js v2.1 loaded (null-safe KPI updates)');
+console.log('✅ mrr-list.js v2.2 loaded (MRR edit + void)');
