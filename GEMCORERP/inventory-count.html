@@ -355,6 +355,7 @@
           <option value="PENDING_REVIEW">Pending Review</option>
           <option value="APPROVED">Approved</option>
           <option value="REJECTED">Rejected</option>
+          <option value="CANCELLED">Cancelled</option>
         </select>
         <button class="erp-btn-clear" onclick="icClearFilters()">
           <i class="bi bi-x-lg"></i> Clear
@@ -517,19 +518,23 @@
 
     <div class="erp-card mb-3" style="padding:20px;">
       <div class="row g-3 text-center">
-        <div class="col-md-3">
+        <div class="col-6 col-md">
           <div class="small text-muted">Total Items</div>
           <div style="font-size:1.8rem;font-weight:800;" id="icReviewTotal">0</div>
         </div>
-        <div class="col-md-3">
+        <div class="col-6 col-md">
           <div class="small text-muted">Matched</div>
           <div style="font-size:1.8rem;font-weight:800;color:#059669;" id="icReviewMatched">0</div>
         </div>
-        <div class="col-md-3">
+        <div class="col-6 col-md">
           <div class="small text-muted">With Variance</div>
           <div style="font-size:1.8rem;font-weight:800;color:#dc2626;" id="icReviewVariance">0</div>
         </div>
-        <div class="col-md-3">
+        <div class="col-6 col-md">
+          <div class="small text-muted">Not Counted</div>
+          <div style="font-size:1.8rem;font-weight:800;color:#6b7280;" id="icReviewUncounted">0</div>
+        </div>
+        <div class="col-6 col-md">
           <div class="small text-muted">Total Qty Variance</div>
           <div style="font-size:1.8rem;font-weight:800;" id="icReviewVarianceQty">0</div>
         </div>
@@ -547,6 +552,7 @@
             <option value="all">All Items</option>
             <option value="variance">With Variance Only</option>
             <option value="matched">Matched Only</option>
+            <option value="uncounted">Not Counted Only</option>
           </select>
         </div>
       </div>
@@ -557,7 +563,7 @@
               <th style="width:4%">#</th>
               <th style="width:16%">Item Code</th>
               <th style="width:26%">Description</th>
-              <th style="width:10%" class="text-center">System</th>
+              <th style="width:10%" class="text-center" title="Stock sa oras ng bilang (kasama ang galaw pagkatapos nito)">System</th>
               <th style="width:10%" class="text-center">Counted</th>
               <th style="width:10%" class="text-center">Variance</th>
               <th style="width:8%" class="text-center">Unit</th>
@@ -577,10 +583,10 @@
           Reviewing as supervisor. Approve to auto-adjust stock, or reject to return for recount.
         </div>
         <div id="icReviewActionButtons">
-          <button class="btn btn-outline-danger me-2" onclick="icRejectCount()">
+          <button class="btn btn-outline-danger me-2" id="btnReviewReject" onclick="icRejectCount()">
             <i class="bi bi-x-circle me-1"></i>Reject
           </button>
-          <button class="btn btn-success btn-lg" onclick="icApproveCount()">
+          <button class="btn btn-success btn-lg" id="btnReviewApprove" onclick="icApproveCount()">
             <i class="bi bi-check-circle me-1"></i>Approve & Adjust Stock
           </button>
         </div>
@@ -625,13 +631,18 @@
             <option value="UNCATEGORIZED">UNCATEGORIZED</option>
           </select>
         </div>
+        <div class="mb-3" id="newCountSpotGroup" style="display:none;">
+          <label class="form-label fw-bold">Item Codes <span class="text-danger">*</span></label>
+          <textarea id="newCountSpotCodes" class="form-control" rows="4" placeholder="Isang item code bawat linya (o paghiwalayin ng comma)&#10;e.g. GEM-1-1099939-6"></textarea>
+          <div class="form-text">Ang mga item code lang na ito ang isasama sa count.</div>
+        </div>
         <div class="mb-3">
           <label class="form-label fw-bold">Notes <span class="text-muted small">(optional)</span></label>
           <textarea id="newCountNotes" class="form-control" rows="2" placeholder="e.g., Monthly cycle count"></textarea>
         </div>
         <div class="alert alert-info small py-2 mb-0">
           <i class="bi bi-info-circle me-1"></i>
-          Items will be snapshotted from <code>erp_items</code>. You can then scan or enter manually.
+          Items will be snapshotted from <code>erp_items</code>. You can then scan or enter manually. Ang uncounted na item ay <strong>hindi</strong> gagalawin ang stock.
         </div>
       </div>
       <div class="modal-footer">
