@@ -74,8 +74,8 @@ async function erpDownloadTemplate() {
   
   try {
     // Fetch all active items
-    var rows = await erpFetch('erp_items',
-      'select=item_code,description&is_active=eq.true&order=item_code.asc&limit=5000');
+    var rows = await erpFetchAll('erp_items',
+      'select=item_code,description&is_active=eq.true&order=item_code.asc');
     
     if (!rows || rows.length === 0) {
       erpUsageToast('No items found', 'warning');
