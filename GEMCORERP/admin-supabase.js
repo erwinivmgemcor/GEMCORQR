@@ -2495,87 +2495,116 @@ async function ascCutoverParseFile(event) {
   
   try {
     var text = await file.text();
-    var lines = text.split('\n').filter(function(l) { return l.trim(); });
-    
-    if (lines.length < 2) {
+    var rows = ascCutoverParseCSVText(text);
+
+    if (rows.length < 2) {
       throw new Error('CSV needs header + at least 1 data row');
     }
-    
-    // Parse header
-    var headers = ascCutoverParseCSVLine(lines[0]);
+
+    // Parse header (BOM, extra spaces, "Ave / Mo" vs "Ave/Mo" — lahat tinatanggap)
+    var headers = rows[0];
     console.log('[Cutover] Headers:', headers);
-    
-    // Normalize header names (trim + lowercase for matching)
+
     var headerMap = {};
     headers.forEach(function(h, idx) {
-      var normalized = String(h).trim().toLowerCase();
-      headerMap[normalized] = idx;
+      var key = ascCutoverNormHeader(h);
+      if (headerMap[key] === undefined) headerMap[key] = idx;
     });
-    
+
     // Detect columns (flexible matching)
-   var colIdx = {
-  item_code: ascCutoverFindColumn(headerMap, ['item code', 'item_code', 'itemcode', 'code']),
-  description: ascCutoverFindColumn(headerMap, ['description', 'desc', 'item description']),
-  category: ascCutoverFindColumn(headerMap, ['category', 'cat']),
-  location: ascCutoverFindColumn(headerMap, ['location', 'loc']),
-  on_hand: ascCutoverFindColumn(headerMap, ['on-hand', 'on_hand', 'onhand', 'stock']),
-  buffer_stock: ascCutoverFindColumn(headerMap, ['buffer', 'buffer stock', 'buffer_stock']),
-  base_unit: ascCutoverFindColumn(headerMap, ['unit', 'base unit', 'base_unit', 'uom']),
-  unit_cost: ascCutoverFindColumn(headerMap, ['unit cost', 'unit_cost', 'unitcost', 'cost', 'price']),  // ✅ IDINAGDAG
-  active_consumption_months: ascCutoverFindColumn(headerMap, ['active mo', 'active_mo', 'active months']),
-  ave_monthly_consumption: ascCutoverFindColumn(headerMap, ['ave/mo', 'ave_mo', 'ave monthly', 'avg/mo']),
-  ave_daily_consumption: ascCutoverFindColumn(headerMap, ['ave/day', 'ave_day', 'ave daily', 'avg/day']),
-  abc_classification: ascCutoverFindColumn(headerMap, ['abc', 'abc classification', 'abc_classification']),
-  inventory_movement: ascCutoverFindColumn(headerMap, ['movement', 'inventory movement', 'inventory_movement'])
-};
-    
+    var colIdx = {
+      item_code: ascCutoverFindColumn(headerMap, ['item code', 'item_code', 'itemcode', 'code']),
+      description: ascCutoverFindColumn(headerMap, ['description', 'desc', 'item description']),
+      category: ascCutoverFindColumn(headerMap, ['category', 'cat']),
+      location: ascCutoverFindColumn(headerMap, ['location', 'loc']),
+      on_hand: ascCutoverFindColumn(headerMap, ['on-hand', 'on hand', 'on_hand', 'onhand', 'stock']),
+      buffer_stock: ascCutoverFindColumn(headerMap, ['buffer', 'buffer stock', 'buffer_stock']),
+      base_unit: ascCutoverFindColumn(headerMap, ['unit', 'base unit', 'base_unit', 'uom']),
+      unit_cost: ascCutoverFindColumn(headerMap, ['unit cost', 'unit_cost', 'unitcost', 'cost', 'price']),
+      active_consumption_months: ascCutoverFindColumn(headerMap, ['active mo', 'active mos', 'active_mo', 'active months', 'active month', 'active_consumption_months']),
+      ave_monthly_consumption: ascCutoverFindColumn(headerMap, ['ave/mo', 'ave_mo', 'ave mo', 'ave monthly', 'avg/mo', 'avg mo', 'average/mo', 'ave_monthly_consumption']),
+      ave_daily_consumption: ascCutoverFindColumn(headerMap, ['ave/day', 'ave_day', 'ave day', 'ave daily', 'avg/day', 'avg day', 'average/day', 'ave_daily_consumption']),
+      abc_classification: ascCutoverFindColumn(headerMap, ['abc', 'abc classification', 'abc_classification']),
+      inventory_movement: ascCutoverFindColumn(headerMap, ['movement', 'inventory movement', 'inventory_movement'])
+    };
+
     // Validate required columns
     if (colIdx.item_code === undefined) {
-      throw new Error('Missing required column: "Item Code"');
+      throw new Error('Missing required column: "Item Code" (nakita: ' + headers.join(' | ') + ')');
     }
-    
+
     console.log('[Cutover] Column mapping:', colIdx);
-    
+
+    // Helper: text at number cells. Ang BLANK ay null (hindi 0) — hindi binubura ng blank ang existing.
+    var cellText = function(vals, idx) {
+      return idx !== undefined ? String(vals[idx] === undefined ? '' : vals[idx]).trim() : '';
+    };
+    var cellNum = function(vals, idx) {
+      return idx !== undefined ? ascCutoverNum(vals[idx]) : null;
+    };
+
     // Parse data rows
     var parsedItems = [];
-    var errors = [];
-    
-    for (var i = 1; i < lines.length; i++) {
-      var vals = ascCutoverParseCSVLine(lines[i]);
-      if (vals.length === 0 || !vals[colIdx.item_code]) continue;
-      
-      var itemCode = String(vals[colIdx.item_code] || '').trim();
+    var seen = {};
+    var dupCodes = [];
+    var warnBufferNoAve = 0;
+    var invalidNums = 0;
+
+    for (var i = 1; i < rows.length; i++) {
+      var vals = rows[i];
+      var itemCode = cellText(vals, colIdx.item_code);
       if (!itemCode) continue;
-      
-    var item = {
-  item_code: itemCode,
-  description: colIdx.description !== undefined ? String(vals[colIdx.description] || '').trim() : '',
-  category: colIdx.category !== undefined ? String(vals[colIdx.category] || '').trim() : '',
-  location: colIdx.location !== undefined ? String(vals[colIdx.location] || '').trim() : '',
-  on_hand: colIdx.on_hand !== undefined ? (parseFloat(vals[colIdx.on_hand]) || 0) : 0,
-  buffer_stock: colIdx.buffer_stock !== undefined ? (parseFloat(vals[colIdx.buffer_stock]) || 0) : 0,
-  base_unit: colIdx.base_unit !== undefined ? String(vals[colIdx.base_unit] || '').trim() : 'PIECE',
-  unit_cost: (colIdx.unit_cost !== undefined && vals[colIdx.unit_cost] !== '') 
-  ? (parseFloat(vals[colIdx.unit_cost]) || null)   // null kung invalid, hindi 0
-  : null,   // null kung walang column o blank
-  active_consumption_months: colIdx.active_consumption_months !== undefined ? (parseInt(vals[colIdx.active_consumption_months]) || 0) : 0,
-  ave_monthly_consumption: colIdx.ave_monthly_consumption !== undefined ? (parseFloat(vals[colIdx.ave_monthly_consumption]) || 0) : 0,
-  ave_daily_consumption: colIdx.ave_daily_consumption !== undefined ? (parseFloat(vals[colIdx.ave_daily_consumption]) || 0) : 0,
-  abc_classification: colIdx.abc_classification !== undefined ? String(vals[colIdx.abc_classification] || 'C').trim() : 'C',
-  inventory_movement: colIdx.inventory_movement !== undefined ? String(vals[colIdx.inventory_movement] || 'NO MOVEMENT').trim().toUpperCase() : 'NO MOVEMENT'
-};
-      
+
+      if (seen[itemCode.toLowerCase()]) { dupCodes.push(itemCode); continue; }
+      seen[itemCode.toLowerCase()] = true;
+
+      var activeMo = cellNum(vals, colIdx.active_consumption_months);
+      var moveTxt = cellText(vals, colIdx.inventory_movement);
+      var abcTxt = cellText(vals, colIdx.abc_classification);
+
+      var item = {
+        item_code: itemCode,
+        description: cellText(vals, colIdx.description),
+        category: cellText(vals, colIdx.category),
+        location: cellText(vals, colIdx.location),
+        on_hand: cellNum(vals, colIdx.on_hand),
+        buffer_stock: cellNum(vals, colIdx.buffer_stock),
+        base_unit: cellText(vals, colIdx.base_unit),
+        unit_cost: cellNum(vals, colIdx.unit_cost),   // null kung blank; 0 = keep existing (sa RPC)
+        active_consumption_months: activeMo === null ? null : Math.round(activeMo),
+        ave_monthly_consumption: cellNum(vals, colIdx.ave_monthly_consumption),
+        ave_daily_consumption: cellNum(vals, colIdx.ave_daily_consumption),
+        abc_classification: abcTxt,
+        inventory_movement: moveTxt ? moveTxt.toUpperCase() : ''
+      };
+
+      if (item.buffer_stock !== null && item.ave_monthly_consumption === null && item.active_consumption_months === null) {
+        warnBufferNoAve++;
+      }
       parsedItems.push(item);
     }
-    
+
+    _ascCutover.dupCodes = dupCodes;
+    _ascCutover.warnBufferNoAve = warnBufferNoAve;
+
     _ascCutover.parsedItems = parsedItems;
     
     console.log('[Cutover] Parsed', parsedItems.length, 'items');
     
     if (statusEl) {
+      var warnHtml = '';
+      if (dupCodes.length) {
+        warnHtml += '<div class="mt-1"><i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>' +
+          dupCodes.length + ' duplicate Item Code ang nilaktawan (unang row lang ang ginamit): ' +
+          ascEsc(dupCodes.slice(0, 5).join(', ')) + (dupCodes.length > 5 ? '…' : '') + '</div>';
+      }
+      if (warnBufferNoAve) {
+        warnHtml += '<div class="mt-1"><i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>' +
+          warnBufferNoAve + ' item ang may Buffer pero walang Ave/Mo o Active Mo. Mare-recompute ang buffer nila sa unang MRIF maliban kung i-check ang "Lock imported Buffer".</div>';
+      }
       statusEl.innerHTML = '<div class="alert alert-success small py-2">' +
         '<i class="bi bi-check-circle-fill me-1"></i>' +
-        '<strong>' + parsedItems.length + '</strong> items parsed successfully' +
+        '<strong>' + parsedItems.length + '</strong> items parsed successfully' + warnHtml +
         '</div>';
     }
     
@@ -2597,32 +2626,70 @@ window.ascCutoverParseFile = ascCutoverParseFile;
 // ═══════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════
-function ascCutoverParseCSVLine(line) {
-  var result = [];
-  var current = '';
-  var inQuotes = false;
-  
-  for (var i = 0; i < line.length; i++) {
-    var c = line[i];
-    
-    if (c === '"') {
-      if (inQuotes && line[i+1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if ((c === ',' || c === '\t') && !inQuotes) {
-      result.push(current);
-      current = '';
+// Buong-file CSV parser: BOM, quoted cells na may comma/line-break, CRLF, at
+// auto-detect ng delimiter (comma, semicolon, tab) base sa header row.
+function ascCutoverParseCSVText(text) {
+  text = String(text || '').replace(/^\uFEFF/, '');
+  var firstLine = text.split(/\r\n|\n|\r/)[0] || '';
+  var counts = { ',': 0, ';': 0, '\t': 0 };
+  var q0 = false;
+  for (var k = 0; k < firstLine.length; k++) {
+    var ch = firstLine[k];
+    if (ch === '"') q0 = !q0;
+    else if (!q0 && counts[ch] !== undefined) counts[ch]++;
+  }
+  var delim = ',';
+  if (counts[';'] > counts[delim]) delim = ';';
+  if (counts['\t'] > counts[delim]) delim = '\t';
+
+  var rows = [], row = [], cur = '', inQ = false;
+  for (var i = 0; i < text.length; i++) {
+    var c = text[i];
+    if (inQ) {
+      if (c === '"' && text[i + 1] === '"') { cur += '"'; i++; }
+      else if (c === '"') inQ = false;
+      else cur += c;
+    } else if (c === '"') {
+      inQ = true;
+    } else if (c === delim) {
+      row.push(cur.trim()); cur = '';
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(cur.trim()); cur = '';
+      if (row.some(function(x) { return x !== ''; })) rows.push(row);
+      row = [];
     } else {
-      current += c;
+      cur += c;
     }
   }
-  result.push(current);
-  
-  // Trim lahat
-  return result.map(function(v) { return String(v).trim(); });
+  row.push(cur.trim());
+  if (row.some(function(x) { return x !== ''; })) rows.push(row);
+  return rows;
+}
+
+// Kept for backward compatibility (ibang code na maaaring tumawag)
+function ascCutoverParseCSVLine(line) {
+  var r = ascCutoverParseCSVText(line);
+  return r.length ? r[0] : [];
+}
+
+function ascCutoverNormHeader(h) {
+  return String(h || '')
+    .replace(/^\uFEFF/, '')
+    .toLowerCase()
+    .replace(/\s*\/\s*/g, '/')   // "Ave / Mo" -> "ave/mo"
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Blank / "-" / "N/A" / invalid -> null. Tumatanggap ng "1,234.50", "₱12", "35%".
+function ascCutoverNum(v) {
+  if (v === null || v === undefined) return null;
+  var t = String(v).trim();
+  if (t === '' || t === '-' || t === '—' || /^n\/?a$/i.test(t)) return null;
+  t = t.replace(/[₱$,\s%]/g, '');
+  if (t === '' || isNaN(Number(t))) return null;
+  return Number(t);
 }
 
 function ascCutoverFindColumn(headerMap, aliases) {
@@ -2844,6 +2911,21 @@ window.ascCutoverShowDiff = ascCutoverShowDiff;
 // ═══════════════════════════════════════════════════════════
 // STEP 3: EXECUTE CUTOVER
 // ═══════════════════════════════════════════════════════════
+// Unang buwan ng TOTOONG usage (YYYYMM). Ang usage bago nito ay nasa baseline na (Ave/Mo ng CSV).
+// Default: kung ika-20 na o lampas na ng buwan, susunod na buwan (month-end cutover); kung hindi, kasalukuyang buwan.
+function ascCutoverDefaultStartMonth() {
+  var now = new Date();
+  var y = now.getFullYear(), m = now.getMonth() + 1;
+  if (now.getDate() >= 20) { m++; if (m > 12) { m = 1; y++; } }
+  return y + '-' + (m < 10 ? '0' + m : m);
+}
+function ascCutoverInitDefaults() {
+  var el = document.getElementById('cutoverStartMonth');
+  if (el && !el.value) el.value = ascCutoverDefaultStartMonth();
+}
+window.ascCutoverInitDefaults = ascCutoverInitDefaults;
+document.addEventListener('DOMContentLoaded', ascCutoverInitDefaults);
+
 async function ascCutoverConfirm() {
   if (_ascCutover.isExecuting) return;
   
@@ -2855,6 +2937,16 @@ async function ascCutoverConfirm() {
     return;
   }
   
+  // Unang buwan ng totoong usage + opsyonal na lock ng buffer
+  ascCutoverInitDefaults();
+  var startVal = (document.getElementById('cutoverStartMonth') || {}).value || ascCutoverDefaultStartMonth();
+  var startYm = parseInt(startVal.replace('-', ''), 10);
+  if (!startYm || startYm < 200001 || startYm > 209912 || (startYm % 100) < 1 || (startYm % 100) > 12) {
+    erpShowToast('Piliin ang tamang "First month of real usage"', 'warning');
+    return;
+  }
+  var lockBuffer = !!((document.getElementById('cutoverLockBuffer') || {}).checked);
+
   // Final confirmation
   var confirmMsg = '⚠️ EXECUTE FULL CUTOVER?\n\n' +
     '═══════════════════════════════════\n' +
@@ -2863,6 +2955,9 @@ async function ascCutoverConfirm() {
     '  ✏️  Will UPDATE: ' + _ascCutover.updatedItems.length + ' items\n' +
     '  🗑️  Will REMOVE: ' + _ascCutover.removedItems.length + ' items (soft-delete)\n' +
     '  📁 Total CSV:    ' + _ascCutover.parsedItems.length + ' rows\n' +
+    '═══════════════════════════════════\n\n' +
+    '  📅 Real usage starts: ' + startVal + '\n' +
+    '  🔒 Lock imported Buffer: ' + (lockBuffer ? 'YES' : 'NO') + '\n' +
     '═══════════════════════════════════\n\n' +
     '📸 Auto-snapshot will be created.\n' +
     '🔙 Rollback available sa Cutover History.\n\n' +
@@ -2899,10 +2994,13 @@ async function ascCutoverConfirm() {
       method: 'POST',
       headers: erpHeaders(),
       body: JSON.stringify({
-        p_items: _ascCutover.parsedItems,
+        p_items: _ascCutover.parsedItems.map(function(it) {
+          return lockBuffer ? Object.assign({}, it, { lock_buffer: true }) : it;
+        }),
         p_performed_by: user,
         p_csv_filename: _ascCutover.csvFilename,
-        p_notes: notes
+        p_notes: notes,
+        p_start_ym: startYm
       })
     });
     
@@ -2931,6 +3029,16 @@ async function ascCutoverConfirm() {
       snapshot_id: data.snapshot_id
     }, notes);
     
+    if (data.errors > 0) {
+      var det = (data.error_details || []).slice(0, 10).map(function(e) {
+        return '• ' + e.item_code + ': ' + e.error;
+      }).join('\n');
+      console.warn('[Cutover] Items with errors:', data.error_details);
+      setTimeout(function() {
+        alert('⚠️ Cutover tapos, pero ' + data.errors + ' item(s) ang hindi na-import:\n\n' + det +
+              (data.errors > 10 ? '\n…at iba pa (tingnan ang console)' : ''));
+      }, 300);
+    }
     erpShowToast('✅ Full cutover complete!', 'success');
     
     // Reload snapshots
