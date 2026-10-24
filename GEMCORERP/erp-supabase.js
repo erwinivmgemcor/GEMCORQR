@@ -233,6 +233,68 @@ async function erpGetItemMovements(itemCode, limit) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// MANUAL ON-HAND ADJUSTMENTS → MOVEMENT HISTORY (ADJ rows)
+// Ang manual edit ng On-Hand (Stock Monitor) ay nasa audit table, hindi sa ledger,
+// kaya hindi nakikita sa history at nakaka-confuse kung bakit nag-iba ang on-hand.
+// Ang function na ito ay nagmi-merge ng mga on_hand edit bilang "ADJ" rows.
+// Dedupe: kung may ADJUSTMENT na ledger row na pareho ang delta (±2 min), hindi na idadagdag.
+// ═══════════════════════════════════════════════════════════
+async function erpGetManualOnHandEdits(itemCode, limit) {
+  try {
+    var rows = await erpFetch('v_item_manual_edits',
+      'select=*&item_code=eq.' + encodeURIComponent(itemCode) +
+      '&order=edited_at.desc&limit=' + (limit || 500));
+    return (rows || []).filter(function(e) {
+      return String(e.field_name || '').toLowerCase() === 'on_hand';
+    });
+  } catch (err) {
+    console.warn('[erpGetManualOnHandEdits]', err.message);
+    return [];
+  }
+}
+
+function erpMergeManualAdjustments(movements, edits) {
+  movements = movements || [];
+  var merged = movements.slice();
+  (edits || []).forEach(function(e) {
+    var oldV = parseFloat(e.old_value); if (isNaN(oldV)) oldV = 0;
+    var newV = parseFloat(e.new_value); if (isNaN(newV)) newV = 0;
+    var delta = Math.round((newV - oldV) * 10000) / 10000;
+    if (delta === 0) return;
+    var t = e.edited_at ? new Date(e.edited_at).getTime() : 0;
+
+    var dup = movements.some(function(m) {
+      var type = String(m.transaction_type || '').toUpperCase();
+      var dir = String(m.direction || '').toUpperCase();
+      if (type.indexOf('ADJ') === -1 && dir !== 'ADJUSTMENT') return false;
+      var md = Number(m.qty_in || 0) - Number(m.qty_out || 0);
+      var mt = m.transaction_date ? new Date(m.transaction_date).getTime() : 0;
+      return Math.abs(md - delta) < 0.0001 && Math.abs(mt - t) <= 120000;
+    });
+    if (dup) return;
+
+    merged.push({
+      transaction_date: e.edited_at,
+      transaction_type: 'MANUAL_ADJ',
+      direction: 'ADJUSTMENT',
+      qty_in: delta > 0 ? delta : 0,
+      qty_out: delta < 0 ? Math.abs(delta) : 0,
+      balance_before: oldV,
+      balance_after: newV,
+      reference_doc: 'MANUAL EDIT',
+      performed_by: e.edited_by || '',
+      reason: e.reason || '',
+      adj_variance: delta,
+      _synthetic: true
+    });
+  });
+  merged.sort(function(a, b) {
+    return new Date(b.transaction_date || 0).getTime() - new Date(a.transaction_date || 0).getTime();
+  });
+  return merged;
+}
+
+// ═══════════════════════════════════════════════════════════
 // REORDER LIST
 // ═══════════════════════════════════════════════════════════
 async function erpGetReorderList(force) {
