@@ -18,6 +18,7 @@
 <link rel="stylesheet" href="erp-styles.css">
 <link rel="stylesheet" href="erp-nav.css">
   <link rel="stylesheet" href="erp-notif.css">
+  <link rel="stylesheet" href="my-requests.css">
 
 
 <script src="erp-theme.js"></script>
@@ -28,6 +29,7 @@
 <script defer src="erp-nav.js"></script>
   <script defer src="js/chat-helper.js"></script>          <!-- ← NEW -->
 <script defer src="js/edit-request-permission.js"></script>  <!-- ← NEW -->
+<script defer src="my-requests-dashboard.js"></script>
 <script defer src="my-requests.js"></script>
   <script defer src="notifications.js"></script>
   <script defer src="js/update.js"></script>
@@ -60,29 +62,23 @@
 
 <div class="erp-container">
 
-  <!-- WELCOME HEADER -->
-  <div class="erp-card" style="padding:24px;margin-bottom:20px;">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-      <div>
-        <h3 style="margin-bottom:8px;">
-          <i class="bi bi-person-circle me-2"></i>Welcome, <span id="welcomeName">—</span>
-        </h3>
-        <p class="text-muted mb-0" id="welcomeDept">—</p>
-      </div>
-      <div class="d-flex gap-2 flex-wrap">
-        <a href="new-mrif.html" class="erp-btn-primary btn-lg">
-          <i class="bi bi-plus-circle me-1"></i>New MRIF
-        </a>
-        <a href="new-mrs.html" class="erp-btn-primary btn-lg" style="background:#8b5cf6;">
-          <i class="bi bi-arrow-counterclockwise me-1"></i>New MRS
-        </a>
-      </div>
+  <!-- HERO -->
+  <div class="mrd-hero">
+    <div>
+      <div class="mrd-hero-eyebrow" id="mrdHeroDate">—</div>
+      <h2 class="mrd-hero-title"><span id="mrdGreeting">Welcome</span>, <span id="welcomeName">—</span></h2>
+      <div class="mrd-hero-dept" id="welcomeDept">—</div>
+      <div class="mrd-hero-summary" id="mrdHeroSummary"><span class="mrd-dot"></span>Loading your requests…</div>
+    </div>
+    <div class="mrd-hero-actions">
+      <a href="new-mrif.html" class="mrd-btn mrd-btn-light"><i class="bi bi-plus-circle"></i>New MRIF</a>
+      <a href="new-mrs.html" class="mrd-btn mrd-btn-accent"><i class="bi bi-arrow-counterclockwise"></i>New MRS</a>
     </div>
   </div>
 
   <!-- KPI CARDS -->
-  <div class="erp-kpi-row" style="grid-template-columns: repeat(4, 1fr);margin-bottom:20px;">
-    <div class="erp-kpi-card kpi-blue">
+  <div class="erp-kpi-row mrd-kpis" style="grid-template-columns: repeat(4, 1fr);margin-bottom:20px;">
+    <div class="erp-kpi-card kpi-slate" onclick="mrdFilterStatus('')" title="Show all requests">
       <div class="kpi-icon"><i class="bi bi-file-earmark-text"></i></div>
       <div class="kpi-content">
         <div class="kpi-label">Total Requests</div>
@@ -90,7 +86,7 @@
         <div class="kpi-sub">All time</div>
       </div>
     </div>
-    <div class="erp-kpi-card kpi-amber">
+    <div class="erp-kpi-card kpi-amber" onclick="mrdFilterStatus('PENDING')" title="Show pending requests">
       <div class="kpi-icon"><i class="bi bi-clock-history"></i></div>
       <div class="kpi-content">
         <div class="kpi-label">Pending</div>
@@ -98,7 +94,7 @@
         <div class="kpi-sub">Awaiting warehouse</div>
       </div>
     </div>
-    <div class="erp-kpi-card kpi-green">
+    <div class="erp-kpi-card kpi-green" onclick="mrdFilterStatus('COMPLETED')" title="Show completed requests">
       <div class="kpi-icon"><i class="bi bi-check-circle-fill"></i></div>
       <div class="kpi-content">
         <div class="kpi-label">Completed</div>
@@ -106,7 +102,7 @@
         <div class="kpi-sub">Fully served</div>
       </div>
     </div>
-    <div class="erp-kpi-card kpi-red">
+    <div class="erp-kpi-card kpi-blue" onclick="mrdFilterStatus('PARTIAL')" title="Show partially served requests">
       <div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div>
       <div class="kpi-content">
         <div class="kpi-label">Partial</div>
@@ -115,6 +111,14 @@
       </div>
     </div>
   </div>
+
+  <!-- DASHBOARD (filled by my-requests-dashboard.js) -->
+  <div id="mrdDashboard">
+    <div class="mrd-section-title">Insights</div>
+    <div class="mrd-insights"><div class="mrd-skel"></div><div class="mrd-skel"></div><div class="mrd-skel"></div><div class="mrd-skel"></div></div>
+  </div>
+
+  <div class="mrd-section-title">All requests <small>search, filter and track every transaction</small></div>
 
   <!-- FILTERS -->
   <div class="erp-card erp-filters-card">
@@ -162,8 +166,10 @@
             <th class="col-type text-center">Type</th>
             <th class="col-jo">JO No.</th>
             <th class="col-status text-center">Status</th>
+            <th class="col-progress text-center">Progress</th>
             <th class="col-items text-center">Items</th>
             <th class="col-actions text-center">Actions</th>
+            <th class="col-edit text-center">Edit</th>
           </tr>
         </thead>
         <tbody id="myTableBody">
