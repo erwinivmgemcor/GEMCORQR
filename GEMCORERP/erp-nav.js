@@ -519,6 +519,16 @@
     });
   }
 
+  // New-message popups + sound + sidebar badge — runs on every page
+  function _startChatAlerts() {
+    try { if (!localStorage.getItem('ivm_username')) return; } catch(e) { return; }
+    if (window.erpChatAlerts || document.getElementById('erpChatAlertsScript')) return;
+    var sc = document.createElement('script');
+    sc.id = 'erpChatAlertsScript';
+    sc.src = 'erp-chat-alerts.js';
+    document.head.appendChild(sc);
+  }
+
   function _loadProfileScript(cb) {
     if (window.erpProfile) { cb(); return; }
     var existing = document.getElementById('erpProfileScript');
@@ -709,6 +719,7 @@
 
     setTimeout(_checkHealth, 500);
     setTimeout(_syncProfileOnce, 800);
+    setTimeout(_startChatAlerts, 1200);
   }
 
   document.addEventListener('click', function(e) {
