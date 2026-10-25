@@ -1,459 +1,1417 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<script>location.replace("replenishment.html");</script>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GEMCOR ERP — Create PRF</title>
+// ============================================================
+// GEMCOR ERP — Create PRF (v2.5)
+// Two Modes: "From Reorder List" + "Manual Entry"
+// ✅ v2.4: Select All / Deselect All checkbox bug
+// ✅ v2.5: Pending PRF detection + Net Need auto-adjust
+// ============================================================
 
-   <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#1e3a5f">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="mobile-web-app-capable" content="yes">
+var MAX_ITEMS_PER_PRF = 30;
 
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="erp-design-system.css">
-<link rel="stylesheet" href="erp-styles.css">
-<link rel="stylesheet" href="erp-nav.css">
-<link rel="stylesheet" href="erp-notif.css">
+var _prf = {
+  mode: 'reorder',
+  items: [],
+  selectedItems: [],
+  manualItems: [],
+  reorderList: [],
+  pendingPrfItems: {},
+  pendingSummary: {},          // ✅ NEW: Aggregated pending per item
+  inventoryList: [],
+  inventoryLoaded: false,
+  erpItemsMap: {},
+  isSubmitting: false
+};
 
-<style>
-/* ═══════════════════════════════════════════════════════════
-   New PRF — Mode Tabs
-   ═══════════════════════════════════════════════════════════ */
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('[Create PRF v2.5] Initializing...');
 
-.prf-mode-tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 20px;
-  border-bottom: 2px solid var(--erp-border, #e5e7eb);
+  prfCheckHealth();
+  initUserInfo();
+  generatePrfNo();
+  loadReorderList();
+  loadPendingPrfItems();
+  preloadInventoryForSearch();
+
+  var catEl = document.getElementById('prfCategory');
+  if (catEl) {
+    catEl.addEventListener('change', onCategoryChange);
+  }
+});
+
+async function prfCheckHealth() {
+  try {
+    var result = await erpHealthCheck();
+    var badge = document.getElementById('erpHealthBadge');
+    if (!badge) return;
+    var text = document.getElementById('erpHealthText');
+    var dot = badge.querySelector('.dot');
+    if (result.success) {
+      dot.className = 'dot dot-ok';
+      text.textContent = 'Connected (' + result.latency + 'ms)';
+    } else {
+      dot.className = 'dot dot-error';
+      text.textContent = 'Offline';
+    }
+  } catch(e) {}
 }
 
-.prf-mode-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  background: transparent;
-  border: none;
-  border-bottom: 3px solid transparent;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--erp-gray, #6c757d);
-  cursor: pointer;
-  transition: all 0.15s;
-  margin-bottom: -2px;
-  font-family: inherit;
+function initUserInfo() {
+  var fullname = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || '';
+  var department = localStorage.getItem('ivm_userDepartment') || '';
+  document.getElementById('prfPreparedBy').value = fullname;
+  document.getElementById('prfDepartment').value = department;
 }
 
-.prf-mode-tab:hover {
-  color: var(--erp-blue, #1e3a5f);
-  background: #f8fafc;
+function generatePrfNo() {
+  var now = new Date();
+  var month = now.getMonth() + 1;
+  var day = now.getDate();
+  document.getElementById('prfNo').value = 'PRF#' + month + '-' + day;
 }
 
-.prf-mode-tab.active {
-  color: var(--erp-blue, #1e3a5f);
-  border-bottom-color: var(--erp-blue, #1e3a5f);
+// ═══════════════════════════════════════════════════════════
+// MODE SWITCHING
+// ═══════════════════════════════════════════════════════════
+function prfSwitchMode(mode) {
+  _prf.mode = mode;
+
+  document.querySelectorAll('.prf-mode-tab').forEach(function(el) {
+    el.classList.toggle('active', el.dataset.mode === mode);
+  });
+
+  var reorderContent = document.getElementById('modeReorder');
+  var manualContent = document.getElementById('modeManual');
+
+  if (reorderContent) reorderContent.classList.toggle('active', mode === 'reorder');
+  if (manualContent) manualContent.classList.toggle('active', mode === 'manual');
+
+  var hint = document.getElementById('categoryHint');
+  if (hint) {
+    hint.textContent = mode === 'reorder'
+      ? 'Required — pinipili kung anong category ng PRF.'
+      : 'Required — parehong category gagamitin sa submission.';
+  }
+
+  // ✅ Toast alert kapag nag-switch sa reorder mode at may pending
+  if (mode === 'reorder' && _prf.items.length > 0) {
+    var pendingCount = _prf.items.filter(function(it) {
+      return computeSuggestedBreakdown(it).pendingQty > 0;
+    }).length;
+
+    if (pendingCount > 0) {
+      setTimeout(function() {
+        erpShowToast('⚠️ ' + pendingCount + ' item(s) have pending PRF — check the ⚠ PENDING column', 'warning');
+      }, 300);
+    }
+  }
+
+  updateSubmitButton();
+}
+window.prfSwitchMode = prfSwitchMode;
+
+// ═══════════════════════════════════════════════════════════
+// UNIQUE PRF NO CHECK
+// ═══════════════════════════════════════════════════════════
+async function checkPrfNoAvailable(prfNo) {
+  try {
+    var res = await erpFetch('prf_documents',
+      'prf_no=eq.' + encodeURIComponent(prfNo) + '&select=id&limit=1');
+    return (!res || res.length === 0);
+  } catch(e) {
+    console.warn('[checkPrfNoAvailable]', e.message);
+    return true;
+  }
 }
 
-.prf-mode-tab i {
-  font-size: 1.1rem;
+async function generateUniquePrfNo(basePrfNo) {
+  var candidate = basePrfNo;
+  var suffix = 1;
+
+  while (!(await checkPrfNoAvailable(candidate))) {
+    suffix++;
+    candidate = basePrfNo + '-' + suffix;
+    if (suffix > 100) throw new Error('Cannot generate unique PRF No.');
+  }
+
+  return candidate;
 }
 
-.prf-mode-content {
-  display: none;
+// ═══════════════════════════════════════════════════════════
+// LOAD DATA
+// ═══════════════════════════════════════════════════════════
+async function loadReorderList() {
+  try {
+    var rows = await erpFetch('erp_v_reorder_list', 'select=*');
+    _prf.reorderList = rows || [];
+    console.log('[PRF] Reorder list:', _prf.reorderList.length, 'items');
+  } catch(err) {
+    console.error('[PRF] Load failed:', err);
+    erpShowToast('Failed to load reorder list: ' + err.message, 'danger');
+  }
 }
 
-.prf-mode-content.active {
-  display: block;
+async function loadPendingPrfItems() {
+  try {
+    // ═══ Step 1: Load detailed items (per PRF line) ═══
+    var rows = await erpFetch('erp_v_prf_pending_items', 'select=*');
+    _prf.pendingPrfItems = {};
+    
+    (rows || []).forEach(function(r) {
+      var code = String(r.item_code || '').trim();
+      if (!code) return;
+      if (!_prf.pendingPrfItems[code]) _prf.pendingPrfItems[code] = [];
+      _prf.pendingPrfItems[code].push({
+        prf_no: r.prf_no,
+        base_prf_no: r.base_prf_no || r.prf_no,
+        status: r.status,
+        qty: Number(r.qty_for_order || 0),
+        description: r.description || ''
+      });
+    });
+    
+    // ═══ Step 2: Load summary (aggregated per item) ═══
+    _prf.pendingSummary = {};
+    try {
+      var summaryRows = await erpFetch('erp_v_prf_pending_summary', 'select=*');
+      (summaryRows || []).forEach(function(s) {
+        var code = String(s.item_code || '').trim();
+        if (!code) return;
+        _prf.pendingSummary[code] = {
+          count: Number(s.pending_prf_count || 0),
+          totalQty: Number(s.total_pending_qty || 0),
+          prfNos: s.prf_nos || '',
+          firstDate: s.first_prf_date,
+          latestDate: s.latest_prf_date
+        };
+      });
+      console.log('[PRF] Pending summary loaded:', Object.keys(_prf.pendingSummary).length, 'items');
+    } catch(e) {
+      console.warn('[PRF] Summary load failed, computing from detail:', e.message);
+      // Fallback: compute from pendingPrfItems
+      Object.keys(_prf.pendingPrfItems).forEach(function(code) {
+        var items = _prf.pendingPrfItems[code];
+        var uniquePrfs = {};
+        var totalQty = 0;
+        items.forEach(function(p) {
+          var key = p.base_prf_no || p.prf_no;
+          if (!uniquePrfs[key]) uniquePrfs[key] = true;
+          totalQty += p.qty;
+        });
+        _prf.pendingSummary[code] = {
+          count: Object.keys(uniquePrfs).length,
+          totalQty: totalQty,
+          prfNos: Object.keys(uniquePrfs).join(', ')
+        };
+      });
+    }
+    
+    // Update global refs
+    window._prfPending = _prf.pendingPrfItems;
+    window._prfPendingSummary = _prf.pendingSummary;
+    
+    var pendingCount = Object.keys(_prf.pendingSummary).length;
+    console.log('[PRF] Pending items loaded:', pendingCount);
+    
+    // Update UI banner
+    var banner = document.getElementById('pendingPrfBanner');
+    var countEl = document.getElementById('pendingPrfCount');
+    if (banner && countEl) {
+      if (pendingCount > 0) {
+        countEl.textContent = pendingCount;
+        banner.style.display = 'block';
+      } else {
+        banner.style.display = 'none';
+      }
+    }
+  } catch(err) {
+    console.warn('[PRF] Pending items load failed:', err.message);
+  }
 }
 
-/* Manual item row */
-.manual-item-row {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 14px;
-  margin-bottom: 12px;
-  position: relative;
+// ═══════════════════════════════════════════════════════════
+// PENDING CHECK HELPERS
+// ═══════════════════════════════════════════════════════════
+function checkItemPendingPrf(itemCode) {
+  if (!itemCode) return null;
+  var code = String(itemCode).trim();
+  var summary = _prf.pendingSummary[code];
+  if (!summary || summary.totalQty === 0) return null;
+  return summary;
 }
 
-.manual-item-row:hover {
-  border-color: #cbd5e1;
+window.checkItemPendingPrf = checkItemPendingPrf;
+
+// ═══════════════════════════════════════════════════════════
+// LOAD SEARCH CATALOG (erp_items — PAGINATED)
+// ═══════════════════════════════════════════════════════════
+async function preloadInventoryForSearch() {
+  if (_prf.inventoryLoaded) return;
+
+  try {
+    console.log('[PRF] Loading search catalog from erp_items (paginated)...');
+
+    var allRows = [];
+    var pageSize = 1000;
+    var offset = 0;
+    var hasMore = true;
+    var pageNum = 1;
+
+    while (hasMore) {
+      var rows = await erpFetch('erp_items',
+        'select=item_code,description,base_unit,category,location,on_hand,buffer_stock,ave_monthly_consumption' +
+        '&is_active=eq.true&order=item_code.asc&limit=' + pageSize + '&offset=' + offset);
+
+      if (!rows || rows.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      allRows = allRows.concat(rows);
+      offset += rows.length;
+      console.log('[PRF] Page ' + pageNum + ': ' + rows.length + ' items (total: ' + allRows.length + ')');
+      pageNum++;
+
+      if (rows.length < pageSize) hasMore = false;
+      if (hasMore) await new Promise(function(r) { setTimeout(r, 100); });
+    }
+
+    console.log('[PRF] ✅ Total items fetched:', allRows.length);
+
+    _prf.inventoryList = allRows.map(function(r) {
+      return {
+        code: r.item_code,
+        description: r.description || '',
+        unit: r.base_unit || 'PCS',
+        itemClass: r.category || '',
+        category: r.category || '',
+        location: r.location || ''
+      };
+    });
+
+    _prf.erpItemsMap = {};
+    allRows.forEach(function(r) {
+      _prf.erpItemsMap[String(r.item_code || '').trim()] = {
+        buffer_stock: Number(r.buffer_stock || 0),
+        on_hand: Number(r.on_hand || 0),
+        ave_monthly_consumption: Number(r.ave_monthly_consumption || 0),
+        base_unit: r.base_unit || 'PCS',
+        location: r.location || '',
+        category: r.category || ''
+      };
+    });
+
+    _prf.inventoryLoaded = true;
+    console.log('[PRF] ✅ Search catalog loaded:', _prf.inventoryList.length, 'items');
+
+  } catch(err) {
+    console.warn('[PRF] erp_items load failed:', err.message);
+    _prf.inventoryList = [];
+  }
 }
 
-/* Item search dropdown */
-.item-search-wrapper {
-  position: relative;
+function getSuggestedQty(itemCode) {
+  var item = _prf.erpItemsMap[String(itemCode || '').trim()];
+  if (!item) return 0;
+  var diff = item.buffer_stock - item.on_hand;
+  if (diff > 0) return Math.ceil(diff);
+  return 0;
 }
 
-.item-search-dropdown {
-  position: fixed;               /* ← Changed from absolute */
-  background: #fff;
-  border: 1.5px solid #cbd5e1;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
-  max-height: 320px;             /* ← Increased */
-  overflow-y: auto;
-  z-index: 99999;
-  min-width: 400px;              /* ← Ensure readable width */
+// ═══════════════════════════════════════════════════════════
+// COMPUTE SUGGESTED (with pending deduction)
+// ═══════════════════════════════════════════════════════════
+function computeSuggested(it) {
+  var breakdown = computeSuggestedBreakdown(it);
+  return breakdown.netNeed;
 }
 
-.item-search-dropdown.d-none {
-  display: none;
+function computeSuggestedBreakdown(it) {
+  var itemCode = it.item_code || it.code || '';
+  
+  var buffer = Number(it.buffer_stock || 0);
+  var onHand = Number(it.on_hand || 0);
+  var baseNeed = buffer - onHand;
+  if (baseNeed < 0) baseNeed = 0;
+  
+  var pendingInfo = _prf.pendingSummary[itemCode];
+  var pendingQty = pendingInfo ? Number(pendingInfo.totalQty || 0) : 0;
+  var pendingCount = pendingInfo ? Number(pendingInfo.count || 0) : 0;
+  var prfNos = pendingInfo ? pendingInfo.prfNos : '';
+  
+  var netNeed = baseNeed - pendingQty;
+  if (netNeed < 0) netNeed = 0;
+  
+  return {
+    buffer: buffer,
+    onHand: onHand,
+    baseNeed: baseNeed,
+    pendingQty: pendingQty,
+    pendingCount: pendingCount,
+    prfNos: prfNos,
+    netNeed: Math.ceil(netNeed)
+  };
 }
 
-.item-search-item {
-  padding: 10px 14px;
-  cursor: pointer;
-  border-bottom: 1px solid #f0f0f0;
-  font-size: 0.85rem;
-  transition: background 0.1s;
+window.computeSuggestedBreakdown = computeSuggestedBreakdown;
+
+// ═══════════════════════════════════════════════════════════
+// CATEGORY CHANGE (Reorder mode)
+// ═══════════════════════════════════════════════════════════
+function onCategoryChange() {
+  if (_prf.mode !== 'reorder') return;
+
+  var category = document.getElementById('prfCategory').value;
+  var container = document.getElementById('reorderItemsContainer');
+
+  if (!category) {
+    container.innerHTML = '<div class="text-center text-muted py-4">' +
+      '<i class="bi bi-inbox fs-1 d-block mb-2"></i>' +
+      '<div>Select a category above to load items.</div></div>';
+    _prf.items = [];
+    updateSubmitButton();
+    return;
+  }
+
+  _prf.items = _prf.reorderList.filter(function(it) {
+    return String(it.category || '').toUpperCase() === category;
+  });
+
+  console.log('[PRF] Category:', category, 'Items:', _prf.items.length);
+  renderReorderItems();
 }
 
-.item-search-item:hover {
-  background: #eef4fb;
+// ═══════════════════════════════════════════════════════════
+// RENDER REORDER ITEMS (v3.0 — FULLY EDITABLE QTY)
+// ═══════════════════════════════════════════════════════════
+function renderReorderItems() {
+  var container = document.getElementById('reorderItemsContainer');
+  if (!container) return;
+
+  if (_prf.items.length === 0) {
+    container.innerHTML =
+      '<div class="alert alert-info mb-0">' +
+      '<i class="bi bi-info-circle me-2"></i>' +
+      'No items found for this category in the reorder list. ' +
+      'You can switch to <strong>Manual Entry</strong> to add items manually.</div>';
+    updateSubmitButton();
+    updateReorderTabBadge(0);
+    return;
+  }
+
+  var filterCheck = document.getElementById('filterPendingOnly');
+  var filterPendingOnly = filterCheck ? filterCheck.checked : false;
+
+  var itemsToRender = _prf.items.slice();
+
+  if (filterPendingOnly) {
+    itemsToRender = itemsToRender.filter(function(it) {
+      return computeSuggestedBreakdown(it).pendingQty > 0;
+    });
+  }
+
+  itemsToRender.sort(function(a, b) {
+    var aPending = computeSuggestedBreakdown(a).pendingQty;
+    var bPending = computeSuggestedBreakdown(b).pendingQty;
+    if ((aPending > 0) === (bPending > 0)) {
+      return String(a.item_code || '').localeCompare(String(b.item_code || ''));
+    }
+    return (bPending > 0 ? 1 : 0) - (aPending > 0 ? 1 : 0);
+  });
+
+  var pendingCountInCategory = _prf.items.filter(function(it) {
+    return computeSuggestedBreakdown(it).pendingQty > 0;
+  }).length;
+  updateReorderTabBadge(pendingCountInCategory);
+
+  if (itemsToRender.length === 0) {
+    container.innerHTML = '<div class="alert alert-success mb-0">' +
+      '<i class="bi bi-check-circle-fill me-2"></i>' +
+      '<strong>Walang items na may pending PRF sa category na ito! 🎉</strong>' +
+      '<div class="small mt-1">Untick ang filter checkbox para makita lahat ng items.</div>' +
+      '</div>';
+    updateSubmitButton();
+    return;
+  }
+
+  var allSelected = itemsToRender.length > 0 && itemsToRender.every(function(it) {
+    return it._selected === true;
+  });
+  var someSelected = itemsToRender.some(function(it) { return it._selected === true; });
+
+  var html = '<div class="table-responsive">';
+  html += '<table class="erp-table" style="font-size:0.82rem;">';
+  html += '<thead><tr>' +
+    '<th style="width:3%">' +
+      '<input type="checkbox" id="selectAllChk"' +
+        (allSelected ? ' checked' : '') +
+        ' onchange="toggleSelectAll(this.checked)" title="Select/Deselect All">' +
+    '</th>' +
+    '<th style="width:4%">#</th>' +
+    '<th style="width:9%">Item Code</th>' +
+    '<th style="width:16%">Description</th>' +
+    '<th style="width:6%" class="text-center">Location</th>' +
+    '<th style="width:5%" class="text-center">On-Hand</th>' +
+    '<th style="width:5%" class="text-center">Buffer</th>' +
+    '<th style="width:7%" class="text-center" title="Existing Pending UNSERVED PRF Qty">⚠ Pending</th>' +
+    '<th style="width:6%" class="text-center" title="Net need = Buffer - On-Hand - Pending">Net Need</th>' +
+    '<th style="width:8%" class="text-center">Qty For Order</th>' +
+    '<th style="width:5%" class="text-center">Unit</th>' +
+    '<th style="width:17%">Remarks</th>' +
+  '</tr></thead><tbody>';
+
+  itemsToRender.forEach(function(it, idx) {
+    var breakdown = computeSuggestedBreakdown(it);
+    var suggested = breakdown.netNeed;
+    var isSelected = it._selected === true;
+    var qtyOrder = it._qtyOrder !== undefined ? it._qtyOrder : 0;
+    var remarks = it._remarks || '';
+    var originalIdx = _prf.items.indexOf(it);
+
+    // ✅ WALANG DISABLE LOGIC DITO. LAHAT AY EDITABLE.
+    var pendingDisplay = '<span class="text-muted">—</span>';
+    if (breakdown.pendingQty > 0) {
+      var tooltipText = 'PRF Nos:\n' + String(breakdown.prfNos).replace(/, /g, '\n');
+      pendingDisplay = '<span title="' + erpEsc(tooltipText) + '" style="cursor:help;">' +
+        '<strong class="text-warning">' + erpNum(breakdown.pendingQty) + '</strong>' +
+        '<div style="font-size:0.65rem;color:#6b7280;">' +
+        breakdown.pendingCount + ' PRF' + (breakdown.pendingCount > 1 ? 's' : '') +
+        '</div></span>';
+    }
+
+    var netNeedDisplay = '';
+    if (breakdown.pendingQty > 0) {
+      netNeedDisplay = '<div style="text-decoration:line-through;color:#9ca3af;font-size:0.72rem;">' +
+        erpNum(breakdown.baseNeed) + '</div>' +
+        '<div><strong class="text-success">' + erpNum(suggested) + '</strong></div>';
+    } else {
+      netNeedDisplay = '<span class="text-muted" style="font-style:italic;">' + erpNum(suggested) + '</span>';
+    }
+
+    var urgencyBadge = '';
+    if (it.urgency === 'CRITICAL') urgencyBadge = ' <span class="badge bg-danger">CRIT</span>';
+    else if (it.urgency === 'URGENT') urgencyBadge = ' <span class="badge bg-warning text-dark">URG</span>';
+
+    var rowStyle = '';
+    if (isSelected) {
+      rowStyle = ' style="background:#ecfdf5;"';
+    } else if (breakdown.pendingQty > 0) {
+      rowStyle = ' style="background:#fffbeb;"';
+    }
+
+    html += '<tr data-idx="' + originalIdx + '"' +
+      rowStyle +
+      (breakdown.pendingQty > 0 ? ' data-has-pending="true"' : '') + '>' +
+      '<td><input type="checkbox" class="item-select-chk" data-idx="' + originalIdx + '"' +
+        (isSelected ? ' checked' : '') +
+        ' onchange="toggleItemSelect(' + originalIdx + ', this.checked)"></td>' +
+      '<td>' + (idx + 1) + '</td>' +
+      '<td><code>' + erpEsc(it.item_code) + '</code>' + urgencyBadge + '</td>' +
+      '<td>' + erpEsc(it.description || '—') + '</td>' +
+      '<td class="text-center">' + erpEsc(it.location || '—') + '</td>' +
+      '<td class="text-center">' + erpNum(it.on_hand || 0) + '</td>' +
+      '<td class="text-center">' + erpNum(it.buffer_stock || 0) + '</td>' +
+      '<td class="text-center">' + pendingDisplay + '</td>' +
+      '<td class="text-center">' + netNeedDisplay + '</td>' +
+      '<td class="text-center">' +
+        '<input type="number" class="form-control form-control-sm qty-order-input" ' +
+          'data-idx="' + originalIdx + '" value="' + qtyOrder + '" min="0" step="1" ' +
+          'placeholder="' + Math.ceil(suggested) + '" onchange="updateQty(' + originalIdx + ', this.value)">' +
+      '</td>' +
+      '<td class="text-center">' +
+        '<select class="form-select form-select-sm unit-select" data-idx="' + originalIdx + '" onchange="updateUnit(' + originalIdx + ', this.value)" style="font-size:0.75rem;padding:2px 4px;">' +
+          buildUnitOptions(it.base_unit || 'PIECE') +
+        '</select>' +
+      '</td>' +
+      '<td>' +
+        '<input type="text" class="form-control form-control-sm remarks-input" ' +
+        'data-idx="' + originalIdx + '" value="' + erpEsc(remarks) + '" placeholder="Optional" ' +
+        'onchange="updateRemarks(' + originalIdx + ', this.value)">' +
+      '</td>' +
+    '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+
+  recomputeSelected();
+  var totalQty = _prf.selectedItems.reduce(function(s, it) { return s + (it._qtyOrder || 0); }, 0);
+
+  var batchingInfo = '';
+  if (_prf.selectedItems.length > MAX_ITEMS_PER_PRF) {
+    var batches = Math.ceil(_prf.selectedItems.length / MAX_ITEMS_PER_PRF);
+    batchingInfo = '<span class="text-warning ms-3">' +
+      '<i class="bi bi-exclamation-triangle-fill me-1"></i>' +
+      'Will split into <strong>' + batches + '</strong> PRFs' +
+      '</span>';
+  }
+
+  html += '<div class="mt-3 d-flex justify-content-between align-items-center flex-wrap gap-2">';
+  html += '<div class="small text-muted">' +
+    '<i class="bi bi-info-circle me-1"></i>' +
+    'Net Need = (Buffer − On-Hand − Pending PRF)' +
+    batchingInfo + '</div>';
+  html += '<div class="d-flex align-items-center gap-3">';
+  
+  // ✅ Idinagdag natin yung "Deselect PRF Items" dito
+  html += '<button type="button" class="btn btn-sm btn-outline-danger me-2" onclick="deselectPrfItems()" title="Alisin sa selection ang mga may pending PRF">' +
+    '<i class="bi bi-shield-x me-1"></i>Deselect PRF Items</button>';
+    
+  html += '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllItems()" title="Clear all selections">' +
+    '<i class="bi bi-x-lg me-1"></i>Deselect All</button>';
+  html += '<div><strong>Selected:</strong> ' + _prf.selectedItems.length +
+    ' items · <strong>Total Qty:</strong> ' + erpNum(totalQty) + '</div>';
+  html += '</div>';
+  html += '</div>';
+
+  container.innerHTML = html;
+
+  var headerChk = document.getElementById('selectAllChk');
+  if (headerChk && someSelected && !allSelected) {
+    headerChk.indeterminate = true;
+  }
+
+  updateItemsCount();
+  updateSubmitButton();
+}
+// ═══════════════════════════════════════════════════════════
+// ✅ NEW: Update Reorder Tab Badge
+// ═══════════════════════════════════════════════════════════
+function updateReorderTabBadge(pendingCount) {
+  var badge = document.getElementById('reorderPendingBadge');
+  if (!badge) return;
+  
+  if (pendingCount > 0) {
+    badge.textContent = pendingCount + ' ⚠';
+    badge.style.display = 'inline-block';
+    badge.className = 'badge bg-warning text-dark ms-1';
+  } else {
+    badge.style.display = 'none';
+  }
 }
 
-.item-search-item:last-child {
-  border-bottom: none;
+window.updateReorderTabBadge = updateReorderTabBadge;
+
+// ═══════════════════════════════════════════════════════════
+// ✅ NEW: Show Pending Reorder List (from current category)
+// ═══════════════════════════════════════════════════════════
+function showPendingReorderList() {
+  // Collect items with pending from current reorder list
+  var pendingItems = _prf.items.filter(function(it) {
+    return computeSuggestedBreakdown(it).pendingQty > 0;
+  });
+
+  if (pendingItems.length === 0) {
+    erpShowToast('Walang pending items sa category na ito', 'info');
+    return;
+  }
+
+  var html = '<div style="padding:10px;">';
+  html += '<div class="alert alert-warning small mb-3">' +
+    '<i class="bi bi-exclamation-triangle-fill me-1"></i>' +
+    '<strong>' + pendingItems.length + ' item(s)</strong> sa category na ito ang may pending PRF. ' +
+    'Ang <strong>Net Need</strong> ay awtomatikong naka-deduct sa pending qty.' +
+    '</div>';
+  
+  html += '<div class="table-responsive" style="max-height:500px;overflow-y:auto;">';
+  html += '<table class="table table-sm table-bordered" style="font-size:0.82rem;">';
+  html += '<thead class="table-light sticky-top"><tr>' +
+    '<th>Item Code</th>' +
+    '<th>Description</th>' +
+    '<th class="text-center">On-Hand</th>' +
+    '<th class="text-center">Buffer</th>' +
+    '<th class="text-center">⚠ Pending</th>' +
+    '<th class="text-center">Net Need</th>' +
+    '<th class="text-center">Pending PRF(s)</th>' +
+    '</tr></thead><tbody>';
+
+  pendingItems.forEach(function(it) {
+    var breakdown = computeSuggestedBreakdown(it);
+    
+    html += '<tr style="background:#fffbeb;">' +
+      '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
+      '<td>' + erpEsc(it.description || '—') + '</td>' +
+      '<td class="text-center">' + erpNum(it.on_hand || 0) + '</td>' +
+      '<td class="text-center">' + erpNum(it.buffer_stock || 0) + '</td>' +
+      '<td class="text-center"><strong class="text-warning">' + erpNum(breakdown.pendingQty) + '</strong></td>' +
+      '<td class="text-center"><strong class="text-success">' + erpNum(breakdown.netNeed) + '</strong></td>' +
+      '<td><small>' + erpEsc(breakdown.prfNos) + '</small></td>' +
+    '</tr>';
+  });
+
+  html += '</tbody></table></div></div>';
+
+  // Create/reuse modal
+  var modalEl = document.getElementById('pendingReorderListModal');
+  if (modalEl) modalEl.remove();
+
+  var wrapper = document.createElement('div');
+  wrapper.innerHTML = '<div class="modal fade" id="pendingReorderListModal" tabindex="-1">' +
+    '<div class="modal-dialog modal-lg modal-dialog-scrollable">' +
+      '<div class="modal-content">' +
+        '<div class="modal-header" style="background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);color:#fff;">' +
+          '<h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>Pending Items (Current Category)</h5>' +
+          '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>' +
+        '</div>' +
+        '<div class="modal-body p-0">' + html + '</div>' +
+        '<div class="modal-footer">' +
+          '<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(wrapper.firstChild);
+
+  var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('pendingReorderListModal'));
+  modal.show();
 }
 
-.item-search-item .item-code {
-  font-family: 'Courier New', monospace;
-  font-weight: 700;
-  color: var(--erp-blue, #1e3a5f);
-  margin-bottom: 2px;
+window.showPendingReorderList = showPendingReorderList;
+// ═══════════════════════════════════════════════════════════
+// SELECTION
+// ═══════════════════════════════════════════════════════════
+function toggleItemSelect(idx, checked) {
+  var item = _prf.items[idx];
+  if (!item) return;
+
+  var breakdown = computeSuggestedBreakdown(item);
+  
+  // ✅ TINANGGAL NA ANG BLOCKING PARA PWEDE I-OVERRIDE
+  item._selected = checked;
+  
+  if (checked) {
+    // Default to 1 kung 0 ang net need
+    item._qtyOrder = breakdown.netNeed > 0 ? breakdown.netNeed : 1; 
+  } else {
+    item._qtyOrder = 0;
+  }
+  
+  recomputeSelected();
+  renderReorderItems();
 }
 
-.item-search-item .item-desc {
-  color: #4b5563;
-  font-size: 0.8rem;
+window.toggleItemSelect = toggleItemSelect;
+
+function toggleSelectAll(checked) {
+  _prf.items.forEach(function(it) {
+    var breakdown = computeSuggestedBreakdown(it);
+    
+    // ✅ PWEDE NA ISAMA LAHAT, KAHIT MAY PENDING PRF
+    it._selected = checked;
+    
+    if (checked) {
+      it._qtyOrder = breakdown.netNeed > 0 ? breakdown.netNeed : 1;
+    } else {
+      it._qtyOrder = 0;
+    }
+  });
+
+  recomputeSelected();
+  renderReorderItems();
+}
+window.toggleSelectAll = toggleSelectAll;
+
+function deselectAllItems() {
+  console.log('[PRF] Deselect All');
+  _prf.items.forEach(function(it) {
+    it._selected = false;
+    it._qtyOrder = 0;
+  });
+  recomputeSelected();
+  renderReorderItems();
 }
 
-.item-search-item .item-meta {
-  display: flex;
-  gap: 8px;
-  margin-top: 3px;
-  font-size: 0.72rem;
-  color: #6b7280;
+window.deselectAllItems = deselectAllItems;
+
+function updateQty(idx, value) {
+  var item = _prf.items[idx];
+  if (!item) return;
+  var qty = parseFloat(value) || 0;
+  if (qty < 0) qty = 0;
+  item._qtyOrder = qty;
+  if (qty > 0) item._selected = true;
+  recomputeSelected();
+  updateSubmitButton();
 }
 
-.item-search-item .item-meta .badge {
-  font-size: 0.65rem;
+window.updateQty = updateQty;
+
+function updateUnit(idx, value) {
+  var item = _prf.items[idx];
+  if (!item) return;
+  item.base_unit = value;
 }
 
-/* Suggested Qty display */
-.suggested-qty-hint {
-  font-size: 0.72rem;
-  color: #6b7280;
-  margin-top: 4px;
+window.updateUnit = updateUnit;
+
+function updateRemarks(idx, value) {
+  var item = _prf.items[idx];
+  if (!item) return;
+  item._remarks = String(value || '').trim();
 }
 
-.suggested-qty-hint strong {
-  color: #1e3a5f;
+window.updateRemarks = updateRemarks;
+
+function recomputeSelected() {
+  // Bilangin lahat ng may check, para lumabas sa Selected Items
+  _prf.selectedItems = _prf.items.filter(function(it) {
+    return it._selected === true;
+  });
 }
-</style>
 
+window.deselectPrfItems = function() {
+  var count = 0;
+  _prf.items.forEach(function(it) {
+    var breakdown = computeSuggestedBreakdown(it);
+    // Kung may existing PRF (pendingQty > 0), i-uncheck at i-zero ang qty
+    if (breakdown.pendingQty > 0 && it._selected) {
+      it._selected = false;
+      it._qtyOrder = 0;
+      count++;
+    }
+  });
+  
+  if (count > 0) {
+    erpShowToast('✅ Deselected ' + count + ' item(s) with existing PRF.', 'success');
+  } else {
+    erpShowToast('Walang naka-select na item with existing PRF.', 'info');
+  }
+  
+  recomputeSelected();
+  renderReorderItems();
+};
 
-<script src="erp-theme.js"></script>
-   <script src="erp-guard.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script defer src="erp-config.js"></script>
-<script defer src="erp-supabase.js"></script>
-<script defer src="erp-nav.js"></script>
-<script defer src="new-prf.js"></script>
-<script defer src="notifications.js"></script>
-   <script defer src="js/update.js"></script>
-</head>
-<body>
+// ═══════════════════════════════════════════════════════════
+// MANUAL ITEMS
+// ═══════════════════════════════════════════════════════════
+function addManualItem() {
+  _prf.manualItems.push({
+    inventoryId: '',
+    description: '',
+    qty: 0,
+    unit: 'PIECE',
+    remarks: ''
+  });
+  renderManualItems();
+  updateSubmitButton();
 
-<nav class="erp-topbar">
-  <div class="erp-topbar-left">
-    <img src="../gemcor-logo.png" alt="GEMCOR" class="erp-logo" onerror="this.style.display='none'">
-    <div>
-      <div class="erp-brand">GEMCOR ERP</div>
-      <div class="erp-brand-sub">Create PRF <span class="badge-live">LIVE</span></div>
-    </div>
-  </div>
-  <div id="erpNavBar"></div>
-  <div class="erp-topbar-right">
-    <div class="erp-health" id="erpHealthBadge">
-      <span class="dot dot-pending"></span>
-      <span id="erpHealthText">Checking...</span>
-    </div>
-    <a href="prf-monitor.html" class="erp-btn-outline">
-      <i class="bi bi-list-ul"></i> <span>PRF Monitor</span>
-    </a>
-  </div>
-</nav>
+  setTimeout(function() {
+    var inputs = document.querySelectorAll('.manual-item-search-input');
+    if (inputs.length > 0) inputs[inputs.length - 1].focus();
+  }, 100);
+}
 
-<div class="erp-container">
+window.addManualItem = addManualItem;
 
-  <div class="erp-page-header">
-    <div>
-      <div class="erp-page-title">
-        <i class="bi bi-file-earmark-plus"></i>
-        <span>Create PRF</span>
-      </div>
-      <div class="erp-breadcrumb">
-        <a href="stock-monitor.html">Home</a>
-        <i class="bi bi-chevron-right"></i>
-        <a href="prf-monitor.html">PRF Monitor</a>
-        <i class="bi bi-chevron-right"></i>
-        <span>New</span>
-      </div>
-    </div>
-  </div>
+function renderManualItems() {
+  var container = document.getElementById('manualItemsContainer');
+  var emptyState = document.getElementById('manualEmptyState');
+  if (!container) return;
 
-  <!-- STEP 1: DOC INFO -->
-  <div class="erp-card" style="padding:24px;margin-bottom:20px;">
-    <h5 style="margin-bottom:16px;">
-      <span class="badge bg-primary me-2">1</span>PRF Information
-    </h5>
-    <div class="row g-3">
-      <div class="col-md-6">
-        <label class="form-label fw-bold">PRF No. <span class="text-muted small">(editable)</span></label>
-        <input type="text" id="prfNo" class="form-control" placeholder="PRF#MM-DD">
-        <div class="form-text">Auto-generated pero pwede i-edit once may PRF# from procurement.</div>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label fw-bold">Category <span class="text-danger">*</span></label>
-        <select id="prfCategory" class="form-select">
-          <option value="">-- Select Category --</option>
-          <option value="COMPONENTS">COMPONENTS</option>
-          <option value="CONSUMABLES">CONSUMABLES</option>
-          <option value="ENCLOSURE">ENCLOSURE</option>
-          <option value="EWMAT">EWMAT</option>
-          <option value="FABMAT">FABMAT</option>
-          <option value="OFABP">OFABP</option>
-          <option value="PANEL">PANEL</option>
-          <option value="UNCATEGORIZED">UNCATEGORIZED</option>
-        </select>
-        <div class="form-text" id="categoryHint">Required — pinipili kung anong category ng PRF.</div>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label fw-bold">Prepared By</label>
-        <input type="text" id="prfPreparedBy" class="form-control" readonly>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label fw-bold">Department</label>
-        <input type="text" id="prfDepartment" class="form-control" readonly>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label fw-bold">Noted By <span class="text-muted small">(optional)</span></label>
-        <input type="text" id="prfNotedBy" class="form-control" placeholder="e.g. CYNTHIA A. CEREZO">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label fw-bold">Approved By <span class="text-muted small">(optional)</span></label>
-        <input type="text" id="prfApprovedBy" class="form-control" placeholder="e.g. REMIGIO BALAOING">
-      </div>
-      <div class="col-12">
-        <label class="form-label fw-bold">Notes <span class="text-muted small">(optional)</span></label>
-        <textarea id="prfNotes" class="form-control" rows="2" placeholder="Additional notes..."></textarea>
-      </div>
-    </div>
-  </div>
+  if (_prf.manualItems.length === 0) {
+    if (emptyState) emptyState.style.display = 'block';
+    container.innerHTML = '';
+    if (emptyState) container.appendChild(emptyState);
+    updateManualCount();
+    return;
+  }
 
-  <!-- STEP 2: MODE TABS -->
-  <div class="erp-card" style="padding:24px;margin-bottom:20px;">
-    <h5 style="margin-bottom:16px;">
-      <span class="badge bg-primary me-2">2</span>Items
-      <span class="text-muted ms-2" id="itemsCountLabel">(0 items)</span>
-    </h5>
+  if (emptyState) emptyState.style.display = 'none';
 
-    <div class="prf-mode-tabs">
-     <button class="prf-mode-tab active" data-mode="reorder" onclick="prfSwitchMode('reorder')">
-  <i class="bi bi-list-check"></i>
-  <span>From Reorder List</span>
-  <span id="reorderPendingBadge" class="badge bg-warning text-dark ms-1" style="display:none;">0 ⚠</span>
-</button>
-      <button class="prf-mode-tab" data-mode="manual" onclick="prfSwitchMode('manual')">
-        <i class="bi bi-search"></i>
-        <span>Manual Entry</span>
-      </button>
-    </div>
+  var html = '';
+  _prf.manualItems.forEach(function(it, idx) {
+    var erpItem = _prf.erpItemsMap[it.inventoryId] || {};
+    var breakdown = it.inventoryId ? computeSuggestedBreakdown({
+      item_code: it.inventoryId,
+      buffer_stock: erpItem.buffer_stock || 0,
+      on_hand: erpItem.on_hand || 0
+    }) : null;
+    
+    var suggestedQty = breakdown ? breakdown.netNeed : 0;
+    
+    // ✅ Pending warning
+    var warningHtml = '';
+    if (breakdown && breakdown.pendingQty > 0 && it.inventoryId) {
+      var warningClass = breakdown.pendingCount >= 2 ? 'alert-danger' : 'alert-warning';
+      warningHtml = '<div class="alert ' + warningClass + ' py-2 px-3 mt-2 mb-0 small">' +
+        '<i class="bi bi-exclamation-triangle-fill me-1"></i>' +
+        '<strong>May existing pending PRF!</strong> ' +
+        '<code>' + erpEsc(breakdown.prfNos) + '</code>' +
+        '<div class="mt-1" style="font-size:0.78rem;">' +
+        'Pending qty: <strong class="text-danger">' + erpNum(breakdown.pendingQty) + '</strong> · ' +
+        'Original need: ' + erpNum(breakdown.baseNeed) + ' · ' +
+        '<strong class="text-success">Net: ' + erpNum(breakdown.netNeed) + '</strong>' +
+        '</div>' +
+        '</div>';
+    }
+    
+    // ✅ Breakdown display
+    var breakdownHtml = '';
+    if (breakdown && it.inventoryId && breakdown.buffer > 0) {
+      breakdownHtml = '<div class="small text-muted mt-1" style="font-size:0.75rem;">' +
+        'Buffer: <strong>' + erpNum(breakdown.buffer) + '</strong> · ' +
+        'On-Hand: ' + erpNum(breakdown.onHand) + ' · ' +
+        (breakdown.pendingQty > 0 
+          ? 'Pending: <strong class="text-warning">' + erpNum(breakdown.pendingQty) + '</strong> · ' 
+          : '') +
+        'Net Need: <strong class="text-success">' + erpNum(breakdown.netNeed) + '</strong>' +
+        '</div>';
+    }
 
-    <!-- MODE 1: FROM REORDER LIST -->
-<div id="modeReorder" class="prf-mode-content active">
-  <div class="alert alert-info small py-2 mb-3">
-    <i class="bi bi-info-circle me-1"></i>
-    Select a category above then click items from the reorder list.
-    <strong>Items with pending PRF ay naka-top at may yellow highlight.</strong>
-  </div>
+    html += '<div class="manual-item-row" data-idx="' + idx + '">' +
+      '<div class="row g-2 align-items-end">' +
+        '<div class="col-md-4">' +
+          '<label class="form-label small fw-bold mb-1">Item Code <span class="text-danger">*</span></label>' +
+          '<div class="item-search-wrapper">' +
+            '<input type="text" class="form-control form-control-sm manual-item-search-input" ' +
+              'data-idx="' + idx + '" ' +
+              'value="' + erpEsc(it.inventoryId) + '" ' +
+              'placeholder="Search item code or description..." ' +
+              'autocomplete="off" ' +
+              'oninput="onManualItemSearch(' + idx + ', this.value)" ' +
+              'onfocus="onManualItemSearch(' + idx + ', this.value)">' +
+            '<div class="item-search-dropdown d-none" id="manualDropdown' + idx + '"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="col-md-3">' +
+          '<label class="form-label small fw-bold mb-1">Description</label>' +
+          '<input type="text" class="form-control form-control-sm" ' +
+            'id="manualDesc' + idx + '" ' +
+            'value="' + erpEsc(it.description) + '" ' +
+            'readonly>' +
+        '</div>' +
+        '<div class="col-md-1">' +
+          '<label class="form-label small fw-bold mb-1">Qty <span class="text-danger">*</span></label>' +
+          '<input type="number" class="form-control form-control-sm text-center" ' +
+            'id="manualQty' + idx + '" ' +
+            'value="' + (it.qty || '') + '" ' +
+            'min="1" step="1" ' +
+            'oninput="onManualQtyChange(' + idx + ', this.value)">' +
+          (suggestedQty > 0 ? '<div class="suggested-qty-hint">Net: <strong>' + suggestedQty + '</strong></div>' : '') +
+        '</div>' +
+        '<div class="col-md-1">' +
+          '<label class="form-label small fw-bold mb-1">Unit</label>' +
+          '<select class="form-select form-select-sm" id="manualUnit' + idx + '" onchange="onManualUnitChange(' + idx + ', this.value)">' +
+            buildUnitOptions(it.unit || 'PIECE') +
+          '</select>' +
+        '</div>' +
+        '<div class="col-md-2">' +
+          '<label class="form-label small fw-bold mb-1">Remarks</label>' +
+          '<input type="text" class="form-control form-control-sm" ' +
+            'id="manualRemarks' + idx + '" ' +
+            'value="' + erpEsc(it.remarks || '') + '" ' +
+            'placeholder="Optional" ' +
+            'oninput="onManualRemarksChange(' + idx + ', this.value)">' +
+        '</div>' +
+        '<div class="col-md-1">' +
+          '<button type="button" class="btn btn-sm btn-outline-danger w-100" ' +
+            'onclick="removeManualItem(' + idx + ')" title="Remove">' +
+            '<i class="bi bi-trash"></i>' +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+      warningHtml +
+      breakdownHtml +
+    '</div>';
+  });
 
-  <!-- ✅ NEW: Filter + View Pending Actions -->
-  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <div class="form-check mb-0">
-      <input class="form-check-input" type="checkbox" id="filterPendingOnly" onchange="renderReorderItems()">
-      <label class="form-check-label small fw-bold" for="filterPendingOnly" style="cursor:pointer;">
-        <i class="bi bi-funnel-fill me-1 text-warning"></i>
-        Show only items with <strong>pending PRF</strong>
-      </label>
-    </div>
-    <button type="button" class="btn btn-sm btn-outline-warning" onclick="showPendingReorderList()" title="View items with pending PRF sa current category">
-      <i class="bi bi-list-ul me-1"></i>View Pending List
-    </button>
-  </div>
+  container.innerHTML = html;
+  updateManualCount();
+}
 
-  <div id="reorderItemsContainer">
-    <div class="text-center text-muted py-4">
-      <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-      <div>Select a category above to load items from the Reorder List.</div>
-    </div>
-  </div>
-</div>
+window.renderManualItems = renderManualItems;
 
-    <!-- MODE 2: MANUAL ENTRY -->
-    <div id="modeManual" class="prf-mode-content">
-      <div class="alert alert-info small py-2 mb-3">
-        <i class="bi bi-info-circle me-1"></i>
-        Manually search and add items that are <strong>not in the reorder list</strong>. Type item code or description to search.
-      </div>
-         <!-- ✅ NEW: Pending PRF Banner -->
-  <div id="pendingPrfBanner" class="alert alert-warning small py-2 mb-3" style="display:none;">
-    <i class="bi bi-exclamation-triangle-fill me-1"></i>
-    <strong>⚠️ May <span id="pendingPrfCount">0</span> item(s) na may pending UNSERVED PRF</strong>
-    <div class="mt-1 small">Ang Net Need ay awtomatikong naka-deduct sa pending qty.</div>
-    <div class="mt-1">
-      <button type="button" class="btn btn-sm btn-outline-dark py-0" onclick="showPendingPrfList()">
-        <i class="bi bi-list-ul me-1"></i>View List
-      </button>
-    </div>
-  </div>
+function onManualItemSearch(idx, value) {
+  var input = document.querySelector('.manual-item-search-input[data-idx="' + idx + '"]');
+  var dropdown = document.getElementById('manualDropdown' + idx);
+  if (!dropdown || !input) return;
 
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <small class="text-muted" id="manualItemsCount">0 manual item(s)</small>
-        <button class="btn btn-sm btn-primary" onclick="addManualItem()">
-          <i class="bi bi-plus-lg me-1"></i>Add Item
-        </button>
-      </div>
+  var term = String(value || '').toLowerCase().trim();
 
-      <div id="manualItemsContainer">
-        <div class="text-center text-muted py-4" id="manualEmptyState">
-          <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-          <div>No manual items yet. Click "Add Item" to start.</div>
-        </div>
-      </div>
-    </div>
-  </div>
+  if (!term) {
+    dropdown.classList.add('d-none');
+    return;
+  }
 
-  <!-- STEP 3: SUBMIT -->
-  <div class="erp-card" style="padding:24px;margin-bottom:20px;">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-      <div>
-        <h6 class="mb-1">Ready to submit?</h6>
-        <p class="text-muted small mb-0" id="submitSummary">Select items and enter quantities.</p>
-      </div>
-      <div>
-        <button class="btn btn-outline-secondary me-2" onclick="cancelCreate()">
-          <i class="bi bi-x-lg me-1"></i>Cancel
-        </button>
-        <button class="btn btn-primary btn-lg" id="btnSubmitPrf" onclick="submitPrf()" disabled>
-          <i class="bi bi-check-circle me-1"></i>Create PRF
-        </button>
-      </div>
-    </div>
-  </div>
+  if (!_prf.inventoryLoaded) {
+    dropdown.innerHTML = '<div class="item-search-item muted">Loading catalog...</div>';
+    _positionDropdown(dropdown, input);
+    dropdown.classList.remove('d-none');
+    return;
+  }
 
-  <div class="erp-footer">
-    <div>GEMCOR ERP — Create PRF v2.0.0</div>
-    <div>Pure Supabase • No Google Sheets • Live Data</div>
-  </div>
-</div>
+  var matches = _prf.inventoryList.filter(function(it) {
+    var code = String(it.code || '').toLowerCase();
+    var desc = String(it.description || '').toLowerCase();
+    return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
+  }).slice(0, 30);
 
-<!-- SUCCESS MODAL -->
-<div class="modal fade" id="successModal" tabindex="-1" data-bs-backdrop="static">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header bg-success text-white">
-        <h5 class="modal-title"><i class="bi bi-check-circle-fill me-2"></i>PRF Created!</h5>
-      </div>
-      <div class="modal-body text-center py-4">
-        <i class="bi bi-check-circle-fill text-success" style="font-size:4rem;"></i>
-        <h4 class="mt-3">Success!</h4>
-        <div class="alert alert-info mt-3">
-          <div class="small text-muted">PRF No.</div>
-          <h3 class="mb-0" id="successPrfNo">—</h3>
-          <div class="small mt-2">
-            <span id="successItemCount">0</span> items · 
-            <span id="successCategory">—</span>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer justify-content-center gap-2">
-        <button class="btn btn-outline-secondary" onclick="closeSuccessAndReset()">Create Another</button>
-        <a href="prf-monitor.html" class="btn btn-primary">
-          <i class="bi bi-list-ul me-1"></i>View PRF Monitor
-        </a>
-      </div>
-    </div>
-  </div>
-</div>
+  if (matches.length === 0) {
+    dropdown.innerHTML = '<div class="item-search-item muted">No matches found. You can type manually.</div>';
+    _positionDropdown(dropdown, input);
+    dropdown.classList.remove('d-none');
+    return;
+  }
 
-<div class="toast-container position-fixed bottom-0 end-0 p-3">
-  <div id="erpToast" class="toast erp-toast">
-    <div class="toast-body" id="erpToastBody">Message</div>
-  </div>
-</div>
-   <!-- ═══════════════════════════════════════════════════════════ -->
-<!-- EDIT PRF ITEMS MODAL -->
-<!-- ═══════════════════════════════════════════════════════════ -->
-<div class="modal fade" id="editPrfItemsModal" tabindex="-1" data-bs-backdrop="static">
-  <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width:1200px;">
-    <div class="modal-content">
-      <div class="modal-header" style="background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color:#fff;">
-        <h5 class="modal-title">
-          <i class="bi bi-pencil-square me-2"></i>
-          Edit PRF Items — <span id="editPrfItemsTitle">—</span>
-          <span class="badge bg-light text-dark ms-2" id="editPrfVersionBadge">v1 → v2</span>
-        </h5>
-        <button type="button" class="btn-close btn-close-white" onclick="closeEditPrfItems()"></button>
-      </div>
-      <div class="modal-body" id="editPrfItemsBody">
-        <div class="text-center py-5">
-          <div class="erp-spinner" style="margin:0 auto;"></div>
-          <div class="mt-2 text-muted">Loading PRF items...</div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <div class="me-auto small text-muted">
-          <i class="bi bi-info-circle me-1"></i>
-          Original PRF ay hindi mababago. Ang edits ay bagong version.
-        </div>
-        <button type="button" class="btn btn-outline-secondary" onclick="closeEditPrfItems()">Cancel</button>
-        <button type="button" class="btn btn-warning" id="btnSaveEditPrfItems" onclick="saveEditPrfItems()">
-          <i class="bi bi-check-circle me-1"></i>Save as New Version
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
+  var html = '';
+  matches.forEach(function(it) {
+    var erpItem = _prf.erpItemsMap[it.code] || {};
+    var breakdown = computeSuggestedBreakdown({
+      item_code: it.code,
+      buffer_stock: erpItem.buffer_stock || 0,
+      on_hand: erpItem.on_hand || 0
+    });
+    
+    var pendingBadge = '';
+    if (breakdown.pendingQty > 0) {
+      var pendingClass = breakdown.pendingCount >= 2 ? 'bg-danger' : 'bg-warning text-dark';
+      pendingBadge = '<span class="badge ' + pendingClass + '" title="Pending: ' + 
+        erpEsc(breakdown.prfNos) + '">' +
+        '⚠ ' + breakdown.pendingQty + ' pending</span>';
+    }
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- VERSION HISTORY MODAL -->
-<!-- ═══════════════════════════════════════════════════════════ -->
-<div class="modal fade" id="prfVersionHistoryModal" tabindex="-1">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header erp-modal-header">
-        <h5 class="modal-title">
-          <i class="bi bi-clock-history me-2"></i>
-          Version History — <span id="prfHistoryTitle">—</span>
-        </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body" id="prfHistoryBody">
-        <div class="text-center py-4">
-          <div class="erp-spinner" style="margin:0 auto;"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+    html += '<div class="item-search-item" onclick="selectManualItem(' + idx + ', \'' +
+      erpJsEsc(it.code) + '\', \'' + erpJsEsc(it.description) + '\', \'' + erpJsEsc(it.unit) + '\')">' +
+      '<div class="item-code">' + erpEsc(it.code) + '</div>' +
+      '<div class="item-desc">' + erpEsc(it.description.substring(0, 100)) + '</div>' +
+      '<div class="item-meta">' +
+        '<span class="badge bg-light text-dark">' + erpEsc(it.unit || 'PCS') + '</span>' +
+        (breakdown.onHand !== undefined ? '<span>On-Hand: <strong>' + erpNum(breakdown.onHand) + '</strong></span>' : '') +
+        (breakdown.buffer > 0 ? '<span>Buffer: ' + erpNum(breakdown.buffer) + '</span>' : '') +
+        (breakdown.netNeed > 0 ? '<span class="text-success">Net: <strong>' + breakdown.netNeed + '</strong></span>' : '') +
+        pendingBadge +
+      '</div>' +
+    '</div>';
+  });
 
-</body>
-</html>
+  dropdown.innerHTML = html;
+  _positionDropdown(dropdown, input);
+  dropdown.classList.remove('d-none');
+}
+
+window.onManualItemSearch = onManualItemSearch;
+
+function _positionDropdown(dropdown, input) {
+  var rect = input.getBoundingClientRect();
+  var spaceBelow = window.innerHeight - rect.bottom;
+  var spaceAbove = rect.top;
+  var dropdownMinHeight = 320;
+
+  var width = Math.max(rect.width, 420);
+  var maxWidth = window.innerWidth - rect.left - 20;
+  if (width > maxWidth) width = maxWidth;
+
+  dropdown.style.position = 'fixed';
+  dropdown.style.left = rect.left + 'px';
+  dropdown.style.width = width + 'px';
+  dropdown.style.zIndex = '99999';
+
+  if (spaceBelow < dropdownMinHeight && spaceAbove > spaceBelow) {
+    dropdown.style.top = 'auto';
+    dropdown.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceAbove - 20, 320) + 'px';
+  } else {
+    dropdown.style.bottom = 'auto';
+    dropdown.style.top = (rect.bottom + 4) + 'px';
+    dropdown.style.maxHeight = Math.min(spaceBelow - 20, 320) + 'px';
+  }
+}
+
+function selectManualItem(idx, code, description, unit) {
+  var item = _prf.manualItems[idx];
+  if (!item) return;
+
+  item.inventoryId = code;
+  item.description = description;
+  item.unit = unit || 'PIECE';
+
+  // ✅ Auto-set qty based sa net need
+  var erpItem = _prf.erpItemsMap[code] || {};
+  var breakdown = computeSuggestedBreakdown({
+    item_code: code,
+    buffer_stock: erpItem.buffer_stock || 0,
+    on_hand: erpItem.on_hand || 0
+  });
+  
+  if (!item.qty || item.qty === 0) {
+    item.qty = breakdown.netNeed || 1;
+  }
+
+  // ✅ Confirm kung may pending
+  if (breakdown.pendingQty > 0) {
+    var msg = '⚠️ ATTENTION: Item ' + code + ' has existing pending PRF(s):\n\n';
+    msg += '📋 ' + breakdown.prfNos + '\n';
+    msg += '📊 Total pending qty: ' + breakdown.pendingQty + '\n\n';
+    msg += '💡 Net Need (auto-computed): ' + breakdown.netNeed + '\n\n';
+    msg += 'Do you want to proceed?';
+    
+    if (!confirm(msg)) {
+      _prf.manualItems.splice(idx, 1);
+      renderManualItems();
+      updateSubmitButton();
+      erpShowToast('Item removed', 'info');
+      return;
+    }
+  }
+
+  renderManualItems();
+  updateSubmitButton();
+}
+
+window.selectManualItem = selectManualItem;
+
+function onManualQtyChange(idx, value) {
+  var item = _prf.manualItems[idx];
+  if (!item) return;
+  item.qty = parseFloat(value) || 0;
+  updateSubmitButton();
+}
+
+window.onManualQtyChange = onManualQtyChange;
+
+function onManualUnitChange(idx, value) {
+  var item = _prf.manualItems[idx];
+  if (!item) return;
+  item.unit = value;
+}
+
+window.onManualUnitChange = onManualUnitChange;
+
+function onManualRemarksChange(idx, value) {
+  var item = _prf.manualItems[idx];
+  if (!item) return;
+  item.remarks = String(value || '').trim();
+}
+
+window.onManualRemarksChange = onManualRemarksChange;
+
+function removeManualItem(idx) {
+  if (!confirm('Remove this item?')) return;
+  _prf.manualItems.splice(idx, 1);
+  renderManualItems();
+  updateSubmitButton();
+}
+
+window.removeManualItem = removeManualItem;
+
+function updateManualCount() {
+  var el = document.getElementById('manualItemsCount');
+  if (el) el.textContent = _prf.manualItems.length + ' manual item(s)';
+}
+
+// ═══════════════════════════════════════════════════════════
+// SUBMIT BUTTON STATE
+// ═══════════════════════════════════════════════════════════
+function updateSubmitButton() {
+  var btn = document.getElementById('btnSubmitPrf');
+  var summary = document.getElementById('submitSummary');
+  if (!btn) return;
+
+  var reorderCount = 0;
+  var manualCount = 0;
+
+  if (_prf.mode === 'reorder') {
+    recomputeSelected();
+    reorderCount = _prf.selectedItems.length;
+  } else {
+    recomputeSelected();
+    reorderCount = _prf.selectedItems.length;
+  }
+
+  manualCount = _prf.manualItems.filter(function(it) {
+    return it.inventoryId && it.inventoryId.trim() && it.qty > 0;
+  }).length;
+
+  var totalValid = reorderCount + manualCount;
+
+  var category = document.getElementById('prfCategory').value;
+  if (!category) {
+    btn.disabled = true;
+    summary.textContent = 'Please select a category first.';
+    return;
+  }
+
+  if (totalValid === 0) {
+    btn.disabled = true;
+    summary.textContent = 'Select items from reorder list OR add manual items.';
+    return;
+  }
+
+  btn.disabled = false;
+
+  var summaryParts = [];
+  if (reorderCount > 0) summaryParts.push(reorderCount + ' reorder item(s)');
+  if (manualCount > 0) summaryParts.push(manualCount + ' manual item(s)');
+  summary.textContent = summaryParts.join(' + ') + ' ready to submit.';
+}
+
+function updateItemsCount() {
+  var el = document.getElementById('itemsCountLabel');
+  if (!el) return;
+  var reorderCount = _prf.selectedItems.length;
+  var manualCount = _prf.manualItems.length;
+  var total = reorderCount + manualCount;
+  el.textContent = '(' + total + ' items)';
+}
+
+// ═══════════════════════════════════════════════════════════
+// SHOW PENDING PRF LIST
+// ═══════════════════════════════════════════════════════════
+function showPendingPrfList() {
+  var pending = _prf.pendingSummary;
+  var keys = Object.keys(pending);
+  
+  if (keys.length === 0) {
+    erpShowToast('No pending PRF items', 'info');
+    return;
+  }
+  
+  var html = '<div style="padding:10px;">';
+  html += '<h6 class="mb-3">Items with Pending UNSERVED PRF (' + keys.length + ')</h6>';
+  html += '<div class="table-responsive" style="max-height:400px;overflow-y:auto;">';
+  html += '<table class="table table-sm table-bordered" style="font-size:0.82rem;">';
+  html += '<thead class="table-light sticky-top"><tr>' +
+    '<th>Item Code</th>' +
+    '<th>Pending PRF(s)</th>' +
+    '<th class="text-end">Total Qty</th>' +
+    '</tr></thead><tbody>';
+  
+  keys.sort().forEach(function(code) {
+    var s = pending[code];
+    html += '<tr>' +
+      '<td><code>' + erpEsc(code) + '</code></td>' +
+      '<td><small>' + erpEsc(s.prfNos) + '</small></td>' +
+      '<td class="text-end fw-bold text-danger">' + erpNum(s.totalQty) + '</td>' +
+    '</tr>';
+  });
+  
+  html += '</tbody></table></div></div>';
+  
+  var modalEl = document.getElementById('pendingPrfListModal');
+  if (modalEl) modalEl.remove();
+  
+  var wrapper = document.createElement('div');
+  wrapper.innerHTML = '<div class="modal fade" id="pendingPrfListModal" tabindex="-1">' +
+    '<div class="modal-dialog modal-lg modal-dialog-scrollable">' +
+      '<div class="modal-content">' +
+        '<div class="modal-header" style="background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);color:#fff;">' +
+          '<h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>Pending PRF Items</h5>' +
+          '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>' +
+        '</div>' +
+        '<div class="modal-body p-0">' + html + '</div>' +
+        '<div class="modal-footer">' +
+          '<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(wrapper.firstChild);
+  
+  var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('pendingPrfListModal'));
+  modal.show();
+}
+
+window.showPendingPrfList = showPendingPrfList;
+
+// ═══════════════════════════════════════════════════════════
+// SUBMIT PRF
+// ═══════════════════════════════════════════════════════════
+async function submitPrf() {
+  if (_prf.isSubmitting) return;
+
+  var prfNo = document.getElementById('prfNo').value.trim();
+  var category = document.getElementById('prfCategory').value;
+  var preparedBy = document.getElementById('prfPreparedBy').value.trim();
+  var department = document.getElementById('prfDepartment').value.trim();
+  var notedBy = document.getElementById('prfNotedBy').value.trim();
+  var approvedBy = document.getElementById('prfApprovedBy').value.trim();
+  var notes = document.getElementById('prfNotes').value.trim();
+
+  if (!prfNo) { erpShowToast('PRF No. required', 'warning'); return; }
+  if (!category) { erpShowToast('Category required', 'warning'); return; }
+
+  var allItems = [];
+  recomputeSelected();
+  
+  _prf.selectedItems.forEach(function(it) {
+    allItems.push({
+      item_code: it.item_code,
+      description: it.description || '',
+      category: it.category || category,
+      location: it.location || '',
+      average_consumption: Number(it.ave_monthly_consumption || 0),
+      buffer_stock: Number(it.buffer_stock || 0),
+      stock_on_hand: Number(it.on_hand || 0),
+      qty_for_order: Number(it._qtyOrder || 0),
+      unit: it.base_unit || 'PIECE',
+      remarks: it._remarks || '',
+      source: 'reorder'
+    });
+  });
+
+  _prf.manualItems.forEach(function(it) {
+    if (!it.inventoryId || !it.inventoryId.trim()) return;
+    if (!it.qty || it.qty <= 0) return;
+
+    var erpItem = _prf.erpItemsMap[it.inventoryId] || {};
+    allItems.push({
+      item_code: it.inventoryId,
+      description: it.description || '',
+      category: category,
+      location: erpItem.location || '',
+      average_consumption: Number(erpItem.ave_monthly_consumption || 0),
+      buffer_stock: Number(erpItem.buffer_stock || 0),
+      stock_on_hand: Number(erpItem.on_hand || 0),
+      qty_for_order: Number(it.qty),
+      unit: it.unit || 'PIECE',
+      remarks: it.remarks || '',
+      source: 'manual'
+    });
+  });
+
+  if (allItems.length === 0) {
+    erpShowToast('Select at least one item with qty > 0', 'warning');
+    return;
+  }
+
+  // Isang RPC (erp_create_prf) ang gumagawa ng PRF: all-or-nothing, server ang nagbibigay
+  // ng PRF No. (walang banggaan), at ang split sa batches ay ginagawa ng database.
+  var nBatches = Math.ceil(allItems.length / MAX_ITEMS_PER_PRF);
+  var confirmMsg = 'Create PRF with ' + allItems.length + ' item(s)?\n\n';
+  if (nBatches > 1) {
+    confirmMsg += 'Will be split into ' + nBatches + ' PRFs (max ' + MAX_ITEMS_PER_PRF + ' items each).\n\n';
+  }
+  confirmMsg += 'Requested PRF No.: ' + prfNo + ' (adjusted automatically if already used)';
+
+  if (!confirm(confirmMsg)) return;
+
+  _prf.isSubmitting = true;
+  var btn = document.getElementById('btnSubmitPrf');
+  var originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
+
+  try {
+    // force:true — itong page ay may sariling "pending PRF" babala; dito ang user ang nagpapasya
+    var res = await erpCreatePrf({
+      items: allItems.map(function(it) {
+        return { item_code: it.item_code, qty: it.qty_for_order, unit: it.unit, remarks: it.remarks, category: it.category };
+      }),
+      header: {
+        category: category,
+        base_prf_no: prfNo,
+        prepared_by: preparedBy,
+        department: department,
+        noted_by: notedBy,
+        approved_by: approvedBy,
+        notes: notes,
+        purpose: 'STOCK'
+      },
+      splitByCategory: false,
+      maxItems: MAX_ITEMS_PER_PRF,
+      force: true
+    });
+
+    if (!res || res.success !== true) {
+      throw new Error((res && res.message) || 'PRF was not created');
+    }
+
+    var createdPrfs = res.prfs || [];
+    if (createdPrfs.length && createdPrfs[0].prf_no !== prfNo) {
+      erpShowToast('PRF No. adjusted to ' + createdPrfs[0].prf_no, 'info');
+    }
+
+    document.getElementById('successPrfNo').textContent = createdPrfs.map(function(p) { return p.prf_no; }).join(', ');
+    document.getElementById('successItemCount').textContent = allItems.length;
+    document.getElementById('successCategory').textContent = category;
+
+    new bootstrap.Modal(document.getElementById('successModal')).show();
+
+  } catch(err) {
+    console.error('[submitPrf]', err);
+    erpShowToast('Failed — nothing was created. ' + err.message, 'danger');
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+  } finally {
+    _prf.isSubmitting = false;
+  }
+}
+window.submitPrf = submitPrf;
+
+function closeSuccessAndReset() {
+  var modal = bootstrap.Modal.getInstance(document.getElementById('successModal'));
+  if (modal) modal.hide();
+  setTimeout(function() {
+    window.location.href = 'prf-monitor.html';
+  }, 300);
+}
+window.closeSuccessAndReset = closeSuccessAndReset;
+window.closeSuccessAndReset = closeSuccessAndReset;
+
+function cancelCreate() {
+  if (!confirm('Cancel? Unsaved data will be lost.')) return;
+  window.location.href = 'prf-monitor.html';
+}
+
+window.cancelCreate = cancelCreate;
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+function buildUnitOptions(selected) {
+  var units = ['PIECE', 'PCS', 'PAIR', 'SET', 'BOX', 'ROLL', 'SHEET',
+    'KG', 'LITERS', 'GAL', 'METER', 'MM', 'LENGTH',
+    'ASSEMB', 'CAN', 'REAM', 'TANK', 'UNIT'];
+  var html = '';
+  units.forEach(function(u) {
+    var sel = (u === selected) ? ' selected' : '';
+    html += '<option value="' + u + '"' + sel + '>' + u + '</option>';
+  });
+  return html;
+}
+
+function erpNum(n) {
+  if (n === null || n === undefined || isNaN(n)) return '0';
+  return Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
+function erpEsc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function erpJsEsc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
+}
+
+function erpShowToast(msg, type) {
+  var toastEl = document.getElementById('erpToast');
+  if (!toastEl) { console.log('[Toast]', type, msg); return; }
+  document.getElementById('erpToastBody').textContent = msg;
+  bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.item-search-wrapper') && !e.target.closest('.item-search-dropdown')) {
+    document.querySelectorAll('.item-search-dropdown').forEach(function(el) {
+      el.classList.add('d-none');
+    });
+  }
+});
+
+window.addEventListener('scroll', function() {
+  document.querySelectorAll('.item-search-dropdown:not(.d-none)').forEach(function(el) {
+    var idx = el.id.replace('manualDropdown', '');
+    var input = document.querySelector('.manual-item-search-input[data-idx="' + idx + '"]');
+    if (input) _positionDropdown(el, input);
+  });
+}, { passive: true });
+
+window.addEventListener('resize', function() {
+  document.querySelectorAll('.item-search-dropdown:not(.d-none)').forEach(function(el) {
+    el.classList.add('d-none');
+  });
+});
+
+console.log('✅ new-prf.js v2.5 loaded (pending PRF + net need)');
