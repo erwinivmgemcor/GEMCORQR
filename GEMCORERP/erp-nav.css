@@ -1577,3 +1577,25 @@ html, body {
     min-width: 0 !important;
   }
 }
+
+/* ─── Profile photo in user menu ─── */
+.erp-user-avatar img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 50% !important;
+  display: block !important;
+}
+.erp-user-dropdown-header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+.erp-user-dropdown-header .erp-user-dropdown-id {
+  min-width: 0 !important;
+}
+.erp-user-dropdown-header .erp-user-avatar.erp-user-avatar-lg {
+  width: 40px !important;
+  height: 40px !important;
+  font-size: 0.9rem !important;
+}
