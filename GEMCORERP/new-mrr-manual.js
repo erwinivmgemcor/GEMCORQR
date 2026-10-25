@@ -1,233 +1,450 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<script>location.replace("new-mrr.html");</script>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GEMCOR ERP — New MRR</title>
+// ============================================================
+// GEMCOR ERP — New MRR Creation (v3.1 FINAL)
+// ✅ FIXED: SyntaxError
+// ✅ FIXED: Double-submit lock
+// ✅ FIXED: Labels updated (PO Qty, Received Qty)
+// ============================================================
 
-  <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#1e3a5f">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="mobile-web-app-capable" content="yes">
+var _mrrState = {
+  preparedBy: '',
+  receivingSite: 'GEMCOR CATMON',
+  poNo: '', sofNo: '', prfNo: '', vendor: '', drNo: '', receivingDate: '',
+  items: [], inventoryList: [], inventoryLoaded: false,
+  isSubmitting: false, lastSubmittedAt: 0
+};
 
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="erp-design-system.css">
-<link rel="stylesheet" href="erp-styles.css">
-<link rel="stylesheet" href="erp-nav.css">
-  <link rel="stylesheet" href="erp-notif.css">
+var _mrrInventoryCache = null;
+var _mrrSearchTimers = {};
 
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('[New MRR v3.1] Initializing...');
 
-<script src="erp-theme.js"></script>
-  <script src="erp-guard.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script defer src="erp-config.js"></script>
-<script defer src="erp-supabase.js"></script>
-<script defer src="erp-nav.js"></script>
-<script defer src="erp-shortcuts.js"></script>
-<script defer src="new-mrr-manual.js"></script>
-  <script defer src="notifications.js"></script>
-  <script defer src="js/update.js"></script>
-</head>
-<body>
+  mrrCheckHealth();
 
-<nav class="erp-topbar">
-  <div class="erp-topbar-left">
-    <img src="../gemcor-logo.png" alt="GEMCOR" class="erp-logo" onerror="this.style.display='none'">
-    <div>
-      <div class="erp-brand">GEMCOR ERP</div>
-      <div class="erp-brand-sub">Manual MRR <span class="badge-live">LIVE</span></div>
-    </div>
-  </div>
-  <div id="erpNavBar"></div>
-  <div class="erp-topbar-right">
-    <div class="erp-health" id="erpHealthBadge">
-      <span class="dot dot-pending"></span>
-      <span id="erpHealthText">Checking...</span>
-    </div>
-    <a href="../index.html" class="erp-btn-outline">
-      <i class="bi bi-arrow-left"></i> <span>Main System</span>
-    </a>
-  </div>
-</nav>
+  var userFullname = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || '';
+  _mrrState.preparedBy = userFullname;
+  
+  var prepByEl = document.getElementById('mrrPreparedBy');
+  if (prepByEl) prepByEl.value = userFullname;
 
-<div class="erp-container">
+  var today = new Date().toISOString().split('T')[0];
+  var dateEl = document.getElementById('mrrReceivingDate');
+  if (dateEl) dateEl.value = today;
+  _mrrState.receivingDate = today;
 
-  <div class="erp-card" style="padding:24px;margin-bottom:20px;">
-    <h3 style="margin-bottom:8px;">
-      <i class="bi bi-pencil-square me-2"></i>Create New MRR
-    </h3>
-    <p class="text-muted mb-0">
-      Materials Receiving Report. Enter the details and add items manually.
-    </p>
-  </div>
+  loadUserDepartment();
+  preloadInventory();
+});
 
-  <!-- STEP 1: DOCUMENT DETAILS -->
-  <div class="erp-card" style="padding:24px;margin-bottom:20px;">
-    <h5 style="margin-bottom:16px;">
-      <span class="badge bg-primary me-2">1</span>Document Details
-    </h5>
-    <div class="row g-3">
-      <div class="col-md-6">
-        <label class="form-label fw-bold">Prepared By</label>
-        <input type="text" id="mrrPreparedBy" class="form-control" readonly>
-        <div class="form-text">Locked to your account</div>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label fw-bold">Receiving Site <span class="text-danger">*</span></label>
-        <input type="text" id="mrrReceivingSite" class="form-control" value="GEMCOR CATMON">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label fw-bold">PO No. <span class="text-muted small">(optional)</span></label>
-        <input type="text" id="mrrPoNo" class="form-control" placeholder="e.g. 16811">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label fw-bold">SOF No. <span class="text-muted small">(optional)</span></label>
-        <input type="text" id="mrrSofNo" class="form-control" placeholder="e.g. SOF#13472">
-        <div class="form-text">Supplemental Order Form No.</div>
-      </div>
-      <div class="col-md-6">
-        <label class="form-label fw-bold">PRF No. <span class="text-muted small">(optional)</span></label>
-        <input type="text" id="mrrPrfNo" class="form-control" placeholder="e.g. PRF#26-878">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label fw-bold">Vendor / Client <span class="text-danger">*</span></label>
-        <input type="text" id="mrrVendor" class="form-control" placeholder="e.g. KING'S SAFETYNEL INC.">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label fw-bold">DR No. / S.I. No. <span class="text-danger">*</span></label>
-        <input type="text" id="mrrDrNo" class="form-control" placeholder="e.g. SI-59577">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label fw-bold">Receiving Date <span class="text-danger">*</span></label>
-        <input type="date" id="mrrReceivingDate" class="form-control">
-      </div>
-    </div>
-  </div>
+async function mrrCheckHealth() {
+  var badge = document.getElementById('erpHealthBadge');
+  if (!badge) return;
+  var text = document.getElementById('erpHealthText');
+  var dot = badge.querySelector('.dot');
+  try {
+    var result = await erpHealthCheck();
+    if (result.success) {
+      if (dot) dot.className = 'dot dot-ok';
+      if (text) text.textContent = 'Connected (' + result.latency + 'ms)';
+    } else {
+      if (dot) dot.className = 'dot dot-error';
+      if (text) text.textContent = 'Offline';
+    }
+  } catch(err) {
+    if (dot) dot.className = 'dot dot-error';
+    if (text) text.textContent = 'Error';
+  }
+}
 
-  <!-- STEP 2: ITEMS -->
-  <div class="erp-card" style="padding:24px;margin-bottom:20px;">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h5 class="mb-0">
-        <span class="badge bg-primary me-2">2</span>Items
-      </h5>
-      <button class="btn btn-sm btn-primary" onclick="addItemRow()">
-        <i class="bi bi-plus-lg me-1"></i>Add Item
-      </button>
-    </div>
+async function loadUserDepartment() {
+  var username = localStorage.getItem('ivm_username') || '';
+  if (!username) return;
+  var deptField = document.getElementById('mrrDepartment');
+  if (deptField) {
+    deptField.placeholder = 'Loading...';
+    deptField.disabled = true;
+  }
+  
+  try {
+    var rows = await erpFetch('users',
+      'username=eq.' + encodeURIComponent(username) + '&select=department&limit=1');
+    if (rows && rows[0] && rows[0].department) {
+      var dept = rows[0].department.trim();
+      _mrrState.department = dept;
+      if (deptField) {
+        deptField.value = dept;
+        deptField.readOnly = true;
+        deptField.disabled = false;
+        deptField.classList.add('locked-input');
+        var label = deptField.previousElementSibling;
+        if (label) {
+          label.innerHTML = 'Department <span class="badge bg-success ms-1"><i class="bi bi-lock-fill me-1"></i>Locked</span>';
+        }
+      }
+    } else {
+      if (deptField) {
+        deptField.placeholder = 'Enter department';
+        deptField.disabled = false;
+      }
+    }
+  } catch(err) {
+    if (deptField) {
+      deptField.placeholder = 'Enter department';
+      deptField.disabled = false;
+    }
+  }
+}
 
-    <div id="itemsContainer">
-      <div class="text-center text-muted py-4" id="itemsEmptyState">
-        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
-        <div>No items yet. Click "Add Item" to start.</div>
-      </div>
-    </div>
-  </div>
+async function preloadInventory() {
+  if (_mrrInventoryCache) return;
+  try {
+    console.log('[New MRR] Loading inventory...');
+    if (typeof erpGetInventoryListForDropdown === 'function') {
+      _mrrInventoryCache = await erpGetInventoryListForDropdown();
+    } else {
+      var allItems = [];
+      var pageSize = 1000;
+      var offset = 0;
+      var hasMore = true;
+      while (hasMore) {
+        var query = 'select=item_code,description,base_unit,category,location' +
+                    '&is_active=eq.true&order=item_code.asc' +
+                    '&limit=' + pageSize + '&offset=' + offset;
+        var rows = await erpFetch('erp_items', query);
+        if (!rows || rows.length === 0) break;
+        allItems = allItems.concat(rows);
+        offset += rows.length;
+        if (rows.length < pageSize) hasMore = false;
+      }
+      _mrrInventoryCache = allItems.map(function(r) {
+        return { code: r.item_code, description: r.description || '', unit: r.base_unit || 'PIECE', category: r.category || '' };
+      });
+    }
+    console.log('[New MRR] ✅ Inventory loaded:', _mrrInventoryCache.length);
+  } catch(err) {
+    console.warn('[New MRR] Failed:', err.message);
+    _mrrInventoryCache = [];
+  }
+}
 
-  <!-- STEP 3: SUBMIT -->
-  <div class="erp-card" style="padding:24px;margin-bottom:20px;">
-    <div class="d-flex justify-content-between align-items-center">
-      <div>
-        <h6 class="mb-1">Ready to submit?</h6>
-        <p class="text-muted small mb-0">Manual MRR will be created in the ERP system.</p>
-      </div>
-      <div>
-        <button class="btn btn-outline-secondary me-2" onclick="resetForm()">
-          <i class="bi bi-x-lg me-1"></i>Reset
-        </button>
-        <button class="btn btn-success btn-lg" id="btnSubmitMrr" onclick="if(!this.disabled){ this.disabled=true; submitMrr(this); }">
-  <i class="bi bi-check-circle me-1"></i>Submit MRR
-</button>
-      </div>
-    </div>
-  </div>
+// ═══════════════════════════════════════════════════════════
+// ADD ITEM FUNCTION
+// ═══════════════════════════════════════════════════════════
+window.addItemRow = function() {
+  var emptyState = document.getElementById('itemsEmptyState');
+  if (emptyState) emptyState.style.display = 'none';
+  
+  var template = document.getElementById('itemRowTemplate');
+  if (!template) return;
 
-  <div class="erp-footer">
-    <div>GEMCOR ERP — Manual MRR v1.1.0</div>
-    <div>Pure Supabase • No Google Sheets • Live Data</div>
-  </div>
-</div>
+  var clone = template.content.cloneNode(true);
+  var row = clone.querySelector('.erp-item-row');
+  
+  var idx = _mrrState.items.length;
+  row.setAttribute('data-item-idx', idx);
+  var numEl = row.querySelector('.item-number');
+  if (numEl) numEl.textContent = (idx + 1);
+  
+  var codeInput = row.querySelector('.item-code-input');
+  if (codeInput) {
+    codeInput.addEventListener('input', function() { onItemCodeInput(this); });
+    codeInput.addEventListener('focus', function() { onItemCodeInput(this); });
+    codeInput.addEventListener('blur', function() {
+      var self = this;
+      setTimeout(function() { hideItemDropdown(self); }, 200);
+    });
+  }
+  
+  var container = document.getElementById('itemsContainer');
+  if (container) container.appendChild(clone);
+  
+  _mrrState.items.push({ code: '', description: '', qty: 1, atlQty: 1, unit: 'PCS', remarks: '' });
+  
+  setTimeout(function() {
+    var newRow = document.querySelector('.erp-item-row[data-item-idx="' + idx + '"]');
+    if (newRow && newRow.querySelector('.item-code-input')) {
+      newRow.querySelector('.item-code-input').focus();
+    }
+  }, 100);
+};
 
-<!-- ITEM ROW TEMPLATE -->
-<template id="itemRowTemplate">
-  <div class="erp-item-row mb-3" data-item-idx="">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-      <div class="erp-item-row-header">Item #<span class="item-number"></span></div>
-      <button class="btn btn-sm btn-outline-danger" onclick="removeItemRow(this)" title="Remove">
-        <i class="bi bi-trash"></i>
-      </button>
-    </div>
-    <div class="erp-item-row-grid">
-      <div class="erp-item-field erp-item-code-field">
-        <label>Item Code <span class="text-danger">*</span></label>
-        <input type="text" class="form-control item-code-input" placeholder="Search or type item code..." autocomplete="off">
-        <div class="item-dropdown erp-item-dropdown d-none"></div>
-      </div>
-      <div class="erp-item-field">
-        <label>Description</label>
-        <input type="text" class="form-control item-desc-input" readonly>
-      </div>
-      <!-- ✅ PINALITAN ANG LABEL DITO -->
-      <div class="erp-item-field">
-        <label>PO Qty <span class="text-danger">*</span></label>
-        <input type="number" class="form-control item-qty-input" min="0.01" step="0.01" value="1">
-      </div>
-      <!-- ✅ PINALITAN ANG LABEL DITO -->
-      <div class="erp-item-field">
-        <label>Received Qty</label>
-        <input type="number" class="form-control item-atl-input" min="0" step="0.01" value="1">
-      </div>
-      <div class="erp-item-field">
-        <label>Unit</label>
-        <select class="form-select item-unit-input">
-          <option value="PIECE">PIECE</option>
-          <!-- ... iba pang options ... -->
-        </select>
-      </div>
-      <div class="erp-item-field erp-item-remarks-field">
-        <label>Remarks</label>
-        <input type="text" class="form-control item-remarks-input" placeholder="Optional" maxlength="200">
-      </div>
-    </div>
-  </div>
-</template>
-<!-- SUCCESS MODAL -->
-<div class="modal fade" id="successModal" tabindex="-1" data-bs-backdrop="static">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header bg-success text-white">
-        <h5 class="modal-title"><i class="bi bi-check-circle-fill me-2"></i>MRR Created!</h5>
-        <button type="button" class="btn-close btn-close-white" onclick="closeSuccessAndReset()"></button>
-      </div>
-      <div class="modal-body text-center py-4">
-        <i class="bi bi-check-circle-fill text-success" style="font-size:4rem;"></i>
-        <h4 class="mt-3">Success!</h4>
-        <div class="alert alert-info">
-          <div class="small text-muted">Document No.</div>
-          <h3 class="mb-0" id="successDocNo">—</h3>
-        </div>
-        <div class="d-flex justify-content-center my-3">
-          <img id="successQrImg" src="" alt="QR" style="max-width:200px;width:100%;border:1px solid #ddd;border-radius:8px;padding:8px;">
-        </div>
-      </div>
-      <div class="modal-footer justify-content-center gap-2">
-        <button class="btn btn-outline-secondary" onclick="closeSuccessAndReset()">Create Another</button>
-        <a href="mrr-list.html" class="btn btn-primary">
-          <i class="bi bi-list-ul me-1"></i>View MRR List
-        </a>
-      </div>
-    </div>
-  </div>
-</div>
+window.removeItemRow = function(btn) {
+  var row = btn.closest('.erp-item-row');
+  if (!row) return;
+  if (!confirm('Remove this item?')) return;
+  
+  var idx = parseInt(row.getAttribute('data-item-idx'), 10);
+  _mrrState.items[idx] = null;
+  row.remove();
+  reindexItemRows();
+  
+  var remaining = document.querySelectorAll('.erp-item-row').length;
+  if (remaining === 0) {
+    var empty = document.getElementById('itemsEmptyState');
+    if (empty) empty.style.display = 'block';
+  }
+};
 
-<div class="toast-container position-fixed bottom-0 end-0 p-3">
-  <div id="erpToast" class="toast erp-toast">
-    <div class="toast-body" id="erpToastBody">Message</div>
-  </div>
-</div>
+function reindexItemRows() {
+  var rows = document.querySelectorAll('.erp-item-row');
+  var newItems = [];
+  rows.forEach(function(row, i) {
+    var oldIdx = parseInt(row.getAttribute('data-item-idx'), 10);
+    var item = _mrrState.items[oldIdx];
+    if (item) {
+      row.setAttribute('data-item-idx', i);
+      var numEl = row.querySelector('.item-number');
+      if (numEl) numEl.textContent = (i + 1);
+      newItems.push(item);
+    }
+  });
+  _mrrState.items = newItems;
+}
 
-</body>
-</html>
+// ═══════════════════════════════════════════════════════════
+// AUTO-SUGGEST
+// ═══════════════════════════════════════════════════════════
+function onItemCodeInput(input) {
+  var row = input.closest('.erp-item-row');
+  var dropdown = row.querySelector('.item-dropdown');
+  var term = input.value.toLowerCase().trim();
+  
+  if (!term) { dropdown.classList.add('d-none'); return; }
+  
+  if (!_mrrInventoryCache) {
+    dropdown.innerHTML = '<div class="erp-item-dropdown-item muted">Loading inventory...</div>';
+    dropdown.classList.remove('d-none');
+    return;
+  }
+  
+  var matches = _mrrInventoryCache.filter(function(it) {
+    return (it.code && it.code.toLowerCase().indexOf(term) !== -1) ||
+           (it.description && it.description.toLowerCase().indexOf(term) !== -1);
+  }).slice(0, 15);
+  
+  if (matches.length === 0) {
+    dropdown.innerHTML = '<div class="erp-item-dropdown-item muted">No matches — you can type manually</div>';
+    dropdown.classList.remove('d-none');
+    return;
+  }
+  
+  var html = '';
+  matches.forEach(function(it) {
+    var safeCode = String(it.code || '').replace(/'/g, "\\'");
+    var safeDesc = String(it.description || '').replace(/'/g, "\\'");
+    var safeUnit = String(it.unit || 'PIECE').replace(/'/g, "\\'");
+    
+    html += '<div class="erp-item-dropdown-item" onclick="selectItemFromDropdown(' + row.getAttribute('data-item-idx') + ', \'' + safeCode + '\', \'' + safeDesc + '\', \'' + safeUnit + '\')">' +
+      '<div class="item-code">' + erpEsc(it.code) + ' <span class="item-unit">' + erpEsc(it.unit) + '</span></div>' +
+      '<div class="item-desc">' + erpEsc(it.description.substring(0, 80)) + '</div>' +
+    '</div>';
+  });
+  dropdown.innerHTML = html;
+  dropdown.classList.remove('d-none');
+}
+
+window.selectItemFromDropdown = function(idx, code, desc, unit) {
+  var row = document.querySelector('.erp-item-row[data-item-idx="' + idx + '"]');
+  if (!row) return;
+  
+  var codeInput = row.querySelector('.item-code-input');
+  if (codeInput) codeInput.value = code;
+  
+  var descInput = row.querySelector('.item-desc-input');
+  if (descInput) descInput.value = desc;
+  
+  var unitInput = row.querySelector('.item-unit-input');
+  if (unitInput) unitInput.value = unit;
+  
+  var dropdown = row.querySelector('.item-dropdown');
+  if (dropdown) dropdown.classList.add('d-none');
+  
+  if (_mrrState.items[idx]) {
+    _mrrState.items[idx].code = code;
+    _mrrState.items[idx].description = desc;
+    _mrrState.items[idx].unit = unit;
+  }
+  
+  setTimeout(function() {
+    var qtyInput = row.querySelector('.item-qty-input');
+    if (qtyInput) {
+      qtyInput.focus();
+      qtyInput.select();
+    }
+  }, 100);
+};
+
+function hideItemDropdown(input) {
+  var row = input.closest('.erp-item-row');
+  if (row) {
+    var dropdown = row.querySelector('.item-dropdown');
+    if (dropdown) dropdown.classList.add('d-none');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SUBMIT MRR
+// ═══════════════════════════════════════════════════════════
+window.submitMrr = async function() {
+  if (_mrrState.isSubmitting) return;
+
+  var now = Date.now();
+  if (_mrrState.lastSubmittedAt && (now - _mrrState.lastSubmittedAt) < 10000) {
+    erpShowToast('Please wait before submitting again', 'warning'); return;
+  }
+
+  var getVal = function(id) {
+    try { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+    catch(e) { return ''; }
+  };
+
+  var receivingSite = getVal('mrrReceivingSite') || 'GEMCOR CATMON';
+  var vendor = getVal('mrrVendor');
+  var drNo = getVal('mrrDrNo');
+  var receivingDate = getVal('mrrReceivingDate') || new Date().toISOString().split('T')[0]; 
+  var poNo = getVal('mrrPoNo');
+  var sofNo = getVal('mrrSofNo');
+  var prfNo = getVal('mrrPrfNo');
+
+  if (!vendor) { erpShowToast('Vendor is required', 'warning'); return; }
+  if (!drNo) { erpShowToast('DR No. is required', 'warning'); return; }
+
+  var validItems = [];
+  var rows = document.querySelectorAll('.erp-item-row');
+  
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    
+    var code = row.querySelector('.item-code-input') ? row.querySelector('.item-code-input').value.trim() : '';
+    var desc = row.querySelector('.item-desc-input') ? row.querySelector('.item-desc-input').value.trim() : '';
+    var qty = row.querySelector('.item-qty-input') ? (parseFloat(row.querySelector('.item-qty-input').value) || 0) : 0; // PO Qty
+    var atlQty = row.querySelector('.item-atl-input') ? (parseFloat(row.querySelector('.item-atl-input').value) || 0) : 0; // Received Qty
+    var unit = row.querySelector('.item-unit-input') ? row.querySelector('.item-unit-input').value : 'PIECE';
+    var remarks = row.querySelector('.item-remarks-input') ? row.querySelector('.item-remarks-input').value.trim() : '';
+    
+    if (!code) { erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning'); return; }
+    if (qty <= 0 && atlQty <= 0) { erpShowToast('Item #' + (i + 1) + ' has no quantity.', 'warning'); return; }
+    
+    var finalQty = qty > 0 ? qty : atlQty;
+    
+    validItems.push({
+      item_code: code, description: desc, qty: finalQty, atl_qty: atlQty,
+      unit: unit, remarks: remarks || (atlQty >= finalQty ? 'COMPLETE' : 'PARTIAL')
+    });
+  }
+
+  if (validItems.length === 0) { erpShowToast('Please add at least one item', 'warning'); return; }
+  if (!confirm('Create MRR with ' + validItems.length + ' item(s)?')) return;
+
+  _mrrState.isSubmitting = true;
+  _mrrState.lastSubmittedAt = now;
+
+  var btn = document.getElementById('btnSubmitMrr');
+  var originalHtml = btn ? btn.innerHTML : 'Submit';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
+  }
+
+  try {
+    var rpcRes = await fetch(erpUrl('rpc/get_next_doc_number'), {
+      method: 'POST', headers: erpHeaders(),
+      body: JSON.stringify({ p_prefix: 'MRR' })
+    });
+
+    if (!rpcRes.ok) throw new Error('RPC Doc Num failed');
+    var nextNum = await rpcRes.json();
+    var docNo = 'MRR' + String(nextNum).padStart(7, '0');
+
+    var currentUser = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
+
+    var processRes = await fetch(erpUrl('rpc/erp_submit_mrr'), {
+      method: 'POST', headers: erpHeaders(),
+      body: JSON.stringify({
+        p_doc_no: docNo,
+        p_doc_payload: {
+          requestor: _mrrState.preparedBy, department: '',
+          po_no: poNo, sof_no: sofNo, prf_no: prfNo,
+          vendor: vendor, client_name: vendor, dr_no: drNo,
+          receiving_site: receivingSite, receiving_date: receivingDate,
+          date_prepared: new Date().toISOString().split('T')[0],
+          prepared_by: _mrrState.preparedBy
+        },
+        p_items: validItems,
+        p_processed_by: currentUser
+      })
+    });
+
+    if (!processRes.ok) {
+      var errText = await processRes.text();
+      throw new Error('RPC Error: ' + processRes.status + ' ' + errText);
+    }
+    
+    var data = await processRes.json();
+    if (!data || !data.success) throw new Error(data.error || 'Unknown error');
+
+    erpShowToast('✅ MRR created: ' + docNo + ' (' + data.status + ')', 'success');
+    showSuccessModal(docNo);
+
+  } catch(err) {
+    console.error('[submitMrr]', err);
+    erpShowToast('Failed: ' + err.message, 'danger');
+  } finally {
+    _mrrState.isSubmitting = false;
+    if (btn) { btn.disabled = false; btn.innerHTML = originalHtml; }
+  }
+};
+
+function showSuccessModal(docNo) {
+  var docNoEl = document.getElementById('successDocNo');
+  if (docNoEl) docNoEl.textContent = docNo;
+
+  var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
+  var qrData = base + '../?doc=' + encodeURIComponent(docNo) + '&view=print';
+  
+  var qrImg = document.getElementById('successQrImg');
+  if (qrImg) qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(qrData);
+  
+  var modalEl = document.getElementById('successModal');
+  if (modalEl) {
+    new bootstrap.Modal(modalEl).show();
+    modalEl.addEventListener('hidden.bs.modal', function onHide() {
+      modalEl.removeEventListener('hidden.bs.modal', onHide);
+      resetFormSilent();
+    }, { once: true });
+  }
+}
+
+function resetFormSilent() {
+  var getEl = function(id) { return document.getElementById(id); };
+  if (getEl('mrrPoNo')) getEl('mrrPoNo').value = '';
+  if (getEl('mrrSofNo')) getEl('mrrSofNo').value = '';
+  if (getEl('mrrPrfNo')) getEl('mrrPrfNo').value = '';
+  if (getEl('mrrVendor')) getEl('mrrVendor').value = '';
+  if (getEl('mrrDrNo')) getEl('mrrDrNo').value = '';
+  _mrrState.sofNo = ''; _mrrState.items = [];
+  var container = document.getElementById('itemsContainer');
+  if (container) container.querySelectorAll('.erp-item-row').forEach(function(r) { r.remove(); });
+  var empty = document.getElementById('itemsEmptyState');
+  if (empty) empty.style.display = 'block';
+}
+
+window.resetForm = function() { if (!confirm('Reset the form?')) return; resetFormSilent(); erpShowToast('Form reset'); };
+window.closeSuccessAndReset = function() { var m = bootstrap.Modal.getInstance(document.getElementById('successModal')); if (m) m.hide(); };
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+function erpEsc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function erpShowToast(msg, type) {
+  var toastEl = document.getElementById('erpToast');
+  if (!toastEl) { console.log('[Toast]', type, msg); return; }
+  document.getElementById('erpToastBody').textContent = msg;
+  bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3500 }).show();
+}
+
+console.log('✅ new-mrr-manual.js v3.1 loaded');
