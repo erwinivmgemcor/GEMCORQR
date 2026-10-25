@@ -11,10 +11,13 @@ var _notifState = {
   notifications: [],
   unreadCount: 0,
   refreshInterval: null,
-  lastFetchTs: 0
+  lastFetchTs: 0,
+  fetching: false,
+  hadError: false
 };
 
-var NOTIF_REFRESH_MS = 30000; // 30 seconds
+var NOTIF_REFRESH_MS = 15000;        // while the tab is visible
+var NOTIF_REFRESH_HIDDEN_MS = 30000; // background tabs keep polling so sound alerts still arrive
 
 // ═══════════════════════════════════════════════════════════
 // INIT
@@ -34,32 +37,29 @@ function initNotifications() {
   // Initial fetch
   fetchNotifications();
 
-  // Auto-refresh
-  if (_notifState.refreshInterval) clearInterval(_notifState.refreshInterval);
-  _notifState.refreshInterval = setInterval(fetchNotifications, NOTIF_REFRESH_MS);
-
-  // Pause when tab hidden
+  // Auto-refresh (slower, but never paused, when the tab is in the background)
+  notifSchedule();
   document.addEventListener('visibilitychange', function() {
-    if (document.hidden) {
-      if (_notifState.refreshInterval) {
-        clearInterval(_notifState.refreshInterval);
-        _notifState.refreshInterval = null;
-      }
-    } else {
-      fetchNotifications();
-      if (!_notifState.refreshInterval) {
-        _notifState.refreshInterval = setInterval(fetchNotifications, NOTIF_REFRESH_MS);
-      }
-    }
+    notifSchedule();
+    if (!document.hidden) fetchNotifications();
   });
 
   console.log('[Notifications] Ready for', _notifState.userRole, ':', _notifState.userFullname);
+}
+
+function notifSchedule() {
+  if (_notifState.refreshInterval) clearInterval(_notifState.refreshInterval);
+  _notifState.refreshInterval = setInterval(fetchNotifications,
+    document.hidden ? NOTIF_REFRESH_HIDDEN_MS : NOTIF_REFRESH_MS);
 }
 
 // ═══════════════════════════════════════════════════════════
 // FETCH NOTIFICATIONS
 // ═══════════════════════════════════════════════════════════
 async function fetchNotifications() {
+  if (_notifState.fetching) return;   // a slow poll must not overlap the next one
+  _notifState.fetching = true;
+  _notifState.hadError = false;
   try {
     var notifications = [];
 
@@ -74,6 +74,12 @@ async function fetchNotifications() {
       return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
     });
 
+    // Alert on anything new. Skipped when a sub-query failed: the list is then
+    // incomplete, and the missing items would look "new" on the next good poll.
+    if (!_notifState.hadError && window.erpAlerts) {
+      try { erpAlerts.process(notifications); } catch (e) { console.warn('[Alerts]', e); }
+    }
+
     _notifState.notifications = notifications.slice(0, 20); // Top 20
     _notifState.unreadCount = computeUnreadCount(notifications);
     _notifState.lastFetchTs = Date.now();
@@ -85,6 +91,8 @@ async function fetchNotifications() {
 
   } catch(err) {
     console.error('[fetchNotifications]', err);
+  } finally {
+    _notifState.fetching = false;
   }
 }
 
@@ -122,6 +130,7 @@ async function fetchWarehouseNotifications() {
     });
 
   } catch(err) {
+    _notifState.hadError = true;
     console.warn('[Warehouse notif] Documents failed:', err.message);
   }
 
@@ -149,6 +158,7 @@ async function fetchWarehouseNotifications() {
     });
 
   } catch(err) {
+    _notifState.hadError = true;
     console.warn('[Warehouse notif] PRF failed:', err.message);
   }
 
@@ -195,6 +205,7 @@ async function fetchProductionNotifications() {
     });
 
   } catch(err) {
+    _notifState.hadError = true;
     console.warn('[Production notif] Failed:', err.message);
   }
 
@@ -321,6 +332,7 @@ function renderDropdown() {
     '</div>';
   }
 
+  html += (window.erpAlerts ? erpAlerts.settingsHtml() : '');
   html += '</div>';
   notifContainer.innerHTML = html;
 }
