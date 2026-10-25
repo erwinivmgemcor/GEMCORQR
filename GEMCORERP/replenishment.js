@@ -28,7 +28,8 @@ var _rp = {
   prfsChanged: false,
   extraItems: [],       // items added by hand in the modal (not on the reorder list)
   modalVals: {},        // typed qty/remarks, kept across re-renders
-  catalog: null         // erp_items search list (loaded on first use)
+  catalog: null,        // erp_items search list (loaded on first use)
+  openMap: null         // {item_code: {qty, prfs:[{prf_no,status,open_qty}]}} — fresh each time the modal opens
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -428,9 +429,40 @@ function rpModalRows() {
   return rows;
 }
 
+// Open PRF lines per item (UNSERVED / STAGGERED, remaining qty > 0) — loaded fresh when the modal opens
+async function rpLoadOpenMap() {
+  try {
+    var rows = await erpFetchAll('erp_v_prf_open_lines', 'select=item_code,prf_no,status,open_qty&order=item_code.asc');
+    var m = {};
+    (rows || []).forEach(function(r) {
+      var c = r.item_code;
+      if (!m[c]) m[c] = { qty: 0, prfs: [] };
+      m[c].qty += Number(r.open_qty || 0);
+      m[c].prfs.push({ prf_no: r.prf_no, status: r.status, open_qty: Number(r.open_qty || 0) });
+    });
+    _rp.openMap = m;
+  } catch(e) {
+    console.warn('[rpLoadOpenMap]', e);
+    _rp.openMap = null; // fall back to the numbers already on the page
+  }
+}
+
+function rpOpenInfo(it) {
+  if (_rp.openMap) return _rp.openMap[it.item_code] || { qty: 0, prfs: [] };
+  var q = Number(it.on_order_qty || 0);
+  return { qty: q, prfs: q > 0 ? [{ prf_no: it.open_prf_nos || '', status: 'OPEN', open_qty: q }] : [] };
+}
+
+// Suggested qty = (buffer − on-hand) − already on order, never below 0
+function rpSuggested(it) {
+  var need = Math.max(Number(it.buffer_stock || 0) - Number(it.on_hand || 0), 0);
+  return Math.ceil(Math.max(need - rpOpenInfo(it).qty, 0));
+}
+
 function rpCreatePrfFromSelection() {
   _rp.extraItems = [];
   _rp.modalVals = {};
+  _rp.openMap = null;
 
   document.getElementById('rpPrfNotedBy').value = rpSavedSignatory('rp_noted_by', RP_DEFAULT_NOTED_BY);
   document.getElementById('rpPrfApprovedBy').value = rpSavedSignatory('rp_approved_by', RP_DEFAULT_APPROVED_BY);
@@ -445,6 +477,7 @@ function rpCreatePrfFromSelection() {
   }
   _rp.prfModal.show();
   rpLoadCatalog(); // warm up the "add other item" search
+  rpLoadOpenMap().then(function() { rpStashModalVals(); rpRefreshModal(); }); // fresh open-PRF info → re-draw
 }
 
 function rpRefreshModal() {
@@ -482,7 +515,7 @@ async function rpLoadCatalog() {
   if (_rp.catalog) return _rp.catalog;
   try {
     var rows = await erpFetchAll('erp_items',
-      'select=item_code,description,base_unit,category,location&is_active=eq.true&is_deleted=eq.false&order=item_code.asc');
+      'select=item_code,description,base_unit,category,location,on_hand,buffer_stock,ave_monthly_consumption&is_active=eq.true&is_deleted=eq.false&order=item_code.asc');
     _rp.catalog = rows || [];
   } catch(e) {
     console.warn('[rpLoadCatalog]', e);
@@ -514,9 +547,14 @@ async function rpAddItemSearch() {
     box.innerHTML = '<div class="list-group-item small text-muted">No matching item</div>';
   } else {
     box.innerHTML = hits.map(function(it) {
+      var oi = rpOpenInfo(it);
+      var tag = oi.qty > 0
+        ? ' <span class="oo-badge ms-1" title="' + rpEsc(oi.prfs.map(function(p) { return p.prf_no + ' ' + p.status; }).join(', ')) + '">⚠ on order ' + rpNum(oi.qty) + '</span>'
+        : '';
       return '<button type="button" class="list-group-item list-group-item-action small" data-code="' + rpEsc(it.item_code) + '">' +
-        '<code>' + rpEsc(it.item_code) + '</code> — ' + rpEsc(rpTruncate(it.description || '', 60)) +
-        ' <span class="cat-badge ms-1">' + rpEsc(it.category || '—') + '</span></button>';
+        '<code>' + rpEsc(it.item_code) + '</code> — ' + rpEsc(rpTruncate(it.description || '', 55)) +
+        ' <span class="cat-badge ms-1">' + rpEsc(it.category || '—') + '</span>' +
+        '<span class="text-muted ms-2">On-hand ' + rpNum(it.on_hand) + ' / Buffer ' + rpNum(it.buffer_stock) + '</span>' + tag + '</button>';
     }).join('');
     box.querySelectorAll('button[data-code]').forEach(function(btn) {
       btn.addEventListener('click', function() { rpAddExtraItem(btn.getAttribute('data-code')); });
@@ -534,6 +572,8 @@ function rpAddExtraItem(code) {
     description: it.description || '',
     category: it.category || 'UNCATEGORIZED',
     base_unit: it.base_unit || 'PIECE',
+    on_hand: Number(it.on_hand || 0),
+    buffer_stock: Number(it.buffer_stock || 0),
     _extra: true
   });
   document.getElementById('rpAddItemInput').value = '';
@@ -565,20 +605,39 @@ function renderRpPrfItems(items) {
   document.getElementById('rpPrfItemsCount').textContent = items.length;
   document.getElementById('rpBtnCreatePrf').disabled = (items.length === 0);
 
+  var warnCount = 0;
   var html = '';
   items.forEach(function(it, idx) {
     var v = _rp.modalVals[it.item_code] || {};
-    var defQty = it._extra ? 1 : Math.max(1, Math.ceil(rpNetNeeded(it)));
-    html += '<tr' + (it._extra ? ' class="table-warning"' : '') + '>' +
+    var oi = rpOpenInfo(it);
+    var sug = rpSuggested(it);
+    var defQty = Math.max(1, sug);
+    if (oi.qty > 0) warnCount++;
+
+    var warn = '';
+    if (oi.qty > 0) {
+      warn = '<div class="small text-danger mt-1" style="line-height:1.3;">⚠ Already on order: ' +
+        oi.prfs.map(function(p) {
+          return rpEsc(p.prf_no) + (p.status && p.status !== 'OPEN' ? ' <strong>' + rpEsc(p.status) + '</strong>' : '') + ' · ' + rpNum(p.open_qty);
+        }).join('; ') + '</div>';
+    }
+    var hint = sug > 0 ? 'Suggested ' + rpNum(sug)
+      : (Number(it.on_hand || 0) >= Number(it.buffer_stock || 0) ? 'Above buffer' : 'Covered by open PRF');
+
+    html += '<tr' + (oi.qty > 0 ? ' class="table-danger"' : (it._extra ? ' class="table-warning"' : '')) + '>' +
       '<td class="text-center">' + (idx + 1) + '</td>' +
-      '<td><code style="font-size:0.75rem;">' + rpEsc(it.item_code) + '</code>' + (it._extra ? ' <span class="badge bg-warning text-dark">added</span>' : '') + '</td>' +
+      '<td><code style="font-size:0.75rem;">' + rpEsc(it.item_code) + '</code>' + (it._extra ? ' <span class="badge bg-warning text-dark">added</span>' : '') + warn + '</td>' +
       '<td><span class="cat-badge">' + rpEsc(it.category || '—') + '</span></td>' +
-      '<td>' + rpEsc(rpTruncate(it.description || '', 70)) + '</td>' +
+      '<td>' + rpEsc(rpTruncate(it.description || '', 60)) + '</td>' +
+      '<td class="text-end">' + rpNum(it.on_hand) + '</td>' +
+      '<td class="text-end">' + rpNum(it.buffer_stock) + '</td>' +
+      '<td class="text-end ' + (oi.qty > 0 ? 'fw-bold text-danger' : '') + '">' + (oi.qty > 0 ? rpNum(oi.qty) : '—') + '</td>' +
       '<td class="text-center">' +
         '<input type="number" class="form-control form-control-sm text-center rp-prf-qty" ' +
           'data-code="' + rpEsc(it.item_code) + '" ' +
           'value="' + rpEsc(v.qty !== undefined ? v.qty : defQty) + '" ' +
           'min="1" step="1" style="width:80px;margin:0 auto;">' +
+        '<div class="small text-muted">' + hint + '</div>' +
       '</td>' +
       '<td class="text-center">' + rpEsc(it.base_unit || '—') + '</td>' +
       '<td>' +
@@ -593,6 +652,17 @@ function renderRpPrfItems(items) {
   tbody.querySelectorAll('.rp-rm').forEach(function(btn) {
     btn.addEventListener('click', function() { rpRemoveModalItem(btn.getAttribute('data-code')); });
   });
+
+  var warnEl = document.getElementById('rpPrfWarn');
+  if (warnEl) {
+    if (warnCount > 0) {
+      warnEl.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i><strong>' + warnCount + ' item' + (warnCount === 1 ? '' : 's') +
+        '</strong> already on an open PRF (red rows). Creating another PRF for them will double-order — remove them or lower the qty.';
+      warnEl.style.display = 'block';
+    } else {
+      warnEl.style.display = 'none';
+    }
+  }
 }
 
 function rpClosePrfModal() {
