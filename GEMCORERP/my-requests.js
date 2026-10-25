@@ -91,13 +91,13 @@ async function myRequestsLoad() {
   var tbody = document.getElementById('myTableBody');
   if (!tbody) return;
   
-  tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
+  tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
     '<div class="erp-spinner"></div>' +
     '<div class="mt-2">Loading your requests...</div></td></tr>';
   
   var userFullname = _myRequests.currentUser;
   if (!userFullname) {
-    tbody.innerHTML = '<tr><td colspan="8" class="erp-empty text-danger">' +
+    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty text-danger">' +
       'Could not determine user. Please log in again.</td></tr>';
     return;
   }
@@ -115,9 +115,10 @@ async function myRequestsLoad() {
     
     myRequestsComputeKPIs();
     await myRequestsRender();
+    if (typeof mrdOnLoaded === 'function') mrdOnLoaded();
   } catch(err) {
     console.error('[myRequestsLoad]', err);
-    tbody.innerHTML = '<tr><td colspan="8" class="erp-empty text-danger">' +
+    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty text-danger">' +
       'Failed: ' + erpEsc(err.message) + '</td></tr>';
   }
 }
@@ -222,7 +223,7 @@ async function myRequestsRender() {
   if (el) el.disabled = (end >= total);
   
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No requests found. Click "New MRIF" or "New MRS" to create one.</td></tr>';
     return;
@@ -250,10 +251,11 @@ async function myRequestsRender() {
     
     html += '<tr>' +
       '<td><code>' + erpEsc(d.doc_no) + '</code></td>' +
-      '<td>' + erpEsc(dateStr) + '</td>' +
+      '<td>' + erpEsc(dateStr) + (typeof mrdAgeSub === 'function' ? mrdAgeSub(d) : '') + '</td>' +
       '<td class="text-center"><span class="badge ' + typeBadge + '">' + typeUpper + '</span></td>' +
       '<td>' + erpEsc(d.jo_no || '—') + '</td>' +
       '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span></td>' +
+      '<td class="text-center" data-prog-doc="' + erpEsc(d.doc_no) + '">' + (typeof mrdProgressCell === 'function' ? mrdProgressCell(d) : '') + '</td>' +
       '<td class="text-center">' + (d.item_count || 0) + '</td>' +
       '<td class="text-center">' +
         '<button class="erp-action-btn primary" onclick="viewRequestDetails(\'' + safeDoc + '\', \'' + typeUpper + '\')" title="View Details">' +
@@ -318,6 +320,7 @@ async function viewRequestDetails(docNo, docType) {
     if (doc.project) html += '<div class="col-md-6"><strong>Project:</strong> ' + erpEsc(doc.project) + '</div>';
     if (doc.department) html += '<div class="col-md-6"><strong>Department:</strong> ' + erpEsc(doc.department) + '</div>';
     html += '</div>';
+    if (typeof mrdStepperHtml === 'function') html += mrdStepperHtml(doc);
     
     // QR Code
     var qrData = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '') + '../?doc=' + encodeURIComponent(docNo) + '&view=print';
@@ -336,12 +339,13 @@ async function viewRequestDetails(docNo, docType) {
       '<th>#</th><th>Item Code</th><th>Description</th>' +
       '<th class="text-center">Req Qty</th>' +
       '<th class="text-center">Issued Qty</th>' +
+      '<th style="min-width:110px">Progress</th>' +
       '<th class="text-center">Unit</th>' +
       '<th>Remarks</th>' +
       '</tr></thead><tbody>';
     
     if (items.length === 0) {
-      html += '<tr><td colspan="7" class="text-center text-muted py-3">No items</td></tr>';
+      html += '<tr><td colspan="8" class="text-center text-muted py-3">No items</td></tr>';
     } else {
       items.forEach(function(it, idx) {
         html += '<tr>' +
@@ -350,6 +354,7 @@ async function viewRequestDetails(docNo, docType) {
           '<td>' + erpEsc(it.description || '—') + '</td>' +
           '<td class="text-center">' + (it.requested_qty || 0) + '</td>' +
           '<td class="text-center">' + (it.issued_qty || 0) + '</td>' +
+          '<td>' + (typeof mrdBarHtml === 'function' ? mrdBarHtml(mrdItemPct(it), true) : '') + '</td>' +
           '<td class="text-center">' + erpEsc(it.unit || '—') + '</td>' +
           '<td>' + erpEsc(it.remarks || '—') + '</td>' +
         '</tr>';
@@ -469,6 +474,7 @@ function myRequestsPageNext() {
 window.myRequestsPageNext = myRequestsPageNext;
 
 function myRequestsRefresh() {
+  if (typeof _mrd !== 'undefined') _mrd.progressAt = 0;
   erpShowToast('Refreshing...', 'info');
   myRequestsLoad();
   myRequestsCheckHealth();
