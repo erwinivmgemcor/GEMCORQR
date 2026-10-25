@@ -28,6 +28,7 @@
 <script defer src="erp-supabase.js"></script>
 <script defer src="erp-nav.js"></script>
 <script defer src="js/update.js"></script>
+<script defer src="erp-avatars.js"></script>
 <script defer src="js/chat.js"></script>
 <script defer src="notif-alerts.js"></script>
 <script defer src="notifications.js"></script>
@@ -56,61 +57,56 @@
 
 <div class="erp-container">
   <div class="chat-wrapper" id="chatWrapper">
-    
+
     <!-- Sidebar — Conversation List -->
     <aside class="chat-sidebar" id="chatSidebar">
-      
-      <!-- Tabs -->
-      <div class="chat-sidebar-header">
-        <div class="chat-tabs">
-          <button class="chat-tab-btn active" data-tab="chats" onclick="switchChatTab('chats')">
-            <i class="bi bi-people-fill me-1"></i>Chats
+
+      <div class="chat-sidebar-top">
+        <div class="chat-sidebar-title">
+          <h2>Messages</h2>
+          <span class="chat-total-unread" id="chatTotalUnread" style="display:none;">0</span>
+        </div>
+        <div class="chat-tabs" role="tablist">
+          <button class="chat-tab-btn active" data-tab="chats" onclick="switchChatTab('chats')" role="tab">
+            <i class="bi bi-people-fill"></i> Chats
           </button>
-          <button class="chat-tab-btn" data-tab="documents" onclick="switchChatTab('documents')">
-            <i class="bi bi-file-earmark-text me-1"></i>Documents
+          <button class="chat-tab-btn" data-tab="documents" onclick="switchChatTab('documents')" role="tab">
+            <i class="bi bi-file-earmark-text"></i> Documents
           </button>
         </div>
+        <div class="chat-search-wrap">
+          <i class="bi bi-search"></i>
+          <input type="text" id="chatSearchInput" class="chat-search-input"
+                 placeholder="Search people or documents..." autocomplete="off"
+                 oninput="filterConversations()">
+        </div>
       </div>
-      
-      <!-- Search -->
-      <div class="chat-search-wrap">
-        <i class="bi bi-search"></i>
-        <input type="text" 
-               id="chatSearchInput" 
-               class="chat-search-input" 
-               placeholder="Search conversations..."
-               oninput="filterConversations()">
-      </div>
-      
-      <!-- Conversation List -->
+
       <div class="chat-conv-list" id="chatConversationList">
         <div class="chat-conv-loading">
           <div class="erp-spinner" style="width:24px;height:24px;border-width:2.5px;"></div>
         </div>
       </div>
-      
+
     </aside>
-    
+
     <!-- Main — Chat Panel -->
     <main class="chat-main">
-      
-      <!-- Empty State -->
+
       <div class="chat-empty-state" id="chatEmptyState">
-        <i class="bi bi-chat-square-dots"></i>
-        <h5>Welcome to Messages</h5>
-        <p class="text-muted small mb-0">Pick a conversation to start chatting.</p>
+        <div class="chat-empty-ico"><i class="bi bi-chat-heart"></i></div>
+        <h5>Your messages</h5>
+        <p>Pick a person on the left to start chatting.</p>
         <div class="chat-empty-hint">
-          <i class="bi bi-lightbulb me-1"></i>
-          Tip: Discuss specific documents in the <strong>Documents</strong> tab
+          <i class="bi bi-lightbulb"></i>
+          Discuss a specific request in the <strong>Documents</strong> tab
         </div>
       </div>
-      
-      <!-- Chat Panel -->
+
       <div class="chat-panel" id="chatPanel" style="display:none;">
-        
-        <!-- Header -->
+
         <div class="chat-panel-header">
-          <button class="chat-back-btn d-md-none" id="chatBackBtn" title="Back" onclick="closeConversation()">
+          <button class="chat-back-btn" id="chatBackBtn" title="Back" onclick="closeConversation()">
             <i class="bi bi-arrow-left"></i>
           </button>
           <div class="chat-panel-info">
@@ -121,34 +117,37 @@
             </div>
           </div>
         </div>
-        
-        <!-- Document Banner (if thread) -->
+
         <div class="chat-doc-banner" id="chatDocBanner" style="display:none;"></div>
-        
-        <!-- Messages -->
-        <div class="chat-messages" id="chatMessages"></div>
-        
-        <!-- Input -->
+
+        <div class="chat-messages-wrap">
+          <div class="chat-messages" id="chatMessages"></div>
+          <button class="chat-jump" id="chatJump" type="button" style="display:none;" onclick="chatScrollToEnd(true)">
+            <i class="bi bi-arrow-down-short"></i> <span id="chatJumpText">New messages</span>
+          </button>
+        </div>
+
         <div class="chat-input-row">
-          <textarea id="chatInput" 
-                    class="chat-input" 
-                    placeholder="Type a message..." 
-                    rows="1" 
-                    maxlength="500"></textarea>
-          <button class="chat-send-btn" id="chatSendBtn" title="Send">
+          <div class="chat-emoji-pop" id="chatEmojiPop" style="display:none;"></div>
+          <button class="chat-icon-btn" id="chatEmojiBtn" type="button" title="Emoji"><i class="bi bi-emoji-smile"></i></button>
+          <div class="chat-input-box">
+            <textarea id="chatInput" class="chat-input" placeholder="Type a message..." rows="1" maxlength="500"></textarea>
+            <span class="chat-counter" id="chatCounter"></span>
+          </div>
+          <button class="chat-send-btn" id="chatSendBtn" title="Send (Enter)">
             <i class="bi bi-send-fill"></i>
           </button>
         </div>
-        
+
       </div>
-      
+
     </main>
-    
+
   </div>
 
   <div class="erp-footer">
-    <div>GEMCOR ERP — Messages v1.0.0</div>
-    <div>Pure Supabase • No Google Sheets • Live Data</div>
+    <div>GEMCOR ERP — Messages</div>
+    <div>Enter to send · Shift+Enter for a new line</div>
   </div>
 </div>
 
