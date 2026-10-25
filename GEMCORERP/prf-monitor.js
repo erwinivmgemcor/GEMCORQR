@@ -682,10 +682,11 @@ function prfMonitorRenderItemTab() {
       '<td class="text-center" style="font-size:0.72rem;">' + dateDeliveredDisplay + '</td>' +
       '<td class="text-center">' +
         '<select class="form-select form-select-sm inline-status" onchange="updateItemStatus(' + it.id + ', this.value)">' +
-          '<option value="UNSERVED"' + (status === 'UNSERVED' ? ' selected' : '') + '>UNSERVED</option>' +
-          '<option value="STAGGERED"' + (status === 'STAGGERED' ? ' selected' : '') + '>STAGGERED</option>' +
-          '<option value="SERVED"' + (status === 'SERVED' ? ' selected' : '') + '>SERVED</option>' +
+          '<option value="UNSERVED"' + (status === 'UNSERVED' ? ' selected' : '') + '>UNSERVED' + (status === 'UNSERVED' && it.status_manual ? ' 🔒' : '') + '</option>' +
+          '<option value="STAGGERED"' + (status === 'STAGGERED' ? ' selected' : '') + '>STAGGERED' + (status === 'STAGGERED' && it.status_manual ? ' 🔒' : '') + '</option>' +
+          '<option value="SERVED"' + (status === 'SERVED' ? ' selected' : '') + '>SERVED' + (status === 'SERVED' && it.status_manual ? ' 🔒' : '') + '</option>' +
           '<option value="CANCELED"' + (status === 'CANCELED' ? ' selected' : '') + '>CANCELED</option>' +
+          '<option value="AUTO">↺ AUTO (follow MRR)</option>' +
         '</select>' +
       '</td>' +
     '</tr>';
@@ -1018,10 +1019,11 @@ async function viewPrfDetails(prfId) {
           '<td class="text-center" style="font-size:0.72rem;">' + dateDeliveredDisplay + '</td>' +
           '<td class="text-center">' +
             '<select class="form-select form-select-sm" style="font-size:0.75rem;" onchange="updateItemStatus(' + it.id + ', this.value)">' +
-              '<option value="UNSERVED"' + (status === 'UNSERVED' ? ' selected' : '') + '>UNSERVED</option>' +
-              '<option value="STAGGERED"' + (status === 'STAGGERED' ? ' selected' : '') + '>STAGGERED</option>' +
-              '<option value="SERVED"' + (status === 'SERVED' ? ' selected' : '') + '>SERVED</option>' +
+              '<option value="UNSERVED"' + (status === 'UNSERVED' ? ' selected' : '') + '>UNSERVED' + (status === 'UNSERVED' && it.status_manual ? ' 🔒' : '') + '</option>' +
+              '<option value="STAGGERED"' + (status === 'STAGGERED' ? ' selected' : '') + '>STAGGERED' + (status === 'STAGGERED' && it.status_manual ? ' 🔒' : '') + '</option>' +
+              '<option value="SERVED"' + (status === 'SERVED' ? ' selected' : '') + '>SERVED' + (status === 'SERVED' && it.status_manual ? ' 🔒' : '') + '</option>' +
               '<option value="CANCELED"' + (status === 'CANCELED' ? ' selected' : '') + '>CANCELED</option>' +
+              '<option value="AUTO">↺ AUTO (follow MRR)</option>' +
             '</select>' +
           '</td>' +
           '<td>' + erpEsc(it.remarks || '—') + '</td>' +
