@@ -184,6 +184,10 @@
 </style>
 
 
+<script>
+  // PRF Monitor now lives in Replenishment > PRFs. Opened on its own (old links/bookmarks) -> go there.
+  (function(){ try { if (window.top === window.self && new URLSearchParams(location.search).get('embed') !== '1') location.replace('replenishment.html#prfs'); } catch(e){} })();
+</script>
 <!-- Embed mode: prf-monitor.html?embed=1 is shown inside Replenishment > PRFs tab (no sidebar/topbar/header) -->
 <script>
   (function(){ try { if (new URLSearchParams(location.search).get('embed') === '1') document.documentElement.classList.add('is-embed'); } catch(e){} })();
