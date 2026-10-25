@@ -249,7 +249,7 @@ function clearSession() {
   var keys = [
     'ivm_username', 'ivm_userFullname', 'ivm_userRole',
     'ivm_allowedRoles', 'ivm_userDepartment', 'ivm_requestorName',
-    'ivm_chatUnread', 'ivm_editReqCount', 'ivm_isAdmin'
+    'ivm_chatUnread', 'ivm_editReqCount', 'ivm_isAdmin', 'ivm_avatar'
   ];
   keys.forEach(function(k) { localStorage.removeItem(k); });
   try { sessionStorage.clear(); } catch(e) {}
