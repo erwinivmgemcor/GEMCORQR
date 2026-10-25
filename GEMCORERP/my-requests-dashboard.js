@@ -9,7 +9,9 @@ var MRD_WEEKS = 8;             // weeks shown in the trend chart
 var MRD_PROGRESS_TTL = 60000;  // ms before item progress is fetched again
 var MRD_CHUNK = 50;            // docs per doc_items query (keeps the URL short)
 
-var _mrd = { progress: {}, progressAt: 0, loading: false };
+var MRD_DAYS = 14;             // days shown in the daily view
+
+var _mrd = { progress: {}, progressAt: 0, loading: false, range: 'weekly' };
 
 // ── helpers ──────────────────────────────────────────────────
 function mrdStatus(d) { return String((d && d.status) || 'PENDING').toUpperCase(); }
@@ -149,6 +151,12 @@ function mrdMetrics() {
     m.weeks.push({ start: ws, mrif: 0, mrs: 0 });
   }
 
+  m.days = [];
+  for (var dd = MRD_DAYS - 1; dd >= 0; dd--) {
+    var day = new Date(now); day.setHours(0, 0, 0, 0); day.setDate(day.getDate() - dd);
+    m.days.push({ start: day, mrif: 0, mrs: 0 });
+  }
+
   docs.forEach(function (d) {
     var s = mrdStatus(d);
     if (s === 'PENDING') m.pending++;
@@ -173,6 +181,13 @@ function mrdMetrics() {
       if (created.getFullYear() === now.getFullYear() && created.getMonth() === now.getMonth()) m.thisMonth++;
       var lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       if (created.getFullYear() === lm.getFullYear() && created.getMonth() === lm.getMonth()) m.lastMonth++;
+
+      var dayKey = new Date(created); dayKey.setHours(0, 0, 0, 0); dayKey = dayKey.getTime();
+      m.days.forEach(function (b) {
+        if (b.start.getTime() === dayKey) {
+          if (String(d.doc_type).toUpperCase() === 'MRS') b.mrs++; else b.mrif++;
+        }
+      });
 
       var wk = mrdWeekStart(created).getTime();
       m.weeks.forEach(function (b) {
@@ -249,36 +264,50 @@ function mrdInsightTiles(m) {
 }
 
 function mrdTrendChart(m) {
-  var W = 640, H = 230, padL = 30, padR = 10, padT = 18, padB = 34;
+  var daily = _mrd.range === 'daily';
+  var buckets = daily ? m.days : m.weeks;
   var max = 0;
-  m.weeks.forEach(function (b) { max = Math.max(max, b.mrif + b.mrs); });
+  buckets.forEach(function (b) { max = Math.max(max, b.mrif + b.mrs); });
   if (max === 0) {
-    return '<div class="mrd-empty"><i class="bi bi-bar-chart"></i>No requests in the last ' + MRD_WEEKS + ' weeks</div>';
+    return '<div class="mrd-empty"><i class="bi bi-bar-chart"></i>No requests in the last ' +
+      (daily ? MRD_DAYS + ' days' : MRD_WEEKS + ' weeks') + '</div>';
   }
   var top = Math.max(4, Math.ceil(max / 4) * 4);
-  var innerW = W - padL - padR, innerH = H - padT - padB;
-  var slot = innerW / m.weeks.length, bw = Math.min(34, slot * 0.58);
-  var svg = '<svg class="mrd-chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Requests per week">';
+  var n = buckets.length;
 
+  var y = '', grid = '';
   for (var g = 0; g <= 4; g++) {
-    var y = padT + innerH - (innerH * g / 4);
-    svg += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + y + '" y2="' + y + '" stroke="#e2e8f0" stroke-width="1"' + (g ? ' stroke-dasharray="3 4"' : '') + '/>' +
-      '<text x="' + (padL - 6) + '" y="' + (y + 3.5) + '" text-anchor="end" font-size="10" fill="#94a3b8">' + Math.round(top * g / 4) + '</text>';
+    var pos = g * 25;
+    y += '<span style="bottom:' + pos + '%">' + Math.round(top * g / 4) + '</span>';
+    grid += '<i style="bottom:' + pos + '%"></i>';
   }
 
-  m.weeks.forEach(function (b, i) {
-    var x = padL + slot * i + (slot - bw) / 2;
-    var hMrif = innerH * b.mrif / top, hMrs = innerH * b.mrs / top;
-    var yBase = padT + innerH;
+  var cols = '', labels = '';
+  buckets.forEach(function (b, i) {
+    var total = b.mrif + b.mrs;
     var label = b.start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    var tip = label + ' week: ' + b.mrif + ' MRIF, ' + b.mrs + ' MRS';
-    svg += '<g><title>' + tip + '</title>';
-    if (b.mrif) svg += '<rect x="' + x + '" y="' + (yBase - hMrif) + '" width="' + bw + '" height="' + hMrif + '" rx="4" fill="#4f46e5"/>';
-    if (b.mrs)  svg += '<rect x="' + x + '" y="' + (yBase - hMrif - hMrs) + '" width="' + bw + '" height="' + hMrs + '" rx="4" fill="#a78bfa"/>';
-    if (b.mrif + b.mrs) svg += '<text x="' + (x + bw / 2) + '" y="' + (yBase - hMrif - hMrs - 5) + '" text-anchor="middle" font-size="10.5" font-weight="700" fill="#334155">' + (b.mrif + b.mrs) + '</text>';
-    svg += '<text x="' + (x + bw / 2) + '" y="' + (H - 12) + '" text-anchor="middle" font-size="10" fill="' + (i === m.weeks.length - 1 ? '#1e3a5f' : '#94a3b8') + '"' + (i === m.weeks.length - 1 ? ' font-weight="700"' : '') + '>' + label + '</text></g>';
+    var tip = label + (daily ? '' : ' (week of)') + ': ' + b.mrif + ' MRIF, ' + b.mrs + ' MRS';
+    var last = i === n - 1;
+    cols += '<div class="mrd-col" title="' + tip + '">' +
+      (total ? '<div class="mrd-stack" style="height:' + (total / top * 100).toFixed(2) + '%">' +
+        '<em class="mrd-val">' + total + '</em>' +
+        (b.mrs ? '<span class="mrd-seg mrs" style="flex-grow:' + b.mrs + '"></span>' : '') +
+        (b.mrif ? '<span class="mrd-seg mrif" style="flex-grow:' + b.mrif + '"></span>' : '') +
+        '</div>' : '') + '</div>';
+    // the daily view has 14 labels, so show every other one to avoid crowding
+    var show = !daily || ((n - 1 - i) % 2 === 0);
+    labels += '<span class="' + (last ? 'is-now' : '') + '">' + (show ? label : '') + '</span>';
   });
-  return svg + '</svg>';
+
+  return '<div class="mrd-trend">' +
+    '<div class="mrd-y">' + y + '</div>' +
+    '<div class="mrd-plot"><div class="mrd-gridlines">' + grid + '</div><div class="mrd-cols">' + cols + '</div></div>' +
+    '<div></div><div class="mrd-x">' + labels + '</div></div>';
+}
+
+function mrdSetRange(r) {
+  _mrd.range = r === 'daily' ? 'daily' : 'weekly';
+  mrdRender();
 }
 
 function mrdDonut(m) {
@@ -364,9 +393,12 @@ function mrdRender() {
     '<div class="mrd-section-title">Insights <small>based on your requests</small></div>' +
     '<div class="mrd-insights">' + mrdInsightTiles(m) + '</div>' +
     '<div class="mrd-grid-2">' +
-      '<div class="mrd-card"><div class="mrd-card-head"><div><div class="mrd-card-title">Requests per week</div>' +
-        '<div class="mrd-card-sub">Last ' + MRD_WEEKS + ' weeks</div></div>' +
-        '<div class="mrd-legend"><span><i style="background:#4f46e5"></i>MRIF</span><span><i style="background:#a78bfa"></i>MRS</span></div></div>' +
+      '<div class="mrd-card"><div class="mrd-card-head"><div><div class="mrd-card-title">Request volume</div>' +
+        '<div class="mrd-card-sub">' + (_mrd.range === 'daily' ? 'Last ' + MRD_DAYS + ' days' : 'Last ' + MRD_WEEKS + ' weeks') + '</div></div>' +
+        '<div class="mrd-head-right"><div class="mrd-legend"><span><i style="background:#4f46e5"></i>MRIF</span><span><i style="background:#a78bfa"></i>MRS</span></div>' +
+        '<div class="mrd-seg-toggle" role="group" aria-label="Chart range">' +
+          '<button type="button" class="' + (_mrd.range === 'weekly' ? 'on' : '') + '" onclick="mrdSetRange(\'weekly\')">Weekly</button>' +
+          '<button type="button" class="' + (_mrd.range === 'daily' ? 'on' : '') + '" onclick="mrdSetRange(\'daily\')">Daily</button></div></div></div>' +
         mrdTrendChart(m) + '</div>' +
       '<div class="mrd-card"><div class="mrd-card-head"><div><div class="mrd-card-title">Status breakdown</div>' +
         '<div class="mrd-card-sub">All your requests</div></div></div>' + mrdDonut(m) + '</div>' +
@@ -422,6 +454,7 @@ function mrdItemPct(it) {
 }
 
 window.mrdRender = mrdRender;
+window.mrdSetRange = mrdSetRange;
 window.mrdOnLoaded = mrdOnLoaded;
 window.mrdFilterStatus = mrdFilterStatus;
 window.mrdProgressCell = mrdProgressCell;
