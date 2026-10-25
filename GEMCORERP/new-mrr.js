@@ -13,6 +13,7 @@ var _mrrState = {
   receivingDate: '',
   preparedBy: '',
   items: [],
+  prfLines: [],
   isSubmitting: false,
   lastSubmittedAt: 0
 };
@@ -43,26 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('mrrReceivingDate').value = today;
   _mrrState.receivingDate = today;
 
-  var step2 = document.getElementById('step2Card');
-  var step3 = document.getElementById('step3Card');
-  var step4 = document.getElementById('step4Card');
-  if (step2) step2.style.display = 'none';
-  if (step3) step3.style.display = 'none';
-  if (step4) step4.style.display = 'none';
-
- var addItemBtn = document.querySelector('#step3Card .btn-primary');
-if (addItemBtn) addItemBtn.style.display = 'inline-block';
-  
-  // I-update ang alert message sa loob ng step 3
-  var itemsTable = document.querySelector('#step3Card .table-responsive');
-  if (itemsTable) {
-    itemsTable.innerHTML = '<div class="text-center py-5 text-muted">' +
-      '<i class="bi bi-inbox fs-1 d-block mb-3 opacity-50"></i>' +
-      '<h5>No PO Loaded</h5>' +
-      '<p class="small mb-0">Please enter a valid PO No. above and click "Lookup" to auto-load items.<br>' +
-      'If this is a manual/legacy receipt without a PO, please use the <a href="new-mrr-manual.html" class="fw-bold text-primary">Manual MRR Entry</a>.</p>' +
-      '</div>';
-  }
+  renderItems();
 
   document.getElementById('mrrPoNo').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
@@ -113,8 +95,63 @@ async function mrrCheckHealth() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// PO LOOKUP — with fallback to erp_prf_po_cache
+// PO LOOKUP — fills PRF No., SOF No., Supplier and items
+// Sources: prf_items (PO linked to PRF) → erp_prf_po_cache (PO master sheet)
+//          + earlier MRRs of the same PO (partial deliveries: SOF/supplier reused,
+//            items default to what is still NOT received)
+// Not found? Nothing is blocked: fill the details in by hand.
 // ═══════════════════════════════════════════════════════════
+function _mrrUnique(arr) {
+  var seen = {}, out = [];
+  arr.forEach(function(x) {
+    x = String(x || '').trim();
+    if (x && !seen[x]) { seen[x] = true; out.push(x); }
+  });
+  return out;
+}
+
+function _mrrSofFrom(rows) {
+  var re = /SOF\s*#?\s*([A-Za-z0-9\-]+)/i;
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    var fields = [r.sof_no, r.remarks, r.client, r.brand_note, r.requestor];
+    for (var k = 0; k < fields.length; k++) {
+      var f = fields[k];
+      if (!f) continue;
+      if (k === 0) return String(f).trim();           // a real sof_no column, if it exists
+      var m = re.exec(String(f));
+      if (m) return 'SOF#' + m[1];
+    }
+  }
+  return '';
+}
+
+// Earlier MRRs for this PO → received qty per item + SOF/supplier/PRF to reuse
+async function _mrrPriorReceipts(poNo) {
+  var out = { docs: [], received: {}, sof: '', vendor: '', prf: '' };
+  try {
+    var docs = await erpFetch('documents',
+      'doc_type=eq.MRR&po_no=eq.' + encodeURIComponent(poNo) +
+      '&status=in.(COMPLETED,PARTIAL)&select=doc_no,sof_no,vendor,prf_no,created_at&order=created_at.desc&limit=200');
+    out.docs = docs || [];
+    if (out.docs.length === 0) return out;
+    for (var i = 0; i < out.docs.length; i++) {
+      var d = out.docs[i];
+      if (!out.sof && d.sof_no) out.sof = d.sof_no;
+      if (!out.vendor && d.vendor) out.vendor = d.vendor;
+      if (!out.prf && d.prf_no) out.prf = d.prf_no;
+    }
+    var nos = out.docs.map(function(d) { return encodeURIComponent(d.doc_no); }).join(',');
+    var lines = await erpFetch('doc_items', 'doc_no=in.(' + nos + ')&select=item_code,issued_qty&limit=5000');
+    (lines || []).forEach(function(l) {
+      out.received[l.item_code] = (out.received[l.item_code] || 0) + Number(l.issued_qty || 0);
+    });
+  } catch(e) {
+    console.warn('[MRR prior receipts]', e.message);
+  }
+  return out;
+}
+
 async function lookupPoNo() {
   var poNo = document.getElementById('mrrPoNo').value.trim();
   var statusEl = document.getElementById('poStatus');
@@ -130,132 +167,215 @@ async function lookupPoNo() {
   resultEl.innerHTML = '<span class="small">Searching...</span>';
 
   try {
-    // ═══ STEP 1: Try prf_items first ═══
-    console.log('[MRR Lookup] Querying prf_items for po_no=' + poNo);
-    var rows = await erpFetch('prf_items',
-      'po_no=eq.' + encodeURIComponent(poNo) + '&order=line_no.asc&limit=500');
-
+    var enc = encodeURIComponent(poNo);
+    var rows = await erpFetch('prf_items', 'po_no=eq.' + enc + '&order=prf_no.asc,line_no.asc&limit=500');
     var source = 'prf_items';
 
-    // ═══ STEP 2: Fallback to erp_prf_po_cache ═══
-    if (!rows || rows.length === 0) {
-      console.log('[MRR Lookup] Not in prf_items, trying erp_prf_po_cache...');
-      try {
-        var cacheRows = await erpFetch('erp_prf_po_cache',
-          'po_no=eq.' + encodeURIComponent(poNo) + '&order=item_no.asc&limit=500');
-
-        if (cacheRows && cacheRows.length > 0) {
-          console.log('[MRR Lookup] Found ' + cacheRows.length + ' items in po_cache');
-          rows = cacheRows.map(function(r) {
-            return {
-              prf_no: r.prf_no || '',
-              item_code: r.inventory_id || '',
-              description: r.description || '',
-              qty_for_order: Number(r.qty || 0),
-              unit: r.unit || 'PCS',
-              line_no: r.item_no || 0,
-              po_supplier: r.supplier || '',
-              _source: 'po_cache'
-            };
-          });
-          source = 'po_cache';
-        }
-      } catch(cacheErr) {
-        console.warn('[MRR Lookup] po_cache query failed:', cacheErr.message);
-      }
+    var cacheRows = [];
+    try {
+      cacheRows = await erpFetch('erp_prf_po_cache', 'po_no=eq.' + enc + '&order=item_no.asc&limit=500') || [];
+    } catch(cacheErr) {
+      console.warn('[MRR Lookup] po_cache query failed:', cacheErr.message);
     }
 
-    // ═══ STEP 3: Not found in either ═══
-    if (!rows || rows.length === 0) {
-      statusEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> PO No. not found</span>';
+    if ((!rows || rows.length === 0) && cacheRows.length > 0) {
+      rows = cacheRows.map(function(r) {
+        return {
+          prf_no: r.prf_no || '',
+          item_code: r.inventory_id || '',
+          description: r.description || '',
+          qty_for_order: Number(r.qty || 0),
+          unit: r.unit || 'PCS',
+          line_no: r.item_no || 0,
+          po_supplier: r.supplier || ''
+        };
+      });
+      source = 'PO master sheet';
+    }
+
+    var prior = await _mrrPriorReceipts(poNo);
+
+    if ((!rows || rows.length === 0) && prior.docs.length === 0) {
+      statusEl.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle"></i> PO No. not found</span>';
       resultEl.className = 'alert alert-warning mb-0 py-2';
       resultEl.innerHTML = '<span class="small"><i class="bi bi-exclamation-triangle me-1"></i>' +
-        'PO No. <strong>' + erpEsc(poNo) + '</strong> not found in PRF records or PO cache. ' +
-        'You can still add items manually below.</span>';
+        'PO No. <strong>' + erpEsc(poNo) + '</strong> is not in the PRF records or the PO master. ' +
+        'No problem — fill in the PRF No. (if any), supplier and items below. The MRR will still be saved.</span>';
       return;
     }
 
-    console.log('[MRR Lookup] Found ' + rows.length + ' items (source: ' + source + ')');
+    rows = rows || [];
+    var prfNos = _mrrUnique(rows.map(function(r) { return r.prf_no; }));
+    var prfText = prfNos.length ? prfNos.join(', ') : prior.prf;
+    var supplier = _mrrUnique(rows.map(function(r) { return r.po_supplier; }))[0] || prior.vendor || '';
+    var sof = prior.sof || _mrrSofFrom(cacheRows);
 
-    var first = rows[0];
     _mrrState.poNo = poNo;
-    _mrrState.prfNo = first.prf_no || '';
-    _mrrState.client = first.po_supplier || '';
-    _mrrState.vendor = first.po_supplier || '';
+    _mrrState.prfNo = prfText;
+    _mrrState.client = supplier;
+    _mrrState.vendor = supplier;
 
-    document.getElementById('mrrPrfNo').value = _mrrState.prfNo;
-    document.getElementById('mrrVendor').value = _mrrState.vendor;
+    if (prfText) document.getElementById('mrrPrfNo').value = prfText;
+    if (supplier) document.getElementById('mrrVendor').value = supplier;
+    if (sof) {
+      document.getElementById('mrrSofNo').value = sof;
+      document.getElementById('mrrSofNoDisplay').value = sof;
+    }
 
-    // ═══ Build items ═══
-    _mrrState.items = rows.map(function(r, i) {
-      return {
+    // items: PO qty vs. what earlier MRRs already received (oldest line first)
+    var pool = {};
+    Object.keys(prior.received).forEach(function(k) { pool[k] = prior.received[k]; });
+    var items = [], fullyReceived = 0, partlyReceived = 0;
+    rows.forEach(function(r, i) {
+      var qty = Number(r.qty_for_order || 0);
+      var take = Math.min(pool[r.item_code] || 0, qty);
+      pool[r.item_code] = (pool[r.item_code] || 0) - take;
+      var remaining = qty - take;
+      if (qty > 0 && remaining <= 0) { fullyReceived++; return; }
+      if (take > 0) partlyReceived++;
+      items.push({
         itemCode: r.item_code || '',
         description: r.description || '',
-        requestedQty: Number(r.qty_for_order || 0),
-        issuedQty: Number(r.qty_for_order || 0),
+        requestedQty: qty,
+        issuedQty: remaining,
         unit: r.unit || 'PCS',
         remarks: '',
         itemNo: r.line_no || (i + 1)
-      };
+      });
     });
+    _mrrState.items = items;
+    renderItems();
 
-    // ✅ IPAKITA ANG FORM KAPAG MAY NAKITANG PO
-    var step2 = document.getElementById('step2Card');
-    var step3 = document.getElementById('step3Card');
-    var step4 = document.getElementById('step4Card');
-    if (step2) step2.style.display = 'block';
-    if (step3) step3.style.display = 'block';
-    if (step4) step4.style.display = 'block';
-
-    // I-restore yung table view para sa items
-    var itemsTable = document.querySelector('#step3Card .table-responsive');
-    if (itemsTable) {
-      itemsTable.innerHTML = '<table class="erp-table" id="itemsTable">' +
-        '<thead><tr>' +
-          '<th style="width:5%">#</th>' +
-          '<th style="width:20%">Item Code</th>' +
-          '<th style="width:25%">Description</th>' +
-          '<th style="width:9%" class="text-center">Req Qty</th>' +
-          '<th style="width:9%" class="text-center">ATL Qty</th>' +
-          '<th style="width:8%" class="text-center">Unit</th>' +
-          '<th style="width:14%">Remarks</th>' +
-          '<th style="width:6%"></th>' +
-        '</tr></thead>' +
-        '<tbody id="itemsBody"></tbody>' +
-      '</table>';
-      renderItems();
+    var note = '';
+    if (prior.docs.length) {
+      note += '<br><span class="text-muted">Earlier MRR(s) for this PO: ' + erpEsc(prior.docs.map(function(d) { return d.doc_no; }).join(', ')) +
+        (fullyReceived ? ' — ' + fullyReceived + ' line(s) already fully received (not listed)' : '') +
+        (partlyReceived ? ' — ' + partlyReceived + ' line(s) partly received (ATL Qty = still to receive)' : '') + '</span>';
     }
+    var warnSof = sof ? '' : '<br><span class="text-muted">SOF No. not found for this PO — type it in if there is one.</span>';
 
-    var sourceLabel = source === 'po_cache' ? ' <em>(from PO cache)</em>' : '';
-    statusEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> PO No. found!</span>';
+    statusEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> PO No. found</span>';
     resultEl.className = 'alert alert-success mb-0 py-2';
     resultEl.innerHTML = '<span class="small"><i class="bi bi-check-circle me-1"></i>' +
-      'Found: <strong>' + erpEsc(_mrrState.prfNo || poNo) + '</strong>' + sourceLabel + ' — ' +
-      erpEsc(_mrrState.client || 'No client') + ' (' + rows.length + ' items)</span>';
+      'Found in <em>' + erpEsc(source) + '</em>: PRF <strong>' + erpEsc(prfText || '—') + '</strong>' +
+      ' · SOF <strong>' + erpEsc(sof || '—') + '</strong>' +
+      ' · Supplier <strong>' + erpEsc(supplier || '—') + '</strong>' +
+      ' · ' + items.length + ' item(s) loaded' + note + warnSof + '</span>';
 
-    erpShowToast('PO No. found! ' + rows.length + ' items loaded.', 'success');
+    erpShowToast('PO No. found. ' + items.length + ' item(s) loaded.', 'success');
+    checkPrfInfo();
 
     setTimeout(function() {
-      document.getElementById('mrrDrNo').focus();
+      var dr = document.getElementById('mrrDrNo');
+      if (dr) dr.focus();
     }, 300);
 
   } catch(err) {
     console.error('[lookupPoNo]', err);
     statusEl.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle"></i> Lookup failed</span>';
     resultEl.className = 'alert alert-danger mb-0 py-2';
-    resultEl.innerHTML = '<span class="small">' + erpEsc(err.message) + '</span>';
+    resultEl.innerHTML = '<span class="small">' + erpEsc(err.message) +
+      ' — you can still fill in the details below by hand.</span>';
   }
 }
+
+// ═══════════════════════════════════════════════════════════
+// PRF DETECTION — shows what this MRR will update in PRF Monitor
+// ═══════════════════════════════════════════════════════════
+function _mrrPrfList(raw) {
+  return _mrrUnique(String(raw || '').split(/[,;]+/));
+}
+
+async function checkPrfInfo() {
+  var el = document.getElementById('mrrPrfInfo');
+  if (!el) return;
+  var list = _mrrPrfList(document.getElementById('mrrPrfNo').value);
+  _mrrState.prfLines = [];
+  if (list.length === 0) { el.innerHTML = ''; return; }
+
+  el.innerHTML = '<span class="text-muted"><i class="bi bi-hourglass-split"></i> Checking PRF...</span>';
+  try {
+    var q = 'prf_no=in.(' + list.map(encodeURIComponent).join(',') + ')&select=*&order=prf_no.asc,line_no.asc&limit=2000';
+    var lines = await erpFetch('prf_items', q) || [];
+    _mrrState.prfLines = lines;
+
+    var html = '';
+    list.forEach(function(p) {
+      var mine = lines.filter(function(l) { return l.prf_no === p; });
+      if (mine.length === 0) {
+        html += '<div class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i><strong>' + erpEsc(p) +
+          '</strong> not found in PRF records — the MRR will be saved, but no PRF will be updated.</div>';
+        return;
+      }
+      var c = { UNSERVED: 0, STAGGERED: 0, SERVED: 0, CANCELED: 0 };
+      mine.forEach(function(l) { var s = String(l.status || 'UNSERVED').toUpperCase(); if (c[s] !== undefined) c[s]++; });
+      html += '<div class="text-success"><i class="bi bi-check-circle me-1"></i><strong>' + erpEsc(p) + '</strong>: ' + mine.length +
+        ' line(s) — ' + c.UNSERVED + ' unserved, ' + c.STAGGERED + ' staggered, ' + c.SERVED + ' served' +
+        (c.CANCELED ? ', ' + c.CANCELED + ' canceled' : '') +
+        '. Saving this MRR updates their status automatically.</div>';
+    });
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<span class="text-muted">Could not check the PRF (' + erpEsc(e.message) + ').</span>';
+  }
+}
+
+// Fill the items table with the still-open lines of the typed PRF(s)
+async function loadItemsFromPrf() {
+  var list = _mrrPrfList(document.getElementById('mrrPrfNo').value);
+  if (list.length === 0) { erpShowToast('Type a PRF No. first', 'warning'); return; }
+  await checkPrfInfo();
+
+  var open = (_mrrState.prfLines || []).filter(function(l) {
+    var s = String(l.status || 'UNSERVED').toUpperCase();
+    return s === 'UNSERVED' || s === 'STAGGERED';
+  });
+  if (open.length === 0) { erpShowToast('No open (unserved / staggered) lines on this PRF', 'warning'); return; }
+
+  // remaining qty per line, if the database view exists; otherwise the full PRF qty
+  var remaining = {};
+  try {
+    var ov = await erpFetch('erp_v_prf_open_lines',
+      'prf_no=in.(' + list.map(encodeURIComponent).join(',') + ')&select=prf_item_id,open_qty&limit=2000');
+    (ov || []).forEach(function(r) { remaining[r.prf_item_id] = Number(r.open_qty || 0); });
+  } catch(e) { remaining = null; }
+
+  if (_mrrState.items.length > 0 && !confirm('Replace the items already in the table with the PRF lines?')) return;
+
+  _mrrState.items = open.map(function(l, i) {
+    var qty = Number(l.qty_for_order || 0);
+    var rem = remaining ? (remaining[l.id] !== undefined ? remaining[l.id] : qty) : qty;
+    return {
+      itemCode: l.item_code || '',
+      description: l.description || '',
+      requestedQty: qty,
+      issuedQty: rem,
+      unit: l.unit || 'PCS',
+      remarks: '',
+      itemNo: l.line_no || (i + 1)
+    };
+  });
+  renderItems();
+
+  var vend = document.getElementById('mrrVendor');
+  if (vend && !vend.value.trim()) {
+    var sup = _mrrUnique(open.map(function(l) { return l.po_supplier; }))[0];
+    if (sup) vend.value = sup;
+  }
+  var po = document.getElementById('mrrPoNo');
+  if (po && !po.value.trim()) {
+    var pos = _mrrUnique(open.map(function(l) { return l.po_no; }));
+    if (pos.length === 1) po.value = pos[0];
+  }
+  erpShowToast(open.length + ' PRF line(s) loaded. Set the ATL Qty actually received.', 'success');
+}
+window.checkPrfInfo = checkPrfInfo;
+window.loadItemsFromPrf = loadItemsFromPrf;
 
 // ═══════════════════════════════════════════════════════════
 // ITEMS MANAGEMENT
 // ═══════════════════════════════════════════════════════════
 function addItemRow() {
-  if (!_mrrState.poNo) {
-    erpShowToast('Please lookup a valid PO No. first. For manual entry, use the Manual MRR page.', 'warning');
-    return;
-  }
-  
   _mrrState.items.push({
     itemCode: '',
     description: '',
@@ -281,7 +401,7 @@ function renderItems() {
   if (_mrrState.items.length === 0) {
     tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">' +
       '<i class="bi bi-inbox fs-3 d-block mb-2 opacity-50"></i>' +
-      'Click "+ Add Item" to start, or enter PO No. above to auto-load items.</td></tr>';
+      'Click "+ Add Item", or enter a PO No. / PRF No. above to load items.</td></tr>';
     return;
   }
 
@@ -591,6 +711,8 @@ async function submitMrr() {
   if (!receivingSite) { erpShowToast('Receiving Site is required', 'warning'); return; }
 
   _mrrState.vendor = document.getElementById('mrrVendor').value.trim();
+  _mrrState.poNo = document.getElementById('mrrPoNo').value.trim();   // typed by hand or from lookup
+  _mrrState.receivingSite = receivingSite;
   _mrrState.prfNo = document.getElementById('mrrPrfNo').value.trim();
   _mrrState.sofNo = document.getElementById('mrrSofNoDisplay').value.trim() || document.getElementById('mrrSofNo').value.trim();
 
@@ -601,13 +723,15 @@ async function submitMrr() {
     var it = _mrrState.items[i];
     if (!it.itemCode || !it.itemCode.trim()) { erpShowToast('Item #' + (i + 1) + ' is missing an item code', 'warning'); return; }
     
+    if (!(Number(it.requestedQty) > 0) && !(Number(it.issuedQty) > 0)) { erpShowToast('Item #' + (i + 1) + ' has no quantity', 'warning'); return; }
+    if (!_mrrState.vendor) { erpShowToast('Vendor / Client is required', 'warning'); return; }
     validItems.push({
       item_code: it.itemCode,
       description: it.description,
-      qty: it.requestedQty,
-      atl_qty: it.issuedQty,
+      qty: Number(it.requestedQty) > 0 ? Number(it.requestedQty) : Number(it.issuedQty),
+      atl_qty: Number(it.issuedQty) || 0,
       unit: it.unit,
-      remarks: it.remarks || (it.issuedQty >= it.requestedQty ? 'COMPLETE' : 'PARTIAL')
+      remarks: it.remarks || ((Number(it.issuedQty) || 0) >= (Number(it.requestedQty) > 0 ? Number(it.requestedQty) : Number(it.issuedQty)) ? 'COMPLETE' : 'PARTIAL')
     });
   }
 
@@ -647,7 +771,7 @@ async function submitMrr() {
           sof_no: _mrrState.sofNo || '',
           prf_no: _mrrState.prfNo,
           vendor: _mrrState.vendor,
-          client_name: _mrrState.client || '',
+          client_name: _mrrState.vendor || _mrrState.client || '',
           dr_no: _mrrState.drNo,
           receiving_site: _mrrState.receivingSite,
           receiving_date: _mrrState.receivingDate,
@@ -668,7 +792,8 @@ async function submitMrr() {
     if (!data || !data.success) throw new Error(data.error || 'Unknown error');
 
     erpShowToast('✅ MRR created: ' + docNo, 'success');
-    showSuccessModal(docNo);
+    var prfSummaryHtml = await _mrrPrfSummary(_mrrState.prfNo, _mrrState.poNo);
+    showSuccessModal(docNo, prfSummaryHtml);
 
   } catch(err) {
     console.error('[submitMrr]', err);
@@ -682,8 +807,35 @@ async function submitMrr() {
 // ═══════════════════════════════════════════════════════════
 // SUCCESS MODAL
 // ═══════════════════════════════════════════════════════════
-function showSuccessModal(docNo, sofInfo) {
+// What PRF Monitor shows for the PRF(s) this MRR touched (read right after saving)
+async function _mrrPrfSummary(prfText, poNo) {
+  try {
+    var list = _mrrPrfList(prfText);
+    var q = list.length
+      ? 'prf_no=in.(' + list.map(encodeURIComponent).join(',') + ')'
+      : (poNo ? 'po_no=eq.' + encodeURIComponent(poNo) : '');
+    if (!q) return '';
+    var lines = await erpFetch('prf_items', q + '&select=prf_no,status&limit=2000') || [];
+    if (lines.length === 0) return '<div class="text-muted"><i class="bi bi-info-circle me-1"></i>No PRF line is linked to this MRR.</div>';
+    var by = {};
+    lines.forEach(function(l) {
+      var s = String(l.status || 'UNSERVED').toUpperCase();
+      by[l.prf_no] = by[l.prf_no] || { UNSERVED: 0, STAGGERED: 0, SERVED: 0, CANCELED: 0 };
+      if (by[l.prf_no][s] !== undefined) by[l.prf_no][s]++;
+    });
+    return '<div class="fw-bold mb-1"><i class="bi bi-file-earmark-text me-1"></i>PRF status now</div>' +
+      Object.keys(by).map(function(p) {
+        var c = by[p];
+        return '<div><strong>' + erpEsc(p) + '</strong> — ' + c.SERVED + ' served · ' + c.STAGGERED + ' staggered · ' + c.UNSERVED + ' unserved' +
+          (c.CANCELED ? ' · ' + c.CANCELED + ' canceled' : '') + '</div>';
+      }).join('');
+  } catch(e) { return ''; }
+}
+
+function showSuccessModal(docNo, prfInfoHtml) {
   document.getElementById('successDocNo').textContent = docNo;
+  var infoEl = document.getElementById('successPrfInfo');
+  if (infoEl) infoEl.innerHTML = prfInfoHtml || '';
   
   var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
   var qrData = base + '../?doc=' + encodeURIComponent(docNo) + '&view=print';
@@ -722,9 +874,11 @@ function resetFormSilent() {
   if (sof1) sof1.value = '';
   if (sof2) sof2.value = '';
 
+  _mrrState.prfLines = [];
+  var pi = document.getElementById('mrrPrfInfo'); if (pi) pi.innerHTML = '';
   document.getElementById('poStatus').innerHTML = '';
   document.getElementById('poLookupResult').className = 'alert alert-secondary mb-0 py-2';
-  document.getElementById('poLookupResult').innerHTML = '<span class="text-muted small">Enter a PO No. above to auto-load items, or skip to add items manually.</span>';
+  document.getElementById('poLookupResult').innerHTML = '<span class="text-muted small">Enter a PO No. and click Lookup, or skip it and fill in the details yourself.</span>';
 
   renderItems();
 
