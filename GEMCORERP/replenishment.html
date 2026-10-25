@@ -337,7 +337,7 @@ tr.row-covered code { color: #64748b; }
 
 <!-- CONFIRM CREATE PRF MODAL -->
 <div class="modal fade" id="rpConfirmPrfModal" tabindex="-1" data-bs-backdrop="static">
-  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header" style="background:linear-gradient(135deg, #1e3a5f 0%, #2a4a73 100%); color:#fff;">
         <h5 class="modal-title">
@@ -347,7 +347,8 @@ tr.row-covered code { color: #64748b; }
         <button type="button" class="btn-close btn-close-white" onclick="rpClosePrfModal()"></button>
       </div>
       <div class="modal-body">
-        <div class="alert alert-info small py-2 mb-3" id="rpPrfPlan"></div>
+        <div class="alert alert-info small py-2 mb-2" id="rpPrfPlan"></div>
+        <div class="alert alert-danger small py-2 mb-3" id="rpPrfWarn" style="display:none;"></div>
 
         <div class="row g-3 mb-3">
           <div class="col-md-6">
@@ -376,13 +377,16 @@ tr.row-covered code { color: #64748b; }
           <table class="table table-sm table-bordered" style="font-size:0.82rem;">
             <thead class="table-light sticky-top">
               <tr>
-                <th style="width:4%">#</th>
-                <th style="width:16%">Item Code</th>
-                <th style="width:12%">Category</th>
-                <th style="width:28%">Description</th>
-                <th style="width:12%" class="text-center">Qty Order</th>
-                <th style="width:8%" class="text-center">Unit</th>
-                <th style="width:18%">Remarks</th>
+                <th style="width:3%">#</th>
+                <th style="width:17%">Item Code</th>
+                <th style="width:9%">Category</th>
+                <th style="width:19%">Description</th>
+                <th style="width:6%" class="text-end">On-Hand</th>
+                <th style="width:6%" class="text-end">Buffer</th>
+                <th style="width:7%" class="text-end">On Order</th>
+                <th style="width:10%" class="text-center">Qty Order</th>
+                <th style="width:5%" class="text-center">Unit</th>
+                <th style="width:14%">Remarks</th>
                 <th style="width:4%"></th>
               </tr>
             </thead>
