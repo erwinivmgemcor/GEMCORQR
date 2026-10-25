@@ -25,6 +25,8 @@ const STATIC_ASSETS = [
   '/GEMCORQR/GEMCORERP/erp-nav.css',
   '/GEMCORQR/GEMCORERP/erp-profile.js',
   '/GEMCORQR/GEMCORERP/erp-profile.css',
+  '/GEMCORQR/GEMCORERP/erp-avatars.js',
+  '/GEMCORQR/GEMCORERP/erp-chat-alerts.js',
   '/GEMCORQR/GEMCORERP/erp-notif.css',
   '/GEMCORQR/GEMCORERP/erp-styles.css',
   '/GEMCORQR/gemcor-logo.png'
