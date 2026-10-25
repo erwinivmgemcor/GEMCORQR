@@ -67,7 +67,8 @@
   var PATTERNS = {
     request: [[880, 0, 0.7], [659.25, 0.22, 0.95], [880, 1.3, 0.7], [659.25, 1.52, 0.95]],   // door-bell, twice: hard to miss
     done:    [[523.25, 0, 0.5], [659.25, 0.12, 0.5], [783.99, 0.24, 0.5], [1046.5, 0.36, 0.95]], // rising chime = good news
-    partial: [[783.99, 0, 0.5], [987.77, 0.16, 0.85]]                                          // softer two-note
+    partial: [[783.99, 0, 0.5], [987.77, 0.16, 0.85]],                                         // softer two-note
+    message: [[1174.66, 0, 0.22], [1567.98, 0.13, 0.5], [1174.66, 0.9, 0.22], [1567.98, 1.03, 0.5]]   // chat: bright two-note "pop", repeated once
   };
 
   function playNow(name) {
@@ -347,5 +348,5 @@
     enableDesktop: enableDesktop, settingsHtml: settingsHtml,
     isMuted: isMuted, config: CFG, _unlock: unlock
   };
-  console.log('✅ notif-alerts.js v1.0 loaded');
+  console.log('✅ notif-alerts.js v1.1 loaded');
 })();
