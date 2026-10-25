@@ -1,5 +1,5 @@
 // ============================================================
-// GEMCOR ERP — Navigation & Layout System v8.5
+// GEMCOR ERP — Navigation & Layout System v8.6
 // ============================================================
 
 (function() {
@@ -330,12 +330,13 @@
   }
 
   function _getUserInfo() {
-    var info = { username: '', fullname: '', role: '', department: '', initials: '' };
+    var info = { username: '', fullname: '', role: '', department: '', initials: '', avatar: '' };
     try {
       info.username = localStorage.getItem('ivm_username') || '';
       info.fullname = localStorage.getItem('ivm_userFullname') || info.username;
       info.role = localStorage.getItem('ivm_userRole') || '';
       info.department = localStorage.getItem('ivm_userDepartment') || '';
+      info.avatar = localStorage.getItem('ivm_avatar') || '';
       if (info.fullname) {
         var parts = info.fullname.trim().split(/\s+/);
         if (parts.length >= 2) {
@@ -491,6 +492,47 @@
     return sidebar;
   }
 
+  function _avatarInner(userInfo) {
+    if (userInfo.avatar && /^data:image\//.test(userInfo.avatar)) {
+      return '<img src="' + userInfo.avatar.replace(/"/g, '') + '" alt="">';
+    }
+    return _escapeHtml(userInfo.initials || '?');
+  }
+
+  // Re-draw every avatar on the page from localStorage (called after upload / sync)
+  window.erpApplyAvatar = function() {
+    var info = _getUserInfo();
+    document.querySelectorAll('.erp-user-avatar').forEach(function(el) {
+      el.innerHTML = _avatarInner(info);
+    });
+  };
+
+  // Pull photo + preferences from the server once per login session
+  function _syncProfileOnce() {
+    try {
+      if (sessionStorage.getItem('ivm_profileSynced') === '1') return;
+      if (!_getUserInfo().username) return;
+      sessionStorage.setItem('ivm_profileSynced', '1');
+    } catch(e) { return; }
+    _loadProfileScript(function() {
+      if (window.erpProfile && window.erpProfile.sync) window.erpProfile.sync();
+    });
+  }
+
+  function _loadProfileScript(cb) {
+    if (window.erpProfile) { cb(); return; }
+    var existing = document.getElementById('erpProfileScript');
+    if (existing) { existing.addEventListener('load', cb); return; }
+    var sc = document.createElement('script');
+    sc.id = 'erpProfileScript';
+    sc.src = 'erp-profile.js';
+    sc.onload = cb;
+    sc.onerror = function() {
+      if (typeof erpShowToast === 'function') erpShowToast('Could not load Settings', 'warning');
+    };
+    document.head.appendChild(sc);
+  }
+
   function _buildTopbar(userInfo, currentPage) {
     var topbar = document.createElement('div');
     topbar.id = 'erpThinTopbar';
@@ -520,7 +562,7 @@
         '<div id="erpBellContainer"></div>' +
         '<div class="erp-user-menu" id="erpUserMenu">' +
           '<button class="erp-user-toggle" type="button" aria-label="User menu">' +
-            '<div class="erp-user-avatar">' + _escapeHtml(userInfo.initials || '?') + '</div>' +
+            '<div class="erp-user-avatar">' + _avatarInner(userInfo) + '</div>' +
             '<div class="erp-user-info">' +
               '<div class="erp-user-name">' + _escapeHtml(userInfo.fullname || 'User') + '</div>' +
               '<div class="erp-user-role">' + _escapeHtml(userInfo.role || 'user') + '</div>' +
@@ -529,8 +571,11 @@
           '</button>' +
           '<div class="erp-user-dropdown">' +
             '<div class="erp-user-dropdown-header">' +
+              '<div class="erp-user-avatar erp-user-avatar-lg">' + _avatarInner(userInfo) + '</div>' +
+              '<div class="erp-user-dropdown-id">' +
               '<div class="fullname">' + _escapeHtml(userInfo.fullname || 'User') + '</div>' +
               '<div class="meta"><i class="bi bi-person-badge"></i> ' + _escapeHtml(userInfo.username || '') + (userInfo.department ? ' · ' + _escapeHtml(userInfo.department) : '') + '</div>' +
+              '</div>' +
             '</div>' +
             '<button class="erp-user-dropdown-item" type="button" onclick="erpUserRefresh()"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>' +
             '<button class="erp-user-dropdown-item" type="button" onclick="erpUserSettings()"><i class="bi bi-gear"></i> Settings</button>' +
@@ -663,6 +708,7 @@
     }
 
     setTimeout(_checkHealth, 500);
+    setTimeout(_syncProfileOnce, 800);
   }
 
   document.addEventListener('click', function(e) {
@@ -692,7 +738,7 @@
   window.erpUserLogout = function() {
     if (!confirm('Logout ' + _getUserInfo().fullname + '?')) return;
     try {
-      var keysToRemove = ['ivm_username', 'ivm_userFullname', 'ivm_userRole', 'ivm_allowedRoles', 'ivm_requestorName', 'ivm_userDepartment', 'ivm_chatUnread', 'ivm_editReqCount', 'ivm_isAdmin'];
+      var keysToRemove = ['ivm_username', 'ivm_userFullname', 'ivm_userRole', 'ivm_allowedRoles', 'ivm_requestorName', 'ivm_userDepartment', 'ivm_chatUnread', 'ivm_editReqCount', 'ivm_isAdmin', 'ivm_avatar'];
       keysToRemove.forEach(function(k) { localStorage.removeItem(k); });
       sessionStorage.clear();
     } catch(e) {}
@@ -706,7 +752,10 @@
   };
 
   window.erpUserSettings = function() {
-    if (typeof erpShowToast === 'function') erpShowToast('Settings — coming soon', 'info');
+    document.querySelectorAll('.erp-user-menu.open').forEach(function(m) { m.classList.remove('open'); });
+    _loadProfileScript(function() {
+      if (window.erpProfile) window.erpProfile.open();
+    });
   };
 
   window.erpRenderNav = renderNav;
@@ -725,5 +774,5 @@
     renderNav();
   }
 
-  console.log('✅ erp-nav.js v8.5 loaded (New MRR updated)');
+  console.log('✅ erp-nav.js v8.6 loaded (Settings + profile photo)');
 })();
