@@ -1,9 +1,11 @@
 // ============================================================
-// GEMCOR ERP — Chat System v2.1
+// GEMCOR ERP — Chat System v3.0
 // DM + Document threads via Supabase `messages` table
-// ✅ Role-based MRR filtering (warehouse only)
-// ✅ NULL-safe queries
-// ✅ Explicit nulls on send
+//  • Profile pictures (erp-avatars.js)
+//  • Grouped bubbles, read ticks, emoji, jump-to-latest
+//  • No more duplicated history on refresh (messages merged by id)
+//  • Live: erp-chat-alerts.js tells this page the moment a message arrives
+//  ✅ Role-based MRR filtering (warehouse only)
 // ============================================================
 
 var _chatState = {
@@ -13,89 +15,81 @@ var _chatState = {
   openWith: null,
   openType: null,
   openDocType: null,
-  conversations: [],
   users: [],
+  msgs: [],            // messages of the open thread
+  threadSig: '',
+  lastTs: '',          // ISO created_at of the newest message we hold
+  listSig: '',
   pollTimer: null,
-  badgeTimer: null,
-  lastMsgTs: 0,
-  isMobile: false
+  listTimer: null,
+  loadingThread: false,
+  isMobile: false,
+  tempSeq: 0
 };
+
+var CHAT_EMOJI = ['😀','😂','😊','😍','👍','🙏','👏','🎉','😅','🤝','👌','✅','❌','⚠️','📦','🚚','⏰','❓','❤️','🔥','😢','😮','🙌','💪'];
 
 // ═══════════════════════════════════════════════════════════
 // ROLE HELPERS
 // ═══════════════════════════════════════════════════════════
-function _getUserRole() {
-  return localStorage.getItem('ivm_userRole') || '';
-}
-
-function _isWarehouse() {
-  return _getUserRole() === 'warehouse';
-}
-
+function _getUserRole() { return localStorage.getItem('ivm_userRole') || ''; }
+function _isWarehouse() { return _getUserRole() === 'warehouse'; }
 function _canAccessDocType(docType) {
-  var typeUpper = String(docType || '').toUpperCase();
-  
-  // MRR — warehouse only
-  if (typeUpper === 'MRR' && !_isWarehouse()) {
-    return false;
-  }
-  
-  // MRIF, MRS — both roles
-  return true;
+  return !(String(docType || '').toUpperCase() === 'MRR' && !_isWarehouse());
 }
+function _getAllowedDocTypes() { return _isWarehouse() ? ['MRIF', 'MRR', 'MRS'] : ['MRIF', 'MRS']; }
 
-function _getAllowedDocTypes() {
-  return _isWarehouse() 
-    ? ['MRIF', 'MRR', 'MRS'] 
-    : ['MRIF', 'MRS'];
+function avHtml(username, fullname) {
+  if (window.erpAvatars) return window.erpAvatars.html(username, fullname);
+  return erpEsc(getInitials(fullname || username));
 }
 
 // ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('[Chat] Initializing...');
-  
   _chatState.currentUser = localStorage.getItem('ivm_username') || '';
   _chatState.currentFullname = localStorage.getItem('ivm_userFullname') || _chatState.currentUser;
   _chatState.isMobile = window.matchMedia('(max-width: 767.98px)').matches;
-  
-  if (!_chatState.currentUser) {
-    console.warn('[Chat] No user logged in');
-    return;
-  }
-  
-  console.log('[Chat] User:', _chatState.currentUser, '| Role:', _getUserRole());
-  
+  if (!_chatState.currentUser) return;
+
   chatCheckHealth();
-  loadConversations();
-  refreshChatBadge();
-  
-  _chatState.badgeTimer = setInterval(refreshChatBadge, 120000);
-  
+  loadConversations(false);
+  if (window.erpAvatars) window.erpAvatars.refresh();
+
+  setupInput();
   window.addEventListener('resize', function() {
     _chatState.isMobile = window.matchMedia('(max-width: 767.98px)').matches;
   });
-  
-  setupInputHandlersWithRetry();
-  
+
+  // the global alert module (erp-chat-alerts.js) fires this the moment something arrives
+  window.addEventListener('erp-chat-new', function(e) {
+    loadConversations(true);
+    var list = (e && e.detail) || [];
+    if (_chatState.openWith && list.some(_belongsToOpenThread)) pollThread();
+  });
+  window.addEventListener('erp-avatars-updated', function() {
+    _chatState.listSig = ''; _chatState.threadSig = '';
+    loadConversations(true);
+    if (_chatState.openWith) { _fillHeader(); _renderThread(true); }
+  });
+
+  _chatState.listTimer = setInterval(function() {
+    if (!document.hidden) loadConversations(true);
+  }, 12000);
+
   document.addEventListener('visibilitychange', function() {
-    if (document.hidden) {
-      if (_chatState.pollTimer) clearInterval(_chatState.pollTimer);
-      if (_chatState.badgeTimer) clearInterval(_chatState.badgeTimer);
-    } else {
-      refreshChatBadge();
-      _chatState.badgeTimer = setInterval(refreshChatBadge, 120000);
-      if (_chatState.openWith && _chatState.openType === 'user') {
-        loadMessages(_chatState.openWith, 0, false);
-        startPolling();
-      } else if (_chatState.openWith && _chatState.openType === 'doc') {
-        loadDocMessages(_chatState.openWith, 0, false);
-        startPolling();
-      }
-    }
+    if (document.hidden) return;
+    loadConversations(true);
+    if (_chatState.openWith) { pollThread(); _markOpenRead(); }
   });
 });
+
+function _belongsToOpenThread(m) {
+  if (!m || !_chatState.openWith) return false;
+  if (_chatState.openType === 'doc') return m.doc_no === _chatState.openWith;
+  return !m.doc_no && (m.sender === _chatState.openWith || m.recipient === _chatState.openWith);
+}
 
 async function chatCheckHealth() {
   var badge = document.getElementById('erpHealthBadge');
@@ -104,17 +98,9 @@ async function chatCheckHealth() {
   var dot = badge.querySelector('.dot');
   try {
     var result = await erpHealthCheck();
-    if (result.success) {
-      dot.className = 'dot dot-ok';
-      text.textContent = 'Connected (' + result.latency + 'ms)';
-    } else {
-      dot.className = 'dot dot-error';
-      text.textContent = 'Offline';
-    }
-  } catch(err) {
-    dot.className = 'dot dot-error';
-    text.textContent = 'Error';
-  }
+    dot.className = result.success ? 'dot dot-ok' : 'dot dot-error';
+    text.textContent = result.success ? 'Connected (' + result.latency + 'ms)' : 'Offline';
+  } catch(err) { dot.className = 'dot dot-error'; text.textContent = 'Error'; }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -122,354 +108,261 @@ async function chatCheckHealth() {
 // ═══════════════════════════════════════════════════════════
 function switchChatTab(tab) {
   _chatState.activeTab = tab;
-  
+  _chatState.listSig = '';
   document.querySelectorAll('.chat-tab-btn').forEach(function(el) {
     el.classList.toggle('active', el.getAttribute('data-tab') === tab);
   });
-  
-  loadConversations();
+  loadConversations(false);
 }
 window.switchChatTab = switchChatTab;
 
 // ═══════════════════════════════════════════════════════════
-// LOAD CONVERSATIONS
+// CONVERSATION LIST
 // ═══════════════════════════════════════════════════════════
-async function loadConversations() {
+async function loadConversations(silent) {
   var container = document.getElementById('chatConversationList');
   if (!container) return;
-  
-  container.innerHTML = '<div class="chat-conv-loading">' +
-    '<div class="erp-spinner" style="width:24px;height:24px;border-width:2.5px;"></div>' +
-    '</div>';
-  
+
+  if (!silent) {
+    container.innerHTML = '<div class="chat-conv-loading"><div class="erp-spinner" style="width:24px;height:24px;border-width:2.5px;"></div></div>';
+  }
   try {
-    if (_chatState.activeTab === 'documents') {
-      await loadDocumentThreads();
-    } else {
-      await loadUserConversations();
-    }
+    if (_chatState.activeTab === 'documents') await loadDocumentThreads(silent);
+    else await loadUserConversations(silent);
   } catch(err) {
     console.error('[Chat] Load conversations failed:', err);
-    container.innerHTML = '<div class="chat-conv-loading text-danger">Failed to load</div>';
+    if (!silent) container.innerHTML = '<div class="chat-conv-loading text-danger">Failed to load</div>';
   }
 }
 
-async function loadUserConversations() {
+function _setList(html, sig) {
   var container = document.getElementById('chatConversationList');
-  
-  var usersRes = await erpFetch('users',
-    'select=username,fullname,roles,department&order=fullname.asc');
-  
+  if (!container) return;
+  if (sig === _chatState.listSig) return;
+  _chatState.listSig = sig;
+  var keep = container.scrollTop;
+  container.innerHTML = html;
+  container.scrollTop = keep;
+  filterConversations();
+}
+
+function _setTotalUnread(n) {
+  var el = document.getElementById('chatTotalUnread');
+  if (!el) return;
+  el.textContent = n; el.style.display = n > 0 ? '' : 'none';
+}
+
+function _roleChip(user) {
+  var roles = user && Array.isArray(user.roles) ? user.roles : [];
+  var w = roles.indexOf('warehouse') !== -1, p = roles.indexOf('production') !== -1;
+  if (w && p) return '<span class="chat-chip both">BOTH</span>';
+  if (w) return '<span class="chat-chip wh">WH</span>';
+  if (p) return '<span class="chat-chip pr">PR</span>';
+  return '';
+}
+
+async function loadUserConversations(silent) {
+  var me = _chatState.currentUser;
+  var usersRes = await erpFetch('users', 'select=username,fullname,roles,department&order=fullname.asc');
   if (!usersRes || usersRes.length === 0) {
-    container.innerHTML = '<div class="chat-conv-loading text-muted small">No users found</div>';
+    _setList('<div class="chat-conv-loading small">No users found</div>', 'empty-users');
     return;
   }
-  
-  _chatState.users = usersRes.filter(function(u) {
-    return u.username !== _chatState.currentUser;
-  });
-  
-  // Fetch messages with doc_no filter for DMs
+  _chatState.users = usersRes.filter(function(u) { return u.username !== me; });
+
   var messagesRes = await erpFetch('messages',
     'select=*' +
-    '&or=(sender.eq.' + encodeURIComponent(_chatState.currentUser) + ',recipient.eq.' + encodeURIComponent(_chatState.currentUser) + ')' +
+    '&or=(sender.eq.' + encodeURIComponent(me) + ',recipient.eq.' + encodeURIComponent(me) + ')' +
     '&or=(doc_no.is.null,doc_no.eq.)' +
     '&order=created_at.desc&limit=500');
-  
+
   var convMap = {};
   (messagesRes || []).forEach(function(m) {
-    var other = m.sender === _chatState.currentUser ? m.recipient : m.sender;
+    var other = m.sender === me ? m.recipient : m.sender;
     if (!other) return;
-    if (!convMap[other]) {
-      convMap[other] = {
-        other: other,
-        lastMsg: m,
-        unread: 0
-      };
-    }
-    if (m.recipient === _chatState.currentUser && !m.is_read) {
-      convMap[other].unread++;
-    }
+    if (!convMap[other]) convMap[other] = { other: other, lastMsg: m, unread: 0 };
+    if (m.recipient === me && !m.is_read) convMap[other].unread++;
   });
-  
-  var html = '';
-  var convsWithMsgs = Object.keys(convMap).map(function(k) { return convMap[k]; });
-  
-  convsWithMsgs.sort(function(a, b) {
+
+  var convs = Object.keys(convMap).map(function(k) { return convMap[k]; });
+  convs.sort(function(a, b) {
     if (a.unread > 0 && b.unread === 0) return -1;
     if (b.unread > 0 && a.unread === 0) return 1;
     return new Date(b.lastMsg.created_at).getTime() - new Date(a.lastMsg.created_at).getTime();
   });
-  
-  function findUser(username) {
-    return _chatState.users.find(function(u) { return u.username === username; });
-  }
-  
-  convsWithMsgs.forEach(function(c) {
+
+  var totalUnread = convs.reduce(function(s, c) { return s + c.unread; }, 0);
+  _setTotalUnread(totalUnread);
+
+  function findUser(u) { return _chatState.users.find(function(x) { return x.username === u; }); }
+
+  var html = '', sig = 'u|' + _chatState.openWith + '|';
+  convs.forEach(function(c) {
     var user = findUser(c.other);
     var fullname = user ? (user.fullname || c.other) : c.other;
-    var initials = getInitials(fullname);
-    var timeStr = formatTimeAgo(c.lastMsg.created_at);
     var preview = c.lastMsg.body || '';
-    var isMe = c.lastMsg.sender === _chatState.currentUser;
-    var prefix = isMe ? 'You: ' : '';
-    
-    if (preview.length > 40) preview = preview.substring(0, 40) + '...';
-    
-    var roleBadge = '';
-    if (user && user.roles) {
-      var roles = Array.isArray(user.roles) ? user.roles : [];
-      if (roles.indexOf('warehouse') !== -1 && roles.indexOf('production') !== -1) {
-        roleBadge = '<span class="badge bg-info text-dark" style="font-size:0.6rem;">BOTH</span>';
-      } else if (roles.indexOf('warehouse') !== -1) {
-        roleBadge = '<span class="badge bg-success" style="font-size:0.6rem;">WH</span>';
-      } else if (roles.indexOf('production') !== -1) {
-        roleBadge = '<span class="badge bg-warning text-dark" style="font-size:0.6rem;">PR</span>';
-      }
-    }
-    
+    if (preview.length > 46) preview = preview.substring(0, 46) + '…';
+    var prefix = c.lastMsg.sender === me ? 'You: ' : '';
     var active = (_chatState.openWith === c.other && _chatState.openType === 'user') ? ' active' : '';
-    var safeOther = String(c.other).replace(/'/g, "\\'");
-    
-    html += '<div class="chat-conv-item' + active + '" data-username="' + erpEsc(c.other) + '" onclick="openUserConversation(\'' + safeOther + '\')">' +
-      '<div class="d-flex align-items-start gap-2">' +
-        '<div class="chat-conv-avatar">' + erpEsc(initials) + '</div>' +
-        '<div class="chat-conv-content">' +
-          '<div class="d-flex justify-content-between align-items-center gap-2">' +
-            '<div class="chat-conv-name">' + erpEsc(fullname) + roleBadge + '</div>' +
-            '<div class="chat-conv-time">' + erpEsc(timeStr) + '</div>' +
-          '</div>' +
-          '<div class="chat-conv-preview">' + erpEsc(prefix + preview) + '</div>' +
-        '</div>' +
-        (c.unread > 0 ? '<div class="chat-unread-badge">' + c.unread + '</div>' : '') +
+    var av = avHtml(c.other, fullname);
+    sig += c.other + ':' + c.lastMsg.id + ':' + c.unread + ':' + (window.erpAvatars ? (window.erpAvatars.get(c.other) || '').length : 0) + ';';
+
+    html += '<div class="chat-conv-item' + active + (c.unread ? ' unread' : '') + '" data-username="' + erpEsc(c.other) + '" data-name="' + erpEsc(fullname) + '" onclick="openUserConversation(\'' + String(c.other).replace(/\\/g,'\\\\').replace(/'/g, "\\'") + '\')">' +
+      '<div class="chat-conv-avatar">' + av + '</div>' +
+      '<div class="chat-conv-content">' +
+        '<div class="chat-conv-row"><div class="chat-conv-name">' + erpEsc(fullname) + _roleChip(user) + '</div>' +
+        '<div class="chat-conv-time">' + erpEsc(formatTimeAgo(c.lastMsg.created_at)) + '</div></div>' +
+        '<div class="chat-conv-preview">' + erpEsc(prefix + preview) + '</div>' +
       '</div>' +
+      (c.unread > 0 ? '<div class="chat-unread-badge">' + c.unread + '</div>' : '') +
     '</div>';
   });
-  
-  var usersWithoutMsgs = _chatState.users.filter(function(u) {
-    return !convMap[u.username];
-  });
-  
-  if (usersWithoutMsgs.length > 0) {
-    if (convsWithMsgs.length > 0) {
-      html += '<div style="padding:12px 16px;font-size:0.72rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;font-weight:700;background:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">Start new chat</div>';
-    }
-    
-    usersWithoutMsgs.forEach(function(u) {
+
+  var fresh = _chatState.users.filter(function(u) { return !convMap[u.username]; });
+  if (fresh.length) {
+    if (convs.length) html += '<div class="chat-section-label">Start a new chat</div>';
+    fresh.forEach(function(u) {
       var fullname = u.fullname || u.username;
-      var initials = getInitials(fullname);
-      var safeUsername = String(u.username).replace(/'/g, "\\'");
-      
-      html += '<div class="chat-conv-item" data-username="' + erpEsc(u.username) + '" onclick="openUserConversation(\'' + safeUsername + '\')">' +
-        '<div class="d-flex align-items-start gap-2">' +
-          '<div class="chat-conv-avatar">' + erpEsc(initials) + '</div>' +
-          '<div class="chat-conv-content">' +
-            '<div class="chat-conv-name">' + erpEsc(fullname) + '</div>' +
-            '<div class="chat-conv-preview text-muted fst-italic">Tap to start a chat</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
+      sig += 'n' + u.username + (window.erpAvatars ? (window.erpAvatars.get(u.username) || '').length : 0) + ';';
+      html += '<div class="chat-conv-item" data-username="' + erpEsc(u.username) + '" data-name="' + erpEsc(fullname) + '" onclick="openUserConversation(\'' + String(u.username).replace(/\\/g,'\\\\').replace(/'/g, "\\'") + '\')">' +
+        '<div class="chat-conv-avatar">' + avHtml(u.username, fullname) + '</div>' +
+        '<div class="chat-conv-content">' +
+          '<div class="chat-conv-name">' + erpEsc(fullname) + _roleChip(u) + '</div>' +
+          '<div class="chat-conv-preview hint">Tap to start a chat</div>' +
+        '</div></div>';
     });
   }
-  
-  if (!html) {
-    html = '<div class="chat-conv-loading text-muted small">No users to chat with</div>';
-  }
-  
-  container.innerHTML = html;
+  _setList(html || '<div class="chat-conv-loading small">No users to chat with</div>', sig);
 }
 
-async function loadDocumentThreads() {
-  var container = document.getElementById('chatConversationList');
-  
-  // ═══ ROLE-BASED FILTER — MRR is warehouse-only ═══
-  var allowedDocTypes = _getAllowedDocTypes();
-  var typeFilter = '&doc_type=in.(' + allowedDocTypes.join(',') + ')';
-  
-  console.log('[Chat] Loading doc threads with filter:', allowedDocTypes);
-  
+async function loadDocumentThreads(silent) {
+  var me = _chatState.currentUser;
+  var typeFilter = '&doc_type=in.(' + _getAllowedDocTypes().join(',') + ')';
   var messagesRes = await erpFetch('messages',
-    'select=*' +
-    '&doc_no=not.is.null' +
-    '&doc_no=neq.' +
-    typeFilter +
-    '&order=created_at.desc&limit=500');
-  
+    'select=*&doc_no=not.is.null&doc_no=neq.' + typeFilter + '&order=created_at.desc&limit=500');
+
   var threadMap = {};
   (messagesRes || []).forEach(function(m) {
-    var docNo = m.doc_no;
-    if (!docNo) return;
-    if (!threadMap[docNo]) {
-      threadMap[docNo] = {
-        docNo: docNo,
-        docType: m.doc_type || '',
-        lastMsg: m,
-        unread: 0
-      };
-    }
-    if (m.sender !== _chatState.currentUser && !m.is_read) {
-      threadMap[docNo].unread++;
-    }
+    if (!m.doc_no) return;
+    if (!threadMap[m.doc_no]) threadMap[m.doc_no] = { docNo: m.doc_no, docType: m.doc_type || '', lastMsg: m, unread: 0 };
+    if (m.sender !== me && !m.is_read) threadMap[m.doc_no].unread++;
   });
-  
   var threads = Object.keys(threadMap).map(function(k) { return threadMap[k]; });
-  
   threads.sort(function(a, b) {
     if (a.unread > 0 && b.unread === 0) return -1;
     if (b.unread > 0 && a.unread === 0) return 1;
     return new Date(b.lastMsg.created_at).getTime() - new Date(a.lastMsg.created_at).getTime();
   });
-  
-  if (threads.length === 0) {
-    container.innerHTML = '<div class="chat-conv-loading text-muted small">' +
-      'No document discussions yet.<br><br>' +
-      '<i class="bi bi-file-earmark-text" style="font-size:2rem;opacity:0.3;"></i><br>' +
-      'Open a document and click "Discuss" to start one.' +
-      '</div>';
+
+  if (!threads.length) {
+    _setList('<div class="chat-conv-loading small">No document discussions yet.<br><br>' +
+      '<i class="bi bi-file-earmark-text" style="font-size:2rem;opacity:.3;"></i><br>' +
+      'Open a document and click "Discuss" to start one.</div>', 'empty-docs');
     return;
   }
-  
-  var html = '';
+
+  var html = '', sig = 'd|' + _chatState.openWith + '|';
   threads.forEach(function(t) {
-    var docNo = t.docNo;
-    var docType = t.docType;
-    var timeStr = formatTimeAgo(t.lastMsg.created_at);
+    var isMe = t.lastMsg.sender === me;
+    var senderName = isMe ? 'You' : String(t.lastMsg.sender_fullname || t.lastMsg.sender || '').split(' ')[0];
     var preview = t.lastMsg.body || '';
-    var isMe = t.lastMsg.sender === _chatState.currentUser;
-    var senderName = isMe ? 'You' : (t.lastMsg.sender_fullname || t.lastMsg.sender);
-    var prefix = senderName + ': ';
-    
-    if (preview.length > 40) preview = preview.substring(0, 40) + '...';
-    
-    var typeBadge = '';
-    if (docType === 'MRIF') typeBadge = '<span class="badge bg-warning text-dark" style="font-size:0.6rem;">MRIF</span>';
-    else if (docType === 'MRR') typeBadge = '<span class="badge bg-success" style="font-size:0.6rem;">MRR</span>';
-    else if (docType === 'MRS') typeBadge = '<span class="badge bg-danger" style="font-size:0.6rem;">MRS</span>';
-    
-    var active = (_chatState.openWith === docNo && _chatState.openType === 'doc') ? ' active' : '';
-    var safeDoc = String(docNo).replace(/'/g, "\\'");
-    var safeType = String(docType || '').replace(/'/g, "\\'");
-    
-    html += '<div class="chat-conv-item' + active + '" data-doc="' + erpEsc(docNo) + '" onclick="openDocConversation(\'' + safeDoc + '\', \'' + safeType + '\')">' +
-      '<div class="d-flex align-items-start gap-2">' +
-        '<div class="chat-conv-avatar" style="background:linear-gradient(135deg,#8b5cf6 0%,#7c3aed 100%);">' +
-          '<i class="bi bi-file-earmark-text"></i>' +
-        '</div>' +
-        '<div class="chat-conv-content">' +
-          '<div class="d-flex justify-content-between align-items-center gap-2">' +
-            '<div class="chat-conv-name" style="font-size:0.82rem;">' + erpEsc(docNo) + typeBadge + '</div>' +
-            '<div class="chat-conv-time">' + erpEsc(timeStr) + '</div>' +
-          '</div>' +
-          '<div class="chat-conv-preview">' + erpEsc(prefix + preview) + '</div>' +
-        '</div>' +
-        (t.unread > 0 ? '<div class="chat-unread-badge">' + t.unread + '</div>' : '') +
+    if (preview.length > 40) preview = preview.substring(0, 40) + '…';
+    var cls = t.docType === 'MRIF' ? 'mrif' : t.docType === 'MRR' ? 'mrr' : t.docType === 'MRS' ? 'mrs' : '';
+    var chip = t.docType ? '<span class="chat-chip ' + cls + '">' + erpEsc(t.docType) + '</span>' : '';
+    var active = (_chatState.openWith === t.docNo && _chatState.openType === 'doc') ? ' active' : '';
+    sig += t.docNo + ':' + t.lastMsg.id + ':' + t.unread + ';';
+
+    html += '<div class="chat-conv-item' + active + (t.unread ? ' unread' : '') + '" data-doc="' + erpEsc(t.docNo) + '" data-name="' + erpEsc(t.docNo) + '" onclick="openDocConversation(\'' + String(t.docNo).replace(/\\/g,'\\\\').replace(/'/g, "\\'") + '\', \'' + String(t.docType || '').replace(/'/g, "\\'") + '\')">' +
+      '<div class="chat-conv-avatar chat-av-doc"><i class="bi bi-file-earmark-text"></i></div>' +
+      '<div class="chat-conv-content">' +
+        '<div class="chat-conv-row"><div class="chat-conv-name">' + erpEsc(t.docNo) + chip + '</div>' +
+        '<div class="chat-conv-time">' + erpEsc(formatTimeAgo(t.lastMsg.created_at)) + '</div></div>' +
+        '<div class="chat-conv-preview">' + erpEsc(senderName + ': ' + preview) + '</div>' +
       '</div>' +
+      (t.unread > 0 ? '<div class="chat-unread-badge">' + t.unread + '</div>' : '') +
     '</div>';
   });
-  
-  container.innerHTML = html;
+  _setList(html, sig);
 }
 
 // ═══════════════════════════════════════════════════════════
 // OPEN CONVERSATIONS
 // ═══════════════════════════════════════════════════════════
+function _resetThread() {
+  _chatState.msgs = []; _chatState.threadSig = ''; _chatState.lastTs = '';
+  _hideJump();
+}
+
+function _fillHeader() {
+  var avEl = document.getElementById('chatPanelAvatar');
+  if (_chatState.openType === 'user') {
+    var user = _chatState.users.find(function(u) { return u.username === _chatState.openWith; });
+    var fullname = user ? (user.fullname || _chatState.openWith) : _chatState.openWith;
+    document.getElementById('chatWithName').textContent = fullname;
+    document.getElementById('chatWithSub').textContent = '@' + _chatState.openWith + (user && user.department ? ' · ' + user.department : '');
+    avEl.className = 'chat-panel-avatar';
+    avEl.innerHTML = avHtml(_chatState.openWith, fullname);
+  } else {
+    document.getElementById('chatWithName').textContent = _chatState.openWith;
+    document.getElementById('chatWithSub').textContent = 'Document discussion';
+    avEl.className = 'chat-panel-avatar chat-av-doc';
+    avEl.innerHTML = '<i class="bi bi-file-earmark-text"></i>';
+  }
+}
+
+function _showPanel() {
+  if (_chatState.isMobile) document.getElementById('chatWrapper').classList.add('mobile-chat-open');
+  document.getElementById('chatEmptyState').style.display = 'none';
+  document.getElementById('chatPanel').style.display = 'flex';
+}
+
 async function openUserConversation(otherUsername) {
   _chatState.openWith = otherUsername;
   _chatState.openType = 'user';
   _chatState.openDocType = null;
-  _chatState.lastMsgTs = 0;
-  
-  if (_chatState.isMobile) {
-    document.getElementById('chatWrapper').classList.add('mobile-chat-open');
-  }
-  
+  _resetThread();
+  _showPanel();
+  document.getElementById('chatDocBanner').style.display = 'none';
   document.querySelectorAll('.chat-conv-item').forEach(function(el) {
     el.classList.toggle('active', el.getAttribute('data-username') === otherUsername);
   });
-  
-  document.getElementById('chatEmptyState').style.display = 'none';
-  document.getElementById('chatPanel').style.display = 'flex';
-  document.getElementById('chatDocBanner').style.display = 'none';
-  
-  var user = _chatState.users.find(function(u) { return u.username === otherUsername; });
-  var fullname = user ? (user.fullname || otherUsername) : otherUsername;
-  var initials = getInitials(fullname);
-  
-  document.getElementById('chatWithName').textContent = fullname;
-  document.getElementById('chatWithSub').textContent = '@' + otherUsername;
-  document.getElementById('chatPanelAvatar').textContent = initials;
-  document.getElementById('chatPanelAvatar').style.background = '';
-  
-  var messagesEl = document.getElementById('chatMessages');
-  messagesEl.innerHTML = '<div class="text-center py-3"><div class="erp-spinner" style="width:24px;height:24px;border-width:2.5px;margin:0 auto;"></div></div>';
-  
-  markConversationRead(otherUsername);
-  
-  await loadMessages(otherUsername, 0, false);
-  
-  setTimeout(function() {
-    var input = document.getElementById('chatInput');
-    if (input) input.focus();
-  }, 200);
-  
+
+  if (!_chatState.users.length) {
+    try { await loadConversations(true); } catch(e) {}
+  }
+  _fillHeader();
+  _setThreadLoading();
+  _markOpenRead();
+  await loadThread();
+  setTimeout(function() { var i = document.getElementById('chatInput'); if (i && !_chatState.isMobile) i.focus(); }, 150);
   startPolling();
 }
 window.openUserConversation = openUserConversation;
 
 async function openDocConversation(docNo, docType) {
-  // ═══ ROLE-BASED ACCESS CHECK ═══
-  var typeUpper = String(docType || '').toUpperCase();
-  
-  if (typeUpper === 'MRR' && !_isWarehouse()) {
-    console.warn('[Chat] Access denied: MRR is warehouse-only');
-    if (typeof erpShowToast === 'function') {
-      erpShowToast('MRR discussions are accessible to warehouse only', 'warning');
-    }
-    // Redirect to chat home
-    setTimeout(function() {
-      window.location.href = 'chat.html';
-    }, 500);
+  if (!_canAccessDocType(docType)) {
+    if (typeof erpShowToast === 'function') erpShowToast('MRR discussions are accessible to warehouse only', 'warning');
+    setTimeout(function() { window.location.href = 'chat.html'; }, 500);
     return;
   }
-  
   _chatState.openWith = docNo;
   _chatState.openType = 'doc';
   _chatState.openDocType = docType || '';
-  _chatState.lastMsgTs = 0;
-  
-  if (_chatState.isMobile) {
-    document.getElementById('chatWrapper').classList.add('mobile-chat-open');
-  }
-  
+  _resetThread();
+  _showPanel();
   document.querySelectorAll('.chat-conv-item').forEach(function(el) {
     el.classList.toggle('active', el.getAttribute('data-doc') === docNo);
   });
-  
-  document.getElementById('chatEmptyState').style.display = 'none';
-  document.getElementById('chatPanel').style.display = 'flex';
-  
-  document.getElementById('chatWithName').textContent = docNo;
-  document.getElementById('chatWithSub').textContent = 'Document discussion';
-  document.getElementById('chatPanelAvatar').innerHTML = '<i class="bi bi-file-earmark-text"></i>';
-  document.getElementById('chatPanelAvatar').style.background = 'linear-gradient(135deg,#8b5cf6 0%,#7c3aed 100%)';
-  
+  _fillHeader();
   var banner = document.getElementById('chatDocBanner');
   banner.style.display = 'block';
   banner.innerHTML = '<i class="bi bi-file-earmark-text me-1"></i>Discussion about <strong>' + erpEsc(docNo) + '</strong>' +
-    (docType ? ' <span class="badge bg-secondary ms-1">' + erpEsc(docType) + '</span>' : '');
-  
-  var messagesEl = document.getElementById('chatMessages');
-  messagesEl.innerHTML = '<div class="text-center py-3"><div class="erp-spinner" style="width:24px;height:24px;border-width:2.5px;margin:0 auto;"></div></div>';
-  
-  markDocThreadRead(docNo);
-  
-  await loadDocMessages(docNo, 0, false);
-  
-  setTimeout(function() {
-    var input = document.getElementById('chatInput');
-    if (input) input.focus();
-  }, 200);
-  
+    (docType ? ' <span class="chat-chip ' + String(docType).toLowerCase() + '">' + erpEsc(docType) + '</span>' : '');
+
+  _setThreadLoading();
+  _markOpenRead();
+  await loadThread();
+  setTimeout(function() { var i = document.getElementById('chatInput'); if (i && !_chatState.isMobile) i.focus(); }, 150);
   startPolling();
 }
 window.openDocConversation = openDocConversation;
@@ -477,273 +370,303 @@ window.openDocConversation = openDocConversation;
 function closeConversation() {
   _chatState.openWith = null;
   _chatState.openType = null;
-  
-  if (_chatState.pollTimer) {
-    clearInterval(_chatState.pollTimer);
-    _chatState.pollTimer = null;
-  }
-  
-  if (_chatState.isMobile) {
-    document.getElementById('chatWrapper').classList.remove('mobile-chat-open');
-  }
-  
+  if (_chatState.pollTimer) { clearInterval(_chatState.pollTimer); _chatState.pollTimer = null; }
+  if (_chatState.isMobile) document.getElementById('chatWrapper').classList.remove('mobile-chat-open');
   document.getElementById('chatEmptyState').style.display = 'flex';
   document.getElementById('chatPanel').style.display = 'none';
-  
-  loadConversations();
+  _chatState.listSig = '';
+  loadConversations(true);
 }
 window.closeConversation = closeConversation;
 
+function _setThreadLoading() {
+  document.getElementById('chatMessages').innerHTML =
+    '<div class="chat-nomsg"><div class="erp-spinner" style="width:24px;height:24px;border-width:2.5px;margin:0 auto;"></div></div>';
+}
+
 // ═══════════════════════════════════════════════════════════
-// LOAD MESSAGES
+// THREAD DATA (merge by id — never duplicates)
 // ═══════════════════════════════════════════════════════════
-async function loadMessages(otherUser, sinceTs, append) {
-  var container = document.getElementById('chatMessages');
-  if (!container) return;
-  
-  console.log('[Chat] Loading messages with:', otherUser);
-  
+function _msgKey(m) { return m.id != null ? 'i' + m.id : 'k' + m.created_at + '|' + m.sender + '|' + (m.body || ''); }
+
+function _mergeMsgs(rows) {
+  var map = {};
+  _chatState.msgs.forEach(function(m) { map[_msgKey(m)] = m; });
+  var added = 0;
+  (rows || []).forEach(function(m) {
+    var k = _msgKey(m);
+    if (!map[k]) added++;
+    map[k] = m;
+  });
+  var all = Object.keys(map).map(function(k) { return map[k]; });
+  all.sort(function(a, b) {
+    var d = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    return d || (Number(a.id) - Number(b.id)) || 0;
+  });
+  _chatState.msgs = all;
+  if (all.length) _chatState.lastTs = all[all.length - 1].created_at;
+  return added;
+}
+
+function _dmQueries(since) {
+  var me = encodeURIComponent(_chatState.currentUser), other = encodeURIComponent(_chatState.openWith);
+  var docFilter = '&or=(doc_no.is.null,doc_no.eq.)';
+  var after = since ? '&created_at=gt.' + encodeURIComponent(since) : '';
+  var order = since ? '&order=created_at.asc&limit=100' : '&order=created_at.desc&limit=300';
+  return [
+    erpFetch('messages', 'select=*&sender=eq.' + me + '&recipient=eq.' + other + docFilter + after + order),
+    erpFetch('messages', 'select=*&sender=eq.' + other + '&recipient=eq.' + me + docFilter + after + order)
+  ];
+}
+
+async function loadThread() {
+  if (!_chatState.openWith) return;
+  var token = _chatState.openType + '|' + _chatState.openWith;
   try {
-    var docFilter = '&or=(doc_no.is.null,doc_no.eq.)';
-    
-    var q1 = 'select=*' +
-             '&sender=eq.' + encodeURIComponent(_chatState.currentUser) +
-             '&recipient=eq.' + encodeURIComponent(otherUser) +
-             docFilter +
-             '&order=created_at.asc&limit=500';
-    
-    var q2 = 'select=*' +
-             '&sender=eq.' + encodeURIComponent(otherUser) +
-             '&recipient=eq.' + encodeURIComponent(_chatState.currentUser) +
-             docFilter +
-             '&order=created_at.asc&limit=500';
-    
-    var results = await Promise.all([
-      erpFetch('messages', q1),
-      erpFetch('messages', q2)
-    ]);
-    
-    var sent = results[0] || [];
-    var received = results[1] || [];
-    var all = sent.concat(received);
-    
-    all.sort(function(a, b) {
-      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-    });
-    
-    _renderMessages(container, all, append, false);
-  } catch(err) {
-    console.error('[Chat] Load messages failed:', err);
-    if (!append) {
-      container.innerHTML = '<div class="text-danger text-center py-3 small">' +
-        'Failed to load: ' + erpEsc(err.message) + '</div>';
+    var rows;
+    if (_chatState.openType === 'user') {
+      var r = await Promise.all(_dmQueries(''));
+      rows = (r[0] || []).concat(r[1] || []);
+    } else {
+      rows = await erpFetch('messages', 'select=*&doc_no=eq.' + encodeURIComponent(_chatState.openWith) + '&order=created_at.desc&limit=300');
     }
+    if (token !== _chatState.openType + '|' + _chatState.openWith) return;   // user switched meanwhile
+    _chatState.msgs = []; _mergeMsgs(rows);
+    _renderThread(true);
+  } catch(err) {
+    console.error('[Chat] Load thread failed:', err);
+    document.getElementById('chatMessages').innerHTML =
+      '<div class="chat-nomsg text-danger">Failed to load: ' + erpEsc(err.message) + '</div>';
   }
 }
 
-async function loadDocMessages(docNo, sinceTs, append) {
+async function pollThread() {
+  if (!_chatState.openWith || _chatState.loadingThread) return;
+  _chatState.loadingThread = true;
+  var token = _chatState.openType + '|' + _chatState.openWith;
+  try {
+    var added = 0, changed = false;
+    if (_chatState.openType === 'user') {
+      var calls = _dmQueries(_chatState.lastTs);
+      calls.push(erpFetch('messages',
+        'select=id&sender=eq.' + encodeURIComponent(_chatState.currentUser) +
+        '&recipient=eq.' + encodeURIComponent(_chatState.openWith) +
+        '&or=(doc_no.is.null,doc_no.eq.)&is_read=eq.false&limit=300'));
+      var r = await Promise.all(calls);
+      if (token !== _chatState.openType + '|' + _chatState.openWith) return;
+      added = _mergeMsgs((r[0] || []).concat(r[1] || []));
+      // read ticks: my messages that are no longer unread on the server
+      var stillUnread = {};
+      (r[2] || []).forEach(function(x) { stillUnread[x.id] = 1; });
+      _chatState.msgs.forEach(function(m) {
+        if (m.id != null && m.sender === _chatState.currentUser && !m.is_read && !stillUnread[m.id]) { m.is_read = true; changed = true; }
+      });
+    } else {
+      var rows = await erpFetch('messages',
+        'select=*&doc_no=eq.' + encodeURIComponent(_chatState.openWith) +
+        '&created_at=gt.' + encodeURIComponent(_chatState.lastTs || '1970-01-01T00:00:00Z') +
+        '&order=created_at.asc&limit=100');
+      if (token !== _chatState.openType + '|' + _chatState.openWith) return;
+      added = _mergeMsgs(rows || []);
+    }
+    if (added || changed) {
+      var incoming = _chatState.msgs.slice(-added).filter(function(m) { return m.sender !== _chatState.currentUser; });
+      _renderThread(false, incoming.length);
+      if (incoming.length && !document.hidden) _markOpenRead();
+      loadConversations(true);
+    }
+  } catch(e) { /* next poll retries */ }
+  finally { _chatState.loadingThread = false; }
+}
+
+function startPolling() {
+  if (_chatState.pollTimer) clearInterval(_chatState.pollTimer);
+  _chatState.pollTimer = setInterval(function() {
+    if (!_chatState.openWith || document.hidden) return;
+    pollThread();
+  }, 4000);
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════
+function linkify(escaped) {
+  return escaped.replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)"'])/g, function(u) {
+    return '<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + u + '</a>';
+  });
+}
+
+function _renderThread(forceBottom, newIncoming) {
   var container = document.getElementById('chatMessages');
   if (!container) return;
-  
-  try {
-    var query = 'select=*' +
-                '&doc_no=eq.' + encodeURIComponent(docNo) +
-                '&order=created_at.asc&limit=500';
-    
-    var rows = await erpFetch('messages', query);
-    _renderMessages(container, rows || [], append, true);
-  } catch(err) {
-    console.error('[Chat] Load doc messages failed:', err);
-  }
-}
+  var msgs = _chatState.msgs;
+  var sig = msgs.map(function(m) { return _msgKey(m) + (m.is_read ? 'r' : ''); }).join(',');
+  if (sig === _chatState.threadSig && !forceBottom) return;
+  _chatState.threadSig = sig;
 
-function _renderMessages(container, msgs, append, isDocThread) {
-  if (msgs.length === 0 && !append) {
-    container.innerHTML = '<div class="text-center text-muted py-5 small">' +
-      '<i class="bi bi-chat-dots" style="font-size:2.5rem;opacity:0.3;display:block;margin-bottom:12px;"></i>' +
-      'No messages yet. Say hi 👋</div>';
+  if (!msgs.length) {
+    container.innerHTML = '<div class="chat-nomsg"><i class="bi bi-chat-dots"></i>No messages yet. Say hi 👋</div>';
     return;
   }
-  
-  if (msgs.length > 0) {
-    _chatState.lastMsgTs = new Date(msgs[msgs.length - 1].created_at).getTime();
-  }
-  
-  var html = '';
-  var lastDateLabel = '';
-  
-  msgs.forEach(function(m) {
-    var d = new Date(m.created_at);
-    var dateLabel = formatDateLabel(d);
-    
-    if (dateLabel !== lastDateLabel) {
-      html += '<div class="chat-date-sep">' + erpEsc(dateLabel) + '</div>';
-      lastDateLabel = dateLabel;
+
+  var nearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 90;
+  var prevTop = container.scrollTop;
+  var isDoc = _chatState.openType === 'doc';
+  var me = _chatState.currentUser;
+  var html = '', lastDate = '';
+
+  msgs.forEach(function(m, i) {
+    var d = new Date(m.created_at), label = formatDateLabel(d);
+    if (label !== lastDate) { html += '<div class="chat-date-sep">' + erpEsc(label) + '</div>'; lastDate = label; }
+
+    var prev = msgs[i - 1], next = msgs[i + 1];
+    var isMe = m.sender === me;
+    function sameGroup(a, b) {
+      return a && b && a.sender === b.sender && formatDateLabel(new Date(a.created_at)) === formatDateLabel(new Date(b.created_at)) &&
+        Math.abs(new Date(b.created_at) - new Date(a.created_at)) < 5 * 60 * 1000;
     }
-    
-    var time = formatTime(d);
-    var isMe = m.sender === _chatState.currentUser;
-    var cls = isMe ? 'chat-bubble chat-bubble-me' : 'chat-bubble chat-bubble-them';
-    
-    var senderLine = '';
-    if (!isMe && isDocThread) {
-      var first = (m.sender_fullname || m.sender || '').split(' ')[0];
-      senderLine = '<div class="chat-bubble-sender">' + erpEsc(first) + '</div>';
+    var first = !sameGroup(prev, m), last = !sameGroup(m, next);
+
+    var avatar = '';
+    if (!isMe) {
+      avatar = last
+        ? '<div class="chat-msg-avatar">' + avHtml(m.sender, m.sender_fullname) + '</div>'
+        : '<div class="chat-msg-spacer"></div>';
     }
-    
-    html += '<div class="' + cls + '">' + senderLine +
-      '<div>' + erpEsc(m.body || '') + '</div>' +
-      '<div class="chat-bubble-time">' + erpEsc(time) + '</div>' +
-    '</div>';
+    var senderLine = (!isMe && isDoc && first)
+      ? '<div class="chat-bubble-sender">' + erpEsc(m.sender_fullname || m.sender) + '</div>' : '';
+
+    var tick = '';
+    if (isMe && !isDoc) tick = '<i class="bi ' + (m.is_read ? 'bi-check2-all read' : 'bi-check2') + ' chat-tick"></i>';
+    var timeLine = last ? '<div class="chat-bubble-time">' + erpEsc(formatTime(d)) + tick + '</div>' : '';
+
+    html += '<div class="chat-row ' + (isMe ? 'me' : 'them') + (first ? ' first' : '') + (last ? ' last' : '') + '" title="' + erpEsc(formatTime(d)) + '">' +
+      avatar +
+      '<div class="chat-bubble ' + (isMe ? 'chat-bubble-me' : 'chat-bubble-them') + '">' + senderLine +
+        '<div class="chat-bubble-body">' + linkify(erpEsc(m.body || '')) + '</div>' + timeLine +
+      '</div></div>';
   });
-  
-  if (append) {
-    container.insertAdjacentHTML('beforeend', html);
-  } else {
-    container.innerHTML = html;
+
+  container.innerHTML = html;
+  if (forceBottom || nearBottom) { container.scrollTop = container.scrollHeight; _hideJump(); }
+  else {
+    container.scrollTop = prevTop;
+    if (newIncoming) _showJump(newIncoming);
   }
-  
-  container.scrollTop = container.scrollHeight;
 }
 
+function _showJump(n) {
+  var b = document.getElementById('chatJump'); if (!b) return;
+  _chatState.jumpCount = (_chatState.jumpCount || 0) + n;
+  document.getElementById('chatJumpText').textContent = _chatState.jumpCount + ' new message' + (_chatState.jumpCount > 1 ? 's' : '');
+  b.style.display = 'flex';
+}
+function _hideJump() {
+  _chatState.jumpCount = 0;
+  var b = document.getElementById('chatJump'); if (b) b.style.display = 'none';
+}
+function chatScrollToEnd() {
+  var c = document.getElementById('chatMessages');
+  if (c) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
+  _hideJump();
+}
+window.chatScrollToEnd = chatScrollToEnd;
+
 // ═══════════════════════════════════════════════════════════
-// SEND MESSAGE
+// SEND
 // ═══════════════════════════════════════════════════════════
 async function sendMessage() {
   var input = document.getElementById('chatInput');
   if (!input) return;
-  
   if (!_chatState.openWith) {
     if (typeof erpShowToast === 'function') erpShowToast('Open a conversation first', 'warning');
     return;
   }
-  
   var body = input.value.trim();
   if (!body) return;
-  
-  // ═══ Role check for doc threads ═══
-  if (_chatState.openType === 'doc') {
-    var docTypeUpper = String(_chatState.openDocType || '').toUpperCase();
-    if (docTypeUpper === 'MRR' && !_isWarehouse()) {
-      if (typeof erpShowToast === 'function') erpShowToast('MRR discussions are warehouse-only', 'warning');
-      return;
-    }
+  if (_chatState.openType === 'doc' && !_canAccessDocType(_chatState.openDocType)) {
+    if (typeof erpShowToast === 'function') erpShowToast('MRR discussions are warehouse-only', 'warning');
+    return;
   }
-  
-  input.value = '';
-  input.style.height = 'auto';
-  
+  input.value = ''; input.style.height = 'auto'; _updateCounter();
+  document.getElementById('chatEmojiPop').style.display = 'none';
+  _sendBody(body);
+}
+window.sendMessage = sendMessage;
+
+async function _sendBody(body, retryEl) {
+  var container = document.getElementById('chatMessages');
   var payload = {
     sender: _chatState.currentUser,
     sender_fullname: _chatState.currentFullname,
-    body: body,
-    is_read: false,
-    read_at: null,
-    doc_no: null,
-    doc_type: null,
-    recipient: null
+    body: body, is_read: false, read_at: null,
+    doc_no: null, doc_type: null, recipient: null
   };
-  
-  if (_chatState.openType === 'user') {
-    payload.recipient = _chatState.openWith;
-  } else if (_chatState.openType === 'doc') {
-    payload.doc_no = _chatState.openWith;
-    payload.doc_type = _chatState.openDocType || '';
+  if (_chatState.openType === 'user') payload.recipient = _chatState.openWith;
+  else { payload.doc_no = _chatState.openWith; payload.doc_type = _chatState.openDocType || ''; }
+  var token = _chatState.openType + '|' + _chatState.openWith;
+
+  var temp = retryEl;
+  if (!temp && container) {
+    var emptyNote = container.querySelector('.chat-nomsg'); if (emptyNote) emptyNote.remove();
+    temp = document.createElement('div');
+    temp.className = 'chat-row me last first';
+    container.appendChild(temp);
   }
-  
-  var container = document.getElementById('chatMessages');
-  var tempId = 'temp_' + Date.now();
-  
-  if (container) {
-    try {
-      container.insertAdjacentHTML('beforeend',
-        '<div class="chat-bubble chat-bubble-me" id="' + tempId + '" style="opacity:0.6;">' +
-          '<div>' + erpEsc(body) + '</div>' +
-          '<div class="chat-bubble-time">Sending...</div>' +
-        '</div>');
-      container.scrollTop = container.scrollHeight;
-    } catch(uiErr) {}
+  if (temp) {
+    temp.onclick = null; temp.style.cursor = '';
+    temp.innerHTML = '<div class="chat-bubble chat-bubble-me sending"><div class="chat-bubble-body">' + linkify(erpEsc(body)) +
+      '</div><div class="chat-bubble-time">Sending…</div></div>';
+    container.scrollTop = container.scrollHeight;
   }
-  
+
   try {
     var ctrl = new AbortController();
     var timer = setTimeout(function() { ctrl.abort(); }, 15000);
-    
     var res = await fetch(erpUrl('messages'), {
-      method: 'POST',
-      headers: erpHeaders({ 'Prefer': 'return=representation' }),
-      body: JSON.stringify(payload),
-      signal: ctrl.signal
+      method: 'POST', headers: erpHeaders({ 'Prefer': 'return=representation' }),
+      body: JSON.stringify(payload), signal: ctrl.signal
     });
-    
     clearTimeout(timer);
-    
-    if (!res.ok) {
-      var errText = await res.text();
-      throw new Error('HTTP ' + res.status);
-    }
-    
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     var result = await res.json();
-    
-    var temp = document.getElementById(tempId);
-    if (temp) temp.remove();
-    
-    try {
-      if (_chatState.openType === 'user') {
-        await loadMessages(_chatState.openWith, 0, false);
-      } else {
-        await loadDocMessages(_chatState.openWith, 0, false);
-      }
-    } catch(loadErr) {
-      console.error('[Chat] Reload failed:', loadErr);
-      if (container && result && result[0]) {
-        var sentMsg = result[0];
-        container.insertAdjacentHTML('beforeend',
-          '<div class="chat-bubble chat-bubble-me">' +
-            '<div>' + erpEsc(sentMsg.body) + '</div>' +
-            '<div class="chat-bubble-time">' + formatTime(new Date(sentMsg.created_at)) + '</div>' +
-          '</div>');
-        container.scrollTop = container.scrollHeight;
-      }
+    if (temp && temp.parentNode) temp.remove();
+    if (token === _chatState.openType + '|' + _chatState.openWith && result && result[0]) {
+      _mergeMsgs([result[0]]);
+      _renderThread(true);
     }
-    
-    if (typeof loadConversations === 'function') {
-      try { loadConversations(); } catch(e) {}
-    }
-    
+    try { loadConversations(true); } catch(e) {}
   } catch(err) {
     console.error('[Chat] Send failed:', err);
-    
-    var temp2 = document.getElementById(tempId);
-    if (temp2) {
-      temp2.style.opacity = '1';
-      temp2.style.background = '#dc2626';
-      var timeDiv = temp2.querySelector('.chat-bubble-time');
-      if (timeDiv) timeDiv.textContent = 'Failed';
+    if (temp) {
+      temp.innerHTML = '<div class="chat-bubble chat-bubble-me failed"><div class="chat-bubble-body">' + linkify(erpEsc(body)) +
+        '</div><div class="chat-bubble-time">Failed · click to retry</div></div>';
+      temp.style.cursor = 'pointer';
+      temp.onclick = function() { _sendBody(body, temp); };
     }
-    
-    if (typeof erpShowToast === 'function') {
-      erpShowToast('Failed: ' + err.message, 'danger');
-    }
+    if (typeof erpShowToast === 'function') erpShowToast('Message not sent: ' + err.message, 'danger');
   }
 }
-window.sendMessage = sendMessage;
 
 // ═══════════════════════════════════════════════════════════
 // MARK AS READ
 // ═══════════════════════════════════════════════════════════
+function _markOpenRead() {
+  if (!_chatState.openWith) return;
+  var p = _chatState.openType === 'user' ? markConversationRead(_chatState.openWith) : markDocThreadRead(_chatState.openWith);
+  Promise.resolve(p).then(function() {
+    window.dispatchEvent(new CustomEvent('erp-chat-read'));
+    loadConversations(true);
+  });
+}
+
 async function markConversationRead(otherUser) {
   try {
     await fetch(erpUrl('messages?recipient=eq.' + encodeURIComponent(_chatState.currentUser) +
                        '&sender=eq.' + encodeURIComponent(otherUser) +
-                       '&or=(doc_no.is.null,doc_no.eq.)' +
-                       '&is_read=eq.false'), {
-      method: 'PATCH',
-      headers: erpHeaders(),
-      body: JSON.stringify({
-        is_read: true,
-        read_at: new Date().toISOString()
-      })
+                       '&or=(doc_no.is.null,doc_no.eq.)&is_read=eq.false'), {
+      method: 'PATCH', headers: erpHeaders(),
+      body: JSON.stringify({ is_read: true, read_at: new Date().toISOString() })
     });
   } catch(e) {}
 }
@@ -752,124 +675,82 @@ async function markDocThreadRead(docNo) {
   try {
     await fetch(erpUrl('messages?doc_no=eq.' + encodeURIComponent(docNo) +
                        '&is_read=eq.false&sender=not.eq.' + encodeURIComponent(_chatState.currentUser)), {
-      method: 'PATCH',
-      headers: erpHeaders(),
-      body: JSON.stringify({
-        is_read: true,
-        read_at: new Date().toISOString()
-      })
+      method: 'PATCH', headers: erpHeaders(),
+      body: JSON.stringify({ is_read: true, read_at: new Date().toISOString() })
     });
   } catch(e) {}
 }
 
-// ═══════════════════════════════════════════════════════════
-// BADGE
-// ═══════════════════════════════════════════════════════════
+// kept for other pages that call it
 async function refreshChatBadge() {
-  try {
-    var rows = await erpFetch('messages',
-      'select=id&recipient=eq.' + encodeURIComponent(_chatState.currentUser) +
-      '&is_read=eq.false&limit=1000');
-    
-    var count = (rows || []).length;
-    
-    var badge = document.getElementById('chatBadgeSidebar');
-    if (badge) {
-      badge.textContent = count;
-      badge.classList.toggle('d-none', count === 0);
-    }
-    
-    if (count > 0) {
-      document.title = '(' + count + ') Messages — GEMCOR ERP';
-    } else {
-      document.title = 'Messages — GEMCOR ERP';
-    }
-    
-    localStorage.setItem('ivm_chatUnread', String(count));
-  } catch(err) {}
+  if (window.erpChatAlerts && window.erpChatAlerts.refreshCount) return window.erpChatAlerts.refreshCount();
 }
 window.refreshChatBadge = refreshChatBadge;
-
-// ═══════════════════════════════════════════════════════════
-// POLLING
-// ═══════════════════════════════════════════════════════════
-function startPolling() {
-  if (_chatState.pollTimer) clearInterval(_chatState.pollTimer);
-  
-  _chatState.pollTimer = setInterval(function() {
-    if (!_chatState.openWith) return;
-    if (document.hidden) return;
-    
-    if (_chatState.openType === 'user') {
-      loadMessages(_chatState.openWith, _chatState.lastMsgTs, true);
-    } else if (_chatState.openType === 'doc') {
-      loadDocMessages(_chatState.openWith, _chatState.lastMsgTs, true);
-    }
-  }, 8000);
-}
 
 // ═══════════════════════════════════════════════════════════
 // FILTER
 // ═══════════════════════════════════════════════════════════
 function filterConversations() {
-  var term = (document.getElementById('chatSearchInput').value || '').toLowerCase().trim();
-  
+  var inp = document.getElementById('chatSearchInput');
+  var term = ((inp && inp.value) || '').toLowerCase().trim();
   document.querySelectorAll('.chat-conv-item').forEach(function(el) {
-    var text = el.textContent.toLowerCase();
+    var text = ((el.getAttribute('data-name') || '') + ' ' + (el.getAttribute('data-username') || '') + ' ' + (el.getAttribute('data-doc') || '')).toLowerCase();
     el.style.display = (!term || text.indexOf(term) !== -1) ? '' : 'none';
   });
 }
 window.filterConversations = filterConversations;
 
 // ═══════════════════════════════════════════════════════════
-// INPUT HANDLERS
+// INPUT
 // ═══════════════════════════════════════════════════════════
-function setupInputHandlersWithRetry() {
-  var attempts = 0;
-  var maxAttempts = 20;
-  
-  function trySetup() {
-    attempts++;
-    
-    var input = document.getElementById('chatInput');
-    var sendBtn = document.getElementById('chatSendBtn');
-    
-    if (input && sendBtn) {
-      _attachInputHandlers(input, sendBtn);
-      return;
-    }
-    
-    if (attempts < maxAttempts) {
-      setTimeout(trySetup, 100);
-    }
-  }
-  
-  trySetup();
+function _updateCounter() {
+  var input = document.getElementById('chatInput'), c = document.getElementById('chatCounter');
+  if (!input || !c) return;
+  var left = 500 - input.value.length;
+  c.textContent = left <= 80 ? left : '';
+  c.classList.toggle('warn', left <= 20);
 }
 
-function _attachInputHandlers(input, sendBtn) {
-  var newInput = input.cloneNode(true);
-  input.parentNode.replaceChild(newInput, input);
-  
-  var newBtn = sendBtn.cloneNode(true);
-  sendBtn.parentNode.replaceChild(newBtn, sendBtn);
-  
-  newInput.addEventListener('input', function() {
+function setupInput() {
+  var input = document.getElementById('chatInput');
+  var btn = document.getElementById('chatSendBtn');
+  var emojiBtn = document.getElementById('chatEmojiBtn');
+  var pop = document.getElementById('chatEmojiPop');
+  if (!input || !btn) return;
+
+  input.addEventListener('input', function() {
     this.style.height = 'auto';
     this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    _updateCounter();
   });
-  
-  newInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); }
   });
-  
-  newBtn.addEventListener('click', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    sendMessage();
+  btn.addEventListener('click', function(e) { e.preventDefault(); sendMessage(); });
+
+  if (pop && emojiBtn) {
+    pop.innerHTML = CHAT_EMOJI.map(function(e) { return '<button type="button" data-e="' + e + '">' + e + '</button>'; }).join('');
+    emojiBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      pop.style.display = pop.style.display === 'none' ? 'grid' : 'none';
+    });
+    pop.addEventListener('click', function(e) {
+      var b = e.target.closest('button[data-e]'); if (!b) return;
+      var s = input.selectionStart || input.value.length;
+      if (input.value.length + b.dataset.e.length <= 500) {
+        input.value = input.value.slice(0, s) + b.dataset.e + input.value.slice(input.selectionEnd || s);
+        input.focus(); input.selectionStart = input.selectionEnd = s + b.dataset.e.length;
+        _updateCounter();
+      }
+    });
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('#chatEmojiPop')) pop.style.display = 'none';
+    });
+  }
+
+  var msgs = document.getElementById('chatMessages');
+  if (msgs) msgs.addEventListener('scroll', function() {
+    if (msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 90) _hideJump();
   });
 }
 
@@ -879,88 +760,58 @@ function _attachInputHandlers(input, sendBtn) {
 function getInitials(name) {
   if (!name) return '?';
   var parts = String(name).trim().split(/\s+/);
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  }
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   return parts[0].substring(0, 2).toUpperCase();
 }
 
 function formatTimeAgo(ts) {
   if (!ts) return '';
-  var now = Date.now();
-  var time = new Date(ts).getTime();
-  var diff = now - time;
-  
-  var seconds = Math.floor(diff / 1000);
-  var minutes = Math.floor(seconds / 60);
-  var hours = Math.floor(minutes / 60);
-  var days = Math.floor(hours / 24);
-  
+  var diff = Date.now() - new Date(ts).getTime();
+  var seconds = Math.floor(diff / 1000), minutes = Math.floor(seconds / 60), hours = Math.floor(minutes / 60), days = Math.floor(hours / 24);
   if (seconds < 60) return 'now';
   if (minutes < 60) return minutes + 'm';
   if (hours < 24) return hours + 'h';
   if (days < 7) return days + 'd';
-  
-  var d = new Date(ts);
-  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var d = new Date(ts), months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return months[d.getMonth()] + ' ' + d.getDate();
 }
 
 function formatTime(d) {
-  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  var h = d.getHours(), m = String(d.getMinutes()).padStart(2, '0');
+  return ((h % 12) || 12) + ':' + m + ' ' + (h >= 12 ? 'PM' : 'AM');
 }
 
 function formatDateLabel(d) {
   var now = new Date();
   var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   var msgDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  
-  var diff = (today - msgDate) / (1000 * 60 * 60 * 24);
-  
+  var diff = Math.round((today - msgDate) / 86400000);
   if (diff === 0) return 'Today';
   if (diff === 1) return 'Yesterday';
-  
   var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
 }
 
 function erpEsc(s) {
   if (s === null || s === undefined) return '';
-  return String(s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // ═══════════════════════════════════════════════════════════
-// URL PARAM HANDLER
+// URL PARAMS  (chat.html?user=X  or  ?doc=NO&type=MRIF)
 // ═══════════════════════════════════════════════════════════
 function checkUrlParams() {
   var params = new URLSearchParams(window.location.search);
-  var docNo = params.get('doc');
-  var docType = params.get('type');
-  var user = params.get('user');
-  
+  var docNo = params.get('doc'), docType = params.get('type'), user = params.get('user');
   if (docNo) {
-    setTimeout(function() {
-      switchChatTab('documents');
-      setTimeout(function() {
-        openDocConversation(docNo, docType || '');
-      }, 500);
-    }, 800);
+    switchChatTab('documents');
+    setTimeout(function() { openDocConversation(docNo, docType || ''); }, 400);
   } else if (user) {
-    setTimeout(function() {
-      openUserConversation(user);
-    }, 500);
+    setTimeout(function() { openUserConversation(user); }, 400);
   }
 }
-
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(checkUrlParams, 1000);
-  });
-} else {
-  setTimeout(checkUrlParams, 1000);
-}
+  document.addEventListener('DOMContentLoaded', function() { setTimeout(checkUrlParams, 600); });
+} else { setTimeout(checkUrlParams, 600); }
 
-console.log('✅ chat.js v2.1 loaded (with MRR role-based filtering)');
+console.log('✅ chat.js v3.0 loaded');
