@@ -25,7 +25,10 @@ var _rp = {
   isSubmitting: false,
   activeTab: 'needs',
   prfFrameLoaded: false,
-  prfsChanged: false
+  prfsChanged: false,
+  extraItems: [],       // items added by hand in the modal (not on the reorder list)
+  modalVals: {},        // typed qty/remarks, kept across re-renders
+  catalog: null         // erp_items search list (loaded on first use)
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -417,37 +420,142 @@ function rpPlanFor(rows) {
   return plan;
 }
 
-function rpCreatePrfFromSelection() {
+function rpModalRows() {
   var rows = rpSelectedRows();
-  if (rows.length === 0) {
-    erpShowToast('Select at least one item first', 'warning');
-    return;
-  }
+  var have = {};
+  rows.forEach(function(it) { have[it.item_code] = true; });
+  _rp.extraItems.forEach(function(x) { if (!have[x.item_code]) rows.push(x); });
+  return rows;
+}
+
+function rpCreatePrfFromSelection() {
+  _rp.extraItems = [];
+  _rp.modalVals = {};
 
   document.getElementById('rpPrfNotedBy').value = rpSavedSignatory('rp_noted_by', RP_DEFAULT_NOTED_BY);
   document.getElementById('rpPrfApprovedBy').value = rpSavedSignatory('rp_approved_by', RP_DEFAULT_APPROVED_BY);
   document.getElementById('rpPrfNotes').value = '';
+  document.getElementById('rpAddItemInput').value = '';
+  document.getElementById('rpAddItemResults').style.display = 'none';
 
-  rpRenderPrfPlan(rows);
-  renderRpPrfItems(rows);
+  rpRefreshModal();
 
   if (!_rp.prfModal) {
     _rp.prfModal = new bootstrap.Modal(document.getElementById('rpConfirmPrfModal'), { backdrop: 'static' });
   }
   _rp.prfModal.show();
+  rpLoadCatalog(); // warm up the "add other item" search
+}
+
+function rpRefreshModal() {
+  var rows = rpModalRows();
+  rpRenderPrfPlan(rows);
+  renderRpPrfItems(rows);
+}
+
+// remember what the user typed before the table is re-drawn
+function rpStashModalVals() {
+  document.querySelectorAll('.rp-prf-qty').forEach(function(el) {
+    var c = el.getAttribute('data-code');
+    _rp.modalVals[c] = _rp.modalVals[c] || {};
+    _rp.modalVals[c].qty = el.value;
+  });
+  document.querySelectorAll('.rp-prf-remarks').forEach(function(el) {
+    var c = el.getAttribute('data-code');
+    _rp.modalVals[c] = _rp.modalVals[c] || {};
+    _rp.modalVals[c].remarks = el.value;
+  });
+}
+
+function rpRemoveModalItem(code) {
+  rpStashModalVals();
+  if (_rp.selectedItems[code]) {
+    delete _rp.selectedItems[code];
+    rpRender();
+  }
+  _rp.extraItems = _rp.extraItems.filter(function(x) { return x.item_code !== code; });
+  rpRefreshModal();
+}
+
+// ── "Add other item" search ──
+async function rpLoadCatalog() {
+  if (_rp.catalog) return _rp.catalog;
+  try {
+    var rows = await erpFetchAll('erp_items',
+      'select=item_code,description,base_unit,category,location&is_active=eq.true&is_deleted=eq.false&order=item_code.asc');
+    _rp.catalog = rows || [];
+  } catch(e) {
+    console.warn('[rpLoadCatalog]', e);
+    erpShowToast('Could not load the item list: ' + e.message, 'warning');
+    return null;
+  }
+  return _rp.catalog;
+}
+
+async function rpAddItemSearch() {
+  var box = document.getElementById('rpAddItemResults');
+  var q = (document.getElementById('rpAddItemInput').value || '').toLowerCase().trim();
+  if (q.length < 2) { box.style.display = 'none'; return; }
+  var cat = await rpLoadCatalog();
+  if (!cat) return;
+
+  var inModal = {};
+  rpModalRows().forEach(function(it) { inModal[it.item_code] = true; });
+
+  var hits = [];
+  for (var i = 0; i < cat.length && hits.length < 15; i++) {
+    var it = cat[i];
+    if (inModal[it.item_code]) continue;
+    if (String(it.item_code || '').toLowerCase().indexOf(q) !== -1 ||
+        String(it.description || '').toLowerCase().indexOf(q) !== -1) hits.push(it);
+  }
+
+  if (hits.length === 0) {
+    box.innerHTML = '<div class="list-group-item small text-muted">No matching item</div>';
+  } else {
+    box.innerHTML = hits.map(function(it) {
+      return '<button type="button" class="list-group-item list-group-item-action small" data-code="' + rpEsc(it.item_code) + '">' +
+        '<code>' + rpEsc(it.item_code) + '</code> — ' + rpEsc(rpTruncate(it.description || '', 60)) +
+        ' <span class="cat-badge ms-1">' + rpEsc(it.category || '—') + '</span></button>';
+    }).join('');
+    box.querySelectorAll('button[data-code]').forEach(function(btn) {
+      btn.addEventListener('click', function() { rpAddExtraItem(btn.getAttribute('data-code')); });
+    });
+  }
+  box.style.display = 'block';
+}
+
+function rpAddExtraItem(code) {
+  var it = (_rp.catalog || []).find(function(x) { return x.item_code === code; });
+  if (!it) return;
+  rpStashModalVals();
+  _rp.extraItems.push({
+    item_code: it.item_code,
+    description: it.description || '',
+    category: it.category || 'UNCATEGORIZED',
+    base_unit: it.base_unit || 'PIECE',
+    _extra: true
+  });
+  document.getElementById('rpAddItemInput').value = '';
+  document.getElementById('rpAddItemResults').style.display = 'none';
+  rpRefreshModal();
 }
 
 function rpRenderPrfPlan(rows) {
+  var el = document.getElementById('rpPrfPlan');
+  if (rows.length === 0) {
+    el.innerHTML = '<i class="bi bi-info-circle me-1"></i>No items yet — tick items in the list, or search below to add one.';
+    return;
+  }
   var plan = rpPlanFor(rows);
   var totalPrfs = plan.reduce(function(s, p) { return s + p.prfs; }, 0);
-  var html = '<i class="bi bi-info-circle me-1"></i>' +
+  el.innerHTML = '<i class="bi bi-info-circle me-1"></i>' +
     (totalPrfs === 1 ? 'This will create <strong>1 PRF</strong>' : 'This will create <strong>' + totalPrfs + ' PRFs</strong>') +
     ' — one per category' + (rows.length > RP_MAX_ITEMS_PER_PRF ? ', max ' + RP_MAX_ITEMS_PER_PRF + ' items each' : '') +
     '. PRF numbers are assigned automatically.<br><span class="text-muted">' +
     plan.map(function(p) {
       return rpEsc(p.category) + ': ' + p.items + ' item' + (p.items === 1 ? '' : 's') + (p.prfs > 1 ? ' (' + p.prfs + ' PRFs)' : '');
     }).join(' · ') + '</span>';
-  document.getElementById('rpPrfPlan').innerHTML = html;
 }
 
 function renderRpPrfItems(items) {
@@ -455,29 +563,36 @@ function renderRpPrfItems(items) {
   if (!tbody) return;
 
   document.getElementById('rpPrfItemsCount').textContent = items.length;
+  document.getElementById('rpBtnCreatePrf').disabled = (items.length === 0);
 
   var html = '';
   items.forEach(function(it, idx) {
-    html += '<tr>' +
+    var v = _rp.modalVals[it.item_code] || {};
+    var defQty = it._extra ? 1 : Math.max(1, Math.ceil(rpNetNeeded(it)));
+    html += '<tr' + (it._extra ? ' class="table-warning"' : '') + '>' +
       '<td class="text-center">' + (idx + 1) + '</td>' +
-      '<td><code style="font-size:0.75rem;">' + rpEsc(it.item_code) + '</code></td>' +
+      '<td><code style="font-size:0.75rem;">' + rpEsc(it.item_code) + '</code>' + (it._extra ? ' <span class="badge bg-warning text-dark">added</span>' : '') + '</td>' +
       '<td><span class="cat-badge">' + rpEsc(it.category || '—') + '</span></td>' +
       '<td>' + rpEsc(rpTruncate(it.description || '', 70)) + '</td>' +
       '<td class="text-center">' +
         '<input type="number" class="form-control form-control-sm text-center rp-prf-qty" ' +
           'data-code="' + rpEsc(it.item_code) + '" ' +
-          'value="' + Math.max(1, Math.ceil(rpNetNeeded(it))) + '" ' +
+          'value="' + rpEsc(v.qty !== undefined ? v.qty : defQty) + '" ' +
           'min="1" step="1" style="width:80px;margin:0 auto;">' +
       '</td>' +
       '<td class="text-center">' + rpEsc(it.base_unit || '—') + '</td>' +
       '<td>' +
         '<input type="text" class="form-control form-control-sm rp-prf-remarks" ' +
-          'data-code="' + rpEsc(it.item_code) + '" ' +
+          'data-code="' + rpEsc(it.item_code) + '" value="' + rpEsc(v.remarks || '') + '" ' +
           'placeholder="Optional" maxlength="200">' +
       '</td>' +
+      '<td class="text-center"><button type="button" class="btn btn-sm btn-link text-danger p-0 rp-rm" data-code="' + rpEsc(it.item_code) + '" title="Remove"><i class="bi bi-x-lg"></i></button></td>' +
     '</tr>';
   });
   tbody.innerHTML = html;
+  tbody.querySelectorAll('.rp-rm').forEach(function(btn) {
+    btn.addEventListener('click', function() { rpRemoveModalItem(btn.getAttribute('data-code')); });
+  });
 }
 
 function rpClosePrfModal() {
@@ -494,7 +609,7 @@ async function rpSubmitPrf() {
   var approvedBy = document.getElementById('rpPrfApprovedBy').value.trim();
   var notes = document.getElementById('rpPrfNotes').value.trim();
 
-  var rows = rpSelectedRows();
+  var rows = rpModalRows();
   var items = [];
   var bad = [];
   rows.forEach(function(it) {
@@ -531,32 +646,38 @@ async function rpSubmitPrf() {
       department = localStorage.getItem('ivm_userDepartment') || '';
     } catch(e) {}
 
-    var res = await erpCreatePrf({
-      items: items,
-      header: {
-        prepared_by: preparedBy || 'WAREHOUSE',
-        department: department,
-        noted_by: notedBy,
-        approved_by: approvedBy,
-        notes: notes,
-        purpose: 'STOCK'
-      },
-      splitByCategory: true,
-      maxItems: RP_MAX_ITEMS_PER_PRF,
-      force: false
-    });
+    function payload(force) {
+      return {
+        items: items,
+        header: {
+          prepared_by: preparedBy || 'WAREHOUSE',
+          department: department,
+          noted_by: notedBy,
+          approved_by: approvedBy,
+          notes: notes,
+          purpose: 'STOCK'
+        },
+        splitByCategory: true,
+        maxItems: RP_MAX_ITEMS_PER_PRF,
+        force: force === true
+      };
+    }
+    var res = await erpCreatePrf(payload(false));
 
     if (!res || res.success !== true) {
       if (res && res.code === 'OPEN_PRF_CONFLICT') {
-        rpClosePrfModal();
         var list = (res.conflicts || []).map(function(c) {
-          return c.item_code + ' (' + rpNum(c.open_qty) + ' on ' + c.prf_nos + ')';
-        }).join(', ');
-        erpShowToast('Not created — already on an open PRF: ' + list, 'danger');
-        await rpLoad(); // refresh so the rows show their new On Order
-        return;
+          return '• ' + c.item_code + ' — ' + rpNum(c.open_qty) + ' already on ' + c.prf_nos;
+        }).join('\n');
+        if (!confirm('These items are already on an open PRF:\n\n' + list + '\n\nCreate the PRF anyway?')) {
+          await rpLoad(); // refresh so the rows show the latest On Order
+          return;
+        }
+        res = await erpCreatePrf(payload(true));
+        if (!res || res.success !== true) throw new Error((res && res.message) || 'PRF was not created');
+      } else {
+        throw new Error((res && res.message) || 'PRF was not created');
       }
-      throw new Error((res && res.message) || 'PRF was not created');
     }
 
     try {
@@ -568,6 +689,8 @@ async function rpSubmitPrf() {
     rpClosePrfModal();
     rpShowSuccessModal(res.prfs || []);
     _rp.selectedItems = {};
+    _rp.extraItems = [];
+    _rp.modalVals = {};
     await rpLoad();
 
   } catch(err) {
