@@ -63,7 +63,7 @@
         },
         {
           id: 'replenishment',
-          label: 'Replenishment Needs',
+          label: 'Replenishment & PRFs',
           icon: 'bi-cart-plus-fill',
           href: 'replenishment.html',
           roles: ['warehouse']
@@ -107,13 +107,6 @@
           label: 'MRS — Returns',
           icon: 'bi-arrow-counterclockwise',
           href: 'mrs-list.html',
-          roles: ['warehouse']
-        },
-        {
-          id: 'prf-monitor',
-          label: 'PRF Monitor',
-          icon: 'bi-file-earmark-text',
-          href: 'prf-monitor.html',
           roles: ['warehouse']
         },
         {
@@ -283,7 +276,7 @@
     'admin-supabase': 'Supabase Admin Console',
     'system-health': 'System Health',
     'inventory-count': 'Inventory Count',
-    'replenishment': 'Replenishment Needs',
+    'replenishment': 'Replenishment & PRFs',
     'barcode-generator': 'Barcode Generator',
     'all-requests': 'All Requests',
     'mrif-list': 'MRIF List',
