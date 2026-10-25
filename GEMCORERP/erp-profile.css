@@ -1,0 +1,60 @@
+/* GEMCOR ERP — Profile / Settings window */
+.epf-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:5000;padding:16px;animation:epfFade .15s ease}
+@keyframes epfFade{from{opacity:0}to{opacity:1}}
+.epf-modal{background:#fff;color:#0F172A;border-radius:14px;width:560px;max-width:100%;max-height:calc(100vh - 32px);display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden;font-size:.9rem}
+.epf-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #E2E8F0}
+.epf-head h2{font-size:1.05rem;font-weight:700;margin:0}
+.epf-x{border:0;background:transparent;font-size:1.3rem;line-height:1;color:#64748B;cursor:pointer;border-radius:8px;padding:4px 8px}
+.epf-x:hover{background:#F1F5F9;color:#0F172A}
+.epf-tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid #E2E8F0;background:#F8FAFC}
+.epf-tab{border:0;background:transparent;padding:10px 14px;font-weight:600;font-size:.82rem;color:#64748B;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:6px}
+.epf-tab:hover{color:#0F172A}
+.epf-tab.active{color:#1E3A5F;border-bottom-color:#1E3A5F}
+.epf-body{padding:18px;overflow-y:auto}
+.epf-pane{display:none}.epf-pane.active{display:block}
+.epf-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid #E2E8F0;background:#F8FAFC}
+.epf-btn{border:1px solid #CBD5E1;background:#fff;color:#0F172A;border-radius:8px;padding:7px 14px;font-weight:600;font-size:.83rem;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.epf-btn:hover{background:#F1F5F9}
+.epf-btn.primary{background:#1E3A5F;border-color:#1E3A5F;color:#fff}
+.epf-btn.primary:hover{background:#2A4A73}
+.epf-btn.danger{color:#B91C1C;border-color:#FECACA}
+.epf-btn.danger:hover{background:#FEF2F2}
+.epf-btn:disabled{opacity:.55;cursor:not-allowed}
+.epf-avatar-row{display:flex;align-items:center;gap:18px;margin-bottom:18px}
+.epf-avatar{width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,#1E3A5F,#2A4A73);color:#fff;display:flex;align-items:center;justify-content:center;font-size:1.9rem;font-weight:700;overflow:hidden;flex-shrink:0;border:3px solid #fff;box-shadow:0 0 0 1px #CBD5E1}
+.epf-avatar img{width:100%;height:100%;object-fit:cover}
+.epf-avatar-actions{display:flex;flex-wrap:wrap;gap:8px}
+.epf-hint{font-size:.75rem;color:#64748B;margin-top:6px;flex-basis:100%}
+.epf-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.epf-field label{display:block;font-size:.72rem;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.epf-field .epf-ro{background:#F1F5F9;border-radius:8px;padding:8px 10px;font-weight:500;min-height:36px;word-break:break-word}
+.epf-field.full{grid-column:1/-1}
+.epf-input{width:100%;border:1px solid #CBD5E1;border-radius:8px;padding:8px 10px;font:inherit;background:#fff;color:#0F172A}
+.epf-input:focus{outline:2px solid #93B4DB;border-color:#1E3A5F}
+.epf-pw{position:relative}.epf-pw .epf-input{padding-right:38px}
+.epf-pw button{position:absolute;right:4px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:#64748B;cursor:pointer;padding:6px 8px}
+.epf-pwstack{display:flex;flex-direction:column;gap:12px}
+.epf-meter{height:6px;background:#E2E8F0;border-radius:99px;overflow:hidden;margin-top:6px}
+.epf-meter span{display:block;height:100%;width:0;transition:width .2s,background .2s}
+.epf-meter-label{font-size:.72rem;color:#64748B;margin-top:3px}
+.epf-msg{margin-top:12px;font-size:.82rem;padding:8px 10px;border-radius:8px;display:none}
+.epf-msg.show{display:block}.epf-msg.err{background:#FEF2F2;color:#B91C1C}.epf-msg.ok{background:#F0FDF4;color:#15803D}
+.epf-pref{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #F1F5F9}
+.epf-pref:last-child{border-bottom:0}
+.epf-pref b{display:block;font-weight:600}.epf-pref small{color:#64748B}
+.epf-switch{position:relative;width:42px;height:24px;flex-shrink:0}
+.epf-switch input{opacity:0;width:100%;height:100%;position:absolute;inset:0;margin:0;cursor:pointer;z-index:1}
+.epf-switch i{position:absolute;inset:0;background:#CBD5E1;border-radius:99px;transition:background .15s}
+.epf-switch i::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:transform .15s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.epf-switch input:checked+i{background:#1E3A5F}.epf-switch input:checked+i::after{transform:translateX(18px)}
+.epf-range{width:130px}
+/* cropper */
+.epf-crop-wrap{display:flex;flex-direction:column;align-items:center;gap:14px;padding:6px 0}
+.epf-crop-stage{position:relative;width:280px;height:280px;border-radius:12px;overflow:hidden;background:#0F172A;touch-action:none;cursor:grab}
+.epf-crop-stage.drag{cursor:grabbing}
+.epf-crop-stage canvas{display:block;width:280px;height:280px}
+.epf-crop-mask{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at center,transparent 138px,rgba(15,23,42,.6) 139px);border-radius:12px}
+.epf-crop-ring{position:absolute;inset:2px;border-radius:50%;border:2px solid rgba(255,255,255,.85);pointer-events:none}
+.epf-zoom{display:flex;align-items:center;gap:10px;width:280px;color:#64748B}
+.epf-zoom input{flex:1}
+@media(max-width:560px){.epf-grid{grid-template-columns:1fr}.epf-avatar-row{flex-direction:column;align-items:flex-start}}
