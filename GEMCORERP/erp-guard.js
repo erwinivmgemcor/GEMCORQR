@@ -18,7 +18,8 @@
     'new-mrif-manual.html',
     'chat.html',
     'new-mrs-manual.html',
-    'project-costing.html'
+    'project-costing.html',
+    'block-blast.html'   // Break Room (laro)
   ];
   
   // ✅ NEW: Admin-only pages
