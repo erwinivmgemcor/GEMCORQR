@@ -97,6 +97,44 @@ tr.row-covered code { color: #64748b; }
 .rp-tab.active .rp-tab-count { background:#1e3a5f; color:#fff; }
 #rpPrfFrame { width:100%; border:0; min-height:78vh; background:transparent; }
 .rp-setup-alert { display:none; }
+
+/* Active-months badges + chips */
+.am-badge { display:inline-block; min-width:26px; padding:2px 8px; border-radius:8px; font-size:0.72rem; font-weight:800; text-align:center; font-variant-numeric:tabular-nums; }
+.am-ok   { background:#dcfce7; color:#166534; }
+.am-low  { background:#fef3c7; color:#92400e; }
+.am-zero { background:#fee2e2; color:#b91c1c; }
+.am-unk  { background:#f1f5f9; color:#94a3b8; }
+.mov-badge { display:inline-block; padding:2px 7px; border-radius:8px; font-size:0.62rem; font-weight:700; letter-spacing:0.02em; background:#e2e8f0; color:#475569; white-space:nowrap; }
+.mov-fast { background:#dcfce7; color:#166534; } .mov-slow { background:#fef3c7; color:#92400e; } .mov-none { background:#fee2e2; color:#b91c1c; }
+.rp-chips { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:12px; padding-top:12px; border-top:1px dashed #e2e8f0; }
+.rp-chips-label { font-size:0.72rem; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin-right:2px; }
+.rp-chip { border:1.5px solid #e2e8f0; background:#fff; color:#334155; border-radius:999px; padding:5px 12px; font-size:0.8rem; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+.rp-chip b { font-variant-numeric:tabular-nums; }
+.rp-chip:hover { border-color:#1e3a5f; }
+.rp-chip.active { background:#1e3a5f; border-color:#1e3a5f; color:#fff; }
+.rp-chip.warn b { color:#b45309; } .rp-chip.bad b { color:#b91c1c; } .rp-chip.good b { color:#15803d; }
+.rp-chip.active b { color:#fff; }
+.rp-hidden-note { display:none; margin-top:10px; padding:8px 12px; border-radius:10px; background:#fffbeb; border:1px solid #fde68a; color:#92400e; font-size:0.8rem; }
+.rp-hidden-note a { color:#1e3a5f; font-weight:700; cursor:pointer; text-decoration:underline; }
+
+/* sortable headers */
+.erp-table th[data-sort] { cursor:pointer; user-select:none; white-space:nowrap; }
+.erp-table th[data-sort]:hover { color:#1e3a5f; }
+.erp-table th[data-sort]::after { content:'↕'; opacity:.25; margin-left:4px; font-size:.8em; }
+.erp-table th[data-sort].s-asc::after { content:'▲'; opacity:1; color:#1e3a5f; }
+.erp-table th[data-sort].s-desc::after { content:'▼'; opacity:1; color:#1e3a5f; }
+
+/* pager */
+.rp-footer { flex-wrap:wrap; gap:12px; }
+.rp-foot-left { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.rp-foot-left label { display:flex; align-items:center; gap:6px; margin:0; font-size:0.8rem; color:#64748b; }
+.rp-foot-left select { border:1px solid #cbd5e1; border-radius:8px; padding:3px 6px; font-size:0.8rem; background:#fff; }
+.rp-pg { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
+.rp-pg button { min-width:34px; }
+.rp-pg button.cur { background:#1e3a5f !important; color:#fff !important; border-color:#1e3a5f !important; font-weight:700; }
+.rp-pg .rp-gap { padding:0 4px; color:#94a3b8; }
+.rp-pg .rp-goto { display:flex; align-items:center; gap:4px; margin-left:8px; font-size:0.78rem; color:#64748b; }
+.rp-pg .rp-goto input { width:62px; border:1px solid #cbd5e1; border-radius:8px; padding:4px 6px; font-size:0.8rem; }
 </style>
 
 
@@ -232,17 +270,32 @@ tr.row-covered code { color: #64748b; }
       <select id="rpLocationFilter" class="erp-select" onchange="rpOnFilterChange()">
         <option value="">All Locations</option>
       </select>
-      <select id="rpSortFilter" class="erp-select" onchange="rpOnFilterChange()">
+      <select id="rpActiveFilter" class="erp-select" onchange="rpOnActiveChange()" title="How many months the item actually had usage (Active Months)">
+        <option value="">Active months: any</option>
+        <option value="ge:1">Active ≥ 1 month</option>
+        <option value="ge:2">Active ≥ 2 months</option>
+        <option value="ge:3">Active ≥ 3 months</option>
+        <option value="ge:4">Active ≥ 4 months</option>
+        <option value="ge:6">Active ≥ 6 months</option>
+        <option value="ge:12">Active ≥ 12 months</option>
+        <option value="r12">Only 1–2 months</option>
+        <option value="zero">No usage (0 months)</option>
+      </select>
+      <select id="rpSortFilter" class="erp-select" onchange="rpOnSortChange()">
         <option value="value_desc">Sort: Highest Cost</option>
         <option value="value_asc">Sort: Lowest Cost</option>
         <option value="qty_desc">Sort: Highest Net Qty</option>
         <option value="urgency">Sort: Urgency</option>
         <option value="code_asc">Sort: Item Code</option>
+        <option value="active_desc">Sort: Most Active Months</option>
+        <option value="active_asc">Sort: Fewest Active Months</option>
       </select>
       <button class="erp-btn-clear" onclick="rpClearFilters()">
         <i class="bi bi-x-lg"></i> Clear
       </button>
     </div>
+    <div class="rp-chips" id="rpChips"></div>
+    <div class="rp-hidden-note" id="rpHiddenNote"></div>
   </div>
 
   <!-- TABLE -->
@@ -279,23 +332,24 @@ tr.row-covered code { color: #64748b; }
         <thead>
           <tr>
             <th style="width:3%"><input type="checkbox" id="rpSelectAllChk" onchange="rpToggleSelectAll(this.checked)"></th>
-            <th style="width:10%">Item Code</th>
-            <th style="width:20%">Description</th>
-            <th style="width:7%" class="text-center">Category</th>
-            <th style="width:7%">Location</th>
-            <th style="width:6%" class="text-end">On-Hand</th>
-            <th style="width:6%" class="text-end">Buffer</th>
-            <th style="width:6%" class="text-end">Ave/Mo</th>
-            <th style="width:6%" class="text-end">Qty Needed</th>
-            <th style="width:9%" class="text-center">On Order</th>
-            <th style="width:7%" class="text-end">Net Needed</th>
-            <th style="width:5%" class="text-center">Unit</th>
-            <th style="width:8%" class="text-end">Net Cost</th>
-            <th style="width:6%" class="text-center">Urgency</th>
+            <th style="width:9%" data-sort="code">Item Code</th>
+            <th style="width:16%" data-sort="desc">Description</th>
+            <th style="width:6%" class="text-center" data-sort="cat">Category</th>
+            <th style="width:6%" data-sort="loc">Location</th>
+            <th style="width:5%" class="text-end" data-sort="onhand">On-Hand</th>
+            <th style="width:5%" class="text-end" data-sort="buffer">Buffer</th>
+            <th style="width:5%" class="text-end" data-sort="ave">Ave/Mo</th>
+            <th style="width:8%" class="text-center" data-sort="active" title="Months with actual usage / movement class">Active Mo.</th>
+            <th style="width:5%" class="text-end" data-sort="qneeded">Qty Needed</th>
+            <th style="width:7%" class="text-center">On Order</th>
+            <th style="width:6%" class="text-end" data-sort="net">Net Needed</th>
+            <th style="width:4%" class="text-center">Unit</th>
+            <th style="width:7%" class="text-end" data-sort="cost">Net Cost</th>
+            <th style="width:5%" class="text-center" data-sort="urg">Urgency</th>
           </tr>
         </thead>
         <tbody id="rpTableBody">
-          <tr><td colspan="14" class="erp-empty">
+          <tr><td colspan="15" class="erp-empty">
             <div class="erp-spinner"></div>
             <div class="mt-2">Loading replenishment needs...</div>
           </td></tr>
@@ -303,17 +357,17 @@ tr.row-covered code { color: #64748b; }
       </table>
     </div>
 
-    <div class="erp-table-footer">
-      <div>Showing <span id="rpPageStart">0</span>–<span id="rpPageEnd">0</span> of <span id="rpPageTotal">0</span></div>
-      <div class="erp-pagination">
-        <button id="rpBtnPrev" onclick="rpPagePrev()" disabled>
-          <i class="bi bi-chevron-left"></i> Prev
-        </button>
-        <span id="rpPageLabel">Page 1</span>
-        <button id="rpBtnNext" onclick="rpPageNext()">
-          Next <i class="bi bi-chevron-right"></i>
-        </button>
+    <div class="erp-table-footer rp-footer">
+      <div class="rp-foot-left">
+        <div>Showing <span id="rpPageStart">0</span>–<span id="rpPageEnd">0</span> of <span id="rpPageTotal">0</span></div>
+        <label>Rows per page
+          <select id="rpPageSize" onchange="rpOnPageSize()">
+            <option value="25">25</option><option value="50">50</option><option value="100">100</option>
+            <option value="200">200</option><option value="500">500</option>
+          </select>
+        </label>
       </div>
+      <div class="erp-pagination rp-pg" id="rpPager"></div>
     </div>
   </div>
   </div><!-- /rpTabNeeds -->
