@@ -12,6 +12,7 @@
 var RP_MAX_ITEMS_PER_PRF = 30;                 // same as New PRF
 var RP_DEFAULT_NOTED_BY = 'CYNTHIA A. CEREZO'; // used only when nothing was saved before
 var RP_DEFAULT_APPROVED_BY = 'REMIGIO BALAOING';
+var RP_MIN_ACTIVE_MONTHS = 3;                  // below this, a PRF request gets a warning
 
 var _rp = {
   allItems: [],
@@ -19,6 +20,8 @@ var _rp = {
   selectedItems: {},
   currentPage: 1,
   pageSize: 50,
+  hsort: null,          // {key, dir} when a column header was clicked (overrides the Sort dropdown)
+  hasActivity: false,   // true when active-months data could be loaded
   searchTimer: null,
   prfModal: null,
   successModal: null,
@@ -36,6 +39,8 @@ var _rp = {
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
+  rpRestorePrefs();
+  rpBindHeaderSort();
   rpCheckHealth();
   rpLoad();
   if (location.hash === '#prfs') rpSwitchTab('prfs');
@@ -110,13 +115,29 @@ async function rpLoad() {
   var alertEl = document.getElementById('rpSetupAlert');
   if (alertEl) alertEl.style.display = 'none';
   if (tbody && _rp.allItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="14" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="15" class="erp-empty">' +
       '<div class="erp-spinner"></div>' +
       '<div class="mt-2">Loading replenishment needs...</div></td></tr>';
   }
 
   try {
-    var rows = await erpFetchAll('erp_v_reorder_net', 'select=*&order=item_code.asc');
+    var res = await Promise.all([
+      erpFetchAll('erp_v_reorder_net', 'select=*&order=item_code.asc'),
+      // usage history lives on the item master — the Needs view does not carry it
+      erpFetchAll('erp_items', 'select=item_code,active_consumption_months,inventory_movement,abc_classification&order=item_code.asc')
+        .catch(function(e) { console.warn('[rpLoad] active-months data unavailable:', e.message); return null; })
+    ]);
+    var rows = res[0], meta = res[1];
+    _rp.hasActivity = !!meta;
+    var metaMap = {};
+    (meta || []).forEach(function(m) { metaMap[m.item_code] = m; });
+    (rows || []).forEach(function(r) {
+      var m = metaMap[r.item_code];
+      if (!m) return;
+      if (r.active_consumption_months === undefined) r.active_consumption_months = m.active_consumption_months;
+      if (r.inventory_movement === undefined) r.inventory_movement = m.inventory_movement;
+      if (r.abc_classification === undefined) r.abc_classification = m.abc_classification;
+    });
     _rp.allItems = rows || [];
 
     // drop selections that are no longer selectable (e.g. someone else just raised a PRF)
@@ -139,7 +160,7 @@ async function rpLoad() {
       alertEl.style.display = 'block';
     }
     if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="14" class="erp-empty text-danger">' +
+      tbody.innerHTML = '<tr><td colspan="15" class="erp-empty text-danger">' +
         'Failed: ' + rpEsc(msg) + '</td></tr>';
     }
   }
@@ -152,6 +173,39 @@ function rpNetNeeded(it) { return Number(it.net_needed || 0); }
 function rpOnOrder(it)   { return Number(it.on_order_qty || 0); }
 function rpNetValue(it)  { return Number(it.net_value_needed || 0); }
 function rpIsCovered(it) { return rpNetNeeded(it) <= 0; }
+
+// Months the item actually had usage. null = unknown (data could not be loaded).
+function rpActive(it) {
+  if (!_rp.hasActivity && (it.active_consumption_months === undefined)) return null;
+  return Number(it.active_consumption_months || 0);
+}
+
+// Does the item pass the Active-Months filter value?  ''|ge:N|r12|zero
+function rpActiveMatch(it, f) {
+  if (!f) return true;
+  var am = rpActive(it);
+  if (am === null) return false;
+  if (f === 'zero') return am === 0;
+  if (f === 'r12') return am >= 1 && am <= 2;
+  if (f.indexOf('ge:') === 0) return am >= Number(f.slice(3));
+  return true;
+}
+
+function rpActiveLabel(f) {
+  if (!f) return 'any';
+  if (f === 'zero') return 'no usage';
+  if (f === 'r12') return 'only 1–2 months';
+  return '≥ ' + f.slice(3) + ' month' + (f === 'ge:1' ? '' : 's');
+}
+
+function rpMovClass(m) {
+  var t = String(m || '').toUpperCase();
+  if (!t) return '';
+  if (t.indexOf('NO') === 0 || t.indexOf('DEAD') !== -1 || t.indexOf('NON') === 0) return 'mov-none';
+  if (t.indexOf('SLOW') !== -1) return 'mov-slow';
+  if (t.indexOf('FAST') !== -1) return 'mov-fast';
+  return '';
+}
 
 // ═══════════════════════════════════════════════════════════
 // KPIs — only items that still need a PRF
@@ -212,6 +266,136 @@ function rpOnFilterChange() {
   rpRender();
 }
 
+function rpLsGet(k) { try { return localStorage.getItem(k); } catch(e) { return null; } }
+function rpLsSet(k, v) { try { localStorage.setItem(k, v); } catch(e) {} }
+
+function rpRestorePrefs() {
+  var ps = rpLsGet('rp_page_size');
+  var psSel = document.getElementById('rpPageSize');
+  if (ps && psSel && psSel.querySelector('option[value="' + ps + '"]')) { psSel.value = ps; _rp.pageSize = Number(ps); }
+  var af = rpLsGet('rp_active_filter');
+  var afSel = document.getElementById('rpActiveFilter');
+  if (af && afSel && afSel.querySelector('option[value="' + af + '"]')) afSel.value = af;
+}
+
+function rpOnActiveChange() {
+  var v = document.getElementById('rpActiveFilter').value;
+  rpLsSet('rp_active_filter', v);
+  _rp.currentPage = 1;
+  rpRender();
+}
+
+function rpSetActiveFilter(v) {
+  var sel = document.getElementById('rpActiveFilter');
+  if (!sel) return;
+  sel.value = v;
+  rpOnActiveChange();
+}
+
+function rpOnSortChange() {
+  _rp.hsort = null;
+  _rp.currentPage = 1;
+  rpRender();
+}
+
+function rpOnPageSize() {
+  var v = Number(document.getElementById('rpPageSize').value) || 50;
+  _rp.pageSize = v;
+  rpLsSet('rp_page_size', String(v));
+  _rp.currentPage = 1;
+  rpRender();
+}
+
+// ── header click sorting ───────────────────────────────────
+var RP_SORT_GET = {
+  code:    function(it) { return String(it.item_code || ''); },
+  desc:    function(it) { return String(it.description || '').toLowerCase(); },
+  cat:     function(it) { return String(it.category || '').toLowerCase(); },
+  loc:     function(it) { return String(it.location || '').toLowerCase(); },
+  onhand:  function(it) { return Number(it.on_hand || 0); },
+  buffer:  function(it) { return Number(it.buffer_stock || 0); },
+  ave:     function(it) { return Number(it.ave_monthly_consumption || 0); },
+  active:  function(it) { var a = rpActive(it); return a === null ? -1 : a; },
+  mov:     function(it) { return String(it.inventory_movement || '').toLowerCase(); },
+  qneeded: function(it) { return Number(it.qty_needed || 0); },
+  net:     function(it) { return rpNetNeeded(it); },
+  cost:    function(it) { return rpNetValue(it); },
+  urg:     function(it) { var r = { CRITICAL: 0, URGENT: 1, WARNING: 2, OK: 3 }[String(it.urgency || '').toUpperCase()]; return r === undefined ? 99 : r; }
+};
+
+function rpBindHeaderSort() {
+  var head = document.querySelector('#rpTabNeeds thead');
+  if (!head) return;
+  head.addEventListener('click', function(e) {
+    var th = e.target.closest('th[data-sort]');
+    if (!th) return;
+    var key = th.getAttribute('data-sort');
+    var textual = ['code', 'desc', 'cat', 'loc', 'mov'].indexOf(key) !== -1;
+    if (_rp.hsort && _rp.hsort.key === key) _rp.hsort.dir = _rp.hsort.dir === 'asc' ? 'desc' : 'asc';
+    else _rp.hsort = { key: key, dir: textual ? 'asc' : 'desc' };
+    _rp.currentPage = 1;
+    rpRender();
+  });
+}
+
+function rpMarkSortedHeader() {
+  document.querySelectorAll('#rpTabNeeds thead th[data-sort]').forEach(function(th) {
+    th.classList.remove('s-asc', 's-desc');
+    if (_rp.hsort && th.getAttribute('data-sort') === _rp.hsort.key) th.classList.add('s-' + _rp.hsort.dir);
+  });
+}
+
+function rpSortItems(list, sortBy) {
+  if (_rp.hsort && RP_SORT_GET[_rp.hsort.key]) {
+    var g = RP_SORT_GET[_rp.hsort.key], dir = _rp.hsort.dir === 'asc' ? 1 : -1;
+    list.sort(function(a, b) {
+      var x = g(a), y = g(b);
+      var c = (typeof x === 'string') ? x.localeCompare(y, undefined, { numeric: true }) : (x - y);
+      return c * dir || String(a.item_code || '').localeCompare(String(b.item_code || ''));
+    });
+    return;
+  }
+  var urg = RP_SORT_GET.urg;
+  list.sort(function(a, b) {
+    switch (sortBy) {
+      case 'value_desc':  return rpNetValue(b) - rpNetValue(a);
+      case 'value_asc':   return rpNetValue(a) - rpNetValue(b);
+      case 'qty_desc':    return rpNetNeeded(b) - rpNetNeeded(a);
+      case 'urgency':     return urg(a) - urg(b);
+      case 'code_asc':    return String(a.item_code || '').localeCompare(String(b.item_code || ''));
+      case 'active_desc': return RP_SORT_GET.active(b) - RP_SORT_GET.active(a);
+      case 'active_asc':  return RP_SORT_GET.active(a) - RP_SORT_GET.active(b);
+      default: return 0;
+    }
+  });
+}
+
+// ── summary chips: how many items fall in each Active-Months band ──
+function rpRenderChips(base, activeVal) {
+  var box = document.getElementById('rpChips');
+  if (!box) return;
+  if (!_rp.hasActivity) {
+    box.innerHTML = '<span class="small text-muted"><i class="bi bi-info-circle me-1"></i>Active-months data could not be loaded, so the filter is unavailable. Try Refresh.</span>';
+    return;
+  }
+  var c = { all: base.length, ge3: 0, r12: 0, zero: 0 };
+  base.forEach(function(it) {
+    var a = rpActive(it);
+    if (a === 0) c.zero++;
+    else if (a >= 1 && a <= 2) c.r12++;
+    if (a >= RP_MIN_ACTIVE_MONTHS) c.ge3++;
+  });
+  function chip(val, label, n, cls) {
+    return '<button type="button" class="rp-chip ' + cls + (activeVal === val ? ' active' : '') + '" onclick="rpSetActiveFilter(\'' + val + '\')">' +
+      label + ' <b>' + rpNum(n) + '</b></button>';
+  }
+  box.innerHTML = '<span class="rp-chips-label">Usage history</span>' +
+    chip('', 'All', c.all, '') +
+    chip('ge:3', '≥ 3 months', c.ge3, 'good') +
+    chip('r12', '1–2 months only', c.r12, 'warn') +
+    chip('zero', 'No usage', c.zero, 'bad');
+}
+
 function rpRender() {
   var tbody = document.getElementById('rpTableBody');
   if (!tbody) return;
@@ -221,9 +405,11 @@ function rpRender() {
   var urgFilter = document.getElementById('rpUrgencyFilter').value;
   var locFilter = document.getElementById('rpLocationFilter').value;
   var orderFilter = document.getElementById('rpOrderFilter').value;
+  var activeFilter = document.getElementById('rpActiveFilter').value;
   var sortBy = document.getElementById('rpSortFilter').value;
 
-  _rp.filteredItems = _rp.allItems.filter(function(it) {
+  // everything except the Active-Months filter (the chips count from this set)
+  var base = _rp.allItems.filter(function(it) {
     if (orderFilter === 'needs' && rpIsCovered(it)) return false;
     if (orderFilter === 'covered' && !(rpIsCovered(it) && rpOnOrder(it) > 0)) return false;
     if (catFilter && it.category !== catFilter) return false;
@@ -238,21 +424,20 @@ function rpRender() {
     return true;
   });
 
-  var urgencyOrder = { 'CRITICAL': 0, 'URGENT': 1, 'WARNING': 2, 'OK': 3 };
-  function urgRank(it) {
-    var r = urgencyOrder[String(it.urgency || '').toUpperCase()];
-    return r === undefined ? 99 : r;
+  _rp.filteredItems = _rp.hasActivity || !activeFilter ? base.filter(function(it) { return rpActiveMatch(it, activeFilter); }) : base;
+  rpSortItems(_rp.filteredItems, sortBy);
+  rpRenderChips(base, activeFilter);
+  rpMarkSortedHeader();
+
+  var hidden = base.length - _rp.filteredItems.length;
+  var note = document.getElementById('rpHiddenNote');
+  if (note) {
+    if (activeFilter && _rp.hasActivity && hidden > 0) {
+      note.innerHTML = '<i class="bi bi-funnel-fill me-1"></i><strong>' + rpNum(hidden) + '</strong> item' + (hidden === 1 ? ' is' : 's are') +
+        ' hidden by the Active-months filter (' + rpEsc(rpActiveLabel(activeFilter)) + '). <a onclick="rpSetActiveFilter(\'\')">Show all</a>';
+      note.style.display = 'block';
+    } else note.style.display = 'none';
   }
-  _rp.filteredItems.sort(function(a, b) {
-    switch (sortBy) {
-      case 'value_desc': return rpNetValue(b) - rpNetValue(a);
-      case 'value_asc':  return rpNetValue(a) - rpNetValue(b);
-      case 'qty_desc':   return rpNetNeeded(b) - rpNetNeeded(a);
-      case 'urgency':    return urgRank(a) - urgRank(b);
-      case 'code_asc':   return String(a.item_code || '').localeCompare(String(b.item_code || ''));
-      default: return 0;
-    }
-  });
 
   var total = _rp.filteredItems.length;
   var maxPage = Math.max(1, Math.ceil(total / _rp.pageSize));
@@ -265,9 +450,7 @@ function rpRender() {
   document.getElementById('rpPageTotal').textContent = total;
   document.getElementById('rpPageStart').textContent = total > 0 ? start + 1 : 0;
   document.getElementById('rpPageEnd').textContent = end;
-  document.getElementById('rpPageLabel').textContent = 'Page ' + _rp.currentPage;
-  document.getElementById('rpBtnPrev').disabled = (_rp.currentPage <= 1);
-  document.getElementById('rpBtnNext').disabled = (end >= total);
+  rpRenderPager(maxPage);
 
   var subtitle = document.getElementById('rpTableSubtitle');
   if (subtitle) {
@@ -277,10 +460,11 @@ function rpRender() {
   }
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="14" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="15" class="erp-empty">' +
       '<i class="bi bi-check-circle fs-2 d-block mb-2 text-success"></i>' +
-      (orderFilter === 'needs' ? 'Nothing left to order — everything below buffer is already on a PRF or stock is healthy.'
-                               : 'No items match the filters.') + '</td></tr>';
+      (orderFilter === 'needs' && !activeFilter && !search && !catFilter && !locFilter && !urgFilter
+        ? 'Nothing left to order — everything below buffer is already on a PRF or stock is healthy.'
+        : 'No items match the filters.') + '</td></tr>';
     updateRpBulkBar();
     updateRpSelectAllChk();
     return;
@@ -303,6 +487,15 @@ function rpRender() {
         '<span class="oo-prf" title="' + rpEsc(it.open_prf_nos || '') + '">' + rpEsc(it.open_prf_nos || '') + '</span>';
     }
 
+    var am = rpActive(it), amCell;
+    if (am === null) amCell = '<span class="am-badge am-unk">—</span>';
+    else if (am === 0) amCell = '<span class="am-badge am-zero" title="No recorded usage">0</span>';
+    else if (am < RP_MIN_ACTIVE_MONTHS) amCell = '<span class="am-badge am-low" title="Less than ' + RP_MIN_ACTIVE_MONTHS + ' months of usage">' + am + '</span>';
+    else amCell = '<span class="am-badge am-ok">' + am + '</span>';
+
+    var mov = String(it.inventory_movement || '');
+    var movCell = mov ? '<span class="mov-badge ' + rpMovClass(mov) + '" title="' + rpEsc(mov) + '">' + rpEsc(rpTruncate(mov.toUpperCase(), 12)) + '</span>' : '<span class="text-muted">—</span>';
+
     html += '<tr class="' + rowClass + '">' +
       '<td class="text-center">' +
         '<input type="checkbox" class="rp-item-chk" data-code="' + rpEsc(it.item_code) + '"' +
@@ -315,6 +508,7 @@ function rpRender() {
       '<td class="text-end fw-bold">' + rpNum(it.on_hand) + '</td>' +
       '<td class="text-end">' + rpNum(it.buffer_stock) + '</td>' +
       '<td class="text-end">' + rpNum(it.ave_monthly_consumption) + '</td>' +
+      '<td class="text-center">' + amCell + '<div style="margin-top:3px;">' + movCell + '</div></td>' +
       '<td class="text-end">' + rpNum(it.qty_needed) + '</td>' +
       '<td class="text-center">' + onOrderCell + '</td>' +
       '<td class="text-end fw-bold ' + (covered ? '' : 'text-danger') + '">' + rpNum(rpNetNeeded(it)) + '</td>' +
@@ -332,6 +526,46 @@ function rpRender() {
 
   updateRpBulkBar();
   updateRpSelectAllChk();
+}
+
+// ── pager: « ‹ 1 … 4 5 [6] 7 8 … 20 › »  + go to page ──
+function rpRenderPager(maxPage) {
+  var el = document.getElementById('rpPager');
+  if (!el) return;
+  var cur = _rp.currentPage;
+  var show = {};
+  [1, 2, maxPage - 1, maxPage, cur - 2, cur - 1, cur, cur + 1, cur + 2].forEach(function(n) { if (n >= 1 && n <= maxPage) show[n] = true; });
+  var nums = Object.keys(show).map(Number).sort(function(a, b) { return a - b; });
+
+  var h = '<button type="button" onclick="rpGoPage(1)" title="First page"' + (cur <= 1 ? ' disabled' : '') + '><i class="bi bi-chevron-bar-left"></i></button>' +
+          '<button type="button" onclick="rpGoPage(' + (cur - 1) + ')"' + (cur <= 1 ? ' disabled' : '') + '><i class="bi bi-chevron-left"></i> Prev</button>';
+  var prev = 0;
+  nums.forEach(function(n) {
+    if (prev && n - prev > 1) h += '<span class="rp-gap">…</span>';
+    h += '<button type="button" class="' + (n === cur ? 'cur' : '') + '" onclick="rpGoPage(' + n + ')">' + n + '</button>';
+    prev = n;
+  });
+  h += '<button type="button" onclick="rpGoPage(' + (cur + 1) + ')"' + (cur >= maxPage ? ' disabled' : '') + '>Next <i class="bi bi-chevron-right"></i></button>' +
+       '<button type="button" onclick="rpGoPage(' + maxPage + ')" title="Last page"' + (cur >= maxPage ? ' disabled' : '') + '><i class="bi bi-chevron-bar-right"></i></button>';
+  if (maxPage > 5) {
+    h += '<span class="rp-goto">Go to <input type="number" id="rpGoInput" min="1" max="' + maxPage + '" placeholder="#" ' +
+         'onkeydown="if(event.key===\'Enter\')rpGoPage(this.value)"> <button type="button" onclick="rpGoPage(document.getElementById(\'rpGoInput\').value)">Go</button></span>';
+  }
+  el.innerHTML = h;
+}
+
+function rpGoPage(n) {
+  n = parseInt(n, 10);
+  var maxPage = Math.max(1, Math.ceil(_rp.filteredItems.length / _rp.pageSize));
+  if (isNaN(n)) return;
+  n = Math.min(maxPage, Math.max(1, n));
+  if (n === _rp.currentPage) return;
+  _rp.currentPage = n;
+  rpRender();
+  var wrap = document.querySelector('#rpTabNeeds .erp-table-wrap');
+  if (wrap) wrap.scrollTop = 0;
+  var card = document.querySelector('#rpTabNeeds .erp-table-card');
+  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -460,6 +694,14 @@ function rpSuggested(it) {
 }
 
 function rpCreatePrfFromSelection() {
+  var short = rpSelectedRows().filter(function(it) { var a = rpActive(it); return a !== null && a < RP_MIN_ACTIVE_MONTHS; });
+  if (short.length) {
+    var list = short.slice(0, 8).map(function(it) { return '  • ' + it.item_code + '  (' + rpActive(it) + ' mo)'; }).join('\n');
+    var more = short.length > 8 ? '\n  …and ' + (short.length - 8) + ' more' : '';
+    var msg = short.length + ' of the selected item' + (short.length === 1 ? ' has' : 's have') + ' less than ' + RP_MIN_ACTIVE_MONTHS +
+      ' months of usage history, so the buffer/quantity may not be reliable:\n\n' + list + more + '\n\nCreate the PRF anyway?';
+    if (!confirm(msg)) return;
+  }
   _rp.extraItems = [];
   _rp.modalVals = {};
   _rp.openMap = null;
@@ -817,27 +1059,16 @@ function rpClearFilters() {
   document.getElementById('rpCategoryFilter').value = '';
   document.getElementById('rpUrgencyFilter').value = '';
   document.getElementById('rpLocationFilter').value = '';
+  document.getElementById('rpActiveFilter').value = '';
+  rpLsSet('rp_active_filter', '');
   document.getElementById('rpSortFilter').value = 'value_desc';
+  _rp.hsort = null;
   _rp.currentPage = 1;
   rpRender();
 }
 
-function rpPagePrev() {
-  if (_rp.currentPage > 1) {
-    _rp.currentPage--;
-    rpRender();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-}
-
-function rpPageNext() {
-  var maxPage = Math.ceil(_rp.filteredItems.length / _rp.pageSize);
-  if (_rp.currentPage < maxPage) {
-    _rp.currentPage++;
-    rpRender();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-}
+function rpPagePrev() { rpGoPage(_rp.currentPage - 1); }
+function rpPageNext() { rpGoPage(_rp.currentPage + 1); }
 
 function rpRefresh() {
   erpShowToast('Refreshing...', 'info');
@@ -857,7 +1088,7 @@ function rpExport() {
 
   var headers = ['Item Code', 'Description', 'Category', 'Location', 'Unit',
                  'On-Hand', 'Buffer Stock', 'Ave Monthly', 'Qty Needed', 'On Order',
-                 'Open PRF(s)', 'Net Needed', 'Unit Cost', 'Net Est. Cost', 'Urgency'];
+                 'Open PRF(s)', 'Net Needed', 'Unit Cost', 'Net Est. Cost', 'Urgency', 'Active Months', 'Movement'];
   var rows = _rp.filteredItems.map(function(it) {
     return [
       it.item_code || '',
@@ -874,7 +1105,9 @@ function rpExport() {
       rpNetNeeded(it),
       Number(it.unit_cost || 0),
       rpNetValue(it),
-      it.urgency || ''
+      it.urgency || '',
+      rpActive(it) === null ? '' : rpActive(it),
+      it.inventory_movement || ''
     ];
   });
 
