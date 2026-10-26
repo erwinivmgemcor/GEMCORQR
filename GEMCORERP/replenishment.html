@@ -97,6 +97,13 @@ tr.row-covered code { color: #64748b; }
 .rp-tab.active .rp-tab-count { background:#1e3a5f; color:#fff; }
 #rpPrfFrame { width:100%; border:0; min-height:78vh; background:transparent; }
 .rp-setup-alert { display:none; }
+.rp-stale-banner { margin-bottom:14px; padding:11px 16px; border-radius:12px; background:#fffbeb; border:1px solid #fde68a; color:#92400e; font-size:0.86rem; }
+.rp-stale-banner.monday { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
+.rp-stale-banner.ok { background:#f0fdf4; border-color:#bbf7d0; color:#166534; }
+.rp-stale-banner a { color:#1e3a5f; font-weight:700; text-decoration:underline; cursor:pointer; margin-left:4px; }
+tr.row-stale { border-left-color:#dc2626; background:#fff7f7; color:#475569; }
+.oo-age { display:block; font-size:0.64rem; color:#64748b; margin-top:1px; }
+.oo-age.stale { color:#b91c1c; font-weight:800; }
 
 /* Active-months badges + chips */
 .am-badge { display:inline-block; min-width:26px; padding:2px 8px; border-radius:8px; font-size:0.72rem; font-weight:800; text-align:center; font-variant-numeric:tabular-nums; }
@@ -244,6 +251,8 @@ tr.row-covered code { color: #64748b; }
     </div>
   </div>
 
+  <div id="rpStaleBanner" class="rp-stale-banner" style="display:none;"></div>
+
   <!-- FILTERS -->
   <div class="erp-card erp-filters-card" style="padding:16px 18px;margin-bottom:20px;">
     <div class="erp-filters-row">
@@ -256,6 +265,7 @@ tr.row-covered code { color: #64748b; }
       <select id="rpOrderFilter" class="erp-select" onchange="rpOnFilterChange()">
         <option value="needs">Needs PRF</option>
         <option value="covered">Already on order</option>
+        <option value="stale">On order — stale (7+ days)</option>
         <option value="all">All</option>
       </select>
       <select id="rpCategoryFilter" class="erp-select" onchange="rpOnFilterChange()">
