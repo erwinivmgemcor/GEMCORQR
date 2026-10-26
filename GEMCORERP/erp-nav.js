@@ -266,6 +266,19 @@
           ]
         }
       ]
+    },
+    {
+      id: 'breakroom',
+      label: 'Break Room',
+      items: [
+        {
+          id: 'block-blast',
+          label: 'Crate Blast',
+          icon: 'bi-controller',
+          href: 'block-blast.html',
+          roles: ['warehouse', 'production']
+        }
+      ]
     }
   ];
 
@@ -299,7 +312,8 @@
     'my-requests': 'My Requests',
     'new-mrif': 'New MRIF',
     'new-mrr': 'New MRR',
-    'new-mrs': 'New MRS'
+    'new-mrs': 'New MRS',
+    'block-blast': 'Break Room'
   };
 
   var STORAGE_KEYS = {
@@ -696,6 +710,15 @@
       gsScript.src = 'global-search.js';
       gsScript.defer = true;
       document.head.appendChild(gsScript);
+    }
+
+    // Net watch: nagbibigay ng "Maglaro muna" chip kapag offline/mabagal ang internet
+    if (!window.erpNet && !document.getElementById('erpNetWatchScript')) {
+      var nwScript = document.createElement('script');
+      nwScript.id = 'erpNetWatchScript';
+      nwScript.src = 'erp-netwatch.js';
+      nwScript.defer = true;
+      document.head.appendChild(nwScript);
     }
 
     var sidebar = _buildSidebar(userRole, current);
