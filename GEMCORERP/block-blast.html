@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>Break Room — Crate Blast | GEMCOR ERP</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a1626">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+
+<!-- Walang CDN dito: dapat gumana ang page na ito kahit walang internet. -->
+<link rel="stylesheet" href="blockblast.css">
+
+<script>window.ERP_NETWATCH_NO_CHIP = true;</script>
+<script src="erp-guard.js"></script>
+<script defer src="erp-config.js"></script>
+<script defer src="erp-netwatch.js"></script>
+<script defer src="blockblast.js"></script>
+<script defer src="js/update.js"></script>
+</head>
+<body class="bb-page">
+<div id="bbApp"></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var role = '';
+  try { role = localStorage.getItem('ivm_userRole') || ''; } catch (e) {}
+  var production = role === 'production';
+  BlockBlast.mount(document.getElementById('bbApp'), {
+    mode: 'page',
+    backHref: production ? 'my-requests.html' : 'management-dashboard.html',
+    backLabel: production ? 'My Requests' : 'Dashboard'
+  });
+});
+</script>
+</body>
+</html>
