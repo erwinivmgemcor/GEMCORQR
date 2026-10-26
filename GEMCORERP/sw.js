@@ -6,8 +6,8 @@
 //  - Auto-cleanup of old caches
 // ============================================================
 
-const CACHE_NAME = 'gemcor-erp-v1.0.4';
-const RUNTIME_CACHE = 'gemcor-erp-runtime-v1.0.4';
+const CACHE_NAME = 'gemcor-erp-v1.0.5';
+const RUNTIME_CACHE = 'gemcor-erp-runtime-v1.0.5';
 
 // ═══════════════════════════════════════════════════════════
 // STATIC ASSETS — Pre-cache on install
@@ -29,8 +29,32 @@ const STATIC_ASSETS = [
   '/GEMCORQR/GEMCORERP/erp-chat-alerts.js',
   '/GEMCORQR/GEMCORERP/erp-notif.css',
   '/GEMCORQR/GEMCORERP/erp-styles.css',
+  '/GEMCORQR/GEMCORERP/js/update.js',
+  // ── Offline page + Break Room (Crate Blast) ──
+  '/GEMCORQR/GEMCORERP/offline.html',
+  '/GEMCORQR/GEMCORERP/block-blast.html',
+  '/GEMCORQR/GEMCORERP/blockblast.js',
+  '/GEMCORQR/GEMCORERP/blockblast.css',
+  '/GEMCORQR/GEMCORERP/erp-netwatch.js',
+  '/GEMCORQR/GEMCORERP/fonts/BarlowCondensed-700.woff2',
+  '/GEMCORQR/GEMCORERP/fonts/BarlowCondensed-800.woff2',
   '/GEMCORQR/gemcor-logo.png'
 ];
+
+// ═══════════════════════════════════════════════════════════
+// OFFLINE FALLBACK — kapag pumalya ang network at walang cached
+// na kopya ng page, ibigay ang offline.html (may laro).
+// ═══════════════════════════════════════════════════════════
+var OFFLINE_URL = '/GEMCORQR/GEMCORERP/offline.html';
+
+function _offlineFallback(request) {
+  if (request.mode === 'navigate') {
+    return caches.match(OFFLINE_URL).then(function(r) {
+      return r || new Response('Offline', { status: 503, statusText: 'Offline' });
+    });
+  }
+  return Response.error();
+}
 
 // ═══════════════════════════════════════════════════════════
 // NEVER CACHE — Supabase and API endpoints
@@ -138,7 +162,10 @@ self.addEventListener('fetch', function(event) {
         }
         return response;
       }).catch(function() {
-        return caches.match(event.request);
+        // ignoreSearch: para tumama kahit may ?query ang URL (hal. page.html?id=5)
+        return caches.match(event.request, { ignoreSearch: true }).then(function(r) {
+          return r || _offlineFallback(event.request);
+        });
       })
     );
     return;
@@ -148,7 +175,10 @@ self.addEventListener('fetch', function(event) {
   // Return cached version if available, fetch fresh in background
   event.respondWith(
     caches.open(RUNTIME_CACHE).then(function(cache) {
-      return cache.match(event.request).then(function(cached) {
+      // Hanapin sa runtime cache, tapos sa precache (fonts, logo, atbp.)
+      return cache.match(event.request).then(function(hit) {
+        return hit || caches.match(event.request);
+      }).then(function(cached) {
         var networkFetch = fetch(event.request).then(function(response) {
           // Cache successful responses
           if (response && response.status === 200) {
@@ -157,7 +187,7 @@ self.addEventListener('fetch', function(event) {
           return response;
         }).catch(function() {
           // Network failed — return cached if available
-          return cached;
+          return cached || _offlineFallback(event.request);
         });
         
         // Return cached first (fast), network updates in background
