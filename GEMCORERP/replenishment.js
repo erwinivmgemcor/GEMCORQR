@@ -12,6 +12,7 @@
 var RP_MAX_ITEMS_PER_PRF = 30;                 // same as New PRF
 var RP_DEFAULT_NOTED_BY = 'CYNTHIA A. CEREZO'; // used only when nothing was saved before
 var RP_DEFAULT_APPROVED_BY = 'REMIGIO BALAOING';
+var RP_STALE_DAYS = 7;                         // PRFs are raised every Monday → still open after a week = needs a decision
 var RP_MIN_ACTIVE_MONTHS = 3;                  // below this, a PRF request gets a warning
 
 var _rp = {
@@ -20,6 +21,7 @@ var _rp = {
   selectedItems: {},
   currentPage: 1,
   pageSize: 50,
+  prfAge: {},           // item_code -> { days, oldest, prfs:[{prf_no,status,open_qty,days}] }  (open PRF lines only)
   hsort: null,          // {key, dir} when a column header was clicked (overrides the Sort dropdown)
   hasActivity: false,   // true when active-months data could be loaded
   searchTimer: null,
@@ -143,13 +145,16 @@ async function rpLoad() {
     // drop selections that are no longer selectable (e.g. someone else just raised a PRF)
     Object.keys(_rp.selectedItems).forEach(function(code) {
       var it = _rp.allItems.find(function(x) { return x.item_code === code; });
-      if (!it || rpNetNeeded(it) <= 0) delete _rp.selectedItems[code];
+      if (!it) delete _rp.selectedItems[code];
     });
 
     rpPopulateFilters();
     rpComputeKPIs();
     _rp.currentPage = 1;
     rpRender();
+
+    // how old are the PRFs the items are waiting on? (non-blocking — table is already on screen)
+    rpLoadAges().then(function() { if (_rp.activeTab === 'needs') rpRender(); });
 
   } catch(err) {
     console.error('[rpLoad]', err);
@@ -196,6 +201,58 @@ function rpActiveLabel(f) {
   if (f === 'zero') return 'no usage';
   if (f === 'r12') return 'only 1–2 months';
   return '≥ ' + f.slice(3) + ' month' + (f === 'ge:1' ? '' : 's');
+}
+
+// ── PRF age (weekly Monday cycle) ───────────────────────────
+function rpDaysSince(iso) {
+  if (!iso) return null;
+  var d = new Date(iso); if (isNaN(d.getTime())) return null;
+  var t = new Date(); t.setHours(0, 0, 0, 0);
+  var c = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return Math.max(0, Math.round((t - c) / 86400000));
+}
+
+async function rpLoadAges() {
+  try {
+    var lines = await erpFetchAll('erp_v_prf_open_lines', 'select=item_code,prf_no,status,open_qty&order=item_code.asc');
+    lines = (lines || []).filter(function(l) { return Number(l.open_qty || 0) > 0; });
+    var nos = {};
+    lines.forEach(function(l) { if (l.prf_no) nos[l.prf_no] = true; });
+    var list = Object.keys(nos), dates = {};
+    for (var i = 0; i < list.length; i += 80) {
+      var chunk = list.slice(i, i + 80).map(encodeURIComponent).join(',');
+      var docs = await erpFetch('prf_documents', 'select=prf_no,created_at&prf_no=in.(' + chunk + ')&limit=1000');
+      (docs || []).forEach(function(d) { dates[d.prf_no] = d.created_at; });
+    }
+    var map = {};
+    lines.forEach(function(l) {
+      var days = rpDaysSince(dates[l.prf_no]);
+      var e = map[l.item_code] || (map[l.item_code] = { days: null, prfs: [] });
+      e.prfs.push({ prf_no: l.prf_no, status: l.status, open_qty: Number(l.open_qty || 0), days: days });
+      if (days !== null && (e.days === null || days > e.days)) e.days = days;   // oldest open PRF
+    });
+    _rp.prfAge = map;
+  } catch (e) {
+    console.warn('[rpLoadAges] PRF age unavailable:', e.message);
+    _rp.prfAge = {};
+  }
+}
+
+function rpAge(it) { var a = _rp.prfAge[it.item_code]; return a && a.days !== null ? a.days : null; }
+function rpIsStale(it) { var d = rpAge(it); return rpOnOrder(it) > 0 && d !== null && d >= RP_STALE_DAYS; }
+function rpAgeText(d) { return d === 0 ? 'today' : d + (d === 1 ? ' day' : ' days'); }
+function rpAgeTip(it) {
+  var a = _rp.prfAge[it.item_code]; if (!a) return '';
+  return a.prfs.map(function(p) { return p.prf_no + ' · ' + (p.status || 'OPEN') + ' · ' + rpNum(p.open_qty) + ' left' + (p.days !== null ? ' · ' + rpAgeText(p.days) + ' old' : ''); }).join('\n');
+}
+function rpStaleCount() { return _rp.allItems.filter(rpIsStale).length; }
+
+function rpShowStale() {
+  document.getElementById('rpOrderFilter').value = 'stale';
+  document.getElementById('rpActiveFilter').value = '';
+  rpLsSet('rp_active_filter', '');
+  _rp.currentPage = 1;
+  rpRender();
 }
 
 function rpMovClass(m) {
@@ -394,6 +451,32 @@ function rpRenderChips(base, activeVal) {
     chip('ge:3', '≥ 3 months', c.ge3, 'good') +
     chip('r12', '1–2 months only', c.r12, 'warn') +
     chip('zero', 'No usage', c.zero, 'bad');
+  var st = rpStaleCount();
+  if (st > 0) {
+    box.innerHTML += '<span class="rp-chips-label" style="margin-left:14px;">On order</span>' +
+      '<button type="button" class="rp-chip bad' + (document.getElementById('rpOrderFilter').value === 'stale' ? ' active' : '') + '" onclick="rpShowStale()">Stale PRFs <b>' + rpNum(st) + '</b></button>';
+  }
+}
+
+// banner: weekly Monday cycle — what is still waiting on last week's (or older) PRF
+function rpRenderStaleBanner() {
+  var el = document.getElementById('rpStaleBanner');
+  if (!el) return;
+  var st = rpStaleCount();
+  var isMonday = new Date().getDay() === 1;
+  if (!st) {
+    el.style.display = isMonday ? 'block' : 'none';
+    el.className = 'rp-stale-banner ok';
+    el.innerHTML = isMonday ? '<i class="bi bi-calendar-check me-2"></i><strong>Monday — PRF day.</strong> No item is waiting on an old PRF.' : '';
+    return;
+  }
+  el.className = 'rp-stale-banner' + (isMonday ? ' monday' : '');
+  el.innerHTML = '<i class="bi bi-calendar-event me-2"></i>' +
+    (isMonday ? '<strong>Monday — PRF day.</strong> ' : '') +
+    '<strong>' + rpNum(st) + '</strong> item' + (st === 1 ? ' is' : 's are') + ' still waiting on a PRF that is ' + RP_STALE_DAYS + '+ days old (not served yet). ' +
+    'Cancel the old line in PRF Monitor if it is no longer coming, or tick the item to request it again. ' +
+    '<a onclick="rpShowStale()">Show them</a>';
+  el.style.display = 'block';
 }
 
 function rpRender() {
@@ -412,6 +495,7 @@ function rpRender() {
   var base = _rp.allItems.filter(function(it) {
     if (orderFilter === 'needs' && rpIsCovered(it)) return false;
     if (orderFilter === 'covered' && !(rpIsCovered(it) && rpOnOrder(it) > 0)) return false;
+    if (orderFilter === 'stale' && !rpIsStale(it)) return false;
     if (catFilter && it.category !== catFilter) return false;
     if (locFilter && it.location !== locFilter) return false;
     if (urgFilter && String(it.urgency || '').toUpperCase() !== urgFilter) return false;
@@ -427,6 +511,7 @@ function rpRender() {
   _rp.filteredItems = _rp.hasActivity || !activeFilter ? base.filter(function(it) { return rpActiveMatch(it, activeFilter); }) : base;
   rpSortItems(_rp.filteredItems, sortBy);
   rpRenderChips(base, activeFilter);
+  rpRenderStaleBanner();
   rpMarkSortedHeader();
 
   var hidden = base.length - _rp.filteredItems.length;
@@ -456,6 +541,7 @@ function rpRender() {
   if (subtitle) {
     subtitle.textContent = orderFilter === 'needs' ? 'Items that still need a PRF'
       : orderFilter === 'covered' ? 'Items already covered by an open PRF'
+      : orderFilter === 'stale' ? 'Items on a PRF that has been open ' + RP_STALE_DAYS + '+ days'
       : 'All items below buffer stock';
   }
 
@@ -474,17 +560,20 @@ function rpRender() {
   pageItems.forEach(function(it) {
     var urgency = String(it.urgency || 'WARNING').toUpperCase();
     var covered = rpIsCovered(it);
-    var rowClass = covered ? 'row-covered'
+    var stale = rpIsStale(it);
+    var rowClass = covered ? ('row-covered' + (stale ? ' row-stale' : ''))
       : urgency === 'CRITICAL' ? 'row-critical'
       : urgency === 'URGENT' ? 'row-urgent' : 'row-warning';
 
-    var isSelected = !covered && _rp.selectedItems[it.item_code] === true;
+    var isSelected = _rp.selectedItems[it.item_code] === true;
     var onOrder = rpOnOrder(it);
+    var ageD = rpAge(it);
 
     var onOrderCell = '<span class="text-muted">—</span>';
     if (onOrder > 0) {
       onOrderCell = '<span class="oo-badge' + (covered ? ' full' : '') + '">' + rpNum(onOrder) + '</span>' +
-        '<span class="oo-prf" title="' + rpEsc(it.open_prf_nos || '') + '">' + rpEsc(it.open_prf_nos || '') + '</span>';
+        '<span class="oo-prf" title="' + rpEsc(rpAgeTip(it) || it.open_prf_nos || '') + '">' + rpEsc(it.open_prf_nos || '') + '</span>' +
+        (ageD !== null ? '<span class="oo-age' + (stale ? ' stale' : '') + '" title="' + rpEsc(rpAgeTip(it)) + '">' + (stale ? 'STALE · ' : '') + rpAgeText(ageD) + '</span>' : '');
     }
 
     var am = rpActive(it), amCell;
@@ -499,7 +588,7 @@ function rpRender() {
     html += '<tr class="' + rowClass + '">' +
       '<td class="text-center">' +
         '<input type="checkbox" class="rp-item-chk" data-code="' + rpEsc(it.item_code) + '"' +
-          (isSelected ? ' checked' : '') + (covered ? ' disabled title="Already covered by an open PRF"' : '') + '>' +
+          (isSelected ? ' checked' : '') + (covered ? ' data-covered="1" title="Already on an open PRF — tick only if you want to request it again"' : '') + '>' +
       '</td>' +
       '<td><code>' + rpEsc(it.item_code) + '</code></td>' +
       '<td title="' + rpEsc(it.description || '') + '">' + rpEsc(rpTruncate(it.description || '—', 60)) + '</td>' +
@@ -588,7 +677,7 @@ function rpToggleSelectAll(checked) {
     if (checked) _rp.selectedItems[it.item_code] = true;
     else delete _rp.selectedItems[it.item_code];
   });
-  document.querySelectorAll('.rp-item-chk:not(:disabled)').forEach(function(cb) { cb.checked = checked; });
+  document.querySelectorAll('.rp-item-chk:not([data-covered])').forEach(function(cb) { cb.checked = checked; });
   updateRpBulkBar();
   updateRpSelectAllChk();
 }
@@ -605,7 +694,7 @@ function updateRpSelectAllChk() {
 }
 
 function rpSelectedRows() {
-  return _rp.allItems.filter(function(it) { return _rp.selectedItems[it.item_code] && !rpIsCovered(it); });
+  return _rp.allItems.filter(function(it) { return _rp.selectedItems[it.item_code]; });
 }
 
 function updateRpBulkBar() {
@@ -617,7 +706,9 @@ function updateRpBulkBar() {
     bar.classList.add('active');
     var totalQty = 0, totalCost = 0;
     rows.forEach(function(it) { totalQty += rpNetNeeded(it); totalCost += rpNetValue(it); });
-    document.getElementById('rpBulkCount').textContent = rows.length + ' item' + (rows.length === 1 ? '' : 's') + ' selected';
+    var cov = rows.filter(rpIsCovered).length;
+    document.getElementById('rpBulkCount').textContent = rows.length + ' item' + (rows.length === 1 ? '' : 's') + ' selected' +
+      (cov ? ' (' + cov + ' already on a PRF)' : '');
     document.getElementById('rpBulkQty').textContent = rpNum(totalQty);
     document.getElementById('rpBulkCost').textContent = '₱' + rpNum(totalCost);
   } else {
@@ -860,7 +951,9 @@ function renderRpPrfItems(items) {
     if (oi.qty > 0) {
       warn = '<div class="small text-danger mt-1" style="line-height:1.3;">⚠ Already on order: ' +
         oi.prfs.map(function(p) {
-          return rpEsc(p.prf_no) + (p.status && p.status !== 'OPEN' ? ' <strong>' + rpEsc(p.status) + '</strong>' : '') + ' · ' + rpNum(p.open_qty);
+          var pd = (_rp.prfAge[it.item_code] && _rp.prfAge[it.item_code].prfs.filter(function(x) { return x.prf_no === p.prf_no; })[0]) || null;
+          var ageTxt = pd && pd.days !== null ? ' · ' + rpAgeText(pd.days) + ' old' + (pd.days >= RP_STALE_DAYS ? ' <strong>(STALE)</strong>' : '') : '';
+          return rpEsc(p.prf_no) + (p.status && p.status !== 'OPEN' ? ' <strong>' + rpEsc(p.status) + '</strong>' : '') + ' · ' + rpNum(p.open_qty) + ageTxt;
         }).join('; ') + '</div>';
     }
     var hint = sug > 0 ? 'Suggested ' + rpNum(sug)
@@ -979,9 +1072,11 @@ async function rpSubmitPrf() {
     if (!res || res.success !== true) {
       if (res && res.code === 'OPEN_PRF_CONFLICT') {
         var list = (res.conflicts || []).map(function(c) {
-          return '• ' + c.item_code + ' — ' + rpNum(c.open_qty) + ' already on ' + c.prf_nos;
+          var a = _rp.prfAge[c.item_code];
+          var ageNote = a && a.days !== null ? ' (oldest PRF ' + rpAgeText(a.days) + ' old' + (a.days >= RP_STALE_DAYS ? ' — STALE' : '') + ')' : '';
+          return '• ' + c.item_code + ' — ' + rpNum(c.open_qty) + ' already on ' + c.prf_nos + ageNote;
         }).join('\n');
-        if (!confirm('These items are already on an open PRF:\n\n' + list + '\n\nCreate the PRF anyway?')) {
+        if (!confirm('These items are already on an open PRF:\n\n' + list + '\n\nStale lines you no longer expect can be cancelled in PRF Monitor instead.\n\nCreate the PRF anyway?')) {
           await rpLoad(); // refresh so the rows show the latest On Order
           return;
         }
@@ -1088,7 +1183,7 @@ function rpExport() {
 
   var headers = ['Item Code', 'Description', 'Category', 'Location', 'Unit',
                  'On-Hand', 'Buffer Stock', 'Ave Monthly', 'Qty Needed', 'On Order',
-                 'Open PRF(s)', 'Net Needed', 'Unit Cost', 'Net Est. Cost', 'Urgency', 'Active Months', 'Movement'];
+                 'Open PRF(s)', 'Net Needed', 'Unit Cost', 'Net Est. Cost', 'Urgency', 'Active Months', 'Movement', 'Oldest Open PRF (days)', 'Stale'];
   var rows = _rp.filteredItems.map(function(it) {
     return [
       it.item_code || '',
@@ -1107,7 +1202,9 @@ function rpExport() {
       rpNetValue(it),
       it.urgency || '',
       rpActive(it) === null ? '' : rpActive(it),
-      it.inventory_movement || ''
+      it.inventory_movement || '',
+      rpAge(it) === null ? '' : rpAge(it),
+      rpIsStale(it) ? 'YES' : ''
     ];
   });
 
