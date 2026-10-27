@@ -1240,12 +1240,24 @@ async function prfSyncAndRecompute() {
       throw new Error('Invalid response from GAS');
     }
 
-    if (!syncData.success) {
-      throw new Error(syncData.error || 'Unknown error');
+    // Honest report: the script used to say success even when a step failed
+    var problems = [];
+    if (syncData.sync_error)      problems.push('Sheet sync: ' + syncData.sync_error);
+    if (syncData.link_error)      problems.push('Link: ' + syncData.link_error);
+    if (syncData.recompute_error) problems.push('Recompute: ' + syncData.recompute_error);
+    if (syncData.success === false && !problems.length) problems.push(syncData.error || 'Unknown error');
+
+    if (problems.length) {
+      throw new Error(problems.join(' | '));
     }
 
-    erpShowToast('✅ Sync complete! ' + syncData.synced + ' rows, ' +
-                 syncData.statusChanges + ' status updates', 'success');
+    var msg = 'Sync complete — ' + (syncData.synced || 0) + ' PO rows from sheet, ' +
+              (syncData.statusChanges || 0) + ' status updates' +
+              (syncData.elapsed_ms ? ' (' + Math.round(syncData.elapsed_ms / 1000) + 's)' : '');
+    // 0 rows read from the sheet is not "success" — it usually means nothing was matched
+    erpShowToast((syncData.synced ? '✅ ' : '⚠️ ') + msg + (syncData.synced ? '' : '. Walang nabasang PO row sa sheet.'),
+                 syncData.synced ? 'success' : 'warning');
+    try { localStorage.setItem('prf_last_sync', new Date().toISOString()); } catch (e) {}
 
     await prfMonitorLoad();
 
