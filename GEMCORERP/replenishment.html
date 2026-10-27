@@ -251,6 +251,7 @@ tr.row-stale { border-left-color:#dc2626; background:#fff7f7; color:#475569; }
     </div>
   </div>
 
+  <div id="rpReadyBanner" class="alert alert-warning py-2 small" style="display:none;"></div>
   <div id="rpStaleBanner" class="rp-stale-banner" style="display:none;"></div>
 
   <!-- FILTERS -->
@@ -343,12 +344,14 @@ tr.row-stale { border-left-color:#dc2626; background:#fff7f7; color:#475569; }
           <tr>
             <th style="width:3%"><input type="checkbox" id="rpSelectAllChk" onchange="rpToggleSelectAll(this.checked)"></th>
             <th style="width:9%" data-sort="code">Item Code</th>
-            <th style="width:16%" data-sort="desc">Description</th>
+            <th style="width:13%" data-sort="desc">Description</th>
             <th style="width:6%" class="text-center" data-sort="cat">Category</th>
             <th style="width:6%" data-sort="loc">Location</th>
             <th style="width:5%" class="text-end" data-sort="onhand">On-Hand</th>
+            <th style="width:5%" class="text-end" data-sort="reserved" title="Naka-reserve sa SOF">Reserved</th>
             <th style="width:5%" class="text-end" data-sort="buffer">Buffer</th>
             <th style="width:5%" class="text-end" data-sort="ave">Ave/Mo</th>
+            <th style="width:5%" class="text-center" data-sort="cover" title="Available ÷ arawang konsumo">Cover</th>
             <th style="width:8%" class="text-center" data-sort="active" title="Months with actual usage / movement class">Active Mo.</th>
             <th style="width:5%" class="text-end" data-sort="qneeded">Qty Needed</th>
             <th style="width:7%" class="text-center">On Order</th>
@@ -359,7 +362,7 @@ tr.row-stale { border-left-color:#dc2626; background:#fff7f7; color:#475569; }
           </tr>
         </thead>
         <tbody id="rpTableBody">
-          <tr><td colspan="15" class="erp-empty">
+          <tr><td colspan="17" class="erp-empty">
             <div class="erp-spinner"></div>
             <div class="mt-2">Loading replenishment needs...</div>
           </td></tr>
