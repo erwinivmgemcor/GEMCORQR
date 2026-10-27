@@ -270,8 +270,12 @@ function rpMovClass(m) {
 function rpComputeKPIs() {
   var critical = 0, urgent = 0, warning = 0, totalCost = 0, needsCount = 0;
 
+  // KPIs follow the Active-Months filter, so the cards match what the table can actually order
+  var actSel = document.getElementById('rpActiveFilter');
+  var actF = actSel ? actSel.value : '';
   _rp.allItems.forEach(function(it) {
     if (rpIsCovered(it)) return;
+    if (actF && _rp.hasActivity && !rpActiveMatch(it, actF)) return;
     needsCount++;
     var u = String(it.urgency || '').toUpperCase();
     if (u === 'CRITICAL') critical++;
@@ -509,6 +513,7 @@ function rpRender() {
   });
 
   _rp.filteredItems = _rp.hasActivity || !activeFilter ? base.filter(function(it) { return rpActiveMatch(it, activeFilter); }) : base;
+  rpComputeKPIs();
   rpSortItems(_rp.filteredItems, sortBy);
   rpRenderChips(base, activeFilter);
   rpRenderStaleBanner();
