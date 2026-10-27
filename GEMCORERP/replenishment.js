@@ -117,14 +117,16 @@ async function rpLoad() {
   var alertEl = document.getElementById('rpSetupAlert');
   if (alertEl) alertEl.style.display = 'none';
   if (tbody && _rp.allItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="15" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="17" class="erp-empty">' +
       '<div class="erp-spinner"></div>' +
       '<div class="mt-2">Loading replenishment needs...</div></td></tr>';
   }
 
   try {
     var res = await Promise.all([
-      erpFetchAll('erp_v_reorder_net', 'select=*&order=item_code.asc'),
+      // v2 view (SOF reservation + days of cover); falls back to the old view if it is not installed yet
+      erpFetchAll('erp_v_reorder_plan', 'select=*&order=item_code.asc')
+        .catch(function(e) { console.warn('[rpLoad] erp_v_reorder_plan unavailable, using erp_v_reorder_net:', e.message); return erpFetchAll('erp_v_reorder_net', 'select=*&order=item_code.asc'); }),
       // usage history lives on the item master — the Needs view does not carry it
       erpFetchAll('erp_items', 'select=item_code,active_consumption_months,inventory_movement,abc_classification&order=item_code.asc')
         .catch(function(e) { console.warn('[rpLoad] active-months data unavailable:', e.message); return null; })
@@ -149,6 +151,7 @@ async function rpLoad() {
     });
 
     rpPopulateFilters();
+    rpRenderReadyBanner();
     rpComputeKPIs();
     _rp.currentPage = 1;
     rpRender();
@@ -165,7 +168,7 @@ async function rpLoad() {
       alertEl.style.display = 'block';
     }
     if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="15" class="erp-empty text-danger">' +
+      tbody.innerHTML = '<tr><td colspan="17" class="erp-empty text-danger">' +
         'Failed: ' + rpEsc(msg) + '</td></tr>';
     }
   }
@@ -253,6 +256,34 @@ function rpShowStale() {
   rpLsSet('rp_active_filter', '');
   _rp.currentPage = 1;
   rpRender();
+}
+
+// ── v2 columns: SOF-reserved stock and days of cover ───────
+function rpReservedCell(it) {
+  var r = Number(it.reserved_qty || 0);
+  if (!(r > 0)) return '<span class="text-muted">—</span>';
+  return '<span class="text-warning fw-bold" title="Naka-reserve sa SOF. Available lang: ' + rpEsc(rpNum(Number(it.available || 0))) + '">' + rpNum(r) + '</span>';
+}
+function rpCoverCell(it) {
+  var d = it.days_of_cover;
+  if (d === undefined) return '<span class="text-muted">—</span>';
+  if (d === null) return '<span class="text-muted" title="Walang average na konsumo">n/a</span>';
+  d = Number(d);
+  var cls = d <= 0 ? 'text-danger fw-bold' : d <= 14 ? 'text-danger' : d <= 28 ? 'text-warning' : 'text-success';
+  return '<span class="' + cls + '" title="Available ÷ arawang konsumo">' + (d <= 0 ? '0' : rpNum(d)) + ' d</span>';
+}
+
+// Warn when almost everything is at zero — usually means the Stock Cutover is not uploaded yet
+function rpRenderReadyBanner() {
+  var el = document.getElementById('rpReadyBanner');
+  if (!el) return;
+  var n = _rp.allItems.length;
+  var zero = _rp.allItems.filter(function(it) { return Number(it.on_hand || 0) <= 0; }).length;
+  if (n >= 200 && zero / n >= 0.9) {
+    el.innerHTML = '<i class="bi bi-exclamation-octagon-fill me-2"></i><strong>Mukhang hindi pa kumpleto ang stock data.</strong> ' +
+      rpNum(zero) + ' sa ' + rpNum(n) + ' item ang zero ang on-hand. Siguraduhing na-upload na ang Stock Cutover bago gumawa ng PRF — hindi pa tunay ang mga numerong ito.';
+    el.style.display = 'block';
+  } else el.style.display = 'none';
 }
 
 function rpMovClass(m) {
@@ -377,6 +408,8 @@ var RP_SORT_GET = {
   buffer:  function(it) { return Number(it.buffer_stock || 0); },
   ave:     function(it) { return Number(it.ave_monthly_consumption || 0); },
   active:  function(it) { var a = rpActive(it); return a === null ? -1 : a; },
+  reserved: function(it) { return Number(it.reserved_qty || 0); },
+  cover:   function(it) { return it.days_of_cover === null || it.days_of_cover === undefined ? 1e9 : Number(it.days_of_cover); },
   mov:     function(it) { return String(it.inventory_movement || '').toLowerCase(); },
   qneeded: function(it) { return Number(it.qty_needed || 0); },
   net:     function(it) { return rpNetNeeded(it); },
@@ -452,9 +485,9 @@ function rpRenderChips(base, activeVal) {
   }
   box.innerHTML = '<span class="rp-chips-label">Usage history</span>' +
     chip('', 'All', c.all, '') +
-    chip('ge:3', '≥ 3 months', c.ge3, 'good') +
-    chip('r12', '1–2 months only', c.r12, 'warn') +
-    chip('zero', 'No usage', c.zero, 'bad');
+    chip('ge:3', 'Order now · ≥ 3 months', c.ge3, 'good') +
+    chip('r12', 'Verify buffer · 1–2 months', c.r12, 'warn') +
+    chip('zero', 'Don\'t order · no usage', c.zero, 'bad');
   var st = rpStaleCount();
   if (st > 0) {
     box.innerHTML += '<span class="rp-chips-label" style="margin-left:14px;">On order</span>' +
@@ -551,7 +584,7 @@ function rpRender() {
   }
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="15" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="17" class="erp-empty">' +
       '<i class="bi bi-check-circle fs-2 d-block mb-2 text-success"></i>' +
       (orderFilter === 'needs' && !activeFilter && !search && !catFilter && !locFilter && !urgFilter
         ? 'Nothing left to order — everything below buffer is already on a PRF or stock is healthy.'
@@ -600,8 +633,10 @@ function rpRender() {
       '<td class="text-center"><span class="cat-badge">' + rpEsc(it.category || '—') + '</span></td>' +
       '<td>' + rpEsc(rpTruncate(it.location || '—', 18)) + '</td>' +
       '<td class="text-end fw-bold">' + rpNum(it.on_hand) + '</td>' +
+      '<td class="text-end">' + rpReservedCell(it) + '</td>' +
       '<td class="text-end">' + rpNum(it.buffer_stock) + '</td>' +
       '<td class="text-end">' + rpNum(it.ave_monthly_consumption) + '</td>' +
+      '<td class="text-center">' + rpCoverCell(it) + '</td>' +
       '<td class="text-center">' + amCell + '<div style="margin-top:3px;">' + movCell + '</div></td>' +
       '<td class="text-end">' + rpNum(it.qty_needed) + '</td>' +
       '<td class="text-center">' + onOrderCell + '</td>' +
@@ -785,7 +820,8 @@ function rpOpenInfo(it) {
 
 // Suggested qty = (buffer − on-hand) − already on order, never below 0
 function rpSuggested(it) {
-  var need = Math.max(Number(it.buffer_stock || 0) - Number(it.on_hand || 0), 0);
+  var avail = it.available !== undefined && it.available !== null ? Number(it.available) : Number(it.on_hand || 0);
+  var need = Math.max(Number(it.buffer_stock || 0) - avail, 0);
   return Math.ceil(Math.max(need - rpOpenInfo(it).qty, 0));
 }
 
@@ -1188,7 +1224,7 @@ function rpExport() {
 
   var headers = ['Item Code', 'Description', 'Category', 'Location', 'Unit',
                  'On-Hand', 'Buffer Stock', 'Ave Monthly', 'Qty Needed', 'On Order',
-                 'Open PRF(s)', 'Net Needed', 'Unit Cost', 'Net Est. Cost', 'Urgency', 'Active Months', 'Movement', 'Oldest Open PRF (days)', 'Stale'];
+                 'Open PRF(s)', 'Net Needed', 'Unit Cost', 'Net Est. Cost', 'Urgency', 'Active Months', 'Movement', 'Oldest Open PRF (days)', 'Stale', 'Reserved (SOF)', 'Days of Cover'];
   var rows = _rp.filteredItems.map(function(it) {
     return [
       it.item_code || '',
@@ -1209,7 +1245,9 @@ function rpExport() {
       rpActive(it) === null ? '' : rpActive(it),
       it.inventory_movement || '',
       rpAge(it) === null ? '' : rpAge(it),
-      rpIsStale(it) ? 'YES' : ''
+      rpIsStale(it) ? 'YES' : '',
+      Number(it.reserved_qty || 0),
+      it.days_of_cover === undefined || it.days_of_cover === null ? '' : Number(it.days_of_cover)
     ];
   });
 
