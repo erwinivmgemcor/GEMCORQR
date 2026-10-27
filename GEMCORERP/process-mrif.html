@@ -224,17 +224,29 @@
       <div class="modal-body">
         <div class="alert alert-info small py-2 mb-3">
           <i class="bi bi-info-circle me-1"></i>
-          Applying qty to <strong id="batchCount">0</strong> selected item(s).
+          Applying to <strong id="batchCount">0</strong> selected item(s).
         </div>
-        <div class="mb-3">
-          <label class="form-label fw-bold">Qty for All Selected</label>
-          <input type="number" class="form-control form-control-lg" id="batchQtyInput" min="0" step="0.01" autocomplete="off">
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="radio" name="batchMode" id="batchModeRequested" value="requested" checked>
+          <label class="form-check-label fw-bold" for="batchModeRequested">
+            Requested qty ng bawat item
+            <span class="d-block small text-muted fw-normal">Kung ilan ang nirequest, ganoon din ang i-issue. Para sa mga available lahat.</span>
+          </label>
+        </div>
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="radio" name="batchMode" id="batchModeCustom" value="custom">
+          <label class="form-check-label fw-bold" for="batchModeCustom">
+            Custom qty para sa lahat
+          </label>
+        </div>
+        <div class="mb-3 d-none" id="batchCustomWrap">
+          <input type="number" class="form-control form-control-lg" id="batchQtyInput" min="0" step="0.01" autocomplete="off" placeholder="Qty">
           <div class="form-text">Qty will be capped at requested qty per item</div>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="confirmBatchVerify()">
+        <button type="button" class="btn btn-primary" id="btnBatchApply" onclick="confirmBatchVerify()">
           <i class="bi bi-check-all me-1"></i>Apply to All
         </button>
       </div>
