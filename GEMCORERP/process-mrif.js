@@ -384,6 +384,20 @@ function toggleSelectAllCheckbox(checked) {
   renderItems();
 }
 
+function batchMode() {
+  var el = document.querySelector('input[name="batchMode"]:checked');
+  return el ? el.value : 'requested';
+}
+
+function onBatchModeChange() {
+  var custom = batchMode() === 'custom';
+  document.getElementById('batchCustomWrap').classList.toggle('d-none', !custom);
+  if (custom) {
+    var input = document.getElementById('batchQtyInput');
+    input.focus();
+  }
+}
+
 function openBatchVerify() {
   var selectedCount = _process.items.filter(function(it) { return it.selected; }).length;
   if (selectedCount === 0) {
@@ -392,25 +406,48 @@ function openBatchVerify() {
   }
   document.getElementById('batchCount').textContent = selectedCount;
   document.getElementById('batchQtyInput').value = '';
-  var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('batchModal'));
+  // Default: requested qty ng bawat item (less hassle sa warehouse)
+  document.getElementById('batchModeRequested').checked = true;
+  onBatchModeChange();
+
+  var modalEl = document.getElementById('batchModal');
+  if (!modalEl.dataset.bound) {
+    modalEl.dataset.bound = '1';
+    document.querySelectorAll('input[name="batchMode"]').forEach(function(r) {
+      r.addEventListener('change', onBatchModeChange);
+    });
+    // Enter = Apply
+    modalEl.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); confirmBatchVerify(); }
+    });
+  }
+  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
   modal.show();
   setTimeout(function() {
-    var input = document.getElementById('batchQtyInput');
-    input.focus();
+    var btn = document.getElementById('btnBatchApply');
+    if (btn && batchMode() === 'requested') btn.focus();
   }, 300);
 }
 
 function confirmBatchVerify() {
-  var qty = parseFloat(document.getElementById('batchQtyInput').value) || 0;
-  if (qty < 0) {
-    erpShowToast('Invalid quantity', 'warning');
-    return;
+  var mode = batchMode();
+  var customQty = 0;
+
+  if (mode === 'custom') {
+    var raw = document.getElementById('batchQtyInput').value;
+    customQty = parseFloat(raw);
+    if (raw === '' || isNaN(customQty) || customQty < 0) {
+      erpShowToast('Maglagay ng valid na quantity', 'warning');
+      return;
+    }
   }
 
   var applied = 0;
   _process.items.forEach(function(it) {
     if (it.selected) {
-      it.issuedQty = Math.min(qty, it.requestedQty);
+      it.issuedQty = (mode === 'requested')
+        ? Number(it.requestedQty)
+        : Math.min(customQty, Number(it.requestedQty));
       it.verified = true;
       it.selected = false;
       applied++;
@@ -419,7 +456,7 @@ function confirmBatchVerify() {
 
   bootstrap.Modal.getInstance(document.getElementById('batchModal')).hide();
   renderItems();
-  erpShowToast('✓ ' + applied + ' item(s) verified', 'success');
+  erpShowToast('✓ ' + applied + ' item(s) verified' + (mode === 'requested' ? ' (requested qty)' : ''), 'success');
 }
 
 // ═══════════════════════════════════════════════════════════
