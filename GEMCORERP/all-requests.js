@@ -3,7 +3,22 @@
 // Shows all production requests for processing
 // ============================================================
 
+// ═══════════════════════════════════════════════════════════
+// WHO HANDLES WHICH CATEGORY — edit here when assignments change.
+// Key = full name as shown top-right (UPPERCASE). A person can have more than one category.
+// Anyone not listed here (e.g. managers, admins) simply sees all requests by default.
+// ═══════════════════════════════════════════════════════════
+var AR_ASSIGNMENTS = {
+  'ERWIN SISTER': ['COMPONENTS'],
+  'RICHEL LAYA':  ['CONSUMABLES'],
+  'JOMAR BANDA':  ['FABMAT']
+};
+var AR_CATEGORIES = ['COMPONENTS', 'CONSUMABLES', 'FABMAT', 'OTHER'];
+
 var _allRequests = {
+  catByDoc: {},       // doc_no -> { COMPONENTS: n, ... }
+  itemCat: {},        // item_code -> category
+  renderToken: 0,
   allDocs: [],
   filteredDocs: [],
   currentPage: 1,
@@ -19,9 +34,111 @@ document.addEventListener('DOMContentLoaded', function() {
   console.log('[All Requests] Initializing...');
   
   allRequestsCheckHealth();
+  allRequestsInitCatFilter();
   allRequestsLoad();
   allRequestsPopulateDeptFilter();
 });
+
+// ═══════════════════════════════════════════════════════════
+// CATEGORY (Components / Consumables / Fabmat)
+// ═══════════════════════════════════════════════════════════
+function arNormCat(c) {
+  var t = String(c || '').toUpperCase().trim();
+  if (t.indexOf('COMPONENT') === 0) return 'COMPONENTS';
+  if (t.indexOf('CONSUMABLE') === 0) return 'CONSUMABLES';
+  if (t.indexOf('FABMAT') === 0 || t.indexOf('FAB MAT') === 0) return 'FABMAT';
+  return 'OTHER';
+}
+
+function arMyCats() {
+  var name = '';
+  try { name = (localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || ''); } catch (e) {}
+  return AR_ASSIGNMENTS[String(name).toUpperCase().trim()] || [];
+}
+
+function allRequestsInitCatFilter() {
+  var sel = document.getElementById('allCatFilter');
+  if (!sel) return;
+  var mine = arMyCats();
+  var html = '<option value="">All Categories</option>';
+  if (mine.length) html += '<option value="MINE">★ Mine (' + mine.join(' + ') + ')</option>';
+  AR_CATEGORIES.forEach(function(c) { html += '<option value="' + c + '">' + c + '</option>'; });
+  sel.innerHTML = html;
+  var saved = '';
+  try { saved = localStorage.getItem('ar_cat_filter') || ''; } catch (e) {}
+  // default: people with an assignment start on their own category
+  var start = saved && (saved !== 'MINE' || mine.length) ? saved : (mine.length ? 'MINE' : '');
+  sel.value = start;
+  if (sel.value !== start) sel.value = '';
+}
+
+function allRequestsOnCatChange() {
+  try { localStorage.setItem('ar_cat_filter', document.getElementById('allCatFilter').value); } catch (e) {}
+  _allRequests.currentPage = 1;
+  allRequestsRender();
+}
+
+function arCatFilterValue() {
+  var el = document.getElementById('allCatFilter');
+  return el ? el.value : '';
+}
+
+// does this request contain the wanted category (or any of my categories)?
+function arDocHasCat(docNo, filter) {
+  var c = _allRequests.catByDoc[docNo];
+  if (!c) return false;
+  if (filter === 'MINE') return arMyCats().some(function(m) { return c[m] > 0; });
+  return c[filter] > 0;
+}
+
+// Load the categories of the given requests (doc_items → erp_items). Returns true when something new was loaded.
+async function allRequestsEnsureCats(docs) {
+  var missing = [];
+  (docs || []).forEach(function(d) { if (d.doc_no && !_allRequests.catByDoc[d.doc_no]) missing.push(d.doc_no); });
+  if (!missing.length) return false;
+
+  try {
+    var lines = [];
+    for (var i = 0; i < missing.length; i += 60) {
+      var chunk = missing.slice(i, i + 60).map(function(n) { return '"' + String(n).replace(/"/g, '') + '"'; }).join(',');
+      var part = await erpFetchAll('doc_items', 'select=doc_no,item_code&doc_no=in.(' + encodeURIComponent(chunk) + ')&order=doc_no.asc');
+      lines = lines.concat(part || []);
+    }
+    var needCodes = {};
+    lines.forEach(function(l) { if (l.item_code && _allRequests.itemCat[l.item_code] === undefined) needCodes[l.item_code] = true; });
+    var codes = Object.keys(needCodes);
+    for (var k = 0; k < codes.length; k += 120) {
+      var cc = codes.slice(k, k + 120).map(function(c) { return '"' + String(c).replace(/"/g, '') + '"'; }).join(',');
+      var rows = await erpFetchAll('erp_items', 'select=item_code,category&item_code=in.(' + encodeURIComponent(cc) + ')&order=item_code.asc');
+      (rows || []).forEach(function(r) { _allRequests.itemCat[r.item_code] = arNormCat(r.category); });
+    }
+    missing.forEach(function(n) { _allRequests.catByDoc[n] = {}; });
+    lines.forEach(function(l) {
+      var cat = _allRequests.itemCat[l.item_code] || 'OTHER';
+      var m = _allRequests.catByDoc[l.doc_no];
+      if (m) m[cat] = (m[cat] || 0) + 1;
+    });
+    return true;
+  } catch (e) {
+    console.warn('[All Requests] categories unavailable:', e.message);
+    missing.forEach(function(n) { _allRequests.catByDoc[n] = { _err: 1 }; });
+    return false;
+  }
+}
+
+function arCatCellHtml(docNo) {
+  var c = _allRequests.catByDoc[docNo];
+  if (!c) return '<span class="text-muted small">…</span>';
+  if (c._err) return '<span class="text-muted small" title="Could not load categories">n/a</span>';
+  var mine = arMyCats();
+  var keys = AR_CATEGORIES.filter(function(k) { return c[k] > 0; });
+  if (!keys.length) return '<span class="text-muted small">—</span>';
+  return keys.map(function(k) {
+    var isMine = mine.indexOf(k) !== -1;
+    return '<span class="ar-cat ' + k + (isMine ? ' mine' : '') + '" title="' + c[k] + ' item(s) ' + k + (isMine ? ' — yours' : '') + '">' +
+      (isMine ? '★ ' : '') + k + ' · ' + c[k] + '</span>';
+  }).join('');
+}
 
 async function allRequestsCheckHealth() {
   var badge = document.getElementById('erpHealthBadge');
@@ -78,7 +195,7 @@ async function allRequestsLoad() {
   var tbody = document.getElementById('allTableBody');
   if (!tbody) return;
   
-  tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
+  tbody.innerHTML = '<tr><td colspan="10" class="erp-empty">' +
     '<div class="erp-spinner"></div>' +
     '<div class="mt-2">Loading requests...</div></td></tr>';
   
@@ -141,7 +258,7 @@ async function allRequestsLoad() {
     
   } catch(err) {
     console.error('[allRequestsLoad]', err);
-    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty text-danger">' +
+    tbody.innerHTML = '<tr><td colspan="10" class="erp-empty text-danger">' +
       'Failed: ' + erpEsc(err.message) + '</td></tr>';
   }
 }
@@ -171,13 +288,36 @@ function allRequestsComputeKPIs() {
   document.getElementById('allKpiCompletedToday').textContent = completedToday;
 }
 
-function allRequestsRender() {
+// Wrapper: when a category filter is active we need every request's categories first
+async function allRequestsRender() {
+  var tok = ++_allRequests.renderToken;
+  var f = arCatFilterValue();
+  if (f) {
+    var tbody0 = document.getElementById('allTableBody');
+    if (tbody0 && _allRequests.allDocs.some(function(d) { return !_allRequests.catByDoc[d.doc_no]; })) {
+      tbody0.innerHTML = '<tr><td colspan="10" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Checking categories...</div></td></tr>';
+    }
+    await allRequestsEnsureCats(_allRequests.allDocs);
+    if (tok !== _allRequests.renderToken) return;
+  }
+  allRequestsRenderNow();
+  // fill the Category column for the rows on screen (and the "for you" banner) if not loaded yet
+  var start = (_allRequests.currentPage - 1) * _allRequests.pageSize;
+  var visible = _allRequests.filteredDocs.slice(start, start + _allRequests.pageSize);
+  var changed = await allRequestsEnsureCats(visible);
+  if (tok !== _allRequests.renderToken) return;
+  if (changed) allRequestsRenderNow();
+}
+
+function allRequestsRenderNow() {
   var tbody = document.getElementById('allTableBody');
   if (!tbody) return;
   
   var search = (document.getElementById('allSearchInput').value || '').toLowerCase().trim();
   
+  var catFilter = arCatFilterValue();
   _allRequests.filteredDocs = _allRequests.allDocs.filter(function(d) {
+    if (catFilter && !arDocHasCat(d.doc_no, catFilter)) return false;
     if (!search) return true;
     var docNo = String(d.doc_no || '').toLowerCase();
     var req = String(d.requestor || '').toLowerCase();
@@ -200,7 +340,7 @@ function allRequestsRender() {
   document.getElementById('allBtnNext').disabled = (end >= total);
   
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="10" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No requests found.</td></tr>';
     return;
@@ -222,12 +362,13 @@ function allRequestsRender() {
     
     var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
     
-    html += '<tr>' +
+    html += '<tr' + (arIsMine(d.doc_no) ? ' class="ar-mine"' : '') + '>' +
       '<td><code>' + erpEsc(d.doc_no) + '</code></td>' +
       '<td>' + erpEsc(dateStr) + '</td>' +
       '<td>' + erpEsc(d.requestor || '—') + '</td>' +
       '<td>' + erpEsc(d.department || '—') + '</td>' +
       '<td class="text-center"><span class="badge ' + typeBadge + '">' + typeUpper + '</span></td>' +
+      '<td class="text-center">' + arCatCellHtml(d.doc_no) + '</td>' +
       '<td>' + erpEsc(d.jo_no || '—') + '</td>' +
       '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span></td>' +
       '<td class="text-center">' + (d.item_count || 0) + '</td>' +
@@ -239,6 +380,38 @@ function allRequestsRender() {
       '</tr>';
   });
   tbody.innerHTML = html;
+  allRequestsRenderMineBanner();
+}
+
+function arIsMine(docNo) {
+  var mine = arMyCats();
+  var c = _allRequests.catByDoc[docNo];
+  return !!(mine.length && c && mine.some(function(m) { return c[m] > 0; }));
+}
+
+// "For you" banner: how many active requests contain my category
+function allRequestsRenderMineBanner() {
+  var el = document.getElementById('allMineBanner');
+  if (!el) return;
+  var mine = arMyCats();
+  if (!mine.length) { el.style.display = 'none'; return; }
+  var active = _allRequests.allDocs.filter(function(d) {
+    var s = String(d.status || '').toUpperCase();
+    return s === 'PENDING' || s === 'PARTIAL';
+  });
+  var known = active.filter(function(d) { return _allRequests.catByDoc[d.doc_no]; });
+  var mineN = known.filter(function(d) { return arIsMine(d.doc_no); }).length;
+  var unknown = active.length - known.length;
+  var filtering = arCatFilterValue() === 'MINE';
+  el.style.display = 'block';
+  el.style.background = mineN ? '#e0f2fe' : '#f1f5f9';
+  el.style.border = '1px solid ' + (mineN ? '#7dd3fc' : '#e2e8f0');
+  el.innerHTML = '<i class="bi bi-star-fill me-2" style="color:#0ea5e9;"></i>' +
+    '<strong>' + (mineN ? mineN + ' active request' + (mineN === 1 ? '' : 's') + ' for you' : 'Nothing waiting for you right now') + '</strong> ' +
+    '<span class="text-muted">(' + mine.join(' + ') + ')' + (unknown ? ' · checking ' + unknown + ' more…' : '') + '</span> ' +
+    (filtering
+      ? '<a href="javascript:void(0)" onclick="document.getElementById(\'allCatFilter\').value=\'\';allRequestsOnCatChange()">Show all categories</a>'
+      : '<a href="javascript:void(0)" onclick="document.getElementById(\'allCatFilter\').value=\'MINE\';allRequestsOnCatChange()">Show only mine</a>');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -271,6 +444,19 @@ async function viewRequestDetails(docNo, docType) {
     var items = itemsRes || [];
     
     _allRequests.currentDoc = { doc: doc, items: items };
+
+    // category of each line
+    var unk = {};
+    items.forEach(function(it) { if (it.item_code && _allRequests.itemCat[it.item_code] === undefined) unk[it.item_code] = true; });
+    var unkCodes = Object.keys(unk);
+    if (unkCodes.length) {
+      try {
+        var cq = unkCodes.slice(0, 300).map(function(c) { return '"' + String(c).replace(/"/g, '') + '"'; }).join(',');
+        var cr = await erpFetchAll('erp_items', 'select=item_code,category&item_code=in.(' + encodeURIComponent(cq) + ')&order=item_code.asc');
+        (cr || []).forEach(function(r) { _allRequests.itemCat[r.item_code] = arNormCat(r.category); });
+      } catch (ce) { console.warn('[viewRequestDetails] categories unavailable:', ce.message); }
+    }
+    var myCats = arMyCats();
     
     // Build content
     var html = '';
@@ -292,7 +478,7 @@ async function viewRequestDetails(docNo, docType) {
     html += '<div class="table-responsive">';
     html += '<table class="erp-table" style="font-size:0.85rem;">';
     html += '<thead><tr>' +
-      '<th>#</th><th>Item Code</th><th>Description</th>' +
+      '<th>#</th><th>Item Code</th><th>Description</th><th class="text-center">Category</th>' +
       '<th class="text-center">Req Qty</th>' +
       '<th class="text-center">Issued Qty</th>' +
       '<th class="text-center">Unit</th>' +
@@ -300,13 +486,19 @@ async function viewRequestDetails(docNo, docType) {
       '</tr></thead><tbody>';
     
     if (items.length === 0) {
-      html += '<tr><td colspan="7" class="text-center text-muted py-3">No items</td></tr>';
+      html += '<tr><td colspan="8" class="text-center text-muted py-3">No items</td></tr>';
     } else {
       items.forEach(function(it, idx) {
         html += '<tr>' +
           '<td>' + (idx + 1) + '</td>' +
           '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
           '<td>' + erpEsc(it.description || '—') + '</td>' +
+          '<td class="text-center">' + (function() {
+            var k = _allRequests.itemCat[it.item_code];
+            if (!k) return '<span class="text-muted">—</span>';
+            var mn = myCats.indexOf(k) !== -1;
+            return '<span class="ar-cat ' + k + (mn ? ' mine' : '') + '">' + (mn ? '★ ' : '') + k + '</span>';
+          })() + '</td>' +
           '<td class="text-center">' + (it.requested_qty || 0) + '</td>' +
           '<td class="text-center">' + (it.issued_qty || 0) + '</td>' +
           '<td class="text-center">' + erpEsc(it.unit || '—') + '</td>' +
@@ -376,6 +568,8 @@ function allRequestsClearFilters() {
   document.getElementById('allDeptFilter').value = '';
   document.getElementById('allDateFrom').value = '';
   document.getElementById('allDateTo').value = '';
+  try { localStorage.removeItem('ar_cat_filter'); } catch (e) {}
+  allRequestsInitCatFilter();
   _allRequests.currentPage = 1;
   allRequestsLoad();
 }
