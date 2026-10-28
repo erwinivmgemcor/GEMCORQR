@@ -1,7 +1,7 @@
 // ============================================================
 // GEMCOR ERP — Barcode / QR Generator (v1.0)
 // Batch QR label printing for warehouse items
-// Label: 2" x 1" (Avery 5163) — 4 cols × 10 rows per sheet
+// Label layout is adjustable (size, grid, paper, QR/text size) — default 2" x 1", 4 cols × 10 rows
 // ============================================================
 
 var _bg = {
@@ -30,6 +30,11 @@ var _bg = {
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
   console.log('[Barcode Generator v1.0] Initializing...');
+
+  bgLoadLayout();
+  bgBuildPresetOptions();
+  bgSyncLayoutInputs();
+  bgApplyLayout();
 
   bgCheckHealth();
   bgLoad();
@@ -267,7 +272,7 @@ function bgSelectAllFiltered() {
     var proceed = confirm(
       'You are about to select ' + totalFiltered + ' items.\n\n' +
       '⚠️ Warning: Printing ' + totalFiltered + ' labels will use a lot of paper.\n' +
-      'Estimated sheets: ' + Math.ceil(totalFiltered / 40) + ' (Avery 5163)\n\n' +
+      'Estimated sheets: ' + Math.ceil(totalFiltered / bgPerSheet()) + ' (current layout)\n\n' +
       'Continue?'
     );
     if (!proceed) return;
@@ -551,7 +556,7 @@ function bgUpdateBatchControls() {
 
   // Summary
   if (summary) {
-    var sheets = Math.ceil(total / 40);
+    var sheets = Math.ceil(total / bgPerSheet());
     var msg = '<i class="bi bi-printer me-1"></i>';
     msg += '<strong>' + total + '</strong> labels total';
     if (_bg.batchMode === 'batched') {
@@ -629,21 +634,28 @@ function bgRenderLabelGrid(containerId, items) {
   var container = document.getElementById(containerId);
   if (!container) return;
 
+  var L = _bg.layout;
+  var per = bgPerSheet();
+  var qrPx = Math.max(100, Math.round(bgQrInches() * 200));
   var html = '';
-  items.forEach(function(it) {
-    var qrUrl = bgGetQrUrl(it.item_code, 100);
 
-    html += '<div class="bg-label">' +
-      '<div class="bg-label-qr">' +
-        '<img src="' + qrUrl + '" alt="QR" loading="lazy">' +
-      '</div>' +
-      '<div class="bg-label-info">' +
-        '<div class="bg-label-code">' + bgEsc(it.item_code) + '</div>' +
-        (it.description ? '<div class="bg-label-desc">' + bgEsc(bgTruncate(it.description, 60)) + '</div>' : '') +
-        (it.location ? '<div class="bg-label-loc"><i class="bi bi-geo-alt-fill"></i> ' + bgEsc(bgTruncate(it.location, 20)) + '</div>' : '') +
-      '</div>' +
-    '</div>';
-  });
+  for (var s = 0; s < items.length; s += per) {
+    html += '<div class="bg-sheet-page"><div class="bg-sheet-grid">';
+    items.slice(s, s + per).forEach(function(it) {
+      var qrUrl = bgGetQrUrl(it.item_code, qrPx);
+      html += '<div class="bg-label">' +
+        '<div class="bg-label-qr">' +
+          '<img src="' + qrUrl + '" alt="QR" loading="lazy">' +
+        '</div>' +
+        '<div class="bg-label-info">' +
+          '<div class="bg-label-code">' + bgEsc(it.item_code) + '</div>' +
+          (L.showDesc && it.description ? '<div class="bg-label-desc">' + bgEsc(bgTruncate(it.description, 60)) + '</div>' : '') +
+          (L.showLoc && it.location ? '<div class="bg-label-loc"><i class="bi bi-geo-alt-fill"></i> ' + bgEsc(bgTruncate(it.location, 20)) + '</div>' : '') +
+        '</div>' +
+      '</div>';
+    });
+    html += '</div></div>';
+  }
 
   container.innerHTML = html;
 
@@ -704,12 +716,12 @@ function bgPrintLabels() {
   var msg = '';
   if (_bg.batchMode === 'all') {
     msg = 'Print ALL ' + batchCount + ' labels?\n\n' +
-          '📄 Sheets needed: ~' + Math.ceil(batchCount / 40) + '\n' +
+          '📄 Sheets needed: ~' + Math.ceil(batchCount / bgPerSheet()) + '\n' +
           '⏱️ Estimated time: ' + Math.ceil(batchCount / 50) + ' seconds';
   } else {
     msg = 'Print Batch ' + (_bg.currentBatch + 1) + ' of ' + _bg.totalBatches + '?\n\n' +
           '📄 Labels in this batch: ' + batchCount + '\n' +
-          '📄 Sheets needed: ~' + Math.ceil(batchCount / 40) + '\n' +
+          '📄 Sheets needed: ~' + Math.ceil(batchCount / bgPerSheet()) + '\n' +
           '⏱️ Estimated time: ' + Math.ceil(batchCount / 50) + ' seconds';
   }
 
@@ -827,3 +839,213 @@ window.bgNextBatch = bgNextBatch;
 window.bgPrevBatch = bgPrevBatch;
 
 console.log('✅ barcode-generator.js v1.0 loaded');
+
+
+// ═══════════════════════════════════════════════════════════
+// RESIZABLE LAYOUT
+// Everything about the label sheet comes from _bg.layout.
+// bgApplyLayout() writes one <style> block (sheet, grid, label, QR, fonts, @page)
+// so preview and print always use the same numbers. Saved per browser.
+// ═══════════════════════════════════════════════════════════
+var BG_PAGES = {
+  letter: { w: 8.5,  h: 11,    name: 'Letter' },
+  a4:     { w: 8.27, h: 11.69, name: 'A4' }
+};
+
+var BG_PRESETS = {
+  current: { name: '2 × 1 in · 4 × 10 (current)', page: 'letter', w: 2,     h: 1,    cols: 4, rows: 10, gapX: 0,     gapY: 0, top: 0.5, left: 0.5,  qr: 0.65, fs: 100 },
+  a5160:   { name: 'Avery 5160 · 2.625 × 1 · 3 × 10', page: 'letter', w: 2.625, h: 1,    cols: 3, rows: 10, gapX: 0.125, gapY: 0, top: 0.5, left: 0.19, qr: 0.65, fs: 100 },
+  a5167:   { name: 'Avery 5167 · 1.75 × 0.5 · 4 × 20', page: 'letter', w: 1.75,  h: 0.5,  cols: 4, rows: 20, gapX: 0.3,   gapY: 0, top: 0.5, left: 0.3,  qr: 0.38, fs: 70 },
+  a5163:   { name: 'Avery 5163 · 4 × 2 · 2 × 5',       page: 'letter', w: 4,     h: 2,    cols: 2, rows: 5,  gapX: 0.19,  gapY: 0, top: 0.5, left: 0.16, qr: 1.5,  fs: 170 },
+  custom:  { name: 'Custom' }
+};
+
+function bgDefaultLayout() {
+  var p = BG_PRESETS.current;
+  return { preset: 'current', page: p.page, w: p.w, h: p.h, cols: p.cols, rows: p.rows, gapX: p.gapX, gapY: p.gapY,
+           top: p.top, left: p.left, qr: p.qr, fs: p.fs, showDesc: true, showLoc: true };
+}
+
+function bgLoadLayout() {
+  _bg.layout = bgDefaultLayout();
+  try {
+    var raw = localStorage.getItem('bg_layout_v1');
+    if (raw) {
+      var saved = JSON.parse(raw);
+      Object.keys(_bg.layout).forEach(function(k) { if (saved[k] !== undefined && saved[k] !== null) _bg.layout[k] = saved[k]; });
+      if (saved.qr === '' || saved.qr === null) _bg.layout.qr = '';
+    }
+  } catch (e) {}
+}
+
+function bgSaveLayout() {
+  try { localStorage.setItem('bg_layout_v1', JSON.stringify(_bg.layout)); } catch (e) {}
+}
+
+function bgNum(v, def, min, max) {
+  var n = parseFloat(v);
+  if (isNaN(n)) n = def;
+  if (min !== undefined && n < min) n = min;
+  if (max !== undefined && n > max) n = max;
+  return n;
+}
+
+function bgPerSheet() {
+  var L = _bg.layout || bgDefaultLayout();
+  return Math.max(1, Math.round(L.cols) * Math.round(L.rows));
+}
+
+// QR size in inches: user value, or auto (fits label height, never more than 45% of the width)
+function bgQrInches() {
+  var L = _bg.layout;
+  var pad = bgPad();
+  var auto = Math.min(L.h - 2 * pad, L.w * 0.45);
+  var q = (L.qr === '' || L.qr === null || L.qr === undefined) ? auto : bgNum(L.qr, auto, 0.2);
+  return Math.max(0.2, Math.min(q, L.h - 2 * pad, L.w - 2 * pad));
+}
+
+function bgPad() {
+  var L = _bg.layout;
+  return Math.max(0.02, Math.min(0.08, Math.min(L.w, L.h) * 0.08));
+}
+
+function bgBuildPresetOptions() {
+  var sel = document.getElementById('bgLyPreset');
+  if (!sel) return;
+  sel.innerHTML = Object.keys(BG_PRESETS).map(function(k) {
+    return '<option value="' + k + '">' + BG_PRESETS[k].name + '</option>';
+  }).join('');
+}
+
+function bgSyncLayoutInputs() {
+  var L = _bg.layout;
+  function set(id, v) { var el = document.getElementById(id); if (el) el.value = v; }
+  set('bgLyPreset', L.preset);
+  set('bgLyPage', L.page);
+  set('bgLyW', L.w); set('bgLyH', L.h);
+  set('bgLyCols', L.cols); set('bgLyRows', L.rows);
+  set('bgLyGapX', L.gapX); set('bgLyGapY', L.gapY);
+  set('bgLyTop', L.top); set('bgLyLeft', L.left);
+  set('bgLyQr', (L.qr === '' || L.qr === null) ? '' : L.qr);
+  set('bgLyFs', L.fs);
+  var d = document.getElementById('bgLyDesc'); if (d) d.checked = !!L.showDesc;
+  var l = document.getElementById('bgLyLoc');  if (l) l.checked = !!L.showLoc;
+  var fv = document.getElementById('bgLyFsVal'); if (fv) fv.textContent = Math.round(L.fs);
+}
+
+function bgReadLayoutInputs() {
+  var L = _bg.layout;
+  function val(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+  L.page = val('bgLyPage') || 'letter';
+  L.w    = bgNum(val('bgLyW'), 2, 0.4, 8);
+  L.h    = bgNum(val('bgLyH'), 1, 0.3, 10);
+  L.cols = Math.round(bgNum(val('bgLyCols'), 4, 1, 12));
+  L.rows = Math.round(bgNum(val('bgLyRows'), 10, 1, 40));
+  L.gapX = bgNum(val('bgLyGapX'), 0, 0, 2);
+  L.gapY = bgNum(val('bgLyGapY'), 0, 0, 2);
+  L.top  = bgNum(val('bgLyTop'), 0.5, 0, 3);
+  L.left = bgNum(val('bgLyLeft'), 0.5, 0, 3);
+  var q  = val('bgLyQr');
+  L.qr   = (q === '' || isNaN(parseFloat(q))) ? '' : bgNum(q, 0.65, 0.2, 6);
+  L.fs   = bgNum(val('bgLyFs'), 100, 50, 250);
+  var d = document.getElementById('bgLyDesc'); L.showDesc = d ? d.checked : true;
+  var l = document.getElementById('bgLyLoc');  L.showLoc  = l ? l.checked : true;
+}
+
+function bgOnPreset() {
+  var key = document.getElementById('bgLyPreset').value;
+  var p = BG_PRESETS[key];
+  if (p && key !== 'custom') {
+    _bg.layout = Object.assign(bgDefaultLayout(), {
+      preset: key, page: p.page, w: p.w, h: p.h, cols: p.cols, rows: p.rows, gapX: p.gapX, gapY: p.gapY,
+      top: p.top, left: p.left, qr: p.qr, fs: p.fs,
+      showDesc: _bg.layout.showDesc, showLoc: _bg.layout.showLoc
+    });
+  } else {
+    _bg.layout.preset = 'custom';
+  }
+  bgSyncLayoutInputs();
+  bgApplyLayout(true);
+}
+
+// any manual edit = Custom preset
+function bgOnLayoutInput() {
+  bgReadLayoutInputs();
+  _bg.layout.preset = 'custom';
+  var ps = document.getElementById('bgLyPreset'); if (ps) ps.value = 'custom';
+  var fv = document.getElementById('bgLyFsVal'); if (fv) fv.textContent = Math.round(_bg.layout.fs);
+  bgApplyLayout(true);
+}
+
+function bgFitToPage() {
+  bgReadLayoutInputs();
+  var L = _bg.layout, pg = BG_PAGES[L.page] || BG_PAGES.letter;
+  var availW = pg.w - L.left - 0.15, availH = pg.h - L.top - 0.15;
+  L.cols = Math.max(1, Math.floor((availW + L.gapX) / (L.w + L.gapX)));
+  L.rows = Math.max(1, Math.floor((availH + L.gapY) / (L.h + L.gapY)));
+  L.preset = 'custom';
+  bgSyncLayoutInputs();
+  bgApplyLayout(true);
+}
+
+function bgResetLayout() {
+  _bg.layout = bgDefaultLayout();
+  bgSyncLayoutInputs();
+  bgApplyLayout(true);
+}
+
+function bgApplyLayout(rerender) {
+  var L = _bg.layout;
+  var pg = BG_PAGES[L.page] || BG_PAGES.letter;
+  var pad = bgPad();
+  var qr = bgQrInches();
+  var fs = L.fs / 100;
+  var inn = function(n) { return (Math.round(n * 1000) / 1000) + 'in'; };
+
+  var css =
+    '.label-preview-sheet{width:auto!important;padding:0!important;margin:0 auto!important;background:transparent!important;box-shadow:none!important;}' +
+    '.label-sheet-grid{display:block!important;width:auto!important;height:auto!important;margin:0!important;}' +
+    '.bg-sheet-page{background:#fff;box-sizing:border-box;width:' + inn(pg.w) + ';height:' + inn(pg.h - 0.02) + ';' +
+      'padding:' + inn(L.top) + ' 0 0 ' + inn(L.left) + ';margin:0 auto 16px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.15);' +
+      'page-break-after:always;break-after:page;}' +
+    '.bg-sheet-page:last-child{page-break-after:auto;break-after:auto;}' +
+    '.bg-sheet-grid{display:grid;grid-template-columns:repeat(' + L.cols + ',' + inn(L.w) + ');grid-auto-rows:' + inn(L.h) + ';' +
+      'column-gap:' + inn(L.gapX) + ';row-gap:' + inn(L.gapY) + ';}' +
+    '.bg-label{width:' + inn(L.w) + '!important;height:' + inn(L.h) + '!important;padding:' + inn(pad) + '!important;gap:' + inn(pad) + '!important;}' +
+    '.bg-label-qr{width:' + inn(qr) + '!important;height:' + inn(qr) + '!important;}' +
+    '.bg-label-code{font-size:' + (8 * fs).toFixed(1) + 'pt!important;}' +
+    '.bg-label-desc{font-size:' + (6 * fs).toFixed(1) + 'pt!important;}' +
+    '.bg-label-loc{font-size:' + (6 * fs).toFixed(1) + 'pt!important;}' +
+    '@media print{@page{size:' + pg.w + 'in ' + pg.h + 'in;margin:0;}' +
+      '.bg-sheet-page{margin:0!important;box-shadow:none!important;}}';
+
+  var tag = document.getElementById('bgLayoutStyle');
+  if (!tag) { tag = document.createElement('style'); tag.id = 'bgLayoutStyle'; document.body.appendChild(tag); }
+  tag.textContent = css;
+
+  // summary badge + warnings
+  var per = bgPerSheet();
+  var badge = document.getElementById('bgLabelsPerSheet');
+  if (badge) badge.textContent = L.cols + ' cols × ' + L.rows + ' rows = ' + per + ' labels · ' + L.w + '" × ' + L.h + '" · ' + pg.name;
+
+  var usedW = L.left + L.cols * L.w + (L.cols - 1) * L.gapX;
+  var usedH = L.top + L.rows * L.h + (L.rows - 1) * L.gapY;
+  var warns = [];
+  if (usedW > pg.w + 0.001) warns.push('Columns are ' + (usedW - pg.w).toFixed(2) + ' in wider than the paper — reduce Columns/Label W/Left, or press Fit to page.');
+  if (usedH > pg.h - 0.02 + 0.001) warns.push('Rows are ' + (usedH - pg.h).toFixed(2) + ' in taller than the paper — reduce Rows/Label H/Top, or press Fit to page.');
+  if (qr > L.h - 2 * pad + 0.001 || qr > L.w - 2 * pad + 0.001) warns.push('QR is larger than the label.');
+  var info = document.getElementById('bgLyInfo');
+  if (info) {
+    info.innerHTML = warns.length
+      ? '<span class="text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>' + warns.join(' ') + '</span>'
+      : '<span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>Fits ' + pg.name + ' · uses ' + usedW.toFixed(2) + ' × ' + usedH.toFixed(2) + ' in · QR ' + qr.toFixed(2) + ' in</span>';
+  }
+
+  bgSaveLayout();
+
+  // refresh batch summary (sheet count) and sheets if a preview is open
+  if (rerender && _bg.printItems && _bg.printItems.length) {
+    bgUpdateBatchControls();
+    bgRenderCurrentBatch();
+  }
+}
