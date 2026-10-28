@@ -4,9 +4,10 @@
 // ============================================================
 
 // ═══════════════════════════════════════════════════════════
-// WHO HANDLES WHICH CATEGORY — edit here when assignments change.
-// Key = full name as shown top-right (UPPERCASE). A person can have more than one category.
-// Anyone not listed here (e.g. managers, admins) simply sees all requests by default.
+// WHO HANDLES WHICH CATEGORY
+// Normally this comes from the database (admins change it with the "Assign" button).
+// The list below is only a FALLBACK, used when the database part is not installed yet.
+// Key = full name as shown top-right (UPPERCASE).
 // ═══════════════════════════════════════════════════════════
 var AR_ASSIGNMENTS = {
   'ERWIN SISTER': ['COMPONENTS'],
@@ -16,6 +17,9 @@ var AR_ASSIGNMENTS = {
 var AR_CATEGORIES = ['COMPONENTS', 'CONSUMABLES', 'FABMAT', 'OTHER'];
 
 var _allRequests = {
+  assignByUser: {},   // username(lowercase) -> [categories]   (from the database)
+  assignRows: [],     // raw rows: {username, fullname, category, is_active}
+  assignSource: 'fallback',
   catByDoc: {},       // doc_no -> { COMPONENTS: n, ... }
   itemCat: {},        // item_code -> category
   renderToken: 0,
@@ -34,10 +38,58 @@ document.addEventListener('DOMContentLoaded', function() {
   console.log('[All Requests] Initializing...');
   
   allRequestsCheckHealth();
-  allRequestsInitCatFilter();
-  allRequestsLoad();
   allRequestsPopulateDeptFilter();
+  var assignBtn = document.getElementById('allAssignBtn');
+  if (assignBtn && arIsAdmin()) assignBtn.style.display = '';
+  // assignments first, so the default filter ("mine") is right on the first load
+  allRequestsLoadAssignments().then(function() {
+    allRequestsInitCatFilter();
+    allRequestsLoad();
+  });
 });
+
+function arIsAdmin() {
+  try { return localStorage.getItem('ivm_isAdmin') === 'true'; } catch (e) { return false; }
+}
+function arUsername() {
+  try { return String(localStorage.getItem('ivm_username') || ''); } catch (e) { return ''; }
+}
+
+// ── assignments from the database (RPC erp_get_category_assignments) ──
+async function allRequestsLoadAssignments() {
+  try {
+    var res = await fetch(erpUrl('rpc/erp_get_category_assignments'), { method: 'POST', headers: erpHeaders(), body: '{}' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var rows = await res.json();
+    var by = {};
+    (rows || []).forEach(function(r) {
+      if (r.is_active === false) return;
+      var u = String(r.username || '').toLowerCase();
+      (by[u] = by[u] || []).push(String(r.category || '').toUpperCase());
+    });
+    _allRequests.assignRows = rows || [];
+    _allRequests.assignByUser = by;
+    _allRequests.assignSource = 'db';
+  } catch (e) {
+    console.warn('[All Requests] assignments table not available, using built-in list:', e.message);
+    _allRequests.assignSource = 'fallback';
+  }
+  arRenderAssignWarn();
+}
+
+// admin-only warning: a category nobody handles (someone left / was reassigned)
+function arRenderAssignWarn() {
+  var el = document.getElementById('allAssignWarn');
+  if (!el) return;
+  if (!arIsAdmin() || _allRequests.assignSource !== 'db') { el.style.display = 'none'; return; }
+  var covered = {};
+  _allRequests.assignRows.forEach(function(r) { if (r.is_active !== false) covered[String(r.category).toUpperCase()] = true; });
+  var missing = ['COMPONENTS', 'CONSUMABLES', 'FABMAT'].filter(function(c) { return !covered[c]; });
+  if (!missing.length) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i><strong>No one is assigned to ' + missing.join(', ') + '.</strong> ' +
+    'Requests with these items have no owner. <a href="javascript:void(0)" onclick="arOpenAssignModal()">Assign now</a>';
+}
 
 // ═══════════════════════════════════════════════════════════
 // CATEGORY (Components / Consumables / Fabmat)
@@ -51,6 +103,9 @@ function arNormCat(c) {
 }
 
 function arMyCats() {
+  if (_allRequests.assignSource === 'db') {
+    return _allRequests.assignByUser[arUsername().toLowerCase()] || [];
+  }
   var name = '';
   try { name = (localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || ''); } catch (e) {}
   return AR_ASSIGNMENTS[String(name).toUpperCase().trim()] || [];
@@ -660,3 +715,120 @@ function erpShowToast(msg, type) {
 }
 
 console.log('✅ all-requests.js loaded');
+
+
+// ═══════════════════════════════════════════════════════════
+// ADMIN: ASSIGN PEOPLE TO CATEGORIES
+// Saved immediately through RPC erp_set_category_assignees (admin only).
+// ═══════════════════════════════════════════════════════════
+var AR_REAL_CATS = ['COMPONENTS', 'CONSUMABLES', 'FABMAT'];
+var _arUsers = [];
+
+function arEnsureAssignModal() {
+  if (document.getElementById('arAssignModal')) return;
+  var wrap = document.createElement('div');
+  wrap.innerHTML =
+    '<div class="modal fade" id="arAssignModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">' +
+      '<div class="modal-header"><h5 class="modal-title"><i class="bi bi-people-fill me-2"></i>Who handles which category</h5>' +
+      '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>' +
+      '<div class="modal-body" id="arAssignBody"></div>' +
+      '<div class="modal-footer"><div class="me-auto small text-muted"><i class="bi bi-info-circle me-1"></i>Changes save right away. A person can handle more than one category, and a category can have more than one person.</div>' +
+      '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>' +
+    '</div></div></div>';
+  document.body.appendChild(wrap.firstChild);
+}
+
+async function arOpenAssignModal() {
+  if (!arIsAdmin()) { erpShowToast('Admin only', 'warning'); return; }
+  if (_allRequests.assignSource !== 'db') {
+    erpShowToast('Assignments are not set up in the database yet (run the SQL first).', 'warning');
+    return;
+  }
+  arEnsureAssignModal();
+  var body = document.getElementById('arAssignBody');
+  body.innerHTML = '<div class="text-center py-4"><div class="erp-spinner"></div></div>';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('arAssignModal')).show();
+  try {
+    _arUsers = await erpFetchAll('v_users_admin', 'select=username,fullname,is_active,roles&order=fullname.asc');
+  } catch (e) {
+    body.innerHTML = '<div class="alert alert-danger">Could not load users: ' + erpEsc(e.message) + '</div>';
+    return;
+  }
+  arRenderAssignModal();
+}
+
+function arRenderAssignModal() {
+  var body = document.getElementById('arAssignBody');
+  if (!body) return;
+  var html = '';
+  AR_REAL_CATS.forEach(function(cat) {
+    var rows = _allRequests.assignRows.filter(function(r) { return String(r.category).toUpperCase() === cat; });
+    var assigned = {};
+    rows.forEach(function(r) { assigned[String(r.username).toLowerCase()] = true; });
+    var activeCount = rows.filter(function(r) { return r.is_active !== false; }).length;
+
+    html += '<div class="card mb-3"><div class="card-body py-3">' +
+      '<div class="d-flex align-items-center mb-2"><span class="ar-cat ' + cat + '" style="font-size:0.85rem;">' + cat + '</span>' +
+      (activeCount === 0 ? '<span class="ms-2 small text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>No one assigned</span>' : '') + '</div>' +
+      '<div class="mb-2">';
+    if (!rows.length) html += '<span class="text-muted small">—</span>';
+    rows.forEach(function(r) {
+      var inactive = r.is_active === false;
+      html += '<span class="badge rounded-pill bg-light text-dark border me-1 mb-1" style="font-size:0.8rem;padding:6px 10px;' + (inactive ? 'opacity:.6;' : '') + '">' +
+        erpEsc(r.fullname || r.username) + (inactive ? ' <span class="text-danger">(inactive)</span>' : '') +
+        ' <a href="javascript:void(0)" class="text-danger ms-1" title="Remove" onclick="arAssignRemove(\'' + cat + '\', \'' + encodeURIComponent(r.username) + '\')"><i class="bi bi-x-circle-fill"></i></a></span>';
+    });
+    html += '</div><div class="d-flex gap-2"><select class="form-select form-select-sm" id="arAdd_' + cat + '" style="max-width:320px;"><option value="">+ Add person…</option>';
+    _arUsers.filter(function(u) { return u.is_active !== false && !assigned[String(u.username).toLowerCase()]; })
+      .sort(function(a, b) {
+        var aw = (a.roles || []).indexOf('warehouse') !== -1 ? 0 : 1, bw = (b.roles || []).indexOf('warehouse') !== -1 ? 0 : 1;
+        return aw - bw || String(a.fullname || '').localeCompare(String(b.fullname || ''));
+      })
+      .forEach(function(u) {
+        html += '<option value="' + erpEsc(u.username) + '">' + erpEsc(u.fullname || u.username) +
+          ((u.roles || []).indexOf('warehouse') !== -1 ? '' : ' (not warehouse)') + '</option>';
+      });
+    html += '</select><button class="btn btn-sm btn-primary" onclick="arAssignAdd(\'' + cat + '\')"><i class="bi bi-plus-lg"></i> Add</button></div>' +
+      '</div></div>';
+  });
+  body.innerHTML = html;
+}
+
+function arAssignAdd(cat) {
+  var sel = document.getElementById('arAdd_' + cat);
+  if (!sel || !sel.value) { erpShowToast('Choose a person first', 'warning'); return; }
+  var list = _allRequests.assignRows.filter(function(r) { return String(r.category).toUpperCase() === cat; })
+    .map(function(r) { return r.username; });
+  list.push(sel.value);
+  arSaveCategory(cat, list);
+}
+
+function arAssignRemove(cat, encUsername) {
+  var u = decodeURIComponent(encUsername);
+  var list = _allRequests.assignRows.filter(function(r) { return String(r.category).toUpperCase() === cat; })
+    .map(function(r) { return r.username; })
+    .filter(function(x) { return String(x).toLowerCase() !== String(u).toLowerCase(); });
+  arSaveCategory(cat, list);
+}
+
+async function arSaveCategory(cat, usernames) {
+  try {
+    var res = await fetch(erpUrl('rpc/erp_set_category_assignees'), {
+      method: 'POST', headers: erpHeaders(),
+      body: JSON.stringify({ p_category: cat, p_usernames: usernames, p_admin: arUsername() })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + (await res.text()).slice(0, 200));
+    await allRequestsLoadAssignments();
+    arRenderAssignModal();
+    // my own category may have changed → refresh the filter and the table
+    var cur = arCatFilterValue();
+    allRequestsInitCatFilter();
+    var sel = document.getElementById('allCatFilter');
+    if (sel && cur && Array.prototype.some.call(sel.options, function(o) { return o.value === cur; })) sel.value = cur;
+    allRequestsRender();
+    erpShowToast('Saved', 'success');
+  } catch (e) {
+    console.error('[arSaveCategory]', e);
+    erpShowToast('Could not save: ' + e.message, 'danger');
+  }
+}
