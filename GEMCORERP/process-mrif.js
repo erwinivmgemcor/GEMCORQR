@@ -111,6 +111,7 @@ async function loadDocument() {
 
     renderDocInfo();
     renderItems();
+    loadStockInfo(); // internal stock glimpse (does not block the page)
     console.log('[Process] Loaded doc:', _process.docNo, 'items:', _process.items.length);
 
   } catch(err) {
@@ -162,7 +163,7 @@ function renderItems() {
   if (!tbody) return;
 
   if (_process.items.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">No items found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-muted">No items found</td></tr>';
     return;
   }
 
@@ -180,6 +181,7 @@ function renderItems() {
       '<td>' + (idx + 1) + '</td>' +
       '<td><code>' + erpEsc(it.itemCode) + '</code></td>' +
       '<td>' + erpEsc(it.description || '—') + '</td>' +
+      stockCellHtml(it) +
       '<td class="text-center">' + it.requestedQty + '</td>' +
       '<td class="text-center ' + issuedClass + '">' + issuedDisplay + '</td>' +
       '<td class="text-center">' + erpEsc(it.unit) + '</td>' +
@@ -195,6 +197,7 @@ function renderItems() {
 
   updateProgress();
   document.getElementById('itemsCountLabel').textContent = '(' + _process.items.length + ' items)';
+  renderStockSummary();
 }
 
 function toggleItemSelect(idx, checked) {
@@ -717,3 +720,124 @@ function erpShowToast(msg, type) {
 }
 
 console.log('✅ process-mrif.js v3.6 loaded (single RPC + reserved-stock check)');
+
+
+// ═══════════════════════════════════════════════════════════
+// STOCK GLIMPSE (internal, warehouse only)
+// Shows on-hand / reserved / available per line so nobody processes an MRIF
+// for material that is already gone. Read-only: it never blocks Verify or Submit.
+//   No SOF on the MRIF : available = on-hand − all SOF-reserved
+//   MRIF has a SOF     : available = what this SOF still has reserved
+//                        + free stock (on-hand − all reserved), capped at on-hand
+// ═══════════════════════════════════════════════════════════
+_process.stock = {};
+_process.stockLoadedAt = null;
+_process.stockError = null;
+var _stockTimer = null;
+
+async function loadStockInfo() {
+  try {
+    var codes = [];
+    _process.items.forEach(function(it) { if (it.itemCode && codes.indexOf(it.itemCode) === -1) codes.push(it.itemCode); });
+    if (!codes.length) return;
+    var inList = encodeURIComponent(codes.map(function(c) { return '"' + String(c).replace(/"/g, '') + '"'; }).join(','));
+
+    var results = await Promise.all([
+      erpFetchAll('erp_items', 'select=item_code,on_hand,location&item_code=in.(' + inList + ')&order=item_code.asc'),
+      erpFetchAll('erp_sof_allocation_items', 'select=id,item_code,sof_no,allocated_qty,used_qty&item_code=in.(' + inList + ')&order=id.asc')
+        .catch(function(e) { console.warn('[stock] SOF reservations unavailable:', e.message); return null; })
+    ]);
+    var items = results[0] || [], alloc = results[1];
+    var thisSof = String((_process.doc && (_process.doc.sof_no || _process.doc.gem_so_no)) || '').trim();
+
+    var map = {};
+    items.forEach(function(r) {
+      map[r.item_code] = { onHand: Number(r.on_hand || 0), location: r.location || '', reservedAll: 0, sofRemaining: 0, reservationKnown: alloc !== null };
+    });
+    (alloc || []).forEach(function(r) {
+      var m = map[r.item_code]; if (!m) return;
+      var rem = Number(r.allocated_qty || 0) - Number(r.used_qty || 0);
+      if (rem <= 0) return;
+      m.reservedAll += rem;
+      if (thisSof && String(r.sof_no || '').trim() === thisSof) m.sofRemaining += rem;
+    });
+    _process.stock = map;
+    _process.stockLoadedAt = new Date();
+    _process.stockError = null;
+  } catch (e) {
+    console.warn('[stock] failed:', e.message);
+    _process.stockError = e.message;
+  }
+  renderItems();
+
+  // keep it fresh while the page stays open (someone else may issue the same item)
+  if (!_stockTimer) {
+    _stockTimer = setInterval(function() { if (!document.hidden) loadStockInfo(); }, 60000);
+  }
+}
+
+function stockNeed(it) {
+  var status = String((_process.doc && _process.doc.status) || '').toUpperCase();
+  if (status === 'COMPLETED') return 0;
+  return Math.max(Number(it.requestedQty || 0) - Number(it.originalQty || 0), 0);
+}
+
+function stockUsable(s) {
+  var thisSof = String((_process.doc && (_process.doc.sof_no || _process.doc.gem_so_no)) || '').trim();
+  var free = Math.max(s.onHand - s.reservedAll, 0);
+  if (thisSof) return Math.max(Math.min(s.onHand, s.sofRemaining + free), 0);
+  return free;
+}
+
+function stockFmt(n) { return Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+
+function stockLevel(it) {
+  var s = _process.stock[it.itemCode];
+  if (!s) return null;
+  var need = stockNeed(it), usable = stockUsable(s);
+  if (need <= 0) return 'na';
+  if (usable >= need) return 'ok';
+  if (usable > 0) return 'short';
+  return 'none';
+}
+
+function stockCellHtml(it) {
+  if (_process.stockError && !_process.stockLoadedAt) return '<td class="text-center text-muted small" title="' + erpEsc(_process.stockError) + '">n/a</td>';
+  var s = _process.stock[it.itemCode];
+  if (!s) return '<td class="text-center text-muted small">' + (_process.stockLoadedAt ? 'not found' : '…') + '</td>';
+  var lvl = stockLevel(it), need = stockNeed(it), usable = stockUsable(s);
+  var thisSof = String((_process.doc && (_process.doc.sof_no || _process.doc.gem_so_no)) || '').trim();
+  var badge;
+  if (lvl === 'ok')         badge = '<span class="badge bg-success">' + stockFmt(usable) + ' avail</span>';
+  else if (lvl === 'short') badge = '<span class="badge bg-warning text-dark">only ' + stockFmt(usable) + '</span>';
+  else if (lvl === 'none')  badge = '<span class="badge bg-danger">NO STOCK</span>';
+  else                      badge = '<span class="badge bg-secondary">' + stockFmt(usable) + '</span>';
+  var tip = 'On-hand ' + stockFmt(s.onHand) + ' · reserved sa SOF ' + stockFmt(s.reservedAll) +
+            (thisSof ? ' (sa SOF ' + thisSof + ': ' + stockFmt(s.sofRemaining) + ')' : '') +
+            (need > 0 ? ' · kailangan ' + stockFmt(need) : '') +
+            (s.reservationKnown ? '' : ' · (hindi ma-load ang SOF reservations)');
+  var sub = 'on-hand ' + stockFmt(s.onHand) + (s.reservedAll > 0 ? ' · rsv ' + stockFmt(s.reservedAll) : '');
+  return '<td class="text-center" title="' + erpEsc(tip) + '">' + badge +
+         '<div class="text-muted" style="font-size:0.68rem;line-height:1.2;margin-top:2px;">' + erpEsc(sub) + '</div>' +
+         (s.location ? '<div class="text-muted" style="font-size:0.68rem;line-height:1.2;"><i class="bi bi-geo-alt-fill"></i> ' + erpEsc(s.location) + '</div>' : '') +
+         '</td>';
+}
+
+function renderStockSummary() {
+  var el = document.getElementById('stockSummary');
+  if (!el) return;
+  if (_process.stockError && !_process.stockLoadedAt) { el.innerHTML = '<span class="text-muted">stock check unavailable</span>'; return; }
+  if (!_process.stockLoadedAt) { el.innerHTML = '<span class="text-muted">checking stock…</span>'; return; }
+  var short = 0, none = 0;
+  _process.items.forEach(function(it) {
+    var l = stockLevel(it);
+    if (l === 'short') short++; else if (l === 'none') none++;
+  });
+  var t = _process.stockLoadedAt, hh = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2);
+  var msg = (short + none) === 0
+    ? '<span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>Stock OK</span>'
+    : '<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>' +
+        (none ? none + ' no stock' : '') + (none && short ? ' · ' : '') + (short ? short + ' short' : '') + '</span>';
+  el.innerHTML = msg + ' <span class="text-muted">· as of ' + hh + '</span> ' +
+    '<a href="javascript:void(0)" onclick="loadStockInfo()" title="Refresh stock" class="text-decoration-none"><i class="bi bi-arrow-clockwise"></i></a>';
+}
