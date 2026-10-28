@@ -29,6 +29,16 @@
   <script defer src="notif-alerts.js"></script>
   <script defer src="notifications.js"></script>
   <script defer src="js/update.js"></script>
+<style>
+.ar-cat{display:inline-block;font-size:0.68rem;font-weight:700;padding:2px 7px;border-radius:999px;margin:1px 2px 1px 0;white-space:nowrap;border:2px solid transparent;}
+.ar-cat.COMPONENTS{background:#dbeafe;color:#1e40af;}
+.ar-cat.CONSUMABLES{background:#dcfce7;color:#166534;}
+.ar-cat.FABMAT{background:#fef3c7;color:#92400e;}
+.ar-cat.OTHER{background:#e5e7eb;color:#374151;}
+.ar-cat.mine{border-color:#0f172a;box-shadow:0 0 0 1px #fff inset;}
+tr.ar-mine{background:#f0f9ff;}
+tr.ar-mine td:first-child{box-shadow:inset 4px 0 0 #0ea5e9;}
+</style>
 </head>
 <body>
 
@@ -128,6 +138,9 @@
         <option value="COMPLETED">Completed</option>
         <option value="">All Status</option>
       </select>
+      <select id="allCatFilter" class="erp-select" onchange="allRequestsOnCatChange()" title="Filter by item category (Components / Consumables / Fabmat)">
+        <option value="">All Categories</option>
+      </select>
       <select id="allDeptFilter" class="erp-select" onchange="allRequestsLoad()">
         <option value="">All Departments</option>
       </select>
@@ -156,6 +169,8 @@
       <div style="min-width: 150px;"></div>
     </div>
 
+    <div id="allMineBanner" style="display:none;margin:0 0 12px;padding:10px 14px;border-radius:10px;font-size:0.9rem;"></div>
+
     <div class="erp-table-wrap">
       <table class="erp-table">
         <thead>
@@ -165,6 +180,7 @@
             <th class="col-req">Requestor</th>
             <th class="col-dept">Department</th>
             <th class="col-type text-center">Type</th>
+            <th class="text-center" title="Item categories inside this request">Category</th>
             <th class="col-jo">JO No.</th>
             <th class="col-status text-center">Status</th>
             <th class="col-items text-center">Items</th>
@@ -173,7 +189,7 @@
         </thead>
         <tbody id="allTableBody">
           <tr>
-            <td colspan="9" class="erp-empty">
+            <td colspan="10" class="erp-empty">
               <div class="erp-spinner"></div>
               <div class="mt-2">Loading requests...</div>
             </td>
