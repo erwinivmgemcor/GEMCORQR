@@ -146,6 +146,9 @@ tr.ar-mine td:first-child{box-shadow:inset 4px 0 0 #0ea5e9;}
       </select>
       <input type="date" id="allDateFrom" class="erp-select" style="min-width:150px;" onchange="allRequestsLoad()" title="From date">
       <input type="date" id="allDateTo" class="erp-select" style="min-width:150px;" onchange="allRequestsLoad()" title="To date">
+      <button class="erp-btn-clear" id="allAssignBtn" style="display:none;" onclick="arOpenAssignModal()" title="Admin: choose who handles Components / Consumables / Fabmat">
+        <i class="bi bi-people-fill"></i> Assign
+      </button>
       <button class="erp-btn-clear" onclick="allRequestsClearFilters()">
         <i class="bi bi-x-lg"></i> Clear
       </button>
@@ -169,6 +172,7 @@ tr.ar-mine td:first-child{box-shadow:inset 4px 0 0 #0ea5e9;}
       <div style="min-width: 150px;"></div>
     </div>
 
+    <div id="allAssignWarn" style="display:none;margin:0 0 12px;padding:10px 14px;border-radius:10px;font-size:0.9rem;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;"></div>
     <div id="allMineBanner" style="display:none;margin:0 0 12px;padding:10px 14px;border-radius:10px;font-size:0.9rem;"></div>
 
     <div class="erp-table-wrap">
