@@ -179,9 +179,12 @@ async function fetchProductionNotifications() {
     var docsRes = await erpFetch('documents',
       'select=doc_no,doc_type,status,requestor,processed_by,processed_at,created_at' +
       '&requestor=eq.' + encodeURIComponent(_notifState.userFullname) +
+      '&or=(doc_type.eq.MRIF,doc_type.eq.MRS)' +   // production only hears about MRIF / MRS (never MRR, which warehouse creates)
       '&order=created_at.desc&limit=50');
 
     (docsRes || []).forEach(function(d) {
+      var type = String(d.doc_type || '').toUpperCase();
+      if (type !== 'MRIF' && type !== 'MRS') return;   // safety net
       var status = String(d.status || '').toUpperCase();
 
       // Notify if status changed to COMPLETED/PARTIAL
