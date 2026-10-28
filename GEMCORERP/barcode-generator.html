@@ -293,7 +293,7 @@
       <div>
         <div class="fw-bold" style="color:#075985;">Batch QR Label Printing</div>
         <div class="small" style="color:#0369a1;">
-          Label size: <strong>2" × 1"</strong> (Avery 5163) · 4 cols × 10 rows per sheet · Print sa A4/Letter bond paper.
+          Label size and sheet layout are adjustable: open the preview, then <strong>Resize layout</strong> · Print sa A4/Letter bond paper or sticker sheets.
         </div>
       </div>
     </div>
@@ -405,7 +405,7 @@
         <div class="alert alert-info small py-2 mb-3 d-print-none">
           <i class="bi bi-info-circle me-1"></i>
           <strong>Print settings:</strong> 
-          Letter/A4 · Margins: <strong>0.25in</strong> · Scale: <strong>100%</strong> · 
+          Paper size follows the layout · Browser margins: <strong>None</strong> (use Top/Left in Resize layout) · Scale: <strong>100%</strong> · 
           Background graphics: <strong>ON</strong> (para sa QR codes)
         </div>
 
@@ -470,9 +470,12 @@
 
         <div class="d-flex justify-content-between align-items-center mb-3 d-print-none" style="flex-wrap:wrap;gap:8px;">
           <div>
-            <label class="form-label fw-bold mb-1 small">Labels per Sheet (Avery 5163):</label>
+            <label class="form-label fw-bold mb-1 small">Layout:</label>
             <div class="d-flex align-items-center gap-2">
               <span class="badge bg-primary" id="bgLabelsPerSheet">4 cols × 10 rows = 40 labels</span>
+              <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#bgLayoutPanel">
+                <i class="bi bi-aspect-ratio me-1"></i>Resize layout
+              </button>
             </div>
           </div>
           <div class="d-flex gap-2">
@@ -485,6 +488,55 @@
           </div>
         </div>
 
+        <!-- LAYOUT / RESIZE PANEL -->
+        <div class="collapse d-print-none mb-3" id="bgLayoutPanel">
+          <div class="card card-body p-3" style="background:#f8fafc;">
+            <div class="row g-2 align-items-end">
+              <div class="col-md-3 col-6">
+                <label class="form-label fw-bold mb-1 small">Preset</label>
+                <select id="bgLyPreset" class="form-select form-select-sm" onchange="bgOnPreset()"></select>
+              </div>
+              <div class="col-md-2 col-6">
+                <label class="form-label fw-bold mb-1 small">Paper</label>
+                <select id="bgLyPage" class="form-select form-select-sm" onchange="bgOnLayoutInput()">
+                  <option value="letter">Letter (8.5 × 11 in)</option>
+                  <option value="a4">A4 (8.27 × 11.69 in)</option>
+                </select>
+              </div>
+              <div class="col-md-1 col-4"><label class="form-label fw-bold mb-1 small">Label W (in)</label>
+                <input type="number" id="bgLyW" class="form-control form-control-sm" step="0.01" min="0.4" max="8" oninput="bgOnLayoutInput()"></div>
+              <div class="col-md-1 col-4"><label class="form-label fw-bold mb-1 small">Label H (in)</label>
+                <input type="number" id="bgLyH" class="form-control form-control-sm" step="0.01" min="0.3" max="10" oninput="bgOnLayoutInput()"></div>
+              <div class="col-md-1 col-4"><label class="form-label fw-bold mb-1 small">Columns</label>
+                <input type="number" id="bgLyCols" class="form-control form-control-sm" step="1" min="1" max="12" oninput="bgOnLayoutInput()"></div>
+              <div class="col-md-1 col-4"><label class="form-label fw-bold mb-1 small">Rows</label>
+                <input type="number" id="bgLyRows" class="form-control form-control-sm" step="1" min="1" max="40" oninput="bgOnLayoutInput()"></div>
+              <div class="col-md-1 col-4"><label class="form-label fw-bold mb-1 small">Gap X (in)</label>
+                <input type="number" id="bgLyGapX" class="form-control form-control-sm" step="0.01" min="0" max="2" oninput="bgOnLayoutInput()"></div>
+              <div class="col-md-1 col-4"><label class="form-label fw-bold mb-1 small">Gap Y (in)</label>
+                <input type="number" id="bgLyGapY" class="form-control form-control-sm" step="0.01" min="0" max="2" oninput="bgOnLayoutInput()"></div>
+              <div class="col-md-1 col-4"><label class="form-label fw-bold mb-1 small">Top (in)</label>
+                <input type="number" id="bgLyTop" class="form-control form-control-sm" step="0.01" min="0" max="3" oninput="bgOnLayoutInput()"></div>
+              <div class="col-md-1 col-4"><label class="form-label fw-bold mb-1 small">Left (in)</label>
+                <input type="number" id="bgLyLeft" class="form-control form-control-sm" step="0.01" min="0" max="3" oninput="bgOnLayoutInput()"></div>
+              <div class="col-md-2 col-6"><label class="form-label fw-bold mb-1 small">QR size (in) <span class="text-muted fw-normal">blank = auto</span></label>
+                <input type="number" id="bgLyQr" class="form-control form-control-sm" step="0.01" min="0.2" max="6" placeholder="auto" oninput="bgOnLayoutInput()"></div>
+              <div class="col-md-2 col-6"><label class="form-label fw-bold mb-1 small">Text size: <span id="bgLyFsVal">100</span>%</label>
+                <input type="range" id="bgLyFs" class="form-range" min="50" max="250" step="5" oninput="bgOnLayoutInput()"></div>
+              <div class="col-md-3 col-12 d-flex gap-3 align-items-center pb-1">
+                <div class="form-check mb-0"><input class="form-check-input" type="checkbox" id="bgLyDesc" onchange="bgOnLayoutInput()"><label class="form-check-label small" for="bgLyDesc">Description</label></div>
+                <div class="form-check mb-0"><input class="form-check-input" type="checkbox" id="bgLyLoc" onchange="bgOnLayoutInput()"><label class="form-check-label small" for="bgLyLoc">Location</label></div>
+              </div>
+              <div class="col-md-3 col-12 d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="bgFitToPage()" title="Compute max columns and rows that fit on the paper">Fit to page</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="bgResetLayout()">Reset</button>
+              </div>
+            </div>
+            <div class="small mt-2" id="bgLyInfo"></div>
+            <div class="small text-muted mt-1">Tip: print one sheet on plain paper first (100% scale, no "fit to page") and hold it against the sticker sheet. Adjust Top/Left until it lines up. Avery presets are approximate.</div>
+          </div>
+        </div>
+
         <div class="label-preview-sheet" id="bgLabelSheet">
           <div class="label-sheet-grid" id="bgLabelGrid"></div>
         </div>
@@ -492,7 +544,7 @@
                  <div class="modal-footer">
         <div class="me-auto small text-muted">
           <i class="bi bi-info-circle me-1"></i>
-          Recommended paper: <strong>Avery 5163</strong> sticker sheet, o letter-size bond paper.
+          Paper: sticker sheet or bond paper. Match the layout under <strong>Resize layout</strong> to your sheet.
         </div>
         <button type="button" class="btn btn-outline-secondary" onclick="bgClosePreview()">Close</button>
         <button type="button" class="btn btn-primary" onclick="bgPrintLabels()" id="bgBtnPrintLabels">
