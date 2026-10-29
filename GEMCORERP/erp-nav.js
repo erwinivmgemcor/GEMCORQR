@@ -41,6 +41,14 @@
           adminOnly: true
         },
         {
+          id: 'warehouse-kpi',
+          label: 'Warehouse KPI',
+          icon: 'bi-speedometer2',
+          href: 'warehouse-kpi.html',
+          roles: ['warehouse'],
+          adminOnly: true
+        },
+        {
           id: 'system-health',
           label: 'System Health',
           icon: 'bi-activity',
@@ -308,6 +316,7 @@
     'usage-trend': 'Usage Trend',
     'usage-entry': 'Usage Entry',
     'process-history': 'Process History',
+    'warehouse-kpi': 'Warehouse KPI',
     'chat': 'Messages',
     'my-requests': 'My Requests',
     'new-mrif': 'New MRIF',
