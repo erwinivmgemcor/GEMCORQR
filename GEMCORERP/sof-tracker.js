@@ -314,6 +314,7 @@ window.sofViewItems = async function(sofNo) {
             '<th class="text-end">Used Qty</th>' +
             '<th class="text-end">Remaining Qty</th>' +
             '<th class="text-center">Status</th>' +
+            '<th class="text-center">Action</th>' +
           '</tr>' +
         '</thead>' +
         '<tbody>';
@@ -337,6 +338,9 @@ window.sofViewItems = async function(sofNo) {
         '<td class="text-end text-success fw-bold">' + sofTrackerNum(used) + '</td>' +
         '<td class="text-end text-danger fw-bold">' + sofTrackerNum(remaining) + '</td>' +
         '<td class="text-center">' + statusBadge + '</td>' +
+        '<td class="text-center">' + (remaining > 0
+          ? '<button class="btn btn-sm btn-outline-danger" title="Ibalik sa free on-hand" onclick="sofReleaseItem(\'' + sofTrackerEsc(sofNo).replace(/'/g, "\\'") + '\',\'' + sofTrackerEsc(it.item_code).replace(/'/g, "\\'") + '\',' + remaining + ')"><i class="bi bi-unlock me-1"></i>Release</button>'
+          : '') + '</td>' +
       '</tr>';
     });
 
@@ -347,5 +351,140 @@ window.sofViewItems = async function(sofNo) {
     console.error('[sofViewItems]', err);
     document.getElementById('sofItemsModalBody').innerHTML = 
       '<div class="alert alert-danger m-3">Failed to load items: ' + sofTrackerEsc(err.message) + '</div>';
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+// v2.1 — MANUAL ALLOCATE (walang MRR) + RELEASE (ibalik sa free on-hand)
+// Needs sof-manual.sql
+// ═══════════════════════════════════════════════════════════
+var _sofManual = { items: [], timer: null };
+
+async function sofRpc(name, body) {
+  var res = await fetch(erpUrl('rpc/' + name), { method: 'POST', headers: erpHeaders(), body: JSON.stringify(body) });
+  var text = await res.text(), data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (e) {}
+  if (!res.ok) throw new Error((data && (data.message || data.error)) || text || ('HTTP ' + res.status));
+  return data;
+}
+function sofUser() { return localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE'; }
+
+window.sofOpenManual = function() {
+  _sofManual.items = [];
+  var old = document.getElementById('sofManualModal'); if (old) old.remove();
+  var w = document.createElement('div');
+  w.innerHTML =
+  '<div class="modal fade" id="sofManualModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">' +
+    '<div class="modal-header" style="background:#1e3a5f;color:#fff;"><h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Manual SOF Allocation</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>' +
+    '<div class="modal-body">' +
+      '<div class="alert alert-info py-2 small mb-3">Magre-reserve ito ng stock para sa SOF kahit walang MRR. Hindi nito ginagalaw ang on-hand — nababawasan lang ang <b>Available</b>. Kung may existing na SOF#, idadagdag sa allocation niya.</div>' +
+      '<div class="row g-2 mb-3">' +
+        '<div class="col-md-4"><label class="form-label small fw-bold">SOF No. *</label><input id="smSof" class="form-control" list="smSofList" placeholder="e.g. SOF-2610-001"><datalist id="smSofList"></datalist></div>' +
+        '<div class="col-md-4"><label class="form-label small fw-bold">Client</label><input id="smClient" class="form-control" placeholder="optional"></div>' +
+        '<div class="col-md-4"><label class="form-label small fw-bold">Project / JO No.</label><input id="smProject" class="form-control" placeholder="optional"></div>' +
+      '</div>' +
+      '<label class="form-label small fw-bold">Add item</label>' +
+      '<input id="smSearch" class="form-control" placeholder="Item code o description…" oninput="sofManualSearch()" autocomplete="off">' +
+      '<div id="smResults" class="list-group mb-3" style="max-height:220px;overflow:auto;"></div>' +
+      '<table class="table table-sm align-middle"><thead><tr><th>Item</th><th class="text-end">On-hand</th><th class="text-end">Free</th><th style="width:120px">Qty to allocate</th><th></th></tr></thead><tbody id="smRows"><tr><td colspan="5" class="text-muted text-center py-3">Wala pang item.</td></tr></tbody></table>' +
+      '<label class="form-label small fw-bold">Reason *</label><textarea id="smReason" class="form-control" rows="2" placeholder="e.g. Pre-reserve para sa SOF, walang MRR pa"></textarea>' +
+    '</div>' +
+    '<div class="modal-footer"><button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" id="smSubmit" onclick="sofManualSubmit()"><i class="bi bi-check2-circle me-1"></i>Allocate</button></div>' +
+  '</div></div></div>';
+  document.body.appendChild(w.firstChild);
+  var dl = document.getElementById('smSofList');
+  dl.innerHTML = (_sofTracker.allAllocations || []).map(function(a) { return '<option value="' + sofTrackerEsc(a.sof_no) + '">'; }).join('');
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('sofManualModal')).show();
+};
+
+window.sofManualSearch = function() {
+  clearTimeout(_sofManual.timer);
+  _sofManual.timer = setTimeout(async function() {
+    var term = document.getElementById('smSearch').value.trim().replace(/[*,()]/g, ' ').trim();
+    var box = document.getElementById('smResults');
+    if (term.length < 2) { box.innerHTML = ''; return; }
+    try {
+      var t = encodeURIComponent(term);
+      var rows = await erpFetch('erp_items', 'select=item_code,description,base_unit,on_hand&is_deleted=eq.false&is_active=eq.true' +
+        '&or=(item_code.ilike.*' + t + '*,description.ilike.*' + t + '*)&order=item_code.asc&limit=20') || [];
+      if (!rows.length) { box.innerHTML = '<div class="list-group-item text-muted small">No match</div>'; return; }
+      var codes = rows.map(function(r) { return r.item_code; });
+      var resv = {};
+      var al = await erpFetch('erp_sof_allocation_items', 'select=item_code,allocated_qty,used_qty&item_code=in.(' + encodeURIComponent(codes.join(',')) + ')') || [];
+      al.forEach(function(a) { var rem = Number(a.allocated_qty || 0) - Number(a.used_qty || 0); if (rem > 0) resv[a.item_code] = (resv[a.item_code] || 0) + rem; });
+      rows.forEach(function(r) { r.free = Number(r.on_hand || 0) - (resv[r.item_code] || 0); r.reserved = resv[r.item_code] || 0; });
+      window._smFound = rows;
+      box.innerHTML = rows.map(function(r, i) {
+        return '<button type="button" class="list-group-item list-group-item-action py-1" onclick="sofManualPick(' + i + ')">' +
+          '<code>' + sofTrackerEsc(r.item_code) + '</code> <span class="small">' + sofTrackerEsc((r.description || '').substring(0, 70)) + '</span>' +
+          '<span class="float-end small">on-hand <b>' + sofTrackerNum(r.on_hand) + '</b> · free <b class="' + (r.free > 0 ? 'text-success' : 'text-danger') + '">' + sofTrackerNum(r.free) + '</b></span></button>';
+      }).join('');
+    } catch (e) { box.innerHTML = '<div class="list-group-item text-danger small">' + sofTrackerEsc(e.message) + '</div>'; }
+  }, 200);
+};
+
+window.sofManualPick = function(i) {
+  var r = (window._smFound || [])[i]; if (!r) return;
+  if (!_sofManual.items.some(function(x) { return x.item_code === r.item_code; })) _sofManual.items.push({ item_code: r.item_code, description: r.description, on_hand: r.on_hand, free: r.free, qty: '' });
+  document.getElementById('smSearch').value = ''; document.getElementById('smResults').innerHTML = '';
+  sofManualRenderRows();
+};
+
+function sofManualRenderRows() {
+  var tb = document.getElementById('smRows');
+  if (!_sofManual.items.length) { tb.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3">Wala pang item.</td></tr>'; return; }
+  tb.innerHTML = _sofManual.items.map(function(x, i) {
+    return '<tr><td><code>' + sofTrackerEsc(x.item_code) + '</code><div class="small text-muted">' + sofTrackerEsc((x.description || '').substring(0, 60)) + '</div></td>' +
+      '<td class="text-end">' + sofTrackerNum(x.on_hand) + '</td>' +
+      '<td class="text-end ' + (x.free > 0 ? 'text-success' : 'text-danger') + ' fw-bold">' + sofTrackerNum(x.free) + '</td>' +
+      '<td><input type="number" min="0" step="any" class="form-control form-control-sm" value="' + sofTrackerEsc(x.qty) + '" oninput="_sofManual.items[' + i + '].qty=this.value"></td>' +
+      '<td><button class="btn btn-sm btn-link text-danger" onclick="_sofManual.items.splice(' + i + ',1);sofManualRenderRows()"><i class="bi bi-x-lg"></i></button></td></tr>';
+  }).join('');
+}
+window.sofManualRenderRows = sofManualRenderRows;
+
+window.sofManualSubmit = async function() {
+  var sof = document.getElementById('smSof').value.trim();
+  var reason = document.getElementById('smReason').value.trim();
+  var items = _sofManual.items.filter(function(x) { return Number(x.qty) > 0; }).map(function(x) { return { item_code: x.item_code, qty: Number(x.qty) }; });
+  if (!sof) return erpShowToast('SOF No. is required', 'warning');
+  if (!items.length) return erpShowToast('Maglagay ng qty sa kahit isang item', 'warning');
+  if (!reason) return erpShowToast('Reason is required', 'warning');
+  if (!confirm('Allocate ' + items.length + ' item(s) to ' + sof + '?')) return;
+  var btn = document.getElementById('smSubmit'); btn.disabled = true;
+  try {
+    var r = await sofRpc('erp_sof_manual_allocate', {
+      p_sof_no: sof, p_items: items, p_user: sofUser(), p_reason: reason,
+      p_header: { client_name: document.getElementById('smClient').value.trim(), project_name: document.getElementById('smProject').value.trim() }
+    });
+    if (!r || !r.success) {
+      var d = (r && r.details || []).map(function(x) { return x.item_code + ': ' + x.error; }).join('\n');
+      alert((r && r.error || 'Failed') + (d ? '\n\n' + d : ''));
+      return;
+    }
+    erpShowToast('✅ Allocated ' + r.items + ' item(s) to ' + r.sof_no, 'success');
+    bootstrap.Modal.getInstance(document.getElementById('sofManualModal')).hide();
+    sofTrackerLoad();
+  } catch (e) {
+    erpShowToast('Failed: ' + e.message + ' (na-run mo na ba ang sof-manual.sql?)', 'danger');
+  } finally { btn.disabled = false; }
+};
+
+window.sofReleaseItem = async function(sofNo, itemCode, remaining) {
+  var q = prompt('Release ilang qty ng ' + itemCode + ' mula sa ' + sofNo + '?\n(Remaining: ' + remaining + ')\n\nMababawasan ang reservation at babalik sa free on-hand.', remaining);
+  if (q === null) return;
+  var qty = Number(q);
+  if (!(qty > 0) || qty > remaining) return erpShowToast('Invalid qty (1 hanggang ' + remaining + ')', 'warning');
+  var reason = prompt('Reason sa pag-release? (required)');
+  if (!reason || !reason.trim()) return erpShowToast('Reason is required', 'warning');
+  try {
+    var r = await sofRpc('erp_sof_release', { p_sof_no: sofNo, p_item_code: itemCode, p_qty: qty, p_user: sofUser(), p_reason: reason.trim() });
+    if (!r || !r.success) return erpShowToast((r && r.error) || 'Failed', 'danger');
+    erpShowToast('✅ Released ' + r.released + ' — pwede nang gamitin ng kahit anong MRIF', 'success');
+    var m = document.getElementById('sofItemsModal'); if (m) { bootstrap.Modal.getInstance(m).hide(); }
+    sofTrackerLoad();
+    setTimeout(function() { sofViewItems(sofNo); }, 400);
+  } catch (e) {
+    erpShowToast('Failed: ' + e.message + ' (na-run mo na ba ang sof-manual.sql?)', 'danger');
   }
 };
