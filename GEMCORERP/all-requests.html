@@ -36,6 +36,17 @@
 .ar-cat.CONSUMABLES{background:#dcfce7;color:#166534;}
 .ar-cat.FABMAT{background:#fef3c7;color:#92400e;}
 .ar-cat.OTHER{background:#e5e7eb;color:#374151;}
+.ar-catcards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+.ar-cc{background:#fff;border:1px solid #e2e8f0;border-left-width:6px;border-radius:10px;padding:12px 14px;cursor:pointer;transition:box-shadow .15s,transform .15s;}
+.ar-cc:hover{box-shadow:0 4px 14px rgba(15,23,42,.1);transform:translateY(-1px);}
+.ar-cc.active{box-shadow:0 0 0 2px #0f172a;}
+.ar-cc.COMPONENTS{border-left-color:#3b82f6;} .ar-cc.CONSUMABLES{border-left-color:#22c55e;}
+.ar-cc.FABMAT{border-left-color:#f59e0b;} .ar-cc.OTHER{border-left-color:#9ca3af;}
+.ar-cc .t{font-size:.72rem;font-weight:800;letter-spacing:.04em;color:#475569;}
+.ar-cc .n{font-size:1.9rem;font-weight:800;line-height:1.1;color:#0f172a;}
+.ar-cc .s{font-size:.74rem;color:#64748b;}
+.ar-cc .p{font-size:.74rem;font-weight:700;color:#b45309;}
+@media(max-width:768px){.ar-catcards{grid-template-columns:repeat(2,1fr);}}
 .ar-cat.mine{border-color:#0f172a;box-shadow:0 0 0 1px #fff inset;}
 tr.ar-mine{background:#f0f9ff;}
 tr.ar-mine td:first-child{box-shadow:inset 4px 0 0 #0ea5e9;}
@@ -119,6 +130,9 @@ tr.ar-mine td:first-child{box-shadow:inset 4px 0 0 #0ea5e9;}
       </div>
     </div>
   </div>
+
+  <!-- REQUESTS PER CATEGORY -->
+  <div id="allCatCards" class="ar-catcards"></div>
 
   <!-- FILTERS -->
   <div class="erp-card erp-filters-card" style="padding:16px 18px;margin-bottom:20px;">
