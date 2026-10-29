@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEMCOR ERP — Warehouse KPI</title>
+
+  <link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1e3a5f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+  
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="erp-design-system.css">
+<link rel="stylesheet" href="erp-styles.css">
+<link rel="stylesheet" href="erp-nav.css">
+  <link rel="stylesheet" href="erp-notif.css">
+
+<script src="erp-theme.js"></script>
+<script src="erp-guard.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script defer src="erp-config.js"></script>
+<script defer src="erp-supabase.js"></script>
+<script defer src="erp-nav.js"></script>
+<script defer src="warehouse-kpi.js"></script>
+  <script defer src="notif-alerts.js"></script>
+  <script defer src="notifications.js"></script>
+  <script defer src="js/update.js"></script>
+
+<style>
+.wk-bar{height:10px;border-radius:5px;background:#e2e8f0;overflow:hidden;min-width:80px}
+.wk-bar>span{display:block;height:100%;background:#3b82f6}
+.wk-bar.g>span{background:#22c55e}.wk-bar.a>span{background:#f59e0b}.wk-bar.r>span{background:#ef4444}
+.wk-note{font-size:.76rem;color:#64748b}
+.wk-tabs .btn{font-size:.8rem}
+table.wk td,table.wk th{vertical-align:middle;font-size:.85rem}
+.wk-rank{font-weight:800;color:#64748b;width:28px}
+</style>
+</head>
+<body>
+
+<nav class="erp-topbar">
+  <div class="erp-topbar-left">
+    <img src="../gemcor-logo.png" alt="GEMCOR" class="erp-logo" onerror="this.style.display='none'">
+    <div>
+      <div class="erp-brand">GEMCOR ERP</div>
+      <div class="erp-brand-sub">Warehouse KPI <span class="badge-live">LIVE</span></div>
+    </div>
+  </div>
+  <div id="erpNavBar"></div>
+  <div class="erp-topbar-right">
+    <button class="erp-btn-icon" onclick="wkLoad()" title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>
+    <a href="../index.html" class="erp-btn-outline"><i class="bi bi-arrow-left"></i> <span>Main System</span></a>
+  </div>
+</nav>
+
+<div class="erp-container">
+  <div class="erp-page-header">
+    <div>
+      <div class="erp-page-title"><i class="bi bi-speedometer2"></i><span>Warehouse KPI</span></div>
+      <div class="erp-breadcrumb"><a href="stock-monitor.html">Home</a><i class="bi bi-chevron-right"></i><span>Warehouse KPI</span></div>
+    </div>
+  </div>
+
+  <div class="erp-card" style="padding:14px 18px;margin-bottom:20px;">
+    <div class="erp-filters-row" style="align-items:center;">
+      <select id="wkRange" class="erp-select" onchange="wkOnRange()">
+        <option value="today">Today</option>
+        <option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="90">Last 90 days</option>
+        <option value="month">This month</option>
+        <option value="custom">Custom…</option>
+      </select>
+      <input type="date" id="wkFrom" class="erp-select" style="display:none" onchange="wkLoad()">
+      <input type="date" id="wkTo" class="erp-select" style="display:none" onchange="wkLoad()">
+      <select id="wkType" class="erp-select" onchange="wkRender()">
+        <option value="">MRIF + MRS</option><option value="MRIF">MRIF only</option><option value="MRS">MRS only</option>
+      </select>
+      <label class="small ms-2">Target (hrs to complete):
+        <input type="number" id="wkSla" value="24" min="1" step="1" class="erp-select" style="width:80px" onchange="wkRender()">
+      </label>
+      <span class="wk-note ms-auto" id="wkRangeLabel"></span>
+    </div>
+  </div>
+
+  <div class="erp-kpi-row" style="grid-template-columns: repeat(5, 1fr);margin-bottom:20px;">
+    <div class="erp-kpi-card kpi-blue"><div class="kpi-icon"><i class="bi bi-inbox"></i></div><div class="kpi-content"><div class="kpi-label">Requests Received</div><div class="kpi-value" id="kReceived">—</div><div class="kpi-sub" id="kReceivedSub">&nbsp;</div></div></div>
+    <div class="erp-kpi-card kpi-green"><div class="kpi-icon"><i class="bi bi-check-circle-fill"></i></div><div class="kpi-content"><div class="kpi-label">Completed</div><div class="kpi-value" id="kCompleted">—</div><div class="kpi-sub" id="kCompletedSub">&nbsp;</div></div></div>
+    <div class="erp-kpi-card kpi-amber"><div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div><div class="kpi-content"><div class="kpi-label">Avg Turnaround</div><div class="kpi-value" id="kAvgTat">—</div><div class="kpi-sub">request → completed</div></div></div>
+    <div class="erp-kpi-card kpi-blue"><div class="kpi-icon"><i class="bi bi-stopwatch"></i></div><div class="kpi-content"><div class="kpi-label">Avg Handling Time</div><div class="kpi-value" id="kHandle">—</div><div class="kpi-sub" id="kHandleSub">open Process → submit</div></div></div>
+    <div class="erp-kpi-card kpi-red"><div class="kpi-icon"><i class="bi bi-exclamation-triangle-fill"></i></div><div class="kpi-content"><div class="kpi-label">Open Backlog</div><div class="kpi-value" id="kBacklog">—</div><div class="kpi-sub" id="kBacklogSub">&nbsp;</div></div></div>
+  </div>
+
+  <div class="erp-card" style="padding:16px 18px;margin-bottom:20px;">
+    <h6 class="fw-bold mb-1"><i class="bi bi-people-fill me-1"></i>Warehouse Staff Performance</h6>
+    <div class="wk-note mb-2">Ayon sa "processed by" at oras ng pag-complete sa napiling period. Turnaround = oras mula nang i-submit ng production hanggang ma-complete.</div>
+    <div class="table-responsive"><table class="table table-sm wk" id="tblStaff"><thead><tr>
+      <th>#</th><th>Staff</th><th class="text-end">Completed</th><th class="text-end">Per day</th><th class="text-end">Avg turnaround</th><th class="text-end">Fastest</th><th class="text-end">Slowest</th><th>Within target</th><th class="text-end">Avg handling</th>
+    </tr></thead><tbody></tbody></table></div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-lg-6"><div class="erp-card" style="padding:16px 18px;height:100%;">
+      <h6 class="fw-bold mb-1"><i class="bi bi-person-lines-fill me-1"></i>Requests by Requestor (Production)</h6>
+      <div class="wk-note mb-2">Sino at ilan ang nag-request.</div>
+      <div class="table-responsive" style="max-height:420px;overflow:auto"><table class="table table-sm wk" id="tblReq"><thead><tr><th>#</th><th>Requestor</th><th>Dept</th><th class="text-end">MRIF</th><th class="text-end">MRS</th><th class="text-end">Total</th><th style="width:30%"></th></tr></thead><tbody></tbody></table></div>
+    </div></div>
+    <div class="col-lg-6"><div class="erp-card" style="padding:16px 18px;height:100%;">
+      <h6 class="fw-bold mb-1"><i class="bi bi-diagram-3-fill me-1"></i>Requests by Department</h6>
+      <div class="wk-note mb-2">&nbsp;</div>
+      <div class="table-responsive" style="max-height:420px;overflow:auto"><table class="table table-sm wk" id="tblDept"><thead><tr><th>#</th><th>Department</th><th class="text-end">Requests</th><th class="text-end">Completed</th><th class="text-end">Avg turnaround</th><th style="width:30%"></th></tr></thead><tbody></tbody></table></div>
+    </div></div>
+  </div>
+
+  <div class="erp-card" style="padding:16px 18px;margin-bottom:30px;">
+    <h6 class="fw-bold mb-1"><i class="bi bi-clock-history me-1"></i>Open Backlog Aging</h6>
+    <div class="wk-note mb-2">Pending/Partial pa lang — gaano na katagal naghihintay.</div>
+    <div id="wkAging" class="d-flex flex-wrap gap-2"></div>
+  </div>
+  <div id="wkMsg" class="wk-note mb-4"></div>
+</div>
+
+</body>
+</html>
