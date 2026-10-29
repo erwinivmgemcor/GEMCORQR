@@ -387,6 +387,7 @@ async function allRequestsRender() {
     if (tok !== _allRequests.renderToken) return;
   }
   allRequestsRenderNow();
+  arCatCardsLoad(tok);
   // fill the Category column for the rows on screen (and the "for you" banner) if not loaded yet
   var start = (_allRequests.currentPage - 1) * _allRequests.pageSize;
   var visible = _allRequests.filteredDocs.slice(start, start + _allRequests.pageSize);
@@ -473,6 +474,51 @@ function arIsMine(docNo) {
   var mine = arMyCats();
   var c = _allRequests.catByDoc[docNo];
   return !!(mine.length && c && mine.some(function(m) { return c[m] > 0; }));
+}
+
+// ── Requests per category (cards). Counts requests (not lines); a request with 2 categories counts in both. ──
+function arRenderCatCards() {
+  var el = document.getElementById('allCatCards');
+  if (!el) return;
+  var docs = _allRequests.allDocs || [];
+  var stat = {};
+  AR_CATEGORIES.forEach(function(k) { stat[k] = { req: 0, lines: 0, open: 0 }; });
+  var unknown = 0;
+  docs.forEach(function(d) {
+    var c = _allRequests.catByDoc[d.doc_no];
+    if (!c) { unknown++; return; }
+    if (c._err) return;
+    var s = String(d.status || '').toUpperCase();
+    var isOpen = (s === 'PENDING' || s === 'PARTIAL') && !(String(d.doc_type || '').toUpperCase() === 'MRS' && d.processed_at);
+    AR_CATEGORIES.forEach(function(k) {
+      if (c[k] > 0) { stat[k].req++; stat[k].lines += c[k]; if (isOpen) stat[k].open++; }
+    });
+  });
+  var cur = arCatFilterValue();
+  el.innerHTML = AR_CATEGORIES.map(function(k) {
+    var st = stat[k];
+    return '<div class="ar-cc ' + k + (cur === k ? ' active' : '') + '" onclick="arCatCardClick(\'' + k + '\')" title="Click to filter">' +
+      '<div class="t">' + k + '</div>' +
+      '<div class="n">' + st.req + '</div>' +
+      '<div class="s">request' + (st.req === 1 ? '' : 's') + ' · ' + st.lines + ' line' + (st.lines === 1 ? '' : 's') + '</div>' +
+      '<div class="p">' + (st.open ? st.open + ' waiting to process' : '&nbsp;') + '</div>' +
+    '</div>';
+  }).join('') + (unknown ? '<div class="text-muted small" style="grid-column:1/-1;">counting ' + unknown + ' more request(s)…</div>' : '');
+}
+
+function arCatCardClick(k) {
+  var sel = document.getElementById('allCatFilter');
+  if (!sel) return;
+  sel.value = (sel.value === k) ? '' : k;
+  allRequestsOnCatChange();
+}
+
+// load categories of ALL loaded requests in the background so the cards are complete
+async function arCatCardsLoad(tok) {
+  arRenderCatCards();
+  var changed = await allRequestsEnsureCats(_allRequests.allDocs);
+  if (tok !== undefined && tok !== _allRequests.renderToken) return;
+  if (changed) arRenderCatCards();
 }
 
 // "For you" banner: how many active requests contain my category
