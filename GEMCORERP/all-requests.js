@@ -17,6 +17,7 @@ var AR_ASSIGNMENTS = {
 var AR_CATEGORIES = ['COMPONENTS', 'CONSUMABLES', 'FABMAT', 'OTHER'];
 
 var _allRequests = {
+  locks: {},          // doc_no -> {locked_by, locked_by_name, locked_at, idle_seconds}  (requests being processed)
   assignByUser: {},   // username(lowercase) -> [categories]   (from the database)
   assignRows: [],     // raw rows: {username, fullname, category, is_active}
   assignSource: 'fallback',
@@ -46,7 +47,36 @@ document.addEventListener('DOMContentLoaded', function() {
     allRequestsInitCatFilter();
     allRequestsLoad();
   });
+  // who is processing what: refresh every 20 s while the tab is visible
+  setInterval(function() { if (!document.hidden) arRefreshLocks(true); }, 20000);
 });
+
+// ── "in process" locks (see doc-lock.js) ──
+async function arRefreshLocks(rerender) {
+  if (!window.erpDocLock) return;
+  var map = await erpDocLock.list();
+  if (map === null) return;                      // lock tables not installed → feature stays hidden
+  _allRequests.locks = map;
+  if (rerender && _allRequests.allDocs.length) allRequestsRenderNow();
+}
+
+function arLockOf(docNo) {
+  var l = _allRequests.locks && _allRequests.locks[docNo];
+  if (!l) return null;
+  var mine = String(l.locked_by || '').toLowerCase() === arUsername().toLowerCase();
+  return { mine: mine, name: l.locked_by_name || l.locked_by, since: l.locked_at, row: l };
+}
+
+function arLockBadge(docNo) {
+  var l = arLockOf(docNo);
+  if (!l) return '';
+  var mins = Math.max(0, Math.round((Date.now() - new Date(l.since).getTime()) / 60000));
+  var t = mins >= 1 ? mins + ' min' : 'just now';
+  return '<div style="margin-top:4px;"><span title="' + erpEsc(l.mine ? 'You are processing this' : l.name + ' is processing this since ' + new Date(l.since).toLocaleTimeString()) + '" ' +
+    'style="display:inline-block;font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:999px;' +
+    (l.mine ? 'background:#dbeafe;color:#1e40af;' : 'background:#fee2e2;color:#991b1b;') + '">🔒 ' +
+    (l.mine ? 'You' : erpEsc(l.name)) + ' · ' + t + '</span></div>';
+}
 
 function arIsAdmin() {
   try { return localStorage.getItem('ivm_isAdmin') === 'true'; } catch (e) { return false; }
@@ -309,6 +339,7 @@ async function allRequestsLoad() {
     console.log('[All Requests] Loaded ' + _allRequests.allDocs.length + ' requests');
     
     allRequestsComputeKPIs();
+    await arRefreshLocks(false);
     allRequestsRender();
     
   } catch(err) {
@@ -425,7 +456,7 @@ function allRequestsRenderNow() {
       '<td class="text-center"><span class="badge ' + typeBadge + '">' + typeUpper + '</span></td>' +
       '<td class="text-center">' + arCatCellHtml(d.doc_no) + '</td>' +
       '<td>' + erpEsc(d.jo_no || '—') + '</td>' +
-      '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span></td>' +
+      '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span>' + arLockBadge(d.doc_no) + '</td>' +
       '<td class="text-center">' + (d.item_count || 0) + '</td>' +
       '<td class="text-center">' +
         '<button class="erp-action-btn primary" onclick="viewRequestDetails(\'' + safeDoc + '\', \'' + typeUpper + '\')" title="View Details">' +
@@ -569,7 +600,16 @@ async function viewRequestDetails(docNo, docType) {
     var status = String(doc.status || '').toUpperCase();
     var mrsDone = String(doc.doc_type || '').toUpperCase() === 'MRS' && doc.processed_at;
     if ((status === 'PENDING' || status === 'PARTIAL') && !mrsDone) {
-      document.getElementById('btnProcessRequest').style.display = 'inline-flex';
+      var pbtn = document.getElementById('btnProcessRequest');
+      pbtn.style.display = 'inline-flex';
+      var lk = arLockOf(doc.doc_no);
+      if (lk && !lk.mine && !arIsAdmin()) {
+        pbtn.disabled = true;
+        pbtn.innerHTML = '<i class="bi bi-lock-fill me-1"></i>In process by ' + erpEsc(lk.name);
+      } else {
+        pbtn.disabled = false;
+        pbtn.innerHTML = '<i class="bi bi-play-circle me-1"></i>Process Request';
+      }
     }
     
   } catch(err) {
@@ -588,6 +628,12 @@ function processCurrentRequest() {
   var doc = _allRequests.currentDoc.doc;
   var docNo = doc.doc_no;
   var docType = String(doc.doc_type || '').toUpperCase();
+
+  var lk = arLockOf(docNo);
+  if (lk && !lk.mine && !arIsAdmin()) {
+    erpShowToast(lk.name + ' is already processing this request', 'warning');
+    return;
+  }
   
   // Close modal
   var modalEl = document.getElementById('requestDetailModal');
