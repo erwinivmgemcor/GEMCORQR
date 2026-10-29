@@ -24,7 +24,8 @@
   
   // ✅ NEW: Admin-only pages
   var ADMIN_ONLY_PAGES = [
-    'admin-users.html'
+    'admin-users.html',
+    'warehouse-kpi.html'
   ];
 
   function _redirectToLogin(reason) {
