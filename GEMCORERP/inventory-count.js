@@ -295,14 +295,11 @@ async function icCreateSession() {
       seen[c] = true;
       return true;
     });
-    if (codes.length === 0) {
-      icShowToast('Maglagay ng kahit isang item code para sa Spot count', 'warning');
-      return;
-    }
+    // v1.4: pwedeng walang naka-declare na codes; idadagdag on the spot habang nagbibilang
   }
 
   var scopeTxt = type === 'CYCLE' ? 'Category: ' + category
-               : type === 'SPOT' ? 'Items: ' + codes.length + ' item code(s)'
+               : type === 'SPOT' ? (codes.length ? 'Items: ' + codes.length + ' item code(s) (+ pwede pang dagdagan habang nagbibilang)' : 'Open spot count — pipili ka ng items habang nagbibilang')
                : 'Scope: All items';
   if (!confirm('Create new count session?\n\nType: ' + type + '\n' + scopeTxt)) return;
 
@@ -325,10 +322,10 @@ async function icCreateSession() {
     });
 
     var msg = '✅ Count created: ' + r.count_no + ' (' + r.total_items + ' items)';
-    if (codes && r.total_items < codes.length) {
+    if (codes && codes.length && r.total_items < codes.length) {
       msg += ' — ' + (codes.length - r.total_items) + ' code(s) hindi nahanap / inactive';
     }
-    icShowToast(msg, codes && r.total_items < codes.length ? 'warning' : 'success');
+    icShowToast(msg, codes && codes.length && r.total_items < codes.length ? 'warning' : 'success');
 
     var modal = bootstrap.Modal.getInstance(document.getElementById('newCountModal'));
     if (modal) modal.hide();
@@ -422,7 +419,7 @@ function icShowCountingView() {
   document.getElementById('viewReview').style.display = 'none';
 
   document.getElementById('icCountHeader').textContent = 
-    _ic.currentSession.count_no + ' | ' + (_ic.currentSession.scope_category || 'All Items');
+    _ic.currentSession.count_no + ' | ' + (_ic.currentSession.scope_category || (_ic.currentSession.count_type === 'SPOT' ? 'Spot Count' : 'All Items'));
 
   icUpdateProgress();
   icUpdateRecentScans();
@@ -569,10 +566,51 @@ function icExtractItemCode(text) {
   return raw;
 }
 
+// v1.4: SPOT count — kapag wala pa sa session ang item, idagdag on the spot.
+function icIsOpenSpot() {
+  var s = _ic.currentSession;
+  return !!(s && s.count_type === 'SPOT' && s.status === 'IN_PROGRESS');
+}
+
+async function icAddSpotItem(itemCode) {
+  if (_ic.isAdding) return;
+  _ic.isAdding = true;
+  try {
+    icUpdateScanStatus('Adding ' + itemCode + '...', 'info');
+    var r = await icRpc('erp_ic_add_item', {
+      p_count_id: _ic.currentSession.id,
+      p_item_code: itemCode,
+      p_user: icCurrentUser()
+    });
+    var row = r.item;
+    var exists = _ic.currentItems.find(function(it) { return it.id === row.id; });
+    if (!exists) _ic.currentItems.push(row);
+    icApplyStats(r.stats);
+    icUpdateProgress();
+    icUpdateRecentScans();
+    icUpdateVarianceSummary();
+    icUpdateScanStatus('Added: ' + itemCode, 'success');
+    icPlaySuccessBeep();
+    icOpenQtyInputModal(exists || row);
+  } catch (err) {
+    console.error('[icAddSpotItem]', err);
+    icUpdateScanStatus('Not found: ' + itemCode, 'warning');
+    icPlayErrorBuzz();
+    icShowToast('Hindi madagdag: ' + err.message, 'warning');
+  } finally {
+    _ic.isAdding = false;
+  }
+}
+
 function icProcessScannedItem(itemCode) {
   var item = _ic.currentItems.find(function(it) {
     return it.item_code.toUpperCase() === itemCode.toUpperCase();
   });
+
+  if (!item && icIsOpenSpot()) {
+    icAddSpotItem(itemCode);
+    return;
+  }
 
   if (!item) {
     icUpdateScanStatus('Item not in this count: ' + itemCode, 'warning');
@@ -629,7 +667,44 @@ function icOnManualInput(value) {
 
 window.icOnManualInput = icOnManualInput;
 
+async function icBuildSpotSuggestions(term, dropdown, input) {
+  var inSession = {};
+  (_ic.currentItems || []).forEach(function(it) { inSession[String(it.item_code).toUpperCase()] = it; });
+  var rows = [];
+  try {
+    var t = encodeURIComponent(term.replace(/[*,()]/g, ' ').trim());
+    rows = await erpFetch('erp_items',
+      'select=item_code,description,unit,on_hand&is_deleted=eq.false' +
+      '&or=(item_code.ilike.*' + t + '*,description.ilike.*' + t + '*)&order=item_code.asc&limit=30') || [];
+  } catch (e) {
+    console.warn('[IC] spot search failed', e);
+  }
+  if (rows.length === 0) {
+    dropdown.innerHTML = '<div class="item-search-item muted">No matching item</div>';
+  } else {
+    var html = '';
+    rows.forEach(function(it) {
+      var code = String(it.item_code || '');
+      var safeCode = code.replace(/'/g, "\\'");
+      var inS = inSession[code.toUpperCase()];
+      var badge = inS
+        ? (inS.counted_at ? '<span class="badge bg-success">Counted: ' + icNum(inS.counted_qty) + '</span>'
+                          : '<span class="badge bg-secondary">In session</span>')
+        : '<span class="badge bg-primary">+ Add to count</span>';
+      html += '<div class="item-search-item" data-code="' + icEsc(code) + '" onclick="icSelectManualSuggestion(\'' + safeCode + '\')">' +
+        '<div class="item-code">' + icEsc(code) + '</div>' +
+        '<div class="item-desc">' + icEsc(String(it.description || '').substring(0, 100)) + '</div>' +
+        '<div class="item-meta"><span class="badge bg-light text-dark">' + icEsc(it.unit || 'PCS') + '</span>' +
+        '<span>System: <strong>' + icNum(it.on_hand) + '</strong></span>' + badge + '</div></div>';
+    });
+    dropdown.innerHTML = html;
+  }
+  icPositionManualDropdown(dropdown, input);
+  dropdown.classList.remove('d-none');
+}
+
 function icBuildManualSuggestions(term, dropdown, input) {
+  if (icIsOpenSpot()) { icBuildSpotSuggestions(term, dropdown, input); return; }
   if (!_ic.currentItems || _ic.currentItems.length === 0) {
     dropdown.innerHTML = '<div class="item-search-item muted">No count session loaded</div>';
     icPositionManualDropdown(dropdown, input);
