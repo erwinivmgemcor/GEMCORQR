@@ -552,6 +552,23 @@
     document.head.appendChild(sc);
   }
 
+  // First-time guide (production users). Auto-starts once; replay from user menu → Quick Guide.
+  function _loadTourScript(cb) {
+    if (window.erpTour) { cb(); return; }
+    var existing = document.getElementById('erpTourScript');
+    if (existing) { existing.addEventListener('load', cb); return; }
+    var sc = document.createElement('script');
+    sc.id = 'erpTourScript';
+    sc.src = 'erp-tour.js';
+    sc.onload = cb;
+    document.head.appendChild(sc);
+  }
+
+  window.erpStartTour = function(force) {
+    document.querySelectorAll('.erp-user-menu.open').forEach(function(m) { m.classList.remove('open'); });
+    _loadTourScript(function() { if (window.erpTour) window.erpTour.start(!!force); });
+  };
+
   function _loadProfileScript(cb) {
     if (window.erpProfile) { cb(); return; }
     var existing = document.getElementById('erpProfileScript');
@@ -612,6 +629,7 @@
             '</div>' +
             '<button class="erp-user-dropdown-item" type="button" onclick="erpUserRefresh()"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>' +
             '<button class="erp-user-dropdown-item" type="button" onclick="erpUserSettings()"><i class="bi bi-gear"></i> Settings</button>' +
+            (userInfo.role === 'production' ? '<button class="erp-user-dropdown-item" type="button" onclick="erpStartTour(true)"><i class="bi bi-signpost-split"></i> Quick Guide</button>' : '') +
             '<div class="erp-user-dropdown-divider"></div>' +
             '<button class="erp-user-dropdown-item danger" type="button" onclick="erpUserLogout()"><i class="bi bi-box-arrow-right"></i> Logout</button>' +
           '</div>' +
@@ -752,6 +770,7 @@
     setTimeout(_checkHealth, 500);
     setTimeout(_syncProfileOnce, 800);
     setTimeout(_startChatAlerts, 1200);
+    if (userRole === 'production') setTimeout(function() { window.erpStartTour(false); }, 1600);
   }
 
   document.addEventListener('click', function(e) {
