@@ -83,6 +83,13 @@ async function loadDocument() {
     }
     _process.doc = docRes[0];
 
+    // ── lock: stop two staff from processing the same request ──
+    var _lockStatus = String(_process.doc.status || '').toUpperCase();
+    if ((_lockStatus === 'PENDING' || _lockStatus === 'PARTIAL') && window.erpDocLock) {
+      var _gotLock = await erpDocLock.guard(_process.docNo);
+      if (!_gotLock) return;
+    }
+
     var itemsRes = await erpFetch('doc_items', 'doc_no=eq.' + encodeURIComponent(_process.docNo) + '&order=line_no.asc');
 
     _process.items = (itemsRes || []).map(function(it) {
@@ -514,6 +521,8 @@ function processGetSummary() {
 // ═══════════════════════════════════════════════════════════
 async function submitProcess() {
   if (_process.isSubmitting) return;
+  // lock: make sure this request is still mine before touching stock
+  if (window.erpDocLock && !(await erpDocLock.verify(_process.docNo))) return;
 
   var verifiedItems = _process.items.filter(function(it) { return it.verified; });
   if (verifiedItems.length === 0) {
@@ -634,6 +643,8 @@ async function submitProcess() {
     // nagdodoble: 10 -> 5 -> 0 sa on_hand at used_qty 5 -> 10 sa isang 5-qty MRIF.
     // ═══════════════════════════════════════════════════════════
 
+    if (window.erpDocLock) erpDocLock.release(_process.docNo);   // done → free the lock
+
     document.getElementById('successDocNo').textContent = _process.docNo;
     document.getElementById('successStatus').textContent = data.status;
 
@@ -657,7 +668,8 @@ async function submitProcess() {
 
 function cancelProcess() {
   if (!confirm('Cancel and return to queue?')) return;
-  window.location.href = 'all-requests.html';
+  var go = function() { window.location.href = 'all-requests.html'; };
+  if (window.erpDocLock) { erpDocLock.release(_process.docNo).then(go, go); setTimeout(go, 1500); } else go();
 }
 
 // ═══════════════════════════════════════════════════════════
