@@ -603,6 +603,8 @@ async function viewRequestDetails(docNo, docType) {
     if (doc.gem_so_no) html += '<div class="col-md-6"><strong>GEM SO No:</strong> ' + erpEsc(doc.gem_so_no) + '</div>';
     if (doc.client_name) html += '<div class="col-md-6"><strong>Client:</strong> ' + erpEsc(doc.client_name) + '</div>';
     if (doc.project) html += '<div class="col-md-6"><strong>Project:</strong> ' + erpEsc(doc.project) + '</div>';
+    if (doc.carried_from) html += '<div class="col-12"><span class="badge bg-info text-dark"><i class="bi bi-arrow-return-right me-1"></i>Carried from ' + erpEsc(doc.carried_from) + '</span></div>';
+    if (doc.carried_to) html += '<div class="col-12"><span class="badge bg-secondary"><i class="bi bi-arrow-right me-1"></i>Balance carried to ' + erpEsc(doc.carried_to) + '</span></div>';
     html += '</div>';
     
     // Items table
