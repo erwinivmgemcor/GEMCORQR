@@ -257,6 +257,9 @@ tr.ar-mine td:first-child{box-shadow:inset 4px 0 0 #0ea5e9;}
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-outline-warning" id="btnRenumber" onclick="arRenumberCurrent()" style="display:none;" title="Palitan ang numero ng request (kuha sa kasalukuyang series)">
+          <i class="bi bi-hash me-1"></i>Renumber
+        </button>
         <button type="button" class="btn btn-primary" id="btnProcessRequest" onclick="processCurrentRequest()" style="display:none;">
           <i class="bi bi-play-circle me-1"></i>Process Request
         </button>
