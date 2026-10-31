@@ -962,3 +962,89 @@ async function arSaveCategory(cat, usernames) {
     erpShowToast('Could not save: ' + e.message, 'danger');
   }
 }
+
+// ═══════════════════════════════════════════════════════════
+// MONTH-END CLOSE (MRIF) — needs month-end-close.sql
+// ═══════════════════════════════════════════════════════════
+var _mc = { phrase: '', month: '' };
+
+async function arMcRpc(body) {
+  var res = await fetch(erpUrl('rpc/erp_month_close_mrif'), { method: 'POST', headers: erpHeaders(), body: JSON.stringify(body) });
+  var text = await res.text(), data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (e) {}
+  if (!res.ok) throw new Error((data && (data.message || data.error)) || text || ('HTTP ' + res.status));
+  return data;
+}
+
+function arMcMonthEnd() {
+  var el = document.getElementById('mcMonth');
+  return el && el.value ? el.value : null;      // YYYY-MM-DD (katapusan ng buwan)
+}
+
+async function arOpenMonthClose() {
+  var old = document.getElementById('monthCloseModal'); if (old) old.remove();
+  var now = new Date(), last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  var p = function(n) { return String(n).padStart(2, '0'); };
+  var lastStr = last.getFullYear() + '-' + p(last.getMonth() + 1) + '-' + p(last.getDate());
+  var w = document.createElement('div');
+  w.innerHTML =
+  '<div class="modal fade" id="monthCloseModal" tabindex="-1" data-bs-backdrop="static"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">' +
+    '<div class="modal-header" style="background:#92400e;color:#fff;"><h5 class="modal-title"><i class="bi bi-calendar-check me-2"></i>Month-End Close — MRIF</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>' +
+    '<div class="modal-body">' +
+      '<div class="alert alert-warning py-2 small">Ililipat ang <b>lahat ng PENDING at PARTIAL na MRIF</b> sa bagong MRIF (dated 1st ng susunod na buwan). Sa lumang MRIF, ang <b>naibigay lang</b> ang matitira. Kahit may nagpoproseso, ililipat pa rin. Hindi ginagalaw ang stock at SOF.</div>' +
+      '<div class="row g-2 mb-3 align-items-end"><div class="col-auto"><label class="form-label small fw-bold mb-1">Isasara ang buwan na nagtatapos sa</label><input type="date" id="mcMonth" class="form-control form-control-sm" value="' + lastStr + '" onchange="arMcLoad()"></div><div class="col" id="mcSummary" class="small"></div></div>' +
+      '<div id="mcBody"><div class="text-center py-4 text-muted">Loading…</div></div>' +
+    '</div>' +
+    '<div class="modal-footer flex-column align-items-stretch" id="mcFooter"></div>' +
+  '</div></div></div>';
+  document.body.appendChild(w.firstChild);
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('monthCloseModal')).show();
+  arMcLoad();
+}
+
+async function arMcLoad() {
+  var body = document.getElementById('mcBody'), foot = document.getElementById('mcFooter');
+  body.innerHTML = '<div class="text-center py-4 text-muted">Loading…</div>'; foot.innerHTML = '';
+  try {
+    var r = await arMcRpc({ p_user: arUsername(), p_month_end: arMcMonthEnd(), p_apply: false });
+    if (!r || !r.success) throw new Error((r && r.error) || 'Failed');
+    _mc.phrase = r.confirm_phrase;
+    var docs = r.docs || [], locked = docs.filter(function(d) { return d.locked_by; }).length;
+    document.getElementById('mcSummary').innerHTML = '<b>' + docs.length + '</b> MRIF ang lilipat · bagong petsa: <b>' + erpEsc(r.new_docs_dated) + '</b>' + (locked ? ' · <span class="text-danger"><b>' + locked + '</b> ang may nagpoproseso ngayon</span>' : '');
+    if (!docs.length) { body.innerHTML = '<div class="text-center py-4 text-muted">Walang PENDING o PARTIAL na MRIF. Wala nang ililipat. ✅</div>'; return; }
+    var badge = { CARRIED: '<span class="badge bg-info text-dark">May matitira → bagong MRIF</span>', CANCELLED: '<span class="badge bg-secondary">Walang naibigay → buong lilipat, CANCELLED ang luma</span>', COMPLETED: '<span class="badge bg-success">Kumpleto na</span>' };
+    body.innerHTML = '<div class="table-responsive"><table class="table table-sm align-middle" style="font-size:.85rem"><thead><tr><th>MRIF</th><th>Status</th><th>Requestor</th><th>Dept</th><th>JO</th><th class="text-center">Lines na lilipat</th><th class="text-end">Qty na lilipat</th><th>Gagawin</th></tr></thead><tbody>' +
+      docs.map(function(d) {
+        return '<tr' + (d.locked_by ? ' class="table-warning"' : '') + '><td><code>' + erpEsc(d.doc_no) + '</code>' + (d.locked_by ? '<div class="small text-danger"><i class="bi bi-lock-fill"></i> ' + erpEsc(d.locked_by) + '</div>' : '') + '</td><td>' + erpEsc(d.status) + '</td><td>' + erpEsc(d.requestor || '—') + '</td><td>' + erpEsc(d.department || '—') + '</td><td>' + erpEsc(d.jo_no || '—') + '</td><td class="text-center">' + d.lines_to_carry + ' / ' + d.lines + '</td><td class="text-end">' + Number(d.qty_to_carry).toLocaleString() + '</td><td>' + (badge[d.action] || '') + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    foot.innerHTML =
+      '<div class="d-flex flex-wrap gap-2 align-items-center"><label class="small mb-0">I-type ang <b><code>' + erpEsc(_mc.phrase) + '</code></b> para ituloy:</label>' +
+      '<input id="mcConfirm" class="form-control form-control-sm" style="max-width:220px" autocomplete="off" oninput="arMcCheck()" placeholder="' + erpEsc(_mc.phrase) + '">' +
+      '<div class="ms-auto d-flex gap-2"><button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-warning fw-bold" id="mcGo" disabled onclick="arMcApply()"><i class="bi bi-arrow-right-circle me-1"></i>Close month &amp; carry forward</button></div></div>';
+  } catch (e) {
+    body.innerHTML = '<div class="alert alert-danger">Failed: ' + erpEsc(e.message) + ' (na-run mo na ba ang month-end-close.sql?)</div>';
+  }
+}
+
+function arMcCheck() {
+  var ok = String(document.getElementById('mcConfirm').value || '').trim().toUpperCase() === _mc.phrase;
+  document.getElementById('mcGo').disabled = !ok;
+}
+
+async function arMcApply() {
+  var btn = document.getElementById('mcGo'); btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Closing…';
+  try {
+    var r = await arMcRpc({ p_user: arUsername(), p_month_end: arMcMonthEnd(), p_apply: true, p_confirm: document.getElementById('mcConfirm').value.trim() });
+    if (!r || !r.success) throw new Error((r && r.error) || 'Failed');
+    document.getElementById('mcBody').innerHTML =
+      '<div class="text-center py-4"><i class="bi bi-check-circle-fill text-success" style="font-size:3rem"></i><h5 class="mt-2">Tapos na ang Month-End Close</h5>' +
+      '<div class="text-muted">' + r.docs_carried + ' MRIF ang inilipat · ' + r.lines_carried + ' line(s) · ' + r.cancelled_originals + ' na walang naibigay ay na-CANCEL · mga bagong MRIF ay PENDING, dated ' + erpEsc(r.new_docs_dated) + '</div></div>';
+    document.getElementById('mcFooter').innerHTML = '<div class="text-end"><button class="btn btn-primary" data-bs-dismiss="modal">Done</button></div>';
+    if (typeof allRequestsLoad === 'function') allRequestsLoad();
+  } catch (e) {
+    erpShowToast('Failed: ' + e.message, 'danger');
+    btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-right-circle me-1"></i>Close month &amp; carry forward';
+  }
+}
+window.arOpenMonthClose = arOpenMonthClose; window.arMcLoad = arMcLoad; window.arMcCheck = arMcCheck; window.arMcApply = arMcApply;
