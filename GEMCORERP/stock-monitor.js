@@ -1045,15 +1045,22 @@ window.erpRestoreItem = async function(itemCode) {
   try {
     var res = await fetch(erpUrl('erp_items?item_code=eq.' + encodeURIComponent(itemCode)), {
       method: 'PATCH',
-      headers: erpHeaders(),
+      headers: erpHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify({
         is_deleted: false,
         is_active: true,
+        is_deprecated_2026: false,      // kung hindi ito i-false, hindi lalabas sa stock list at MRIF suggestions
         updated_at: new Date().toISOString()
       })
     });
     
     if (!res.ok) throw new Error('HTTP ' + res.status);
+    var restored = await res.json();
+    if (!restored || restored.length === 0) throw new Error('Walang na-update (baka walang permission). Subukan ulit o sabihan ang admin.');
+
+    // linisin ang cache para lumabas agad sa Stock Monitor at sa MRIF/MRS/MRR item suggestions
+    try { if (typeof erpClearInventoryCache === 'function') erpClearInventoryCache(); } catch (e) {}
+    try { if (typeof erpClearCache === 'function') erpClearCache(); } catch (e) {}
     
     erpShowToast('✅ Item restored successfully!');
     
