@@ -161,6 +161,9 @@ tr.ar-mine td:first-child{box-shadow:inset 4px 0 0 #0ea5e9;}
       </select>
       <input type="date" id="allDateFrom" class="erp-select" style="min-width:150px;" onchange="allRequestsLoad()" title="From date">
       <input type="date" id="allDateTo" class="erp-select" style="min-width:150px;" onchange="allRequestsLoad()" title="To date">
+      <button class="erp-btn-clear" id="allMonthCloseBtn" onclick="arOpenMonthClose()" title="Ilipat ang lahat ng pending/partial na MRIF sa susunod na buwan" style="border-color:#f59e0b;color:#b45309;">
+        <i class="bi bi-calendar-check"></i> Month-End Close
+      </button>
       <button class="erp-btn-clear" id="allAssignBtn" style="display:none;" onclick="arOpenAssignModal()" title="Admin: choose who handles Components / Consumables / Fabmat">
         <i class="bi bi-people-fill"></i> Assign
       </button>
