@@ -642,6 +642,14 @@ async function viewRequestDetails(docNo, docType) {
     
     document.getElementById('requestDetailBody').innerHTML = html;
     
+    // Renumber (admin, MRIF, PENDING lang, wala pang naka-issue)
+    var rbtn = document.getElementById('btnRenumber');
+    if (rbtn) {
+      var st0 = String(doc.status || '').toUpperCase();
+      var anyIssued = (items || []).some(function(it) { return Number(it.issued_qty || 0) > 0; });
+      rbtn.style.display = (arIsAdmin() && String(doc.doc_type || '').toUpperCase() === 'MRIF' && st0 === 'PENDING' && !doc.processed_at && !anyIssued) ? 'inline-flex' : 'none';
+    }
+
     // Show Process button if status is PENDING or PARTIAL
     var status = String(doc.status || '').toUpperCase();
     var mrsDone = String(doc.doc_type || '').toUpperCase() === 'MRS' && doc.processed_at;
@@ -668,6 +676,36 @@ async function viewRequestDetails(docNo, docType) {
 // ═══════════════════════════════════════════════════════════
 // PROCESS REQUEST (placeholder — full processing page to follow)
 // ═══════════════════════════════════════════════════════════
+async function arRenumberCurrent() {
+  if (!_allRequests.currentDoc) return;
+  var old = _allRequests.currentDoc.doc.doc_no;
+  var ans = prompt('Renumber ' + old + '\n\nBlangko = kunin ang SUSUNOD na numero sa series.\nO mag-type ng sarili mong numero (hal. 21980):', '');
+  if (ans === null) return;
+  ans = String(ans).trim();
+  var num = null;
+  if (ans !== '') {
+    num = parseInt(ans, 10);
+    if (!(num > 0)) return erpShowToast('Invalid number', 'warning');
+  }
+  if (!confirm('Papalitan ang ' + old + ' ng bagong numero. Tuloy?')) return;
+  try {
+    var res = await fetch(erpUrl('rpc/erp_renumber_doc'), {
+      method: 'POST', headers: erpHeaders(),
+      body: JSON.stringify({ p_doc_no: old, p_username: arUsername(), p_new_number: num })
+    });
+    var text = await res.text(), data = null;
+    try { data = text ? JSON.parse(text) : null; } catch (e) {}
+    if (!res.ok) throw new Error((data && (data.message || data.error)) || text || ('HTTP ' + res.status));
+    if (!data || !data.success) return erpShowToast((data && data.error) || 'Failed', 'danger');
+    erpShowToast('✅ ' + data.old + ' → ' + data['new'], 'success');
+    var m = bootstrap.Modal.getInstance(document.getElementById('requestDetailModal')); if (m) m.hide();
+    if (typeof allRequestsLoad === 'function') allRequestsLoad();
+  } catch (e) {
+    erpShowToast('Failed: ' + e.message + ' (na-run mo na ba ang renumber-doc.sql?)', 'danger');
+  }
+}
+window.arRenumberCurrent = arRenumberCurrent;
+
 function processCurrentRequest() {
   if (!_allRequests.currentDoc) return;
   
