@@ -278,3 +278,22 @@
     max-height: 60vh;
   }
 }
+
+
+/* ─── Tabs: Requests / Announcements ─── */
+.erp-notif-tabs { display: flex; border-bottom: 1px solid var(--border-light, #e2e8f0); }
+.erp-notif-tab {
+  flex: 1; background: none; border: 0; border-bottom: 2px solid transparent;
+  padding: 10px 8px; font-size: 0.8rem; font-weight: 600; color: #64748b;
+  cursor: pointer; transition: color 0.15s, border-color 0.15s;
+}
+.erp-notif-tab:hover { color: #1e3a5f; }
+.erp-notif-tab.on { color: #1e3a5f; border-bottom-color: #1e3a5f; }
+.erp-notif-tab .tab-count {
+  display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 6px;
+  border-radius: 10px; background: #ef4444; color: #fff; font-size: 0.68rem; line-height: 17px;
+}
+.erp-notif-tab .tab-count.ann { background: #94a3b8; }
+[data-theme="dark"] .erp-notif-tabs { border-color: #334155; }
+[data-theme="dark"] .erp-notif-tab { color: #94a3b8; }
+[data-theme="dark"] .erp-notif-tab.on { color: #93c5fd; border-bottom-color: #93c5fd; }
