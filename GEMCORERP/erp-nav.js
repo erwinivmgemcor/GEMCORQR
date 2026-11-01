@@ -129,14 +129,14 @@
           label: 'SOF Tracker',
           icon: 'bi-file-earmark-ruled',
           href: 'sof-tracker.html',
-          roles: ['warehouse']
+          roles: ['warehouse', 'procurement']
         },
         {
           id: 'project-costing',
           label: 'Project Costing',
           icon: 'bi-cash-coin',
           href: 'project-costing.html',
-          roles: ['warehouse']
+          roles: ['warehouse', 'finance']
         }
       ]
     },
@@ -156,14 +156,21 @@
           label: 'MRIF Monitoring',
           icon: 'bi-clipboard-data',
           href: 'mrif-monitoring.html',
-          roles: ['warehouse']
+          roles: ['warehouse', 'finance']
+        },
+        {
+          id: 'prf-monitor',
+          label: 'PRF Monitor',
+          icon: 'bi-file-earmark-text',
+          href: 'replenishment.html#prfs',
+          roles: ['procurement']
         },
         {
           id: 'mrr-monitoring',
           label: 'MRR Monitoring',
           icon: 'bi-clipboard-check',
           href: 'mrr-monitoring.html',
-          roles: ['warehouse']
+          roles: ['warehouse', 'procurement']
         },
         {
           id: 'mrs-monitoring',
