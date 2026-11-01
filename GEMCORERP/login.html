@@ -41,6 +41,37 @@ body {
   padding: 20px;
 }
 
+/* Animated photo background (slow zoom-in) */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background: url('login-bg.jpg') left center / cover no-repeat, var(--gem-navy-dark);
+  transform-origin: 60% 50%;
+  animation: loginZoom 28s ease-in-out infinite alternate;
+  will-change: transform;
+}
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(90deg, rgba(21,42,71,.35) 0%, rgba(21,42,71,.10) 60%, rgba(21,42,71,0) 100%);
+}
+@keyframes loginZoom {
+  from { transform: scale(1); }
+  to   { transform: scale(1.18); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+}
+body { overflow: hidden; }
+/* Wide screens: card on the left so the photo's tagline stays visible */
+@media (min-width: 1100px) {
+  body { justify-content: flex-start; padding-left: 7vw; }
+}
+
 .login-wrapper {
   width: 100%;
   max-width: 420px;
