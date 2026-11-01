@@ -279,7 +279,10 @@ function setLastReadTs(ts, cat) {
   try { localStorage.setItem(notifReadKey(cat || 'request'), String(ts)); } catch(e) {}
 }
 
-function setNotifTab(tab) {
+function setNotifTab(tab, e) {
+  // The dropdown is re-rendered below, which detaches the clicked button. Without this, the outside-click
+  // listener thinks the click was outside the panel and closes it.
+  if (e) e.stopPropagation();
   _notifState.tab = tab === 'announce' ? 'announce' : 'request';
   try { localStorage.setItem('ivm_notif_tab', _notifState.tab); } catch (e) {}
   renderDropdown();
@@ -347,9 +350,9 @@ function renderDropdown() {
   if (hasTabs) {
     var rc = _notifState.unreadReq, ac = _notifState.unreadAnn;
     html += '<div class="erp-notif-tabs">' +
-      '<button type="button" class="erp-notif-tab' + (tab === 'request' ? ' on' : '') + '" onclick="setNotifTab(\'request\')">' +
+      '<button type="button" class="erp-notif-tab' + (tab === 'request' ? ' on' : '') + '" onclick="setNotifTab(\'request\', event)">' +
         '<i class="bi bi-file-earmark-plus me-1"></i>Requests' + (rc > 0 ? '<span class="tab-count">' + rc + '</span>' : '') + '</button>' +
-      '<button type="button" class="erp-notif-tab' + (tab === 'announce' ? ' on' : '') + '" onclick="setNotifTab(\'announce\')">' +
+      '<button type="button" class="erp-notif-tab' + (tab === 'announce' ? ' on' : '') + '" onclick="setNotifTab(\'announce\', event)">' +
         '<i class="bi bi-megaphone me-1"></i>Announcements' + (ac > 0 ? '<span class="tab-count ann">' + ac + '</span>' : '') + '</button>' +
     '</div>';
   }
