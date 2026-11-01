@@ -17,7 +17,8 @@
   var CFG = {
     // notification type (from notifications.js) -> sound name.
     // A type that is missing here never alerts; it stays bell-only (e.g. new_prf).
-    sounds: { new_request: 'request', completed: 'done', partial: 'partial' },
+    sounds: { new_request: 'request', completed: 'done', partial: 'partial',
+             stock_out: 'alarm', stock_conflict: 'alarm', stock_low: 'low' },
     summaryAbove: 3,     // more fresh items than this => one summary toast per type
     maxToasts: 4,
     toastMs: 9000,
@@ -68,6 +69,8 @@
     request: [[880, 0, 0.7], [659.25, 0.22, 0.95], [880, 1.3, 0.7], [659.25, 1.52, 0.95]],   // door-bell, twice: hard to miss
     done:    [[523.25, 0, 0.5], [659.25, 0.12, 0.5], [783.99, 0.24, 0.5], [1046.5, 0.36, 0.95]], // rising chime = good news
     partial: [[783.99, 0, 0.5], [987.77, 0.16, 0.85]],                                         // softer two-note
+    alarm:   [[987.77, 0, 0.35], [739.99, 0.2, 0.55], [987.77, 0.9, 0.35], [739.99, 1.1, 0.55]],      // stock out / conflict: urgent two-tone, twice
+    low:     [[698.46, 0, 0.45], [587.33, 0.18, 0.8]],                                                  // below buffer: softer falling pair
     message: [[1174.66, 0, 0.22], [1567.98, 0.13, 0.5], [1174.66, 0.9, 0.22], [1567.98, 1.03, 0.5]]   // chat: bright two-note "pop", repeated once
   };
 
@@ -248,7 +251,7 @@
   }
 
   // ── detection + dispatch ─────────────────────────────────
-  var SOUND_ORDER = ['request', 'done', 'partial'];
+  var SOUND_ORDER = ['alarm', 'request', 'done', 'partial', 'low'];
   function strongest(items) {
     var best = null;
     items.forEach(function (n) {
@@ -263,7 +266,10 @@
     items.forEach(function (n) { if (!groups[n.type]) { groups[n.type] = []; order.push(n.type); } groups[n.type].push(n); });
     return order.map(function (type) {
       var g = groups[type], first = g[0], c = g.length;
-      var label = type === 'new_request' ? c + ' new requests'
+      var label = type === 'stock_out'      ? c + ' item(s) out of stock / negative'
+                : type === 'stock_low'      ? c + ' item(s) below buffer'
+                : type === 'stock_conflict' ? c + ' stock conflict(s)'
+                : type === 'new_request' ? c + ' new requests'
                 : type === 'completed'   ? c + ' requests served'
                 : c + ' requests partially served';
       return { id: 'sum_' + type, type: type, icon: first.icon, iconColor: first.iconColor,
@@ -344,7 +350,7 @@
   }
 
   window.erpAlerts = {
-    process: process, play: play, test: test, toggleMute: toggleMute,
+    process: process, announce: function (items) { if (items && items.length) dispatch(items); }, play: play, test: test, toggleMute: toggleMute,
     enableDesktop: enableDesktop, settingsHtml: settingsHtml,
     isMuted: isMuted, config: CFG, _unlock: unlock
   };
