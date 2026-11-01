@@ -3,6 +3,9 @@
 // v4.0 — Hashed Passwords via Supabase RPC
 // ============================================================
 
+var ROLE_LABELS = { warehouse: 'Warehouse', production: 'Production', procurement: 'Procurement', finance: 'Finance' };
+var ROLE_HOME = { warehouse: 'management-dashboard.html', production: 'my-requests.html', procurement: 'mrr-monitoring.html', finance: 'mrif-monitoring.html' };
+
 var _authState = {
   selectedRole: null,
   isLoggingIn: false,
@@ -32,7 +35,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function selectRole(role) {
-  if (role !== 'warehouse' && role !== 'production') {
+  if (ROLE_LABELS[role] === undefined) {
     showError('Invalid role selection');
     return;
   }
@@ -45,7 +48,7 @@ function selectRole(role) {
   
   var label = document.getElementById('loginRoleLabel');
   if (label) {
-    label.textContent = (role === 'warehouse' ? 'Warehouse' : 'Production') + ' Login';
+    label.textContent = ROLE_LABELS[role] + ' Login';
   }
   
   setTimeout(function() {
@@ -170,7 +173,7 @@ async function loginUser() {
     var userRoles = Array.isArray(data.roles) ? data.roles : ['warehouse'];
     if (userRoles.indexOf(role) === -1) {
       showError('Access denied. Your account is not authorized for <strong>' + 
-                (role === 'warehouse' ? 'Warehouse' : 'Production') + '</strong> mode.');
+                ROLE_LABELS[role] + '</strong> mode.');
       return;
     }
     
@@ -218,10 +221,8 @@ async function loginUser() {
 window.loginUser = loginUser;
 
 function redirectAfterLogin(role) {
-  if (role === 'warehouse') {
-    window.location.replace('management-dashboard.html');
-  } else if (role === 'production') {
-    window.location.replace('my-requests.html');
+  if (ROLE_HOME[role]) {
+    window.location.replace(ROLE_HOME[role]);
   } else {
     clearSession();
     window.location.replace('login.html');
