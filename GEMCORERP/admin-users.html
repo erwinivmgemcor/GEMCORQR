@@ -209,6 +209,8 @@
         <option value="">All Roles</option>
         <option value="warehouse">Warehouse</option>
         <option value="production">Production</option>
+        <option value="procurement">Procurement</option>
+        <option value="finance">Finance</option>
         <option value="admin">Admin only</option>
       </select>
       <select id="umStatusFilter" class="erp-select" onchange="umRender()">
@@ -338,6 +340,18 @@
                 <input class="form-check-input" type="checkbox" id="umRoleProduction">
                 <label class="form-check-label" for="umRoleProduction">
                   <i class="bi bi-tools me-1"></i>Production
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="umRoleProcurement">
+                <label class="form-check-label" for="umRoleProcurement">
+                  <i class="bi bi-cart-check me-1"></i>Procurement <span class="text-muted small">(view only)</span>
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="umRoleFinance">
+                <label class="form-check-label" for="umRoleFinance">
+                  <i class="bi bi-cash-stack me-1"></i>Finance <span class="text-muted small">(view only)</span>
                 </label>
               </div>
             </div>
