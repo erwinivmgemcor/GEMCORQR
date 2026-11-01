@@ -22,6 +22,61 @@
     'block-blast.html'   // Break Room (laro)
   ];
   
+  // Procurement / Finance: read-only, specific pages only
+  var VIEWER_PAGES = {
+    procurement: ['mrr-monitoring.html', 'prf-monitor.html', 'replenishment.html', 'sof-tracker.html', 'chat.html'],
+    finance: ['mrif-monitoring.html', 'project-costing.html', 'chat.html']
+  };
+  var VIEWER_HOME = { procurement: 'mrr-monitoring.html', finance: 'mrif-monitoring.html' };
+
+  // Write-actions hidden for read-only roles (matched by onclick text)
+  var READONLY_WRITE_FNS = [
+    'openTransmittalModal', 'openEditPrfItems', 'openEditPrfNo', 'bulkUpdateStatus',
+    'prfSyncAndRecompute', 'savePoEdit', 'openPoEditModal', 'saveEditPrfItems', 'saveEditedPrfNo',
+    'addEditPrfItem', 'editPrfRemoveItem', 'sofOpenManual', 'sofReleaseItem', 'sofManualSubmit'
+  ];
+
+  function _applyReadOnly(role) {
+    try {
+      var css = READONLY_WRITE_FNS.map(function(f) {
+        return '[onclick*="' + f + '"]';
+      }).join(',') + ',.item-select-cb,#selectAllItems,#bulkActionsBar,.bulk-status-btn,.erp-readonly-hide{display:none!important}' +
+        '.erp-readonly-badge{position:fixed;right:14px;bottom:14px;z-index:9999;background:#1e3a5f;color:#fff;font:600 12px/1 system-ui,sans-serif;padding:7px 12px;border-radius:20px;opacity:.9;pointer-events:none}';
+      // Procurement only needs the PRFs tab of Replenishment (Needs tab = create PRFs → hidden)
+      if (_getCurrentPage() === 'replenishment.html') {
+        css += '.rp-tabs,#rpTabNeeds,#rpBtnExport{display:none!important}';
+        if (location.hash !== '#prfs') { try { history.replaceState(null, '', location.pathname + location.search + '#prfs'); } catch (e) {} }
+      }
+      var st = document.createElement('style');
+      st.id = 'erp-readonly-css';
+      st.textContent = css;
+      (document.head || document.documentElement).appendChild(st);
+
+      // Block any write request (defense in depth). Read RPCs (POST /rpc/...) and
+      // housekeeping tables (notifications / chat / presence / locks) stay allowed.
+      var _fetch = window.fetch;
+      var SAFE = /\/rest\/v1\/rpc\/(get_|erp_get_|erp_sof_get_|list_|search_|verify_|erp_search)|notif|alert|chat|presence|heartbeat|avatar|profile|password|setting|log_|erp_doc_open/i;
+      window.fetch = function(input, init) {
+        try {
+          var url = (typeof input === 'string') ? input : (input && input.url) || '';
+          var m = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+          if (m !== 'GET' && m !== 'HEAD' && m !== 'OPTIONS' && url.indexOf('/rest/v1/') !== -1 && !SAFE.test(url)) {
+            console.warn('[ERP Guard] Read-only role blocked ' + m + ' ' + url);
+            return Promise.resolve(new Response(JSON.stringify({ error: 'Read-only access' }), { status: 403, headers: { 'Content-Type': 'application/json' } }));
+          }
+        } catch (e) {}
+        return _fetch.apply(this, arguments);
+      };
+
+      document.addEventListener('DOMContentLoaded', function() {
+        var b = document.createElement('div');
+        b.className = 'erp-readonly-badge';
+        b.textContent = 'READ-ONLY · ' + role.toUpperCase();
+        document.body.appendChild(b);
+      });
+    } catch (e) {}
+  }
+
   // ✅ NEW: Admin-only pages
   var ADMIN_ONLY_PAGES = [
     'admin-users.html',
@@ -69,6 +124,17 @@
         return;
       }
       console.log('[ERP Guard] ✓ Admin access granted for ' + username);
+      return;
+    }
+
+    // Procurement / Finance: read-only, whitelisted pages
+    if (VIEWER_PAGES[role]) {
+      if (VIEWER_PAGES[role].indexOf(currentPage) !== -1) {
+        _applyReadOnly(role);
+        console.log('[ERP Guard] ✓ Read-only ' + role + ': ' + currentPage);
+        return;
+      }
+      window.location.replace(VIEWER_HOME[role]);
       return;
     }
 
