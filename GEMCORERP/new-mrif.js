@@ -362,7 +362,7 @@ function onItemCodeInput(input) {
   var html = '';
   matches.forEach(function(it) {
     html += '<div class="erp-item-dropdown-item" data-code="' + erpEsc(it.code) + '" data-desc="' + erpEsc(it.description) + '" data-unit="' + erpEsc(it.unit) + '">' +
-      '<div class="item-code">' + erpEsc(it.code) + ' <span class="item-unit">' + erpEsc(it.unit) + '</span></div>' +
+      '<div class="item-code">' + erpEsc(it.code) + ' <span class="item-unit">' + erpEsc(it.unit) + '</span>' + (window.erpStockAlerts ? erpStockAlerts.badgeFor(it.code) : '') + '</div>' +
       '<div class="item-desc">' + erpEsc(it.description.substring(0, 80)) + '</div>' +
     '</div>';
   });
@@ -395,6 +395,7 @@ function selectItemFromDropdown(row, el) {
     _mrifState.items[idx].unit = unit;
   }
   
+  if (window.erpStockAlerts) erpStockAlerts.noteRow(row);
   setTimeout(function() {
     row.querySelector('.item-qty-input').focus();
     row.querySelector('.item-qty-input').select();
