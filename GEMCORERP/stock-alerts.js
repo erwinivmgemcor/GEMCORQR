@@ -213,15 +213,129 @@
     m.style.display = 'flex';
   }
 
+  // ═════════ PRODUCTION: flags for MRIF form + banner ═════════
+  var _flags = {}, _flagList = [], _flagsLoaded = false;
+  var FLAG_TXT = { OUT: 'Out of stock', CRITICAL: 'Very low', LOW: 'Low stock' };
+  var FLAG_CLR = { OUT: '#dc2626', CRITICAL: '#ea580c', LOW: '#d97706' };
+
+  function setFlags(list) {
+    _flagList = list || []; _flags = {};
+    _flagList.forEach(function (f) { _flags[String(f.c).toUpperCase()] = f; });
+    _flagsLoaded = true;
+  }
+  function flagFor(code) { return _flags[String(code || '').trim().toUpperCase()] || null; }
+
+  async function loadFlags() {
+    if (typeof erpUrl !== 'function') return;
+    try {
+      var res = await fetch(erpUrl('rpc/erp_stock_flags'), { method: 'POST', headers: erpHeaders(), body: '{}', cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var d = await res.json();
+      if (!Array.isArray(d)) throw new Error('bad payload');
+      setFlags(d);
+      lsSet('ivm_stk_flags', JSON.stringify(d));        // offline fallback
+    } catch (e) {
+      console.warn('[StockFlags]', e.message, '(run stock-alerts.sql?)');
+      if (!_flagsLoaded) { try { setFlags(JSON.parse(ls('ivm_stk_flags') || '[]')); } catch (er) {} }
+    }
+    renderProdBanner();
+    Array.prototype.forEach.call(document.querySelectorAll('.erp-item-row'), noteRow);
+  }
+
+  // inline note under an MRIF item row
+  function noteRow(row) {
+    var codeEl = row.querySelector('.item-code-input'), qtyEl = row.querySelector('.item-qty-input');
+    if (!codeEl) return;
+    if (!row.getAttribute('data-stk-bound')) {
+      row.setAttribute('data-stk-bound', '1');
+      ['change', 'blur'].forEach(function (ev) { codeEl.addEventListener(ev, function () { noteRow(row); }); });
+      if (qtyEl) qtyEl.addEventListener('input', function () { noteRow(row); });
+    }
+    var note = row.querySelector('.erp-item-stock-note');
+    var f = flagFor(codeEl.value);
+    codeEl.style.borderColor = f ? FLAG_CLR[f.k] : '';
+    if (!f) { if (note) note.remove(); return; }
+    if (!note) {
+      note = document.createElement('div'); note.className = 'erp-item-stock-note';
+      note.style.cssText = 'font-size:.76rem;font-weight:600;margin:2px 0 2px 36px;';
+      row.appendChild(note);
+    }
+    var qty = parseFloat(qtyEl && qtyEl.value) || 0;
+    var txt;
+    if (f.k === 'OUT') txt = '⚠ Out of stock — mananatiling PENDING ang item na ito hanggang may restock.';
+    else if (qty > f.free) txt = '⚠ ' + FLAG_TXT[f.k] + ': ' + num(f.free) + ' lang ang available, hinihingi ' + num(qty) + ' — malamang PARTIAL.';
+    else txt = '⚠ ' + FLAG_TXT[f.k] + ': ' + num(f.free) + ' na lang ang available.';
+    note.style.color = FLAG_CLR[f.k];
+    note.textContent = txt;
+  }
+
+  function badgeFor(code) {      // html for the item dropdown
+    var f = flagFor(code);
+    return f ? ' <span style="background:' + FLAG_CLR[f.k] + ';color:#fff;border-radius:10px;padding:0 7px;font-size:.68rem;font-weight:700;margin-left:6px;">' +
+      FLAG_TXT[f.k].toUpperCase() + ' · ' + num(f.free) + '</span>' : '';
+  }
+
+  function renderProdBanner() {
+    injectStyle();
+    var host = document.querySelector('.erp-container');
+    if (!host) return;
+    var b = document.getElementById('erpStkBanner');
+    if (!b) { b = document.createElement('div'); b.id = 'erpStkBanner'; b.addEventListener('click', openProdModal); host.insertBefore(b, host.firstChild); }
+    var out = _flagList.filter(function (f) { return f.k === 'OUT'; }).length;
+    var low = _flagList.length - out;
+    var sig = out + '-' + low, dismissed = false;
+    try { dismissed = sessionStorage.getItem('erp_stk_dismiss') === sig; } catch (e) {}
+    if (!_flagList.length || dismissed) { b.style.display = 'none'; return; }
+    b.className = 'warn';
+    b.innerHTML = '<i class="bi bi-info-circle-fill" style="font-size:1.2rem"></i><div><b>Stock notice</b> ' +
+      (out ? '<span class="stk-pill">' + out + ' out of stock</span>' : '') + (low ? '<span class="stk-pill">' + low + ' low</span>' : '') +
+      '<span style="opacity:.7;font-size:.8rem">check bago mag-request — click to view</span></div><button class="stk-x" type="button" title="Hide">×</button>';
+    b.style.display = 'flex';
+    b.querySelector('.stk-x').addEventListener('click', function (e) {
+      e.stopPropagation(); try { sessionStorage.setItem('erp_stk_dismiss', sig); } catch (er) {} b.style.display = 'none';
+    });
+  }
+
+  function openProdModal() {
+    injectStyle();
+    var m = document.getElementById('erpStkModal');
+    if (m) m.remove();
+    m = document.createElement('div'); m.id = 'erpStkModal';
+    m.innerHTML = '<div class="stk-box"><div class="stk-h"><i class="bi bi-info-circle-fill text-warning"></i><span style="flex:1">Items na ubos / mababa ang stock</span>' +
+      '<input id="stkQ" placeholder="Search item..." style="border:1px solid #cbd5e1;border-radius:8px;padding:4px 10px;font-size:.85rem">' +
+      '<button class="stk-btn" type="button" id="stkClose">Close</button></div><div class="stk-body"></div></div>';
+    document.body.appendChild(m);
+    function draw() {
+      var q = (m.querySelector('#stkQ').value || '').toLowerCase();
+      var rows = _flagList.filter(function (f) { return !q || (f.c + ' ' + (f.d || '')).toLowerCase().indexOf(q) !== -1; }).slice(0, 400).map(function (f) {
+        return '<tr><td><code>' + esc(f.c) + '</code></td><td>' + esc(f.d || '') + '</td><td><span class="stk-tag" style="background:' + FLAG_CLR[f.k] + '">' +
+          FLAG_TXT[f.k] + '</span></td><td style="text-align:right">' + num(f.free) + '</td></tr>';
+      }).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:20px">Walang tugma.</td></tr>';
+      m.querySelector('.stk-body').innerHTML = '<table><thead><tr><th>Item</th><th>Description</th><th>Status</th><th style="text-align:right">Available</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    }
+    m.querySelector('#stkQ').addEventListener('input', draw);
+    m.querySelector('#stkClose').addEventListener('click', function () { m.remove(); });
+    m.addEventListener('click', function (e) { if (e.target === m) m.remove(); });
+    m.style.display = 'flex'; draw();
+  }
+
   // ── start ────────────────────────────────────────────────
   function start() {
-    if ((ls('ivm_userRole') || '') !== 'warehouse') return;
+    var role = ls('ivm_userRole') || '';
+    if (role === 'production') {
+      try { setFlags(JSON.parse(ls('ivm_stk_flags') || '[]')); } catch (e) {}
+      renderProdBanner();
+      loadFlags();
+      setInterval(loadFlags, 5 * POLL_MS);
+      return;
+    }
+    if (role !== 'warehouse') return;
     load();
     _timer = setInterval(load, POLL_MS);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
   }
 
-  window.erpStockAlerts = { bellItems: bellItems, refresh: load, open: openModal, data: function () { return _data; } };
+  window.erpStockAlerts = { flagFor: flagFor, badgeFor: badgeFor, noteRow: noteRow, bellItems: bellItems, refresh: load, open: openModal, data: function () { return _data; } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(start, 800); });
   else setTimeout(start, 800);
   console.log('✅ stock-alerts.js v1.0 loaded');
