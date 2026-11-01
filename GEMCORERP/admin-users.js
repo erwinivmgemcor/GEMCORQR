@@ -175,6 +175,8 @@ function umRender() {
     roles.forEach(function(r) {
       if (r === 'warehouse') rolesBadges += '<span class="role-badge role-warehouse">WH</span>';
       else if (r === 'production') rolesBadges += '<span class="role-badge role-production">PR</span>';
+      else if (r === 'procurement') rolesBadges += '<span class="role-badge role-production" style="background:#dbeafe;color:#1e40af;">PC</span>';
+      else if (r === 'finance') rolesBadges += '<span class="role-badge role-production" style="background:#ede9fe;color:#5b21b6;">FN</span>';
     });
     if (!rolesBadges) rolesBadges = '<span class="text-muted small">—</span>';
 
@@ -258,6 +260,8 @@ function umOpenAddModal() {
   document.getElementById('umDepartment').value = '';
   document.getElementById('umRoleWarehouse').checked = true;
   document.getElementById('umRoleProduction').checked = false;
+  document.getElementById('umRoleProcurement').checked = false;
+  document.getElementById('umRoleFinance').checked = false;
   document.getElementById('umIsAdmin').checked = false;
   document.getElementById('umOriginalUsername').value = '';
   document.getElementById('umReason').value = '';
@@ -303,6 +307,8 @@ async function umOpenEditModal(username) {
   var roles = Array.isArray(user.roles) ? user.roles : [];
   document.getElementById('umRoleWarehouse').checked = roles.indexOf('warehouse') !== -1;
   document.getElementById('umRoleProduction').checked = roles.indexOf('production') !== -1;
+  document.getElementById('umRoleProcurement').checked = roles.indexOf('procurement') !== -1;
+  document.getElementById('umRoleFinance').checked = roles.indexOf('finance') !== -1;
   document.getElementById('umIsAdmin').checked = !!user.is_admin;
 
   document.getElementById('umOriginalUsername').value = user.username;
@@ -345,6 +351,8 @@ async function umSaveUser() {
   var department = document.getElementById('umDepartment').value.trim();
   var roleWarehouse = document.getElementById('umRoleWarehouse').checked;
   var roleProduction = document.getElementById('umRoleProduction').checked;
+  var roleProcurement = document.getElementById('umRoleProcurement').checked;
+  var roleFinance = document.getElementById('umRoleFinance').checked;
   var isAdmin = document.getElementById('umIsAdmin').checked;
   var reason = document.getElementById('umReason').value.trim();
   var originalUsername = document.getElementById('umOriginalUsername').value;
@@ -352,7 +360,7 @@ async function umSaveUser() {
   if (!username) { erpShowToast('Username is required', 'warning'); return; }
   if (mode === 'add' && !password) { erpShowToast('Password is required for new user', 'warning'); return; }
   if (!fullname) { erpShowToast('Full name is required', 'warning'); return; }
-  if (!roleWarehouse && !roleProduction) {
+  if (!roleWarehouse && !roleProduction && !roleProcurement && !roleFinance) {
     erpShowToast('Select at least one role', 'warning'); return;
   }
   if (mode === 'edit' && !reason) {
@@ -362,6 +370,8 @@ async function umSaveUser() {
   var roles = [];
   if (roleWarehouse) roles.push('warehouse');
   if (roleProduction) roles.push('production');
+  if (roleProcurement) roles.push('procurement');
+  if (roleFinance) roles.push('finance');
 
   if (mode === 'add') {
     var existing = _um.allUsers.find(function(u) { return u.username === username; });
