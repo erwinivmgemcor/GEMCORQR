@@ -256,6 +256,7 @@ function umOpenAddModal() {
   document.getElementById('umUsername').value = '';
   document.getElementById('umUsername').readOnly = false;
   document.getElementById('umPassword').value = '';
+  document.getElementById('umPassword').placeholder = 'e.g. 12345';
   document.getElementById('umFullname').value = '';
   document.getElementById('umDepartment').value = '';
   document.getElementById('umRoleWarehouse').checked = true;
@@ -288,19 +289,11 @@ async function umOpenEditModal(username) {
   document.getElementById('umModalTitle').textContent = 'Edit User';
   document.getElementById('umSaveBtnText').textContent = 'Save Changes';
 
-  // Fetch password (from base users table, not view)
-  var password = '';
-  try {
-    var rows = await erpFetch('users', 
-      'select=password&username=eq.' + encodeURIComponent(username) + '&limit=1');
-    if (rows && rows[0]) password = rows[0].password || '';
-  } catch(e) {
-    console.warn('[umOpenEditModal] Could not fetch password:', e.message);
-  }
-
   document.getElementById('umUsername').value = user.username;
   document.getElementById('umUsername').readOnly = true;
-  document.getElementById('umPassword').value = password;
+  // Passwords are hashed — never shown. Leave blank to keep the current one.
+  document.getElementById('umPassword').value = '';
+  document.getElementById('umPassword').placeholder = 'Leave blank to keep current password';
   document.getElementById('umFullname').value = user.fullname || '';
   document.getElementById('umDepartment').value = user.department || '';
 
@@ -347,6 +340,7 @@ async function umSaveUser() {
   var mode = document.getElementById('umEditMode').value;
   var username = document.getElementById('umUsername').value.trim().toUpperCase();
   var password = document.getElementById('umPassword').value.trim();
+  if (password === 'HASHED_NO_LONGER_USED') password = '';
   var fullname = document.getElementById('umFullname').value.trim();
   var department = document.getElementById('umDepartment').value.trim();
   var roleWarehouse = document.getElementById('umRoleWarehouse').checked;
