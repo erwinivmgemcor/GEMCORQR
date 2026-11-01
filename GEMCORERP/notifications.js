@@ -10,6 +10,9 @@ var _notifState = {
   userFullname: '',
   notifications: [],
   unreadCount: 0,
+  unreadReq: 0,
+  unreadAnn: 0,
+  tab: 'request',
   refreshInterval: null,
   lastFetchTs: 0,
   fetching: false,
@@ -33,6 +36,8 @@ function initNotifications() {
     console.warn('[Notifications] No user logged in');
     return;
   }
+
+  try { _notifState.tab = localStorage.getItem('ivm_notif_tab') === 'announce' ? 'announce' : 'request'; } catch (e) {}
 
   // Warehouse: stock & conflict announcements (banner + alerts)
   if ((_notifState.userRole === 'warehouse' || _notifState.userRole === 'production') && !window.erpStockAlerts) {
@@ -97,8 +102,11 @@ async function fetchNotifications() {
     notifications.sort(function(a, b) {
       return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
     });
-    _notifState.notifications = notifications.slice(0, 20); // Top 20
-    _notifState.unreadCount = computeUnreadCount(notifications);
+    // Cap each category separately so a flood of stock alerts can never push requests out of the list
+    var reqs = notifications.filter(function(n) { return notifCategory(n) === 'request'; }).slice(0, 20);
+    var anns = notifications.filter(function(n) { return notifCategory(n) === 'announce'; }).slice(0, 20);
+    _notifState.notifications = reqs.concat(anns);
+    computeUnreadCount(_notifState.notifications);
     _notifState.lastFetchTs = Date.now();
 
     renderBell();
@@ -235,38 +243,55 @@ async function fetchProductionNotifications() {
 // ═══════════════════════════════════════════════════════════
 // UNREAD COUNT (based on localStorage last-read timestamp)
 // ═══════════════════════════════════════════════════════════
-function computeUnreadCount(notifications) {
-  var lastReadTs = getLastReadTs();
-  var count = 0;
-
-  notifications.forEach(function(n) {
-    var ts = new Date(n.timestamp).getTime();
-    if (ts > lastReadTs) count++;
-  });
-
-  return count;
+// Category: stock/conflict alerts (id 'stk_') are announcements; everything else is a request
+function notifCategory(n) {
+  return String(n.id || '').indexOf('stk_') === 0 ? 'announce' : 'request';
 }
 
-function getLastReadTs() {
+function computeUnreadCount(notifications) {
+  var req = getLastReadTs('request'), ann = getLastReadTs('announce');
+  var r = 0, a = 0;
+  notifications.forEach(function(n) {
+    var ts = new Date(n.timestamp).getTime();
+    if (notifCategory(n) === 'announce') { if (ts > ann) a++; }
+    else if (ts > req) r++;
+  });
+  _notifState.unreadReq = r;
+  _notifState.unreadAnn = a;
+  _notifState.unreadCount = r + a;
+  return r + a;
+}
+
+function notifReadKey(cat) {
+  return 'ivm_notif_last_read_' + (cat === 'announce' ? 'ann_' : '') + _notifState.username;
+}
+
+function getLastReadTs(cat) {
   try {
-    var key = 'ivm_notif_last_read_' + _notifState.username;
-    return parseInt(localStorage.getItem(key) || '0', 10) || 0;
+    var v = localStorage.getItem(notifReadKey(cat));
+    // announcements fall back to the old shared key until they have their own
+    if (v === null && cat === 'announce') v = localStorage.getItem(notifReadKey('request'));
+    return parseInt(v || '0', 10) || 0;
   } catch(e) { return 0; }
 }
 
-function setLastReadTs(ts) {
-  try {
-    var key = 'ivm_notif_last_read_' + _notifState.username;
-    localStorage.setItem(key, String(ts));
-  } catch(e) {}
+function setLastReadTs(ts, cat) {
+  try { localStorage.setItem(notifReadKey(cat || 'request'), String(ts)); } catch(e) {}
+}
+
+function setNotifTab(tab) {
+  _notifState.tab = tab === 'announce' ? 'announce' : 'request';
+  try { localStorage.setItem('ivm_notif_tab', _notifState.tab); } catch (e) {}
+  renderDropdown();
 }
 
 function markAllAsRead() {
-  setLastReadTs(Date.now());
-  _notifState.unreadCount = 0;
+  var cat = _notifState.tab;
+  setLastReadTs(Date.now(), cat);
+  computeUnreadCount(_notifState.notifications);
   renderBell();
   renderDropdown();
-  erpShowToast('✅ All marked as read', 'success');
+  erpShowToast(cat === 'announce' ? '✅ Announcements marked as read' : '✅ Requests marked as read', 'success');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -276,8 +301,11 @@ function renderBell() {
   var bellContainer = document.getElementById('erpBellContainer');
   if (!bellContainer) return;
 
-  var count = _notifState.unreadCount;
-  var badgeHtml = count > 0 ? '<span class="badge-dot">' + (count > 99 ? '99+' : count) + '</span>' : '';
+  // Red badge = unread requests. Announcements only show a small grey badge when no request is waiting.
+  var req = _notifState.unreadReq, ann = _notifState.unreadAnn;
+  var badgeHtml = '';
+  if (req > 0) badgeHtml = '<span class="badge-dot">' + (req > 99 ? '99+' : req) + '</span>';
+  else if (ann > 0) badgeHtml = '<span class="badge-dot" style="background:#94a3b8;" title="Announcements">' + (ann > 99 ? '99+' : ann) + '</span>';
 
   bellContainer.innerHTML =
     '<button class="erp-btn-icon" id="erpBellBtn" title="Notifications">' +
@@ -302,8 +330,10 @@ function renderDropdown() {
   var notifContainer = document.getElementById('erpNotifContainer');
   if (!notifContainer) return;
 
-  var notifs = _notifState.notifications;
-  var lastReadTs = getLastReadTs();
+  var hasTabs = _notifState.userRole === 'warehouse';
+  var tab = hasTabs ? _notifState.tab : 'request';
+  var notifs = _notifState.notifications.filter(function(n) { return notifCategory(n) === tab; });
+  var lastReadTs = getLastReadTs(tab);
 
   var html = '<div class="erp-notif-dropdown">';
 
@@ -313,11 +343,22 @@ function renderDropdown() {
     (notifs.length > 0 ? '<button class="erp-notif-mark-read" onclick="markAllAsRead()" type="button">Mark all read</button>' : '') +
   '</div>';
 
+  // Tabs (warehouse only: production has no announcements)
+  if (hasTabs) {
+    var rc = _notifState.unreadReq, ac = _notifState.unreadAnn;
+    html += '<div class="erp-notif-tabs">' +
+      '<button type="button" class="erp-notif-tab' + (tab === 'request' ? ' on' : '') + '" onclick="setNotifTab(\'request\')">' +
+        '<i class="bi bi-file-earmark-plus me-1"></i>Requests' + (rc > 0 ? '<span class="tab-count">' + rc + '</span>' : '') + '</button>' +
+      '<button type="button" class="erp-notif-tab' + (tab === 'announce' ? ' on' : '') + '" onclick="setNotifTab(\'announce\')">' +
+        '<i class="bi bi-megaphone me-1"></i>Announcements' + (ac > 0 ? '<span class="tab-count ann">' + ac + '</span>' : '') + '</button>' +
+    '</div>';
+  }
+
   // List
   if (notifs.length === 0) {
     html += '<div class="erp-notif-empty">' +
       '<i class="bi bi-bell-slash fs-2 d-block mb-2 text-muted"></i>' +
-      '<div>No notifications</div>' +
+      '<div>' + (tab === 'announce' ? 'No announcements' : 'No requests') + '</div>' +
     '</div>';
   } else {
     html += '<div class="erp-notif-list">';
@@ -328,7 +369,7 @@ function renderDropdown() {
 
       var safeDoc = String(n.docNo || '').replace(/'/g, "\\'");
       html += '<div class="erp-notif-item' + (isUnread ? ' unread' : '') + '" ' +
-        'onclick="handleNotifClick(\'' + n.link + '\', \'' + safeDoc + '\')" ' +
+        'onclick="handleNotifClick(\'' + n.link + '\', \'' + safeDoc + '\', \'' + tab + '\')" ' +
         'data-notif-id="' + n.id + '">' +
         '<div class="erp-notif-icon" style="background:' + n.iconColor + '20;color:' + n.iconColor + ';">' +
           '<i class="bi ' + n.icon + '"></i>' +
@@ -346,7 +387,7 @@ function renderDropdown() {
 
     // Footer
     html += '<div class="erp-notif-footer">' +
-      '<a href="' + getNotifViewAllLink() + '" class="erp-notif-view-all">' +
+      '<a href="' + getNotifViewAllLink(tab) + '" class="erp-notif-view-all">' +
         'View All <i class="bi bi-arrow-right ms-1"></i>' +
       '</a>' +
     '</div>';
@@ -357,8 +398,8 @@ function renderDropdown() {
   notifContainer.innerHTML = html;
 }
 
-function getNotifViewAllLink() {
-  if (_notifState.userRole === 'warehouse') return 'all-requests.html';
+function getNotifViewAllLink(tab) {
+  if (_notifState.userRole === 'warehouse') return tab === 'announce' ? 'stock-monitor.html' : 'all-requests.html';
   if (_notifState.userRole === 'production') return 'my-requests.html';
   return '#';
 }
@@ -389,10 +430,10 @@ function toggleNotifDropdown() {
 // ═══════════════════════════════════════════════════════════
 // CLICK HANDLER
 // ═══════════════════════════════════════════════════════════
-function handleNotifClick(link, docNo) {
-  // Mark this notification as read by setting last-read to NOW
-  setLastReadTs(Date.now());
-  _notifState.unreadCount = 0;
+function handleNotifClick(link, docNo, cat) {
+  // Mark only this category as read (opening an alert must not clear unread requests)
+  setLastReadTs(Date.now(), cat || 'request');
+  computeUnreadCount(_notifState.notifications);
   renderBell();
 
   // Close dropdown
