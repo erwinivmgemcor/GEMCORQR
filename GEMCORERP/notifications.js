@@ -35,7 +35,7 @@ function initNotifications() {
   }
 
   // Warehouse: stock & conflict announcements (banner + alerts)
-  if (_notifState.userRole === 'warehouse' && !window.erpStockAlerts) {
+  if ((_notifState.userRole === 'warehouse' || _notifState.userRole === 'production') && !window.erpStockAlerts) {
     var sa = document.createElement('script');
     sa.src = 'stock-alerts.js';
     document.head.appendChild(sa);
