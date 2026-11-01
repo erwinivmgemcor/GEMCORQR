@@ -151,20 +151,49 @@ self.addEventListener('fetch', function(event) {
   // Only handle same-origin requests
   if (url.indexOf('/GEMCORQR/') === -1) return;
   
-  // ═══ Network-first for HTML/JS/CSS — para laging bago ang code (iwas lumang JS) ═══
   var path = url.split('?')[0];
+
+  // ═══ INSTANT: Break Room (game) at offline page — cache muna, update sa background ═══
+  // Walang hinihintay na network, kaya agad bumubukas kahit walang internet / mahina ang signal.
+  if (/\/(block-blast\.html|blockblast\.js|blockblast\.css|offline\.html|erp-netwatch\.js)$/i.test(path)) {
+    event.respondWith(
+      caches.match(event.request, { ignoreSearch: true }).then(function(cached) {
+        var update = fetch(event.request).then(function(response) {
+          if (response && response.status === 200) {
+            var copy = response.clone();
+            caches.open(CACHE_NAME).then(function(c) { c.put(event.request, copy); }).catch(function() {});
+          }
+          return response;
+        }).catch(function() { return cached || _offlineFallback(event.request); });
+        return cached || update;
+      })
+    );
+    return;
+  }
+
+  // ═══ Network-first (may 3s timeout) para sa HTML/JS/CSS — laging bago ang code,
+  //     pero kapag mabagal/walang net, cache ang gagamitin agad (hindi maghihintay ng minuto) ═══
   if (/\.(js|html|css)$/i.test(path)) {
     event.respondWith(
-      fetch(event.request).then(function(response) {
-        if (response && response.status === 200) {
-          var copy = response.clone();
-          caches.open(RUNTIME_CACHE).then(function(c) { c.put(event.request, copy); }).catch(function() {});
+      new Promise(function(resolve) {
+        var settled = false;
+        function fromCache() {
+          return caches.match(event.request, { ignoreSearch: true }).then(function(r) { return r || null; });
         }
-        return response;
-      }).catch(function() {
-        // ignoreSearch: para tumama kahit may ?query ang URL (hal. page.html?id=5)
-        return caches.match(event.request, { ignoreSearch: true }).then(function(r) {
-          return r || _offlineFallback(event.request);
+        var timer = setTimeout(function() {
+          fromCache().then(function(r) { if (r && !settled) { settled = true; resolve(r); } });
+        }, 3000);
+        fetch(event.request).then(function(response) {
+          clearTimeout(timer);
+          if (response && response.status === 200) {
+            var copy = response.clone();
+            caches.open(RUNTIME_CACHE).then(function(c) { c.put(event.request, copy); }).catch(function() {});
+          }
+          if (!settled) { settled = true; resolve(response); }
+        }).catch(function() {
+          clearTimeout(timer);
+          if (settled) return;
+          fromCache().then(function(r) { settled = true; resolve(r || _offlineFallback(event.request)); });
         });
       })
     );
