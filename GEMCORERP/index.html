@@ -100,6 +100,10 @@ body {
       window.location.replace('management-dashboard.html');
     } else if (role === 'production') {
       window.location.replace('my-requests.html');
+    } else if (role === 'procurement') {
+      window.location.replace('mrr-monitoring.html');
+    } else if (role === 'finance') {
+      window.location.replace('mrif-monitoring.html');
     } else {
       // Unknown role → reset session
       console.warn('[Landing] Unknown role:', role);
