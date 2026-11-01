@@ -34,6 +34,13 @@ function initNotifications() {
     return;
   }
 
+  // Warehouse: stock & conflict announcements (banner + alerts)
+  if (_notifState.userRole === 'warehouse' && !window.erpStockAlerts) {
+    var sa = document.createElement('script');
+    sa.src = 'stock-alerts.js';
+    document.head.appendChild(sa);
+  }
+
   // Initial fetch
   fetchNotifications();
 
@@ -69,6 +76,12 @@ async function fetchNotifications() {
       notifications = await fetchProductionNotifications();
     }
 
+    // Stock / conflict alerts (warehouse): bell-only here; their sound/toast is handled by stock-alerts.js
+    var stockItems = [];
+    if (_notifState.userRole === 'warehouse' && window.erpStockAlerts) {
+      try { stockItems = erpStockAlerts.bellItems(); } catch (e) {}
+    }
+
     // Sort by timestamp desc
     notifications.sort(function(a, b) {
       return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
@@ -80,6 +93,10 @@ async function fetchNotifications() {
       try { erpAlerts.process(notifications); } catch (e) { console.warn('[Alerts]', e); }
     }
 
+    notifications = notifications.concat(stockItems);
+    notifications.sort(function(a, b) {
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    });
     _notifState.notifications = notifications.slice(0, 20); // Top 20
     _notifState.unreadCount = computeUnreadCount(notifications);
     _notifState.lastFetchTs = Date.now();
