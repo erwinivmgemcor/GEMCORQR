@@ -126,6 +126,7 @@ tr.selected-item-row {
 <script defer src="erp-shortcuts.js"></script>
 <script defer src="prints-erp.js"></script>
 <script defer src="success-actions.js"></script>
+<script defer src="erp-docno-format.js"></script>
 <script defer src="new-mrr.js"></script>
   <script defer src="notif-alerts.js"></script>
   <script defer src="notifications.js"></script>
@@ -189,7 +190,7 @@ tr.selected-item-row {
 </div>
 <div class="col-md-6">
   <label class="form-label fw-bold">SOF No. <span class="text-muted small">(optional)</span></label>
-  <input type="text" id="mrrSofNo" class="form-control form-control-lg" placeholder="e.g. SOF#13472" autocomplete="off">
+  <input type="text" id="mrrSofNo" class="form-control form-control-lg" placeholder="Type the SOF No. exactly as shown in SOF Monitoring" autocomplete="off">
   <div class="form-text">Supplemental Order Form No.</div>
 </div>
 <div class="col-12">
@@ -210,14 +211,14 @@ tr.selected-item-row {
       <div class="col-md-6">
   <label class="form-label fw-bold">PRF No.</label>
   <div class="input-group">
-    <input type="text" id="mrrPrfNo" class="form-control" placeholder="Auto-filled from PO, or type e.g. PRF#26-878" onchange="checkPrfInfo()" autocomplete="off">
+    <input type="text" id="mrrPrfNo" class="form-control" placeholder="Auto-filled from PO, or type the number only, e.g. 26-878 (PRF# is added automatically)" onchange="checkPrfInfo()" autocomplete="off">
     <button class="btn btn-outline-primary" type="button" onclick="loadItemsFromPrf()" title="Fill the items table with the open lines of this PRF"><i class="bi bi-download"></i> Load PRF items</button>
   </div>
   <div id="mrrPrfInfo" class="form-text mt-1"></div>
 </div>
 <div class="col-md-6">
   <label class="form-label fw-bold">SOF No. <span class="text-muted small">(optional)</span></label>
-  <input type="text" id="mrrSofNoDisplay" class="form-control" placeholder="Auto-filled from PO, or type e.g. SOF#13472">
+  <input type="text" id="mrrSofNoDisplay" class="form-control" placeholder="Auto-filled from PO, or type the SOF No. exactly as in SOF Monitoring">
 </div>
       <div class="col-md-6">
         <label class="form-label fw-bold">Vendor / Client</label>
