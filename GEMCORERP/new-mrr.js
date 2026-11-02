@@ -283,7 +283,9 @@ async function lookupPoNo() {
 // PRF DETECTION — shows what this MRR will update in PRF Monitor
 // ═══════════════════════════════════════════════════════════
 function _mrrPrfList(raw) {
-  return _mrrUnique(String(raw || '').split(/[,;]+/));
+  var parts = String(raw || '').split(/[,;]+/);
+  if (typeof window.erpFmtPrf === 'function') parts = parts.map(window.erpFmtPrf);   // → PRF#26-878
+  return _mrrUnique(parts);
 }
 
 async function checkPrfInfo() {
@@ -292,6 +294,7 @@ async function checkPrfInfo() {
   var list = _mrrPrfList(document.getElementById('mrrPrfNo').value);
   _mrrState.prfLines = [];
   if (list.length === 0) { el.innerHTML = ''; return; }
+  document.getElementById('mrrPrfNo').value = list.join(', ');   // show the standard format
 
   el.innerHTML = '<span class="text-muted"><i class="bi bi-hourglass-split"></i> Checking PRF...</span>';
   try {
@@ -713,8 +716,10 @@ async function submitMrr() {
   _mrrState.vendor = document.getElementById('mrrVendor').value.trim();
   _mrrState.poNo = document.getElementById('mrrPoNo').value.trim();   // typed by hand or from lookup
   _mrrState.receivingSite = receivingSite;
-  _mrrState.prfNo = document.getElementById('mrrPrfNo').value.trim();
-  _mrrState.sofNo = document.getElementById('mrrSofNoDisplay').value.trim() || document.getElementById('mrrSofNo').value.trim();
+  var _fmtPrfList = window.erpFmtPrfList || function(v) { return v; };
+  var _fmtSof = window.erpFmtSof || function(v) { return v; };
+  _mrrState.prfNo = _fmtPrfList(document.getElementById('mrrPrfNo').value.trim());
+  _mrrState.sofNo = _fmtSof(document.getElementById('mrrSofNoDisplay').value.trim() || document.getElementById('mrrSofNo').value.trim());
 
   if (_mrrState.items.length === 0) { erpShowToast('No items to submit', 'warning'); return; }
 
