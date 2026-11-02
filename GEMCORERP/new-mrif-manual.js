@@ -318,6 +318,7 @@ async function submitMrif() {
   var clientName = document.getElementById('mrifClientName').value.trim();
   var project = document.getElementById('mrifProject').value.trim();
   var sofNo = document.getElementById('mrifSofNo') ? document.getElementById('mrifSofNo').value.trim() : '';
+  if (window.erpFmtSof) sofNo = window.erpFmtSof(sofNo);
   
   var validItems = [];
   var rows = document.querySelectorAll('.erp-item-row');
