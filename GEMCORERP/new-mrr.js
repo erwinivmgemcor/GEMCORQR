@@ -120,7 +120,7 @@ function _mrrSofFrom(rows) {
       if (!f) continue;
       if (k === 0) return String(f).trim();           // a real sof_no column, if it exists
       var m = re.exec(String(f));
-      if (m) return 'SOF#' + m[1];
+      if (m) return m[1];            // SOF is stored as the bare number (e.g. 12897)
     }
   }
   return '';
