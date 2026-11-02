@@ -153,7 +153,8 @@ async function _mrrPriorReceipts(poNo) {
 }
 
 async function lookupPoNo() {
-  var poNo = document.getElementById('mrrPoNo').value.trim();
+  var poNo = (window.erpFmtPo || function(v) { return v; })(document.getElementById('mrrPoNo').value.trim());
+  document.getElementById('mrrPoNo').value = poNo;
   var statusEl = document.getElementById('poStatus');
   var resultEl = document.getElementById('poLookupResult');
 
@@ -698,6 +699,92 @@ async function _mrrLoadInventory() {
 // ═══════════════════════════════════════════════════════════
 // SUBMIT MRR (Direct Supabase Insert)
 // ═══════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════
+// PRE-SUBMIT CHECKS — keep manually typed data accurate
+// ═══════════════════════════════════════════════════════════
+function _mrrNorm(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
+
+async function _mrrPreflight() {
+  // --- Clean the header fields ---
+  var fmtPo = window.erpFmtPo || function(v) { return v; };
+  _mrrState.poNo = fmtPo(_mrrState.poNo);
+  _mrrState.drNo = _mrrNorm(_mrrState.drNo).toUpperCase();
+  _mrrState.vendor = _mrrNorm(_mrrState.vendor);
+  _mrrState.receivingSite = _mrrNorm(_mrrState.receivingSite).toUpperCase();
+  [['mrrPoNo', _mrrState.poNo], ['mrrDrNo', _mrrState.drNo], ['mrrVendor', _mrrState.vendor], ['mrrReceivingSite', _mrrState.receivingSite]]
+    .forEach(function(p) { var el = document.getElementById(p[0]); if (el) el.value = p[1]; });
+
+  // --- Receiving date: not in the future, warn if very old ---
+  var now = new Date();
+  var todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+  if (_mrrState.receivingDate > todayStr) { erpShowToast('Receiving Date cannot be in the future', 'warning'); return false; }
+  var ageDays = (new Date(todayStr) - new Date(_mrrState.receivingDate)) / 86400000;
+  if (ageDays > 60 && !confirm('Receiving Date is ' + Math.round(ageDays) + ' days ago (' + _mrrState.receivingDate + ').\n\nIs this correct?')) return false;
+
+  // --- Items: every code must exist in the inventory master ---
+  var items = _mrrState.items, problems = [], warns = [], seen = {};
+  var q = [];
+  items.forEach(function(it) {
+    var c = String(it.itemCode || '').trim();
+    if (!c) return;
+    [c, c.toUpperCase()].forEach(function(v) { var w = '"' + v.replace(/"/g, '') + '"'; if (q.indexOf(w) === -1) q.push(w); });
+  });
+  var rows = [];
+  if (q.length) {
+    try {
+      rows = await erpFetch('erp_items',
+        'select=item_code,description,base_unit,is_active,is_deprecated_2026&item_code=in.(' + q.map(encodeURIComponent).join(',') + ')&limit=1000') || [];
+    } catch (e) { erpShowToast('Could not verify the item codes. Check your connection and try again.', 'warning'); return false; }
+  }
+  var master = {};
+  rows.forEach(function(r) { master[String(r.item_code).toUpperCase()] = r; });
+
+  var received = 0;
+  items.forEach(function(it, i) {
+    var code = String(it.itemCode || '').trim();
+    if (!code) return;
+    var n = '#' + (i + 1) + ' ';
+    var row = master[code.toUpperCase()];
+    if (!row) { problems.push(n + '"' + code + '" is not in the inventory. Pick the item from the search list.'); return; }
+    if (row.is_active === false || row.is_deprecated_2026 === true) { problems.push(n + row.item_code + ' is deactivated.'); return; }
+    if (seen[row.item_code]) { problems.push(n + row.item_code + ' is entered twice (also line #' + seen[row.item_code] + '). Combine the quantities into one line.'); return; }
+    seen[row.item_code] = i + 1;
+
+    // Use the master data so code / description / unit always match the inventory
+    it.itemCode = row.item_code;
+    it.description = row.description || it.description;
+    it.unit = row.base_unit || it.unit;
+
+    var req = Number(it.requestedQty) || 0, rec = Number(it.issuedQty) || 0;
+    if (req < 0 || rec < 0) problems.push(n + row.item_code + ' has a negative quantity.');
+    received += rec;
+    if (req > 0 && rec > req) warns.push(n + row.item_code + ': received (' + rec + ') is more than the PO / requested qty (' + req + ').');
+    if (/^(PIECE|PIECES|PCS|PC|UNIT|SET)$/i.test(String(it.unit || '')) && rec % 1 !== 0) warns.push(n + row.item_code + ': decimal quantity (' + rec + ') for unit ' + it.unit + '.');
+  });
+
+  if (problems.length) {
+    alert('Please fix these before submitting:\n\n' + problems.slice(0, 8).join('\n') + (problems.length > 8 ? '\n…and ' + (problems.length - 8) + ' more' : ''));
+    return false;
+  }
+  if (received <= 0) { erpShowToast('All received quantities are 0 — nothing to receive.', 'warning'); return false; }
+  renderItems();   // show the corrected codes / units
+
+  if (warns.length && !confirm('Please double-check:\n\n' + warns.slice(0, 8).join('\n') + '\n\nContinue anyway?')) return false;
+
+  // --- Same DR No. already received? ---
+  try {
+    var dup = await erpFetch('documents',
+      'select=doc_no,vendor,receiving_date&doc_type=eq.MRR&dr_no=eq.' + encodeURIComponent(_mrrState.drNo) + '&order=created_at.desc&limit=3');
+    if (dup && dup.length) {
+      var list = dup.map(function(d) { return d.doc_no + (d.vendor ? ' (' + d.vendor + ')' : ''); }).join(', ');
+      if (!confirm('DR / S.I. No. ' + _mrrState.drNo + ' was already used in: ' + list + '.\n\nThis may be a duplicate receipt. Continue anyway?')) return false;
+    }
+  } catch (e) { /* check is optional — never block submit if it can't run */ }
+
+  return true;
+}
+
 async function submitMrr() {
   if (_mrrState.isSubmitting) return;
 
@@ -722,6 +809,9 @@ async function submitMrr() {
   _mrrState.sofNo = _fmtSof(document.getElementById('mrrSofNoDisplay').value.trim() || document.getElementById('mrrSofNo').value.trim());
 
   if (_mrrState.items.length === 0) { erpShowToast('No items to submit', 'warning'); return; }
+
+  if (!_mrrState.vendor) { erpShowToast('Vendor / Client is required', 'warning'); return; }
+  if (!(await _mrrPreflight())) return;
 
   var validItems = [];
   for (var i = 0; i < _mrrState.items.length; i++) {
