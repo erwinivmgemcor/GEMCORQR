@@ -267,6 +267,9 @@ async function erpLoadItems() {
     });
   }
   
+  // Header (per-column) filters from stock-colfilters.js
+  if (typeof erpApplyColFilters === 'function') _erpFilteredItems = erpApplyColFilters(_erpFilteredItems, _erpAllItems);
+
   erpRenderTable();
   _erpRenderLock = false;
 }
@@ -1272,6 +1275,7 @@ function erpPageNext() {
 function erpClearFilters() {
   ['erpSearchInput', 'erpCategoryFilter', 'erpLocationFilter', 'erpMovementFilter', 'erpAbcFilter', 'erpVarianceFilter']
     .forEach(function(id) { var el = document.getElementById(id); if (el) el.value = ''; });
+  if (typeof erpClearColFilters === 'function') erpClearColFilters(false);
   erpLoadItems();
 }
 
