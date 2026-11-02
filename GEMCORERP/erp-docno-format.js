@@ -1,30 +1,31 @@
 // ============================================================
 // GEMCOR ERP — SOF# / PRF# input formatter
-// The user may type "13472", "SOF 13472" or "sof#13472" — all become "SOF#13472".
-// The user may type "26-878", "PRF 26-878" or "prf#26-878" — all become "PRF#26-878".
-// Several PRFs can be separated by commas: "26-878, 26-879" → "PRF#26-878, PRF#26-879".
+//  SOF  → stored as the bare number:  12897   ("SOF#12897", "sof 12897" → 12897)
+//  PRF  → stored with prefix:         PRF#26-878   ("26-878", "prf 26-878" → PRF#26-878)
+// Several values can be separated by commas.
 // ============================================================
 (function () {
-  function fmtOne(raw, prefix) {
+  function clean(raw, name, addPrefix) {
     var s = String(raw || '').trim();
     if (!s) return '';
-    var re = new RegExp('^' + prefix + '\\s*#?\\s*[:\\-]?\\s*', 'i');
+    var re = new RegExp('^' + name + '\\s*#?\\s*[:\\-]?\\s*', 'i');
     s = s.replace(re, '').replace(/\s+/g, '').toUpperCase();
-    return s ? prefix + '#' + s : '';
+    if (!s) return '';
+    return addPrefix ? name + '#' + s : s;
   }
 
-  function fmtList(raw, prefix) {
+  function fmtList(raw, name, addPrefix) {
     var seen = {}, out = [];
     String(raw || '').split(/[,;]+/).forEach(function (p) {
-      var v = fmtOne(p, prefix);
+      var v = clean(p, name, addPrefix);
       if (v && !seen[v]) { seen[v] = true; out.push(v); }
     });
     return out;
   }
 
-  window.erpFmtSof = function (raw) { return fmtList(raw, 'SOF').join(', '); };
-  window.erpFmtPrf = function (raw) { return fmtOne(raw, 'PRF'); };
-  window.erpFmtPrfList = function (raw) { return fmtList(raw, 'PRF').join(', '); };
+  window.erpFmtSof = function (raw) { return fmtList(raw, 'SOF', false).join(', '); };
+  window.erpFmtPrf = function (raw) { return clean(raw, 'PRF', true); };
+  window.erpFmtPrfList = function (raw) { return fmtList(raw, 'PRF', true).join(', '); };
 
   function bind(id, fn) {
     var el = document.getElementById(id);
@@ -36,6 +37,7 @@
   function init() {
     bind('mrrSofNo', window.erpFmtSof);
     bind('mrrSofNoDisplay', window.erpFmtSof);
+    bind('mrifSofNo', window.erpFmtSof);      // Manual MRIF
     bind('mrrPrfNo', window.erpFmtPrfList);
     bind('editPrfNewNo', window.erpFmtPrf);   // PRF Monitor: edit PRF number
   }
