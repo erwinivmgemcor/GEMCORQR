@@ -94,7 +94,8 @@
           label: 'All Requests',
           icon: 'bi-inbox',
           href: 'all-requests.html',
-          roles: ['warehouse']
+          roles: ['warehouse'],
+          badgeId: 'allReqBadgeSidebar'
         },
         {
           id: 'mrif-list',
@@ -549,6 +550,38 @@
     });
   }
 
+  // Sidebar badge on "All Requests": number of open MRIF/MRS (PENDING + PARTIAL). Warehouse only.
+  function _startRequestsBadge(userRole) {
+    if (userRole !== 'warehouse' || window._erpReqBadgeStarted) return;
+    window._erpReqBadgeStarted = true;
+
+    function paint(n) {
+      var b = document.getElementById('allReqBadgeSidebar');
+      if (!b) return;
+      b.textContent = n > 99 ? '99+' : n;
+      b.classList.toggle('d-none', n <= 0);
+    }
+
+    async function refresh() {
+      if (document.hidden || typeof window.erpUrl !== 'function') return;
+      try {
+        var res = await fetch(window.erpUrl('documents') +
+          '?select=doc_no&or=(doc_type.eq.MRIF,doc_type.eq.MRS)&status=in.(PENDING,PARTIAL)',
+          { method: 'HEAD', cache: 'no-store',
+            headers: Object.assign({}, window.erpHeaders(), { 'Prefer': 'count=exact', 'Range': '0-0' }) });
+        var range = res.headers.get('content-range') || '';
+        var n = parseInt(range.split('/')[1], 10);
+        if (!isNaN(n)) paint(n);
+      } catch (e) { /* keep the last badge value */ }
+    }
+
+    refresh();
+    setInterval(refresh, 60000);
+    document.addEventListener('visibilitychange', function() { if (!document.hidden) refresh(); });
+    // Pages can call: window.dispatchEvent(new Event('erp-requests-changed')) after processing a request
+    window.addEventListener('erp-requests-changed', refresh);
+  }
+
   // New-message popups + sound + sidebar badge — runs on every page
   function _startChatAlerts() {
     try { if (!localStorage.getItem('ivm_username')) return; } catch(e) { return; }
@@ -777,6 +810,7 @@
     setTimeout(_checkHealth, 500);
     setTimeout(_syncProfileOnce, 800);
     setTimeout(_startChatAlerts, 1200);
+    setTimeout(function() { _startRequestsBadge(userRole); }, 1500);
     if (userRole === 'production') setTimeout(function() { window.erpStartTour(false); }, 1600);
   }
 
