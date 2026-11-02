@@ -25,6 +25,8 @@
 
   window.erpFmtSof = function (raw) { return fmtList(raw, 'SOF', false).join(', '); };
   window.erpFmtPrf = function (raw) { return clean(raw, 'PRF', true); };
+  // PO: bare number/code — "PO#16811", "po 16811" → 16811
+  window.erpFmtPo = function (raw) { return clean(raw, 'PO', false); };
   window.erpFmtPrfList = function (raw) { return fmtList(raw, 'PRF', true).join(', '); };
 
   function bind(id, fn) {
@@ -38,6 +40,7 @@
     bind('mrrSofNo', window.erpFmtSof);
     bind('mrrSofNoDisplay', window.erpFmtSof);
     bind('mrifSofNo', window.erpFmtSof);      // Manual MRIF
+    bind('mrrPoNo', window.erpFmtPo);
     bind('mrrPrfNo', window.erpFmtPrfList);
     bind('editPrfNewNo', window.erpFmtPrf);   // PRF Monitor: edit PRF number
   }
