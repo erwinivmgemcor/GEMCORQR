@@ -173,7 +173,7 @@ async function loadUserConversations(silent) {
   var messagesRes = await erpFetch('messages',
     'select=*' +
     '&or=(sender.eq.' + encodeURIComponent(me) + ',recipient.eq.' + encodeURIComponent(me) + ')' +
-    '&or=(doc_no.is.null,doc_no.eq.)' +
+    '&or=(doc_no.is.null,doc_no.eq.)' + _retentionCut() +
     '&order=created_at.desc&limit=500');
 
   var convMap = {};
@@ -239,7 +239,7 @@ async function loadDocumentThreads(silent) {
   var me = _chatState.currentUser;
   var typeFilter = '&doc_type=in.(' + _getAllowedDocTypes().join(',') + ')';
   var messagesRes = await erpFetch('messages',
-    'select=*&doc_no=not.is.null&doc_no=neq.' + typeFilter + '&order=created_at.desc&limit=500');
+    'select=*&doc_no=not.is.null&doc_no=neq.' + typeFilter + _retentionCut() + '&order=created_at.desc&limit=500');
 
   var threadMap = {};
   (messagesRes || []).forEach(function(m) {
@@ -387,6 +387,12 @@ function _setThreadLoading() {
 // ═══════════════════════════════════════════════════════════
 // THREAD DATA (merge by id — never duplicates)
 // ═══════════════════════════════════════════════════════════
+// Chat retention: only the last 7 days are shown (older rows are purged server-side by the daily cron job)
+var CHAT_RETENTION_DAYS = 7;
+function _retentionCut() {
+  return '&created_at=gte.' + encodeURIComponent(new Date(Date.now() - CHAT_RETENTION_DAYS * 86400000).toISOString());
+}
+
 function _msgKey(m) { return m.id != null ? 'i' + m.id : 'k' + m.created_at + '|' + m.sender + '|' + (m.body || ''); }
 
 function _mergeMsgs(rows) {
@@ -411,7 +417,7 @@ function _mergeMsgs(rows) {
 function _dmQueries(since) {
   var me = encodeURIComponent(_chatState.currentUser), other = encodeURIComponent(_chatState.openWith);
   var docFilter = '&or=(doc_no.is.null,doc_no.eq.)';
-  var after = since ? '&created_at=gt.' + encodeURIComponent(since) : '';
+  var after = (since ? '&created_at=gt.' + encodeURIComponent(since) : '') + _retentionCut();
   var order = since ? '&order=created_at.asc&limit=100' : '&order=created_at.desc&limit=300';
   return [
     erpFetch('messages', 'select=*&sender=eq.' + me + '&recipient=eq.' + other + docFilter + after + order),
@@ -428,7 +434,7 @@ async function loadThread() {
       var r = await Promise.all(_dmQueries(''));
       rows = (r[0] || []).concat(r[1] || []);
     } else {
-      rows = await erpFetch('messages', 'select=*&doc_no=eq.' + encodeURIComponent(_chatState.openWith) + '&order=created_at.desc&limit=300');
+      rows = await erpFetch('messages', 'select=*&doc_no=eq.' + encodeURIComponent(_chatState.openWith) + _retentionCut() + '&order=created_at.desc&limit=300');
     }
     if (token !== _chatState.openType + '|' + _chatState.openWith) return;   // user switched meanwhile
     _chatState.msgs = []; _mergeMsgs(rows);
