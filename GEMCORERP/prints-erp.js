@@ -259,7 +259,7 @@ function buildErpMrrHtml(docNo, info, items) {
   // ═══════════════════════════════════════════════════════════
   var poSofPrfParts = [];
   if (poNo) poSofPrfParts.push(poNo);
-  if (sofNo) poSofPrfParts.push(sofNo);
+  if (sofNo) poSofPrfParts.push(/^SOF/i.test(sofNo) ? sofNo : 'SOF#' + sofNo);
   if (prfNo) poSofPrfParts.push(prfNo);
   var poSofPrfCombined = poSofPrfParts.join('/');
 
