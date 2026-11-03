@@ -233,14 +233,15 @@ async function mrrListView(docNo) {
     html += '<div><strong>Receiving Site:</strong> ' + erpEsc(info['Receiving Site'] || '—') + '</div>';
     html += '</div>';
     html += '<table class="table table-sm table-bordered"><thead><tr>';
-    html += '<th>#</th><th>Item Code</th><th>Description</th><th>Qty</th><th>Unit</th><th>Remarks</th>';
+    html += '<th>#</th><th>Item Code</th><th>Description</th><th>Requested Qty</th><th>Received Qty</th><th>Unit</th><th>Remarks</th>';
     html += '</tr></thead><tbody>';
     items.forEach(function(it, i) {
       html += '<tr>' +
         '<td>' + (i + 1) + '</td>' +
         '<td><code>' + erpEsc(it.inventoryId) + '</code></td>' +
         '<td>' + erpEsc(it.description) + '</td>' +
-        '<td>' + (it.expectedQty || 0) + '</td>' +
+        '<td class="text-muted">' + (it.expectedQty || 0) + '</td>' +
+        '<td><strong>' + (it.atlQty || 0) + '</strong></td>' +
         '<td>' + erpEsc(it.unit) + '</td>' +
         '<td>' + erpEsc(it.remarks) + '</td>' +
         '</tr>';
