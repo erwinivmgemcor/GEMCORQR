@@ -17,6 +17,7 @@ var AR_ASSIGNMENTS = {
 var AR_CATEGORIES = ['COMPONENTS', 'CONSUMABLES', 'FABMAT', 'OTHER'];
 
 var _allRequests = {
+  prints: {},        // doc_no -> {count, by, at}  (who printed it — see print-log.js)
   locks: {},          // doc_no -> {locked_by, locked_by_name, locked_at, idle_seconds}  (requests being processed)
   assignByUser: {},   // username(lowercase) -> [categories]   (from the database)
   assignRows: [],     // raw rows: {username, fullname, category, is_active}
@@ -48,7 +49,8 @@ document.addEventListener('DOMContentLoaded', function() {
     allRequestsLoad();
   });
   // who is processing what: refresh every 20 s while the tab is visible
-  setInterval(function() { if (!document.hidden) arRefreshLocks(true); }, 20000);
+  arRefreshPrints(false);
+  setInterval(function() { if (!document.hidden) { arRefreshLocks(true); arRefreshPrints(true); } }, 20000);
 });
 
 // ── "in process" locks (see doc-lock.js) ──
@@ -58,6 +60,23 @@ async function arRefreshLocks(rerender) {
   if (map === null) return;                      // lock tables not installed → feature stays hidden
   _allRequests.locks = map;
   if (rerender && _allRequests.allDocs.length) allRequestsRenderNow();
+}
+
+async function arRefreshPrints(rerender) {
+  if (!window.erpPrintLog) return;
+  var map = await erpPrintLog.list();
+  if (map === null) return;                      // print log table not installed → feature stays hidden
+  _allRequests.prints = map;
+  if (rerender && _allRequests.allDocs.length) allRequestsRenderNow();
+}
+
+function arPrintBadge(docNo) {
+  var p = _allRequests.prints && _allRequests.prints[docNo];
+  if (!p) return '';
+  var when = new Date(p.at).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return '<div style="margin-top:4px;"><span title="' + erpEsc('Printed ' + p.count + 'x. Last printed by ' + p.by + ' on ' + when) + '" ' +
+    'style="display:inline-block;font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:999px;background:#dcfce7;color:#166534;">🖨 Printed · ' +
+    erpEsc(p.by) + ' · ' + erpEsc(when) + (p.count > 1 ? ' ×' + p.count : '') + '</span></div>';
 }
 
 function arLockOf(docNo) {
@@ -451,7 +470,7 @@ function allRequestsRenderNow() {
     var canEditDoc = (localStorage.getItem('ivm_userRole') === 'warehouse') && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL');
     
     html += '<tr' + (arIsMine(d.doc_no) ? ' class="ar-mine"' : '') + '>' +
-      '<td><code>' + erpEsc(d.doc_no) + '</code></td>' +
+      '<td><code>' + erpEsc(d.doc_no) + '</code>' + arPrintBadge(d.doc_no) + '</td>' +
       '<td>' + erpEsc(dateStr) + '</td>' +
       '<td>' + erpEsc(d.requestor || '—') + '</td>' +
       '<td>' + erpEsc(d.department || '—') + '</td>' +
