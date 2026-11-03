@@ -41,6 +41,8 @@ document.addEventListener('DOMContentLoaded', function() {
   
   allRequestsCheckHealth();
   allRequestsPopulateDeptFilter();
+  var cbBtn = document.getElementById('allMonthCloseBtn');
+  if (cbBtn && arCanCloseBalance()) cbBtn.style.display = '';
   var assignBtn = document.getElementById('allAssignBtn');
   if (assignBtn && arIsAdmin()) assignBtn.style.display = '';
   // assignments first, so the default filter ("mine") is right on the first load
@@ -996,87 +998,242 @@ async function arSaveCategory(cat, usernames) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// MONTH-END CLOSE (MRIF) — needs month-end-close.sql
+// CLOSE BALANCE (MRIF) — pili lang ang isasara, kahit anong petsa
+//   needs erp-close-balance-mrif.sql
+// Para sa mga MRIF na kailangan nang ipadala sa Finance (hal. Consumables /
+// Fabmat na regular ang gamit) nang hindi kasama ang mga MRIF na matagal
+// pa (hal. Components na naghihintay ng delivery).
+// Sa bawat napili: ang NAIBIGAY lang ang mananatili sa lumang MRIF; ang
+// balanse ay lilipat sa bagong MRIF (PENDING). Hindi ginagalaw ang stock at SOF.
 // ═══════════════════════════════════════════════════════════
-var _mc = { phrase: '', month: '' };
+var _cb = { rows: [], sel: {}, cat: 'ALL', q: '', until: '', phrase: '', stage: 'pick' };
 
-async function arMcRpc(body) {
-  var res = await fetch(erpUrl('rpc/erp_month_close_mrif'), { method: 'POST', headers: erpHeaders(), body: JSON.stringify(body) });
+function arCanCloseBalance() {
+  try { return arIsAdmin() || String(localStorage.getItem('ivm_userRole') || '').toLowerCase().indexOf('warehouse') !== -1; }
+  catch (e) { return false; }
+}
+
+async function arCbRpc(body) {
+  var res = await fetch(erpUrl('rpc/erp_close_balance_mrif'), { method: 'POST', headers: erpHeaders(), body: JSON.stringify(body) });
   var text = await res.text(), data = null;
   try { data = text ? JSON.parse(text) : null; } catch (e) {}
-  if (!res.ok) throw new Error((data && (data.message || data.error)) || text || ('HTTP ' + res.status));
+  if (!res.ok) {
+    var msg = (data && (data.message || data.error)) || text || ('HTTP ' + res.status);
+    if (res.status === 404 || /could not find the function|PGRST202/i.test(msg)) {
+      throw new Error('Wala pa sa Supabase ang erp_close_balance_mrif. Nothing was closed. (Run erp-close-balance-mrif.sql muna.)');
+    }
+    throw new Error(msg);
+  }
   return data;
 }
 
-function arMcMonthEnd() {
-  var el = document.getElementById('mcMonth');
-  return el && el.value ? el.value : null;      // YYYY-MM-DD (katapusan ng buwan)
+function arCbToday() {
+  var n = new Date(), p = function(x) { return String(x).padStart(2, '0'); };
+  return n.getFullYear() + '-' + p(n.getMonth() + 1) + '-' + p(n.getDate());
 }
 
-async function arOpenMonthClose() {
-  var old = document.getElementById('monthCloseModal'); if (old) old.remove();
-  var now = new Date(), last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  var p = function(n) { return String(n).padStart(2, '0'); };
-  var lastStr = last.getFullYear() + '-' + p(last.getMonth() + 1) + '-' + p(last.getDate());
+async function arOpenCloseBalance() {
+  var old = document.getElementById('closeBalModal'); if (old) old.remove();
+  _cb = { rows: [], sel: {}, cat: 'ALL', q: '', until: '', phrase: '', stage: 'pick' };
   var w = document.createElement('div');
   w.innerHTML =
-  '<div class="modal fade" id="monthCloseModal" tabindex="-1" data-bs-backdrop="static"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">' +
-    '<div class="modal-header" style="background:#92400e;color:#fff;"><h5 class="modal-title"><i class="bi bi-calendar-check me-2"></i>Month-End Close — MRIF</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>' +
-    '<div class="modal-body">' +
-      '<div class="alert alert-warning py-2 small">Ililipat ang <b>lahat ng PENDING at PARTIAL na MRIF</b> sa bagong MRIF (dated 1st ng susunod na buwan). Sa lumang MRIF, ang <b>naibigay lang</b> ang matitira. Kahit may nagpoproseso, ililipat pa rin. Hindi ginagalaw ang stock at SOF.</div>' +
-      '<div class="row g-2 mb-3 align-items-end"><div class="col-auto"><label class="form-label small fw-bold mb-1">Isasara ang buwan na nagtatapos sa</label><input type="date" id="mcMonth" class="form-control form-control-sm" value="' + lastStr + '" onchange="arMcLoad()"></div><div class="col" id="mcSummary" class="small"></div></div>' +
-      '<div id="mcBody"><div class="text-center py-4 text-muted">Loading…</div></div>' +
-    '</div>' +
-    '<div class="modal-footer flex-column align-items-stretch" id="mcFooter"></div>' +
+  '<div class="modal fade" id="closeBalModal" tabindex="-1" data-bs-backdrop="static"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">' +
+    '<div class="modal-header" style="background:#92400e;color:#fff;"><h5 class="modal-title"><i class="bi bi-send-check me-2"></i>Close Balance — MRIF <span class="small fw-normal opacity-75">(pili lang ang isasara)</span></h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>' +
+    '<div class="modal-body" id="cbBody"><div class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Loading MRIFs…</div></div>' +
+    '<div class="modal-footer flex-column align-items-stretch" id="cbFooter"></div>' +
   '</div></div></div>';
   document.body.appendChild(w.firstChild);
-  bootstrap.Modal.getOrCreateInstance(document.getElementById('monthCloseModal')).show();
-  arMcLoad();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('closeBalModal')).show();
+  try {
+    await arCbLoadRows();
+    arCbRenderPick();
+  } catch (e) {
+    console.error('[CloseBalance]', e);
+    document.getElementById('cbBody').innerHTML = '<div class="alert alert-danger">Failed to load: ' + erpEsc(e.message) + '</div>';
+  }
 }
 
-async function arMcLoad() {
-  var body = document.getElementById('mcBody'), foot = document.getElementById('mcFooter');
-  body.innerHTML = '<div class="text-center py-4 text-muted">Loading…</div>'; foot.innerHTML = '';
+async function arCbLoadRows() {
+  var docs = await erpFetchAll('documents', 'select=doc_no,status,requestor,department,jo_no,created_at&doc_type=eq.MRIF&status=in.(PENDING,PARTIAL)&order=created_at.asc');
+  docs = docs || [];
+  var lines = [];
+  for (var i = 0; i < docs.length; i += 60) {
+    var chunk = docs.slice(i, i + 60).map(function(d) { return '"' + String(d.doc_no).replace(/"/g, '') + '"'; }).join(',');
+    var part = await erpFetchAll('doc_items', 'select=doc_no,requested_qty,issued_qty&doc_no=in.(' + encodeURIComponent(chunk) + ')&order=doc_no.asc');
+    lines = lines.concat(part || []);
+  }
+  var agg = {};
+  lines.forEach(function(l) {
+    var a = agg[l.doc_no] || (agg[l.doc_no] = { lines: 0, linesLeft: 0, issued: 0, left: 0 });
+    var req = Number(l.requested_qty) || 0, iss = Number(l.issued_qty) || 0;
+    a.lines++; a.issued += iss;
+    if (req - iss > 0) { a.linesLeft++; a.left += (req - iss); }
+  });
+  await allRequestsEnsureCats(docs);
+  try { await arRefreshLocks(false); } catch (e) {}
+  _cb.rows = docs.map(function(d) {
+    var a = agg[d.doc_no] || { lines: 0, linesLeft: 0, issued: 0, left: 0 };
+    var cats = _allRequests.catByDoc[d.doc_no] || {};
+    return { doc_no: d.doc_no, status: d.status, requestor: d.requestor, department: d.department, jo_no: d.jo_no,
+             created_at: d.created_at, lines: a.lines, linesLeft: a.linesLeft, issued: a.issued, left: a.left, cats: cats };
+  });
+}
+
+function arCbVisible() {
+  var q = String(_cb.q || '').toLowerCase().trim();
+  return _cb.rows.filter(function(r) {
+    if (_cb.cat !== 'ALL' && !(r.cats[_cb.cat] > 0)) return false;
+    if (_cb.until && r.created_at && String(r.created_at).slice(0, 10) > _cb.until) return false;
+    if (q) {
+      var hay = (r.doc_no + ' ' + (r.requestor || '') + ' ' + (r.jo_no || '') + ' ' + (r.department || '')).toLowerCase();
+      if (hay.indexOf(q) === -1) return false;
+    }
+    return true;
+  });
+}
+
+var AR_CB_CAT_STYLE = { COMPONENTS: 'bg-primary', CONSUMABLES: 'bg-success', FABMAT: 'bg-warning text-dark', OTHER: 'bg-secondary' };
+
+function arCbRenderPick() {
+  _cb.stage = 'pick';
+  var body = document.getElementById('cbBody'), foot = document.getElementById('cbFooter');
+  var catCount = { ALL: _cb.rows.length };
+  AR_CATEGORIES.forEach(function(c) { catCount[c] = _cb.rows.filter(function(r) { return r.cats[c] > 0; }).length; });
+  var chips = ['ALL'].concat(AR_CATEGORIES).map(function(c) {
+    var label = c === 'ALL' ? 'All' : c.charAt(0) + c.slice(1).toLowerCase();
+    var on = _cb.cat === c;
+    return '<button type="button" class="btn btn-sm ' + (on ? 'btn-dark' : 'btn-outline-secondary') + '" onclick="arCbSetCat(\'' + c + '\')">' + label + ' <span class="badge ' + (on ? 'bg-light text-dark' : 'bg-secondary') + '">' + (catCount[c] || 0) + '</span></button>';
+  }).join(' ');
+
+  body.innerHTML =
+    '<div class="alert alert-warning py-2 small mb-3">Piliin ang mga MRIF na <b>isasara na</b> (kahit anong petsa — hindi kailangang month-end). ' +
+    'Sa bawat napili, ang <b>naibigay lang</b> ang mananatili sa lumang MRIF (handa na para sa Finance); ang <b>balanse</b> ay lilipat sa bagong MRIF na PENDING. ' +
+    'Ang hindi napili ay <b>hindi gagalawin</b>. Hindi ginagalaw ang stock at SOF. Per-MRIF ang pagsara — kasama ang lahat ng line ng napili.</div>' +
+    '<div class="d-flex flex-wrap gap-2 align-items-center mb-2"><span class="small fw-bold">Category:</span>' + chips + '</div>' +
+    '<div class="row g-2 align-items-end mb-2">' +
+      '<div class="col-md-4"><input id="cbSearch" class="form-control form-control-sm" placeholder="Search MRIF no., requestor, JO, dept…" value="' + erpEsc(_cb.q) + '" oninput="arCbSearch(this.value)"></div>' +
+      '<div class="col-auto"><label class="form-label small mb-0">Ginawa hanggang</label><input type="date" class="form-control form-control-sm" value="' + erpEsc(_cb.until) + '" onchange="arCbUntil(this.value)"></div>' +
+      '<div class="col-auto ms-auto d-flex gap-2"><button class="btn btn-sm btn-outline-primary" onclick="arCbSelectShown(true)">Select all shown</button><button class="btn btn-sm btn-outline-secondary" onclick="arCbSelectShown(false)">Unselect shown</button></div>' +
+    '</div>' +
+    '<div id="cbTable"></div>';
+
+  arCbRenderTable();
+  var today = arCbToday();
+  foot.innerHTML =
+    '<div class="d-flex flex-wrap gap-3 align-items-center">' +
+      '<div><label class="small fw-bold me-2 mb-0">Petsa ng pagsara</label><input type="date" id="cbCloseDate" class="form-control form-control-sm d-inline-block" style="width:auto" value="' + today + '"></div>' +
+      '<div class="small" id="cbSelInfo"></div>' +
+      '<div class="ms-auto d-flex gap-2"><button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>' +
+      '<button class="btn btn-warning fw-bold" id="cbReview" onclick="arCbReview()" disabled><i class="bi bi-eye me-1"></i>Review selected</button></div>' +
+    '</div>';
+  arCbUpdateInfo();
+}
+
+function arCbRenderTable() {
+  var el = document.getElementById('cbTable'); if (!el) return;
+  var rows = arCbVisible();
+  if (!rows.length) {
+    el.innerHTML = '<div class="text-center py-4 text-muted">' + (_cb.rows.length ? 'Walang tugma sa filter.' : 'Walang PENDING o PARTIAL na MRIF. ✅') + '</div>';
+    return;
+  }
+  var allOn = rows.every(function(r) { return _cb.sel[r.doc_no]; });
+  el.innerHTML = '<div class="table-responsive" style="max-height:48vh;overflow-y:auto;"><table class="table table-sm table-hover align-middle" style="font-size:.85rem">' +
+    '<thead class="table-light sticky-top"><tr><th style="width:34px"><input type="checkbox" class="form-check-input" ' + (allOn ? 'checked' : '') + ' onchange="arCbSelectShown(this.checked)"></th>' +
+    '<th>MRIF</th><th>Date</th><th>Status</th><th>Requestor</th><th>Dept</th><th>JO</th><th>Categories</th><th class="text-end">Issued</th><th class="text-end">Balance</th></tr></thead><tbody>' +
+    rows.map(function(r) {
+      var lk = arLockOf(r.doc_no);
+      var cats = AR_CATEGORIES.filter(function(c) { return r.cats[c] > 0; }).map(function(c) {
+        return '<span class="badge ' + AR_CB_CAT_STYLE[c] + ' me-1">' + c.charAt(0) + c.slice(1).toLowerCase() + ' ' + r.cats[c] + '</span>';
+      }).join('') || '<span class="text-muted">—</span>';
+      return '<tr class="' + (_cb.sel[r.doc_no] ? 'table-warning' : '') + '" style="cursor:pointer" onclick="arCbRowClick(event,\'' + erpEsc(String(r.doc_no).replace(/'/g, "\\'")) + '\')">' +
+        '<td><input type="checkbox" class="form-check-input" data-doc="' + erpEsc(r.doc_no) + '" ' + (_cb.sel[r.doc_no] ? 'checked' : '') + ' onchange="arCbToggle(this)"></td>' +
+        '<td><code>' + erpEsc(r.doc_no) + '</code>' + (lk ? '<div class="small text-danger"><i class="bi bi-lock-fill"></i> ' + erpEsc(lk.name) + '</div>' : '') + '</td>' +
+        '<td>' + (r.created_at ? new Date(r.created_at).toLocaleDateString() : '—') + '</td>' +
+        '<td>' + erpEsc(r.status) + '</td><td>' + erpEsc(r.requestor || '—') + '</td><td>' + erpEsc(r.department || '—') + '</td><td>' + erpEsc(r.jo_no || '—') + '</td>' +
+        '<td>' + cats + '</td>' +
+        '<td class="text-end">' + Number(r.issued).toLocaleString() + '</td>' +
+        '<td class="text-end fw-bold">' + Number(r.left).toLocaleString() + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
+function arCbUpdateInfo() {
+  var n = Object.keys(_cb.sel).filter(function(k) { return _cb.sel[k]; }).length;
+  var info = document.getElementById('cbSelInfo'), btn = document.getElementById('cbReview');
+  if (info) info.innerHTML = '<b>' + n + '</b> selected' + (n ? '' : ' <span class="text-muted">— pumili muna ng MRIF</span>');
+  if (btn) { btn.disabled = n === 0; btn.innerHTML = '<i class="bi bi-eye me-1"></i>Review selected (' + n + ')'; }
+}
+
+function arCbSetCat(c) { _cb.cat = c; arCbRenderPick(); }
+function arCbSearch(v) { _cb.q = v; arCbRenderTable(); arCbUpdateInfo(); }
+function arCbUntil(v) { _cb.until = v; arCbRenderTable(); }
+function arCbToggle(cb) { _cb.sel[cb.getAttribute('data-doc')] = cb.checked; arCbRenderTable(); arCbUpdateInfo(); }
+function arCbRowClick(ev, docNo) {
+  if (ev.target && ev.target.tagName === 'INPUT') return;
+  _cb.sel[docNo] = !_cb.sel[docNo]; arCbRenderTable(); arCbUpdateInfo();
+}
+function arCbSelectShown(on) {
+  arCbVisible().forEach(function(r) { _cb.sel[r.doc_no] = !!on; });
+  arCbRenderTable(); arCbUpdateInfo();
+}
+function arCbSelected() { return Object.keys(_cb.sel).filter(function(k) { return _cb.sel[k]; }); }
+function arCbCloseDate() { var el = document.getElementById('cbCloseDate'); return (el && el.value) || arCbToday(); }
+
+// Step 2 — dry run (walang binabago) para makita ang eksaktong mangyayari
+async function arCbReview() {
+  var picked = arCbSelected(); if (!picked.length) return;
+  _cb.closeDate = arCbCloseDate();
+  var body = document.getElementById('cbBody'), foot = document.getElementById('cbFooter');
+  body.innerHTML = '<div class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Checking…</div>';
+  foot.innerHTML = '';
   try {
-    var r = await arMcRpc({ p_user: arUsername(), p_month_end: arMcMonthEnd(), p_apply: false });
+    var r = await arCbRpc({ p_user: arUsername(), p_doc_nos: picked, p_close_date: _cb.closeDate, p_apply: false });
     if (!r || !r.success) throw new Error((r && r.error) || 'Failed');
-    _mc.phrase = r.confirm_phrase;
+    _cb.stage = 'confirm'; _cb.phrase = r.confirm_phrase;
     var docs = r.docs || [], locked = docs.filter(function(d) { return d.locked_by; }).length;
-    document.getElementById('mcSummary').innerHTML = '<b>' + docs.length + '</b> MRIF ang lilipat · bagong petsa: <b>' + erpEsc(r.new_docs_dated) + '</b>' + (locked ? ' · <span class="text-danger"><b>' + locked + '</b> ang may nagpoproseso ngayon</span>' : '');
-    if (!docs.length) { body.innerHTML = '<div class="text-center py-4 text-muted">Walang PENDING o PARTIAL na MRIF. Wala nang ililipat. ✅</div>'; return; }
     var badge = { CARRIED: '<span class="badge bg-info text-dark">May matitira → bagong MRIF</span>', CANCELLED: '<span class="badge bg-secondary">Walang naibigay → buong lilipat, CANCELLED ang luma</span>', COMPLETED: '<span class="badge bg-success">Kumpleto na</span>' };
-    body.innerHTML = '<div class="table-responsive"><table class="table table-sm align-middle" style="font-size:.85rem"><thead><tr><th>MRIF</th><th>Status</th><th>Requestor</th><th>Dept</th><th>JO</th><th class="text-center">Lines na lilipat</th><th class="text-end">Qty na lilipat</th><th>Gagawin</th></tr></thead><tbody>' +
+    body.innerHTML =
+      '<div class="alert alert-info py-2 small">Isasara ang <b>' + docs.length + '</b> na MRIF · bagong MRIF (balanse) dated <b>' + erpEsc(r.new_docs_dated) + '</b>' +
+      (locked ? ' · <span class="text-danger"><b>' + locked + '</b> ang may nagpoproseso ngayon</span>' : '') + '. Ang hindi napili ay hindi gagalawin.</div>' +
+      ((r.skipped && r.skipped.length) ? '<div class="alert alert-secondary py-2 small">Nilaktawan (hindi na PENDING/PARTIAL): ' + r.skipped.map(erpEsc).join(', ') + '</div>' : '') +
+      '<div class="table-responsive"><table class="table table-sm align-middle" style="font-size:.85rem"><thead><tr><th>MRIF</th><th>Status</th><th>Requestor</th><th>Dept</th><th>JO</th><th class="text-center">Lines na lilipat</th><th class="text-end">Qty na lilipat</th><th>Gagawin</th></tr></thead><tbody>' +
       docs.map(function(d) {
         return '<tr' + (d.locked_by ? ' class="table-warning"' : '') + '><td><code>' + erpEsc(d.doc_no) + '</code>' + (d.locked_by ? '<div class="small text-danger"><i class="bi bi-lock-fill"></i> ' + erpEsc(d.locked_by) + '</div>' : '') + '</td><td>' + erpEsc(d.status) + '</td><td>' + erpEsc(d.requestor || '—') + '</td><td>' + erpEsc(d.department || '—') + '</td><td>' + erpEsc(d.jo_no || '—') + '</td><td class="text-center">' + d.lines_to_carry + ' / ' + d.lines + '</td><td class="text-end">' + Number(d.qty_to_carry).toLocaleString() + '</td><td>' + (badge[d.action] || '') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
     foot.innerHTML =
-      '<div class="d-flex flex-wrap gap-2 align-items-center"><label class="small mb-0">I-type ang <b><code>' + erpEsc(_mc.phrase) + '</code></b> para ituloy:</label>' +
-      '<input id="mcConfirm" class="form-control form-control-sm" style="max-width:220px" autocomplete="off" oninput="arMcCheck()" placeholder="' + erpEsc(_mc.phrase) + '">' +
-      '<div class="ms-auto d-flex gap-2"><button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-warning fw-bold" id="mcGo" disabled onclick="arMcApply()"><i class="bi bi-arrow-right-circle me-1"></i>Close month &amp; carry forward</button></div></div>';
+      '<div class="d-flex flex-wrap gap-2 align-items-center"><label class="small mb-0">I-type ang <b><code>' + erpEsc(_cb.phrase) + '</code></b> para ituloy:</label>' +
+      '<input id="cbConfirm" class="form-control form-control-sm" style="max-width:220px" autocomplete="off" oninput="arCbCheck()" placeholder="' + erpEsc(_cb.phrase) + '">' +
+      '<div class="ms-auto d-flex gap-2"><button class="btn btn-outline-secondary" onclick="arCbRenderPick()"><i class="bi bi-arrow-left me-1"></i>Back</button>' +
+      '<button class="btn btn-warning fw-bold" id="cbGo" disabled onclick="arCbApply()"><i class="bi bi-send-check me-1"></i>Close balance of ' + docs.length + ' MRIF</button></div></div>';
   } catch (e) {
-    body.innerHTML = '<div class="alert alert-danger">Failed: ' + erpEsc(e.message) + ' (na-run mo na ba ang month-end-close.sql?)</div>';
+    body.innerHTML = '<div class="alert alert-danger">' + erpEsc(e.message) + '</div>';
+    foot.innerHTML = '<div class="text-end"><button class="btn btn-outline-secondary" onclick="arCbRenderPick()"><i class="bi bi-arrow-left me-1"></i>Back</button></div>';
   }
 }
 
-function arMcCheck() {
-  var ok = String(document.getElementById('mcConfirm').value || '').trim().toUpperCase() === _mc.phrase;
-  document.getElementById('mcGo').disabled = !ok;
+function arCbCheck() {
+  var ok = String(document.getElementById('cbConfirm').value || '').trim().toUpperCase() === String(_cb.phrase).toUpperCase();
+  document.getElementById('cbGo').disabled = !ok;
 }
 
-async function arMcApply() {
-  var btn = document.getElementById('mcGo'); btn.disabled = true;
+async function arCbApply() {
+  var btn = document.getElementById('cbGo'); btn.disabled = true;
+  var orig = btn.innerHTML;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Closing…';
   try {
-    var r = await arMcRpc({ p_user: arUsername(), p_month_end: arMcMonthEnd(), p_apply: true, p_confirm: document.getElementById('mcConfirm').value.trim() });
+    var r = await arCbRpc({ p_user: arUsername(), p_doc_nos: arCbSelected(), p_close_date: _cb.closeDate, p_apply: true, p_confirm: document.getElementById('cbConfirm').value.trim() });
     if (!r || !r.success) throw new Error((r && r.error) || 'Failed');
-    document.getElementById('mcBody').innerHTML =
-      '<div class="text-center py-4"><i class="bi bi-check-circle-fill text-success" style="font-size:3rem"></i><h5 class="mt-2">Tapos na ang Month-End Close</h5>' +
-      '<div class="text-muted">' + r.docs_carried + ' MRIF ang inilipat · ' + r.lines_carried + ' line(s) · ' + r.cancelled_originals + ' na walang naibigay ay na-CANCEL · mga bagong MRIF ay PENDING, dated ' + erpEsc(r.new_docs_dated) + '</div></div>';
-    document.getElementById('mcFooter').innerHTML = '<div class="text-end"><button class="btn btn-primary" data-bs-dismiss="modal">Done</button></div>';
+    document.getElementById('cbBody').innerHTML =
+      '<div class="text-center py-4"><i class="bi bi-check-circle-fill text-success" style="font-size:3rem"></i><h5 class="mt-2">Tapos na ang Close Balance</h5>' +
+      '<div class="text-muted">' + r.docs_carried + ' MRIF ang inilipat · ' + r.lines_carried + ' line(s) · ' + r.cancelled_originals + ' na walang naibigay ay na-CANCEL' + (r.already_complete ? ' · ' + r.already_complete + ' ay kumpleto na (na-COMPLETED lang)' : '') + ' · mga bagong MRIF ay PENDING, dated ' + erpEsc(r.new_docs_dated) + '</div></div>';
+    document.getElementById('cbFooter').innerHTML = '<div class="text-end"><button class="btn btn-primary" data-bs-dismiss="modal">Done</button></div>';
     if (typeof allRequestsLoad === 'function') allRequestsLoad();
   } catch (e) {
     erpShowToast('Failed: ' + e.message, 'danger');
-    btn.disabled = false; btn.innerHTML = '<i class="bi bi-arrow-right-circle me-1"></i>Close month &amp; carry forward';
+    btn.disabled = false; btn.innerHTML = orig;
   }
 }
-window.arOpenMonthClose = arOpenMonthClose; window.arMcLoad = arMcLoad; window.arMcCheck = arMcCheck; window.arMcApply = arMcApply;
+
+window.arOpenCloseBalance = arOpenCloseBalance; window.arOpenMonthClose = arOpenCloseBalance;
+window.arCbSetCat = arCbSetCat; window.arCbSearch = arCbSearch; window.arCbUntil = arCbUntil; window.arCbToggle = arCbToggle;
+window.arCbRowClick = arCbRowClick; window.arCbSelectShown = arCbSelectShown; window.arCbReview = arCbReview;
+window.arCbCheck = arCbCheck; window.arCbApply = arCbApply; window.arCbRenderPick = arCbRenderPick;
