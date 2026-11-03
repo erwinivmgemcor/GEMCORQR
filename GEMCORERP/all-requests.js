@@ -631,8 +631,9 @@ async function viewRequestDetails(docNo, docType) {
     if (doc.gem_so_no) html += '<div class="col-md-6"><strong>GEM SO No:</strong> ' + erpEsc(doc.gem_so_no) + '</div>';
     if (doc.client_name) html += '<div class="col-md-6"><strong>Client:</strong> ' + erpEsc(doc.client_name) + '</div>';
     if (doc.project) html += '<div class="col-md-6"><strong>Project:</strong> ' + erpEsc(doc.project) + '</div>';
-    if (doc.carried_from) html += '<div class="col-12"><span class="badge bg-info text-dark"><i class="bi bi-arrow-return-right me-1"></i>Carried from ' + erpEsc(doc.carried_from) + '</span></div>';
+    if (doc.carried_from) html += '<div class="col-12"><span class="badge bg-info text-dark"><i class="bi bi-arrow-return-right me-1"></i>Carried from ' + erpEsc(doc.carried_from) + (doc.created_at ? ' · ' + erpEsc(arCbFmt(doc.created_at)) : '') + '</span></div>';
     if (doc.carried_to) html += '<div class="col-12"><span class="badge bg-secondary"><i class="bi bi-arrow-right me-1"></i>Balance carried to ' + erpEsc(doc.carried_to) + '</span></div>';
+    if (doc.closed_at) html += '<div class="col-12"><span class="badge bg-dark"><i class="bi bi-clock me-1"></i>Closed: ' + erpEsc(arCbFmt(doc.closed_at)) + '</span></div>';
     html += '</div>';
     
     // Items table
@@ -1118,10 +1119,9 @@ function arCbRenderPick() {
     '<div id="cbTable"></div>';
 
   arCbRenderTable();
-  var today = arCbToday();
   foot.innerHTML =
     '<div class="d-flex flex-wrap gap-3 align-items-center">' +
-      '<div><label class="small fw-bold me-2 mb-0">Petsa ng pagsara</label><input type="date" id="cbCloseDate" class="form-control form-control-sm d-inline-block" style="width:auto" value="' + today + '"></div>' +
+      '<div class="small text-muted"><i class="bi bi-clock me-1"></i>Itatala ang mismong petsa at oras ng pag-Apply.</div>' +
       '<div class="small" id="cbSelInfo"></div>' +
       '<div class="ms-auto d-flex gap-2"><button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>' +
       '<button class="btn btn-warning fw-bold" id="cbReview" onclick="arCbReview()" disabled><i class="bi bi-eye me-1"></i>Review selected</button></div>' +
@@ -1176,23 +1176,25 @@ function arCbSelectShown(on) {
   arCbRenderTable(); arCbUpdateInfo();
 }
 function arCbSelected() { return Object.keys(_cb.sel).filter(function(k) { return _cb.sel[k]; }); }
-function arCbCloseDate() { var el = document.getElementById('cbCloseDate'); return (el && el.value) || arCbToday(); }
+function arCbFmt(iso) {
+  var d = iso ? new Date(iso) : new Date();
+  return d.toLocaleString('en-PH', { timeZone: 'Asia/Manila', year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+}
 
 // Step 2 — dry run (walang binabago) para makita ang eksaktong mangyayari
 async function arCbReview() {
   var picked = arCbSelected(); if (!picked.length) return;
-  _cb.closeDate = arCbCloseDate();
   var body = document.getElementById('cbBody'), foot = document.getElementById('cbFooter');
   body.innerHTML = '<div class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Checking…</div>';
   foot.innerHTML = '';
   try {
-    var r = await arCbRpc({ p_user: arUsername(), p_doc_nos: picked, p_close_date: _cb.closeDate, p_apply: false });
+    var r = await arCbRpc({ p_user: arUsername(), p_doc_nos: picked, p_apply: false });
     if (!r || !r.success) throw new Error((r && r.error) || 'Failed');
     _cb.stage = 'confirm'; _cb.phrase = r.confirm_phrase;
     var docs = r.docs || [], locked = docs.filter(function(d) { return d.locked_by; }).length;
     var badge = { CARRIED: '<span class="badge bg-info text-dark">May matitira → bagong MRIF</span>', CANCELLED: '<span class="badge bg-secondary">Walang naibigay → buong lilipat, CANCELLED ang luma</span>', COMPLETED: '<span class="badge bg-success">Kumpleto na</span>' };
     body.innerHTML =
-      '<div class="alert alert-info py-2 small">Isasara ang <b>' + docs.length + '</b> na MRIF · bagong MRIF (balanse) dated <b>' + erpEsc(r.new_docs_dated) + '</b>' +
+      '<div class="alert alert-info py-2 small">Isasara ang <b>' + docs.length + '</b> na MRIF · isasara ngayon (<b>' + erpEsc(arCbFmt(r.closed_at)) + '</b>) · ang bagong MRIF (balanse) ay dated sa mismong oras ng pagsara' +
       (locked ? ' · <span class="text-danger"><b>' + locked + '</b> ang may nagpoproseso ngayon</span>' : '') + '. Ang hindi napili ay hindi gagalawin.</div>' +
       ((r.skipped && r.skipped.length) ? '<div class="alert alert-secondary py-2 small">Nilaktawan (hindi na PENDING/PARTIAL): ' + r.skipped.map(erpEsc).join(', ') + '</div>' : '') +
       '<div class="table-responsive"><table class="table table-sm align-middle" style="font-size:.85rem"><thead><tr><th>MRIF</th><th>Status</th><th>Requestor</th><th>Dept</th><th>JO</th><th class="text-center">Lines na lilipat</th><th class="text-end">Qty na lilipat</th><th>Gagawin</th></tr></thead><tbody>' +
@@ -1220,11 +1222,11 @@ async function arCbApply() {
   var orig = btn.innerHTML;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Closing…';
   try {
-    var r = await arCbRpc({ p_user: arUsername(), p_doc_nos: arCbSelected(), p_close_date: _cb.closeDate, p_apply: true, p_confirm: document.getElementById('cbConfirm').value.trim() });
+    var r = await arCbRpc({ p_user: arUsername(), p_doc_nos: arCbSelected(), p_apply: true, p_confirm: document.getElementById('cbConfirm').value.trim() });
     if (!r || !r.success) throw new Error((r && r.error) || 'Failed');
     document.getElementById('cbBody').innerHTML =
       '<div class="text-center py-4"><i class="bi bi-check-circle-fill text-success" style="font-size:3rem"></i><h5 class="mt-2">Tapos na ang Close Balance</h5>' +
-      '<div class="text-muted">' + r.docs_carried + ' MRIF ang inilipat · ' + r.lines_carried + ' line(s) · ' + r.cancelled_originals + ' na walang naibigay ay na-CANCEL' + (r.already_complete ? ' · ' + r.already_complete + ' ay kumpleto na (na-COMPLETED lang)' : '') + ' · mga bagong MRIF ay PENDING, dated ' + erpEsc(r.new_docs_dated) + '</div></div>';
+      '<div class="text-muted">' + r.docs_carried + ' MRIF ang inilipat · ' + r.lines_carried + ' line(s) · ' + r.cancelled_originals + ' na walang naibigay ay na-CANCEL' + (r.already_complete ? ' · ' + r.already_complete + ' ay kumpleto na (na-COMPLETED lang)' : '') + ' · mga bagong MRIF ay PENDING</div><div class="mt-2"><span class="badge bg-dark"><i class="bi bi-clock me-1"></i>Closed: ' + erpEsc(arCbFmt(r.closed_at)) + '</span></div></div>';
     document.getElementById('cbFooter').innerHTML = '<div class="text-end"><button class="btn btn-primary" data-bs-dismiss="modal">Done</button></div>';
     if (typeof allRequestsLoad === 'function') allRequestsLoad();
   } catch (e) {
