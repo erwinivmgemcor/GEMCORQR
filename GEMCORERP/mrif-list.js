@@ -190,7 +190,8 @@ function mrifListRender() {
     else if (statusUpper === 'PARTIAL') statusClass = 'status-partial';
     
     var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
-    var editable = canEdit && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL');
+    var editable = canEdit && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL' || statusUpper === 'COMPLETED');
+    var editTitle = statusUpper === 'COMPLETED' ? 'Correct item code / description / UOM' : 'Edit (Warehouse)';
     
     html += '<tr>' +
       '<td><code>' + erpEsc(d.doc_no) + '</code></td>' +
@@ -211,7 +212,7 @@ function mrifListRender() {
           '<i class="bi bi-chat-dots"></i>' +
         '</button>' +
         (editable ? 
-          '<button class="erp-action-btn" onclick="openWarehouseEdit(\'' + safeDoc + '\', \'MRIF\')" title="Edit (Warehouse)">' +
+          '<button class="erp-action-btn" onclick="openWarehouseEdit(\'' + safeDoc + '\', \'MRIF\')" title="' + editTitle + '">' +
             '<i class="bi bi-pencil-square"></i>' +
           '</button>' 
           : '') +
