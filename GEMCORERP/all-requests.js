@@ -448,6 +448,7 @@ function allRequestsRenderNow() {
     var typeBadge = typeUpper === 'MRIF' ? 'bg-warning text-dark' : 'bg-info text-dark';
     
     var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
+    var canEditDoc = (localStorage.getItem('ivm_userRole') === 'warehouse') && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL');
     
     html += '<tr' + (arIsMine(d.doc_no) ? ' class="ar-mine"' : '') + '>' +
       '<td><code>' + erpEsc(d.doc_no) + '</code></td>' +
@@ -459,10 +460,16 @@ function allRequestsRenderNow() {
       '<td>' + erpEsc(d.jo_no || '—') + '</td>' +
       '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span>' + arLockBadge(d.doc_no) + '</td>' +
       '<td class="text-center">' + (d.item_count || 0) + '</td>' +
-      '<td class="text-center">' +
+      '<td class="text-center" style="white-space:nowrap;">' +
+        '<button class="erp-action-btn" onclick="erpOpenPrintPreview(\'' + safeDoc + '\', \'' + typeUpper + '\')" title="Print Preview">' +
+          '<i class="bi bi-printer"></i>' +
+        '</button> ' +
         '<button class="erp-action-btn primary" onclick="viewRequestDetails(\'' + safeDoc + '\', \'' + typeUpper + '\')" title="View Details">' +
           '<i class="bi bi-eye"></i>' +
         '</button>' +
+        (canEditDoc ? ' <button class="erp-action-btn" onclick="openWarehouseEdit(\'' + safeDoc + '\', \'' + typeUpper + '\')" title="Edit (fix unit, qty, items)">' +
+          '<i class="bi bi-pencil-square"></i>' +
+        '</button>' : '') +
       '</td>' +
       '</tr>';
   });
@@ -778,6 +785,10 @@ function allRequestsPageNext() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 }
+
+// After a Warehouse Edit is saved, reload this table (warehouse-edit.js calls these hooks)
+window.mrifListRefresh = function() { allRequestsLoad(); };
+window.mrsListRefresh = function() { allRequestsLoad(); };
 
 function allRequestsRefresh() {
   erpShowToast('Refreshing...', 'info');
