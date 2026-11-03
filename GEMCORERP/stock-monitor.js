@@ -883,6 +883,10 @@ async function erpSubmitEditItem() {
     
     console.log('[Edit] Sending payload:', payload);
     
+    if (unitChanged && !confirm('Change the unit of ' + code + ' from ' + (oldUnit || '—') + ' to ' + newUnit + '?\n\nThis only changes the label. Quantities are NOT converted.')) {
+      throw new Error('Unit change cancelled');
+    }
+
     if (otherChanges) {
       var res = await fetch(erpUrl('rpc/erp_update_item_full'), {
         method: 'POST',
@@ -895,19 +899,46 @@ async function erpSubmitEditItem() {
     }
 
     if (unitChanged) {
-      if (!confirm('Change the unit of ' + code + ' from ' + (oldUnit || '—') + ' to ' + newUnit + '?
+      var unitSaved = false, unitErr = '';
+      // 1) Preferred: RPC (with audit) — kailangan ang erp-update-item-unit.sql sa Supabase
+      try {
+        var ures = await fetch(erpUrl('rpc/erp_update_item_unit'), {
+          method: 'POST',
+          headers: erpHeaders(),
+          body: JSON.stringify({ p_item_code: code, p_base_unit: newUnit, p_updated_by: updatedBy, p_reason: reason })
+        });
+        if (ures.ok) {
+          var udata = await ures.json();
+          if (udata && udata.success) unitSaved = true;
+          else unitErr = (udata && udata.error) || 'Failed to update unit';
+        } else {
+          unitErr = 'RPC HTTP ' + ures.status;
+        }
+      } catch (e) { unitErr = e.message; }
 
-This only changes the label. Quantities are NOT converted.')) {
-        throw new Error('Unit change cancelled');
+      // 2) Fallback: direct update ng erp_items.base_unit (+ audit)
+      if (!unitSaved) {
+        console.warn('[Edit] erp_update_item_unit failed (' + unitErr + ') — using direct update');
+        var pres = await fetch(erpUrl('erp_items?item_code=eq.' + encodeURIComponent(code)), {
+          method: 'PATCH',
+          headers: erpHeaders({ 'Prefer': 'return=representation' }),
+          body: JSON.stringify({ base_unit: newUnit })
+        });
+        var pout = pres.ok ? await pres.json() : null;
+        if (!pres.ok || !pout || !pout.length) {
+          throw new Error('Could not save unit (' + (pres.ok ? 'not permitted — run erp-update-item-unit.sql in Supabase' : 'HTTP ' + pres.status) + ')');
+        }
+        try {
+          await fetch(erpUrl('erp_manual_edits_audit'), {
+            method: 'POST', headers: erpHeaders(),
+            body: JSON.stringify([{
+              item_code: code, field_name: 'base_unit',
+              old_value: String(oldUnit || ''), new_value: newUnit,
+              reason: reason, edited_by: updatedBy, source: 'STOCK_MONITOR_EDIT'
+            }])
+          });
+        } catch (e) { console.warn('[Edit] unit audit failed', e); }
       }
-      var ures = await fetch(erpUrl('rpc/erp_update_item_unit'), {
-        method: 'POST',
-        headers: erpHeaders(),
-        body: JSON.stringify({ p_item_code: code, p_base_unit: newUnit, p_updated_by: updatedBy, p_reason: reason })
-      });
-      if (!ures.ok) throw new Error('Unit update not available (HTTP ' + ures.status + '). Run erp-update-item-unit.sql in Supabase first.');
-      var udata = await ures.json();
-      if (!udata || !udata.success) throw new Error((udata && udata.error) || 'Failed to update unit');
     }
     
     if (_editItemModal) _editItemModal.hide();
