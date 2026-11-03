@@ -18,7 +18,8 @@ var _whEditState = {
   originalItems: [],
   currentItems: [],
   modal: null,
-  isSaving: false
+  isSaving: false,
+  correctionMode: false   // COMPLETED MRIF: item code / description / UOM lang
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -35,6 +36,7 @@ async function openWarehouseEdit(docNo, docType) {
   _whEditState.docNo = docNo;
   _whEditState.docType = String(docType || 'MRIF').toUpperCase();
   _whEditState.isSaving = false;
+  _whEditState.correctionMode = false;
 
   var modalEl = _ensureEditModal();
   _showEditModal(modalEl);
@@ -53,7 +55,11 @@ async function openWarehouseEdit(docNo, docType) {
     console.log('[WarehouseEdit] Document ID:', doc.id);
 
     var status = String(doc.status || '').toUpperCase();
-    if (status !== 'PENDING' && status !== 'PARTIAL') {
+    if (status === 'COMPLETED' && _whEditState.docType === 'MRIF') {
+      // Correction mode: puwede pa ring i-edit ang COMPLETED na MRIF,
+      // pero item code, description at UOM lang (walang dagdag/bawas, walang qty change)
+      _whEditState.correctionMode = true;
+    } else if (status !== 'PENDING' && status !== 'PARTIAL') {
       _setModalLoading(false);
       _closeEditModal();
       erpShowToast('Cannot edit: document is ' + status + '. Only PENDING or PARTIAL can be edited.', 'warning');
@@ -78,6 +84,8 @@ async function openWarehouseEdit(docNo, docType) {
     });
 
     _whEditState.currentItems = JSON.parse(JSON.stringify(_whEditState.originalItems));
+
+    if (_whEditState.correctionMode) await _whAcLoad(); // para kumpleto agad ang UOM list at item suggestions
 
     _renderEditForm(doc);
     _setModalLoading(false);
@@ -160,6 +168,14 @@ function _setModalLoading(loading) {
 function _renderEditForm(doc) {
   var body = document.getElementById('whEditBody');
   if (!body) return;
+
+  var saveBtn = document.getElementById('whEditSaveBtn');
+  if (saveBtn) {
+    saveBtn.innerHTML = _whEditState.correctionMode
+      ? '<i class="bi bi-check-circle me-1"></i>Save Correction'
+      : '<i class="bi bi-check-circle me-1"></i>Save Changes';
+  }
+  if (_whEditState.correctionMode) { _renderCorrectionForm(doc, body); return; }
 
   var titleEl = document.getElementById('whEditTitle');
   if (titleEl) titleEl.textContent = 'Edit: ' + doc.doc_no;
@@ -285,6 +301,7 @@ window._renderEditForm = _renderEditForm;
 // ITEMS RENDERING — v1.2: oninput na (hindi onchange)
 // ═══════════════════════════════════════════════════════════
 function _renderWhEditItems() {
+  if (_whEditState.correctionMode) { _renderWhCorrectionItems(); return; }
   var tbody = document.getElementById('whEditItemsBody');
   if (!tbody) return;
 
@@ -344,6 +361,16 @@ function _whUpdateItem(idx, field, value) {
   if (!_whEditState.currentItems[idx]) return;
   _whEditState.currentItems[idx][field] = value;
   console.log('[WarehouseEdit] Updated item[' + idx + '].' + field + ' =', value);
+  if (_whEditState.correctionMode) {
+    var cur = _whEditState.currentItems[idx], org = _whEditState.originalItems[idx];
+    var row = document.querySelector('#whEditItemsBody tr[data-idx="' + idx + '"]');
+    if (row && org) {
+      var changed = String(cur.itemCode || '').trim() !== String(org.itemCode || '').trim() ||
+                    String(cur.description || '').trim() !== String(org.description || '').trim() ||
+                    String(cur.unit || '').trim() !== String(org.unit || '').trim();
+      row.classList.toggle('table-warning', changed);
+    }
+  }
 }
 
 window._whUpdateItem = _whUpdateItem;
@@ -378,6 +405,17 @@ window._whRemoveItem = _whRemoveItem;
 function _whSyncInputsToState() {
   console.log('[WarehouseEdit] Force syncing inputs to state...');
 
+  if (_whEditState.correctionMode) {
+    document.querySelectorAll('#whEditItemsBody tr[data-idx]').forEach(function(row) {
+      var idx = parseInt(row.getAttribute('data-idx'), 10);
+      var it = _whEditState.currentItems[idx];
+      if (!it) return;
+      var g = function(f) { var el = row.querySelector('[data-field="' + f + '"]'); return el ? el.value : ''; };
+      it.itemCode = g('itemCode'); it.description = g('description'); it.unit = g('unit');
+    });
+    return;
+  }
+
   var rows = document.querySelectorAll('#whEditItemsBody tr');
   rows.forEach(function(row, idx) {
     if (!_whEditState.currentItems[idx]) return;
@@ -411,6 +449,7 @@ window._whSyncInputsToState = _whSyncInputsToState;
 // ═══════════════════════════════════════════════════════════
 async function _saveWarehouseEdit() {
   if (_whEditState.isSaving) return;
+  if (_whEditState.correctionMode) return _saveWhCorrection();
 
   // ═══ v1.2: Force sync inputs to state BAGO mag-validate ═══
   _whSyncInputsToState();
@@ -723,6 +762,285 @@ async function _saveWarehouseEdit() {
 window._saveWarehouseEdit = _saveWarehouseEdit;
 
 // ═══════════════════════════════════════════════════════════
+// CORRECTION MODE — COMPLETED MRIF
+// Puwede pa ring i-edit ang COMPLETED na MRIF, pero:
+//   ✅ Item Code, Description, Unit (UOM) lang ang mababago
+//   ❌ Walang dagdag / bawas ng item, walang qty change, status hindi gagalawin
+// Kapag nagpalit ng Item Code, ililipat ang issued stock (ibabalik sa luma,
+// ibabawas sa bago) — ginagawa ng RPC erp_mrif_correct_items (all-or-nothing).
+// Requires: erp-mrif-correct-items.sql
+// ═══════════════════════════════════════════════════════════
+function _whUnitOptions(current) {
+  var base = ['PIECE', 'SET', 'PAIR', 'METER', 'ROLL', 'BOX', 'PACK', 'KG', 'LITER', 'LOT', 'BOTTLE', 'CAN', 'PAIL', 'SHEET', 'BAG', 'CARTON', 'FEET', 'UNIT'];
+  var seen = {}, out = [];
+  function add(u) {
+    u = String(u == null ? '' : u).trim();
+    if (!u) return;
+    var k = u.toUpperCase();
+    if (seen[k]) return;
+    seen[k] = 1; out.push(u);
+  }
+  add(current);
+  (_whAc.list || []).forEach(function(r) { add(r.unit); });
+  _whEditState.originalItems.forEach(function(it) { add(it.unit); });
+  base.forEach(add);
+  out.sort(function(a, b) { return a.localeCompare(b); });
+  return out;
+}
+
+function _whSetUnit(row, idx, val) {
+  var el = row && row.querySelector('[data-field="unit"]');
+  if (el && el.tagName === 'SELECT') {
+    var found = Array.prototype.some.call(el.options, function(o) { return o.value === val; });
+    if (!found) {
+      var o = document.createElement('option');
+      o.value = val; o.textContent = val;
+      el.appendChild(o);
+    }
+  }
+  if (el) el.value = val;
+  if (idx > -1) _whUpdateItem(idx, 'unit', val);
+}
+
+function _renderCorrectionForm(doc, body) {
+  var titleEl = document.getElementById('whEditTitle');
+  if (titleEl) titleEl.textContent = 'Correct: ' + doc.doc_no;
+
+  var ro = 'readonly style="background:#f8fafc;cursor:not-allowed;"';
+  var html = '';
+
+  html += '<div class="alert alert-warning small py-2 mb-3">'
+       +    '<i class="bi bi-exclamation-triangle me-1"></i>'
+       +    'This MRIF is <strong>COMPLETED</strong>. You can only correct <strong>Item Code, Description and Unit (UOM)</strong>. '
+       +    'Items cannot be added or removed, and quantities cannot be changed.<br>'
+       +    '<span class="text-dark">If you change an <strong>Item Code</strong>, the issued quantity is returned to the old item\'s stock '
+       +    'and deducted from the new item.</span>'
+       +  '</div>';
+
+  html += '<div class="erp-form-section" style="background:#f8fafc;">';
+  html +=   '<div class="row g-3">';
+  [['Doc No.', doc.doc_no], ['Requestor', doc.requestor], ['Department', doc.department], ['JO No.', doc.jo_no]]
+    .forEach(function(f) {
+      html += '<div class="col-md-3"><label class="form-label small fw-bold">' + f[0] + '</label>'
+           +  '<input type="text" class="form-control form-control-sm" value="' + _escWh(f[1] || '') + '" ' + ro + '></div>';
+    });
+  html +=   '</div>';
+  html += '</div>';
+
+  html += '<div class="erp-form-section">';
+  html +=   '<div class="erp-form-section-title"><i class="bi bi-list-check me-1"></i>Items (' + _whEditState.currentItems.length + ')</div>';
+  html +=   '<div class="table-responsive" style="max-height:420px;overflow-y:auto;">';
+  html +=     '<table class="table table-sm table-bordered align-middle" id="whEditItemsTable" style="font-size:0.85rem;">';
+  html +=       '<thead class="table-light sticky-top"><tr>'
+       +          '<th style="width:4%">#</th>'
+       +          '<th style="width:20%">Item Code <i class="bi bi-pencil text-primary"></i></th>'
+       +          '<th style="width:32%">Description <i class="bi bi-pencil text-primary"></i></th>'
+       +          '<th style="width:9%" class="text-center">Req Qty</th>'
+       +          '<th style="width:9%" class="text-center">Issued Qty</th>'
+       +          '<th style="width:12%">Unit <i class="bi bi-pencil text-primary"></i></th>'
+       +          '<th style="width:14%">Remarks</th>'
+       +        '</tr></thead>';
+  html +=       '<tbody id="whEditItemsBody"></tbody>';
+  html +=     '</table>';
+  html +=   '</div>';
+  html +=   '<div class="form-text mt-2"><i class="bi bi-info-circle me-1"></i>Changed rows are highlighted. Type in Item Code to search inventory.</div>';
+  html += '</div>';
+
+  html += '<div class="erp-form-section" style="background:#fffbeb;border-color:#fde68a;">';
+  html +=   '<div class="erp-form-section-title" style="color:#92400e;">'
+       +      '<i class="bi bi-chat-left-text me-1"></i>Reason for Correction <span class="text-danger">*</span>'
+       +    '</div>';
+  html +=   '<input type="text" class="form-control" id="whEditReason" '
+       +      'placeholder="e.g., Wrong item code requested, discovered after processing" maxlength="200">';
+  html +=   '<div class="form-text"><i class="bi bi-info-circle me-1"></i>Required for audit trail.</div>';
+  html += '</div>';
+
+  body.innerHTML = html;
+  _renderWhCorrectionItems();
+}
+
+function _renderWhCorrectionItems() {
+  var tbody = document.getElementById('whEditItemsBody');
+  if (!tbody) return;
+  var html = '';
+  _whEditState.currentItems.forEach(function(it, idx) {
+    var opts = _whUnitOptions(it.unit).map(function(u) {
+      return '<option value="' + _escWh(u) + '"' + (u === it.unit ? ' selected' : '') + '>' + _escWh(u) + '</option>';
+    }).join('');
+    html += '<tr data-idx="' + idx + '">'
+         +    '<td class="text-center">' + (idx + 1) + '</td>'
+         +    '<td><input type="text" class="form-control form-control-sm" data-field="itemCode" autocomplete="off" '
+         +      'value="' + _escWh(it.itemCode) + '" oninput="_whUpdateItem(' + idx + ', \'itemCode\', this.value)"></td>'
+         +    '<td><input type="text" class="form-control form-control-sm" data-field="description" '
+         +      'value="' + _escWh(it.description) + '" oninput="_whUpdateItem(' + idx + ', \'description\', this.value)"></td>'
+         +    '<td class="text-center text-muted">' + (Number(it.qty) || 0) + '</td>'
+         +    '<td class="text-center text-muted">' + (Number(it.issuedQty) || 0) + '</td>'
+         +    '<td><select class="form-select form-select-sm" data-field="unit" '
+         +      'onchange="_whUpdateItem(' + idx + ', \'unit\', this.value)">' + opts + '</select></td>'
+         +    '<td class="text-muted small">' + _escWh(it.remarks || '') + '</td>'
+         +  '</tr>';
+  });
+  tbody.innerHTML = html;
+  _whAcInit(tbody);
+}
+
+async function _saveWhCorrection() {
+  if (_whEditState.isSaving) return;
+  _whSyncInputsToState();
+
+  var reason = (document.getElementById('whEditReason').value || '').trim();
+  if (!reason) {
+    erpShowToast('Reason for correction is required', 'warning');
+    document.getElementById('whEditReason').focus();
+    return;
+  }
+
+  // ─── Alamin ang mga nagbago ───
+  var changes = [], codeChanges = [];
+  for (var i = 0; i < _whEditState.currentItems.length; i++) {
+    var cur = _whEditState.currentItems[i], org = _whEditState.originalItems[i];
+    var nc = String(cur.itemCode || '').trim();
+    var nd = String(cur.description || '').trim();
+    var nu = String(cur.unit || '').trim();
+    if (!nc) { erpShowToast('Item #' + (i + 1) + ' has no item code', 'warning'); return; }
+    if (!nu) { erpShowToast('Item #' + (i + 1) + ' has no unit', 'warning'); return; }
+
+    var codeChanged = nc !== String(org.itemCode || '').trim();
+    if (codeChanged && _whAc.list && _whAc.list.length) {
+      var hit = _whAc.list.filter(function(r) { return String(r.code).toLowerCase() === nc.toLowerCase(); })[0];
+      if (!hit) { erpShowToast('Item #' + (i + 1) + ': "' + nc + '" is not in inventory', 'warning'); return; }
+      nc = String(hit.code);
+    }
+    var descChanged = nd !== String(org.description || '').trim();
+    var unitChanged = nu !== String(org.unit || '').trim();
+    if (!codeChanged && !descChanged && !unitChanged) continue;
+
+    var ch = { idx: i, id: org.id, item_code: nc, description: nd, unit: nu,
+               old: org, codeChanged: codeChanged, descChanged: descChanged, unitChanged: unitChanged };
+    changes.push(ch);
+    if (codeChanged) codeChanges.push(ch);
+  }
+
+  if (!changes.length) { erpShowToast('No changes to save', 'info'); return; }
+
+  // ─── Confirm ───
+  var lines = changes.map(function(c) {
+    var parts = [];
+    if (c.codeChanged) parts.push('Code: ' + c.old.itemCode + ' → ' + c.item_code);
+    if (c.descChanged) parts.push('Description changed');
+    if (c.unitChanged) parts.push('Unit: ' + (c.old.unit || '—') + ' → ' + c.unit);
+    return '• #' + (c.idx + 1) + '  ' + parts.join(' | ');
+  });
+  var stockLines = codeChanges.filter(function(c) { return Number(c.old.issuedQty) > 0; }).map(function(c) {
+    return '• +' + c.old.issuedQty + ' back to ' + c.old.itemCode + ',  −' + c.old.issuedQty + ' from ' + c.item_code;
+  });
+  var msg = 'Save correction to ' + _whEditState.docNo + '?\n\n' + lines.join('\n');
+  if (stockLines.length) msg += '\n\nSTOCK WILL BE MOVED:\n' + stockLines.join('\n');
+  if (!confirm(msg)) return;
+
+  _whEditState.isSaving = true;
+  var btn = document.getElementById('whEditSaveBtn');
+  var origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+
+  var user = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
+
+  try {
+    // 1) Preferred: RPC (atomic, may stock move + audit)
+    var res = await fetch(erpUrl('rpc/erp_mrif_correct_items'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({
+        p_doc_no: _whEditState.docNo,
+        p_changes: changes.map(function(c) { return { id: c.id, item_code: c.item_code, description: c.description, unit: c.unit }; }),
+        p_edited_by: user,
+        p_reason: reason
+      })
+    });
+
+    if (res.ok) {
+      var data = await res.json();
+      if (!data || !data.success) throw new Error((data && data.error) || 'Correction failed');
+    } else if (res.status === 404) {
+      // RPC wala pa sa Supabase → description/unit lang ang kaya sa fallback
+      if (codeChanges.length) {
+        throw new Error('Changing the Item Code needs a database function. Run erp-mrif-correct-items.sql in Supabase first, then try again.');
+      }
+      await _whCorrectionFallback(changes, reason, user);
+    } else {
+      var errText = await res.text();
+      var pg = ''; try { pg = (JSON.parse(errText).message) || ''; } catch (e) {}
+      if (pg.indexOf('Insufficient stock') !== -1) {
+        var item = (pg.match(/item (\S+?)\./) || [])[1] || 'the new item';
+        var curStock = (pg.match(/Current: ([\d.]+)/) || [])[1] || '0';
+        throw new Error('Not enough stock for ' + item + ' (on-hand: ' + curStock + '). Add stock first, then try again. Nothing was changed.');
+      }
+      throw new Error(pg || ('HTTP ' + res.status + ' ' + errText.substring(0, 150)));
+    }
+
+    _closeEditModal();
+    erpShowToast('✅ Correction saved: ' + _whEditState.docNo, 'success');
+
+    if (typeof mrifListRefresh === 'function') setTimeout(mrifListRefresh, 500);
+    else if (typeof allRequestsLoad === 'function') setTimeout(allRequestsLoad, 500);
+
+  } catch (err) {
+    console.error('[WarehouseEdit] Correction failed:', err);
+    erpShowToast('Correction failed: ' + err.message, 'danger');
+  } finally {
+    _whEditState.isSaving = false;
+    if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
+  }
+}
+
+// Fallback (walang code change): direct update ng doc_items + audit, may rollback kapag may pumalya
+async function _whCorrectionFallback(changes, reason, user) {
+  var done = [];
+  try {
+    for (var i = 0; i < changes.length; i++) {
+      var c = changes[i];
+      var r = await fetch(erpUrl('doc_items?id=eq.' + encodeURIComponent(c.id)), {
+        method: 'PATCH',
+        headers: erpHeaders({ 'Prefer': 'return=representation' }),
+        body: JSON.stringify({ description: c.description, unit: c.unit })
+      });
+      var out = r.ok ? await r.json() : null;
+      if (!r.ok || !out || !out.length) {
+        throw new Error('Could not update item #' + (c.idx + 1) + (r.ok ? ' (not permitted)' : ' (HTTP ' + r.status + ')'));
+      }
+      done.push(c);
+    }
+  } catch (e) {
+    // ibalik ang mga nauna nang na-update
+    for (var j = 0; j < done.length; j++) {
+      try {
+        await fetch(erpUrl('doc_items?id=eq.' + encodeURIComponent(done[j].id)), {
+          method: 'PATCH', headers: erpHeaders(),
+          body: JSON.stringify({ description: done[j].old.description, unit: done[j].old.unit })
+        });
+      } catch (e2) {}
+    }
+    throw e;
+  }
+
+  var audit = [];
+  changes.forEach(function(c) {
+    if (c.descChanged) audit.push({ item_code: _whEditState.docNo, field_name: 'description (' + c.old.itemCode + ')',
+      old_value: String(c.old.description || ''), new_value: c.description, reason: reason, edited_by: user, source: 'MRIF_CORRECTION' });
+    if (c.unitChanged) audit.push({ item_code: _whEditState.docNo, field_name: 'unit (' + c.old.itemCode + ')',
+      old_value: String(c.old.unit || ''), new_value: c.unit, reason: reason, edited_by: user, source: 'MRIF_CORRECTION' });
+  });
+  if (audit.length) {
+    try {
+      await fetch(erpUrl('erp_manual_edits_audit'), { method: 'POST', headers: erpHeaders(), body: JSON.stringify(audit) });
+    } catch (e) { console.warn('[WarehouseEdit] correction audit failed', e); }
+  }
+}
+
+window._saveWhCorrection = _saveWhCorrection;
+
+// ═══════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════
 function _escWh(s) {
@@ -858,6 +1176,7 @@ function _whAcPick(i) {
   var row = input.closest('tr');
   var idx = row ? parseInt(row.getAttribute('data-idx'), 10) : -1;
   var setField = function(field, val) {
+    if (field === 'unit') { _whSetUnit(row, idx, val); return; }
     var el = row.querySelector('input[data-field="' + field + '"]');
     if (el) el.value = val;
     if (idx > -1) _whUpdateItem(idx, field, val);
@@ -868,8 +1187,10 @@ function _whAcPick(i) {
     setField('unit', it.unit || 'PIECE');
   }
   _whAcHide();
-  var qty = row && row.querySelector('input[data-field="qty"]');
-  if (qty) { qty.focus(); qty.select(); }
+  if (!_whEditState.correctionMode) {
+    var qty = row && row.querySelector('input[data-field="qty"]');
+    if (qty) { qty.focus(); qty.select(); }
+  }
 }
 
 function _whAcInit(tbody) {
@@ -897,8 +1218,7 @@ function _whAcInit(tbody) {
       if (hit && descEl && !descEl.value.trim()) {
         descEl.value = hit.description || '';
         _whUpdateItem(idx, 'description', descEl.value);
-        var unitEl = row.querySelector('input[data-field="unit"]');
-        if (unitEl) { unitEl.value = hit.unit || 'PIECE'; _whUpdateItem(idx, 'unit', unitEl.value); }
+        _whSetUnit(row, idx, hit.unit || 'PIECE');
       }
     }
     clearTimeout(_whAc.hideTimer);
