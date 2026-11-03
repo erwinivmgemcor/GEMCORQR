@@ -72,6 +72,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }, 500);
 
   console.log('[New MRR v5.0] Ready. Prepared By:', userFullname);
+  setTimeout(_mrrLoadVendorList, 600);
 });
 
 async function mrrCheckHealth() {
@@ -482,6 +483,32 @@ function removeItem(idx) {
 // ═══════════════════════════════════════════════════════════
 // AUTO-SUGGEST
 // ═══════════════════════════════════════════════════════════
+// Vendor suggestions: past MRR vendors + PO suppliers (shown in the browser's suggestion list while typing)
+async function _mrrLoadVendorList() {
+  var list = document.getElementById('mrrVendorList');
+  if (!list) return;
+  var seen = {}, names = [];
+  function add(v) {
+    var s = String(v || '').replace(/\s+/g, ' ').trim();
+    if (s && !seen[s.toUpperCase()]) { seen[s.toUpperCase()] = 1; names.push(s); }
+  }
+  try {
+    var a = await erpFetch('documents', 'select=vendor&doc_type=eq.MRR&vendor=not.is.null&order=created_at.desc&limit=3000') || [];
+    a.forEach(function(r) { add(r.vendor); });
+  } catch (e) {}
+  try {
+    var b = await erpFetch('prf_items', 'select=po_supplier&po_supplier=not.is.null&limit=3000') || [];
+    b.forEach(function(r) { add(r.po_supplier); });
+  } catch (e) {}
+  try {
+    var c = await erpFetch('erp_prf_po_cache', 'select=supplier&supplier=not.is.null&limit=3000') || [];
+    c.forEach(function(r) { add(r.supplier); });
+  } catch (e) {}
+  names.sort(function(x, y) { return x.localeCompare(y); });
+  list.innerHTML = names.map(function(n) { return '<option value="' + erpEsc(n) + '"></option>'; }).join('');
+  console.log('[MRR] Vendor suggestions loaded:', names.length);
+}
+
 function onMrrItemCodeInput(idx, value) {
   var input = document.getElementById('mrrItemCode' + idx);
   var dropdown = document.getElementById('mrrDropdown' + idx);
@@ -549,18 +576,15 @@ async function _mrrSearchItems(idx, term) {
     }
 
     var html = '';
-    matches.forEach(function(it) {
+    _mrrLastMatches[idx] = matches;   // the click handler looks the item up by position (descriptions may contain quotes)
+    matches.forEach(function(it, n) {
       var code = String(it.code || '');
       var desc = String(it.description || '');
-      var unit = String(it.unit || 'PCS');
+      var unit = String(it.unit || 'PIECE');
       var category = String(it.category || '');
-      var safeCode = code.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-      var safeDesc = desc.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-      var safeUnit = unit.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
       html += '<div class="item-search-item" ' +
-        'onmousedown="event.preventDefault();selectMrrItem(' + idx + ', \'' +
-          safeCode + '\', \'' + safeDesc + '\', \'' + safeUnit + '\')">' +
+        'onmousedown="event.preventDefault();_mrrPickItem(' + idx + ',' + n + ')">' +
         '<div class="item-code">' + erpEsc(code) + '</div>' +
         '<div class="item-desc">' + erpEsc(desc.substring(0, 100)) + (desc.length > 100 ? '…' : '') + '</div>' +
         '<div class="item-meta">' +
@@ -579,6 +603,14 @@ async function _mrrSearchItems(idx, term) {
       '<i class="bi bi-exclamation-triangle me-2"></i>Search error</div>';
   }
 }
+
+var _mrrLastMatches = {};
+function _mrrPickItem(idx, n) {
+  var it = (_mrrLastMatches[idx] || [])[n];
+  if (!it) return;
+  selectMrrItem(idx, String(it.code || ''), String(it.description || ''), String(it.unit || 'PIECE'));
+}
+window._mrrPickItem = _mrrPickItem;
 
 function selectMrrItem(idx, code, description, unit) {
   if (_mrrState.items[idx]) {
