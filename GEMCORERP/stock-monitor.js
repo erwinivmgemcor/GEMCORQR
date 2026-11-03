@@ -668,6 +668,22 @@ async function erpOpenEditItemModal(item) {
   document.getElementById('editItemDesc').value = data.description || '';
   document.getElementById('editItemCategory').value = data.category || 'UNCATEGORIZED';
   document.getElementById('editItemLocation').value = data.location || '';
+
+  // Unit (UOM) dropdown: all units used in inventory + the current one
+  var unitEl = document.getElementById('editItemUnit');
+  if (unitEl) {
+    var seenU = {}, unitList = ['PIECE', 'SET', 'PAIR', 'METER', 'ROLL', 'BOX', 'PACK', 'KG', 'LITER', 'LOT', 'BOTTLE', 'CAN', 'PAIL', 'SHEET', 'BAG', 'CARTON', 'FEET', 'UNIT'];
+    unitList.forEach(function(u) { seenU[u] = 1; });
+    (_erpAllItems || []).forEach(function(it) {
+      var u = String(it.base_unit || '').trim().toUpperCase();
+      if (u && !seenU[u]) { seenU[u] = 1; unitList.push(u); }
+    });
+    var curU = String(data.base_unit || 'PIECE').trim().toUpperCase();
+    if (!seenU[curU]) unitList.push(curU);
+    unitList.sort();
+    unitEl.innerHTML = unitList.map(function(u) { return '<option value="' + u + '">' + u + '</option>'; }).join('');
+    unitEl.value = curU;
+  }
   
   var onHandEl = document.getElementById('editItemOnHand');
   if (onHandEl) onHandEl.value = data.on_hand != null ? data.on_hand : 0;
@@ -822,6 +838,13 @@ async function erpSubmitEditItem() {
   if (reorder !== null && reorder !== Number(old.reorder_point || 0)) hasChanges = true;
   if (isActive !== old.is_active) hasChanges = true;
   
+  var unitEl2 = document.getElementById('editItemUnit');
+  var newUnit = unitEl2 ? String(unitEl2.value || '').trim().toUpperCase() : '';
+  var oldUnit = String(old.base_unit || '').trim().toUpperCase();
+  var unitChanged = !!newUnit && newUnit !== oldUnit;
+  var otherChanges = hasChanges;
+  if (unitChanged) hasChanges = true;
+
   if (!hasChanges) {
     erpShowToast('Walang binago', 'info');
     return;
@@ -860,16 +883,32 @@ async function erpSubmitEditItem() {
     
     console.log('[Edit] Sending payload:', payload);
     
-    var res = await fetch(erpUrl('rpc/erp_update_item_full'), {
-      method: 'POST',
-      headers: erpHeaders(),
-      body: JSON.stringify(payload)
-    });
-    
-    if (!res.ok) throw new Error('API error: ' + res.status);
-    var data = await res.json();
-    
-    if (!data || !data.success) throw new Error((data && data.error) || 'Failed to update item');
+    if (otherChanges) {
+      var res = await fetch(erpUrl('rpc/erp_update_item_full'), {
+        method: 'POST',
+        headers: erpHeaders(),
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('API error: ' + res.status);
+      var data = await res.json();
+      if (!data || !data.success) throw new Error((data && data.error) || 'Failed to update item');
+    }
+
+    if (unitChanged) {
+      if (!confirm('Change the unit of ' + code + ' from ' + (oldUnit || '—') + ' to ' + newUnit + '?
+
+This only changes the label. Quantities are NOT converted.')) {
+        throw new Error('Unit change cancelled');
+      }
+      var ures = await fetch(erpUrl('rpc/erp_update_item_unit'), {
+        method: 'POST',
+        headers: erpHeaders(),
+        body: JSON.stringify({ p_item_code: code, p_base_unit: newUnit, p_updated_by: updatedBy, p_reason: reason })
+      });
+      if (!ures.ok) throw new Error('Unit update not available (HTTP ' + ures.status + '). Run erp-update-item-unit.sql in Supabase first.');
+      var udata = await ures.json();
+      if (!udata || !udata.success) throw new Error((udata && udata.error) || 'Failed to update unit');
+    }
     
     if (_editItemModal) _editItemModal.hide();
     erpShowToast('✅ Item updated: ' + code);
