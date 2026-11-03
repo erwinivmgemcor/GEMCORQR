@@ -127,6 +127,7 @@ tr.selected-item-row {
 <script defer src="prints-erp.js"></script>
 <script defer src="success-actions.js"></script>
 <script defer src="erp-docno-format.js"></script>
+<script defer src="erp-vendor-suggest.js"></script>
 <script defer src="new-mrr.js"></script>
   <script defer src="notif-alerts.js"></script>
   <script defer src="notifications.js"></script>
@@ -222,8 +223,7 @@ tr.selected-item-row {
 </div>
       <div class="col-md-6">
         <label class="form-label fw-bold">Vendor / Client</label>
-        <input type="text" id="mrrVendor" class="form-control" list="mrrVendorList" autocomplete="off" placeholder="Auto-filled from PO, or type supplier">
-        <datalist id="mrrVendorList"></datalist>
+        <input type="text" id="mrrVendor" class="form-control" autocomplete="off" placeholder="Auto-filled from PO, or type supplier">
       </div>
       <div class="col-md-6">
         <label class="form-label fw-bold">Receiving Site <span class="text-danger">*</span></label>
