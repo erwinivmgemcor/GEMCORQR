@@ -483,30 +483,10 @@ function removeItem(idx) {
 // ═══════════════════════════════════════════════════════════
 // AUTO-SUGGEST
 // ═══════════════════════════════════════════════════════════
-// Vendor suggestions: past MRR vendors + PO suppliers (shown in the browser's suggestion list while typing)
-async function _mrrLoadVendorList() {
-  var list = document.getElementById('mrrVendorList');
-  if (!list) return;
-  var seen = {}, names = [];
-  function add(v) {
-    var s = String(v || '').replace(/\s+/g, ' ').trim();
-    if (s && !seen[s.toUpperCase()]) { seen[s.toUpperCase()] = 1; names.push(s); }
-  }
-  try {
-    var a = await erpFetch('documents', 'select=vendor&doc_type=eq.MRR&vendor=not.is.null&order=created_at.desc&limit=3000') || [];
-    a.forEach(function(r) { add(r.vendor); });
-  } catch (e) {}
-  try {
-    var b = await erpFetch('prf_items', 'select=po_supplier&po_supplier=not.is.null&limit=3000') || [];
-    b.forEach(function(r) { add(r.po_supplier); });
-  } catch (e) {}
-  try {
-    var c = await erpFetch('erp_prf_po_cache', 'select=supplier&supplier=not.is.null&limit=3000') || [];
-    c.forEach(function(r) { add(r.supplier); });
-  } catch (e) {}
-  names.sort(function(x, y) { return x.localeCompare(y); });
-  list.innerHTML = names.map(function(n) { return '<option value="' + erpEsc(n) + '"></option>'; }).join('');
-  console.log('[MRR] Vendor suggestions loaded:', names.length);
+// Vendor suggestions: gumagamit na ng erp-vendor-suggest.js (ranked, paged, cleaned)
+function _mrrLoadVendorList() {
+  if (window.ErpVendorSuggest) ErpVendorSuggest.attach('mrrVendor');
+  else console.warn('[MRR] erp-vendor-suggest.js not loaded');
 }
 
 function onMrrItemCodeInput(idx, value) {
