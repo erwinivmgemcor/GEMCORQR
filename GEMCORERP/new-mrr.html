@@ -222,7 +222,8 @@ tr.selected-item-row {
 </div>
       <div class="col-md-6">
         <label class="form-label fw-bold">Vendor / Client</label>
-        <input type="text" id="mrrVendor" class="form-control" placeholder="Auto-filled from PO, or type supplier">
+        <input type="text" id="mrrVendor" class="form-control" list="mrrVendorList" autocomplete="off" placeholder="Auto-filled from PO, or type supplier">
+        <datalist id="mrrVendorList"></datalist>
       </div>
       <div class="col-md-6">
         <label class="form-label fw-bold">Receiving Site <span class="text-danger">*</span></label>
