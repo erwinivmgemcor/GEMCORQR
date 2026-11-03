@@ -467,7 +467,7 @@ function allRequestsRenderNow() {
     var typeBadge = typeUpper === 'MRIF' ? 'bg-warning text-dark' : 'bg-info text-dark';
     
     var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
-    var canEditDoc = (localStorage.getItem('ivm_userRole') === 'warehouse') && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL');
+    var canEditDoc = (localStorage.getItem('ivm_userRole') === 'warehouse') && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL' || (statusUpper === 'COMPLETED' && typeUpper === 'MRIF'));
     
     html += '<tr' + (arIsMine(d.doc_no) ? ' class="ar-mine"' : '') + '>' +
       '<td><code>' + erpEsc(d.doc_no) + '</code>' + arPrintBadge(d.doc_no) + '</td>' +
