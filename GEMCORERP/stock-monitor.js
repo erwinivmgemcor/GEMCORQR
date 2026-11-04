@@ -9,7 +9,7 @@
 var _erpAllItems = [];
 var _erpFilteredItems = [];
 var _erpCurrentPage = 1;
-var _erpPageSize = 50;
+var _erpPageSize = 100;
 var _erpCharts = { category: null, abc: null, movement: null };
 var _erpSearchTimer = null;
 
