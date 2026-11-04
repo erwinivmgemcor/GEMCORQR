@@ -105,6 +105,7 @@ function mrifListComputeKPIs() {
   
   _mrifAllDocs.forEach(function(d) {
     var s = String(d.status || '').toUpperCase();
+    if (s === 'CANCELLED') { total--; return; }
     if (s === 'PENDING') pending++;
     else if (s === 'COMPLETED') completed++;
     else if (s === 'PARTIAL') partial++;
@@ -188,8 +189,10 @@ function mrifListRender() {
     var statusClass = 'status-pending';
     if (statusUpper === 'COMPLETED') statusClass = 'status-completed';
     else if (statusUpper === 'PARTIAL') statusClass = 'status-partial';
+    else if (statusUpper === 'CANCELLED') statusClass = 'status-cancelled';
     
     var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
+    var canCancel = canEdit && statusUpper === 'PENDING';
     var editable = canEdit && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL' || statusUpper === 'COMPLETED');
     var editTitle = statusUpper === 'COMPLETED' ? 'Correct item code / description / UOM' : 'Edit (Warehouse)';
     
@@ -215,6 +218,11 @@ function mrifListRender() {
           '<button class="erp-action-btn" onclick="openWarehouseEdit(\'' + safeDoc + '\', \'MRIF\')" title="' + editTitle + '">' +
             '<i class="bi bi-pencil-square"></i>' +
           '</button>' 
+          : '') +
+        (canCancel ?
+          '<button class="erp-action-btn" style="color:#b91c1c" onclick="mrifCancel(\'' + safeDoc + '\')" title="Cancel MRIF (nagawa nang mali / duplicate)">' +
+            '<i class="bi bi-x-circle"></i>' +
+          '</button>'
           : '') +
       '</td>' +
       '</tr>';
