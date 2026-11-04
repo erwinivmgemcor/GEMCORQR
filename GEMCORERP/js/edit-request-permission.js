@@ -499,11 +499,7 @@ function _renderProdEditItems() {
          +      'data-field="issuedQty" '
          +      'value="' + (it.issuedQty || 0) + '" min="0" step="0.01" '
          +      'oninput="_prodUpdateItem(' + idx + ', \'issuedQty\', parseFloat(this.value)||0)"></td>'
-         +    '<td><input type="text" class="form-control form-control-sm text-center" '
-         +      'id="prodEditUnit' + idx + '" '
-         +      'data-field="unit" '
-         +      'value="' + _escProd(it.unit) + '" '
-         +      'oninput="_prodUpdateItem(' + idx + ', \'unit\', this.value)"></td>'
+         +    '<td>' + _prodUnitSelect(idx, it.unit) + '</td>'
          +    '<td><input type="text" class="form-control form-control-sm" '
          +      'data-field="remarks" '
          +      'value="' + _escProd(it.remarks) + '" maxlength="200" '
@@ -570,7 +566,7 @@ function _prodSyncInputsToState() {
     if (!_prodEditState.currentItems[idx]) return;
 
     var getVal = function(field) {
-      var el = row.querySelector('input[data-field="' + field + '"]');
+      var el = row.querySelector('[data-field="' + field + '"]');
       return el ? el.value : '';
     };
 
@@ -660,6 +656,17 @@ function _prodFilterItems(input, idx) {
 
 window._prodFilterItems = _prodFilterItems;
 
+// Unit dropdown na may suggestions (mula sa inventory) + "+ Other…"
+function _prodUnitSelect(idx, current) {
+  var cur = String(current == null ? '' : current).trim();
+  var opts = window.ErpUom ? ErpUom.optionsHtml(cur)
+    : '<option value="' + _escProd(cur || 'PIECE') + '" selected>' + _escProd(cur || 'PIECE') + '</option>';
+  var handler = window.ErpUom
+    ? 'ErpUom.pick(this, function(v){ _prodUpdateItem(' + idx + ', \'unit\', v); })'
+    : '_prodUpdateItem(' + idx + ', \'unit\', this.value)';
+  return '<select class="form-select form-select-sm" id="prodEditUnit' + idx + '" data-field="unit" data-prev="' + _escProd(cur) + '" onchange="' + handler + '">' + opts + '</select>';
+}
+
 function _prodSelectItem(idx, code, description, unit) {
   if (_prodEditState.currentItems[idx]) {
     _prodEditState.currentItems[idx].itemCode = code;
@@ -674,7 +681,10 @@ function _prodSelectItem(idx, code, description, unit) {
   if (descInput) descInput.value = description || '';
 
   var unitInput = document.getElementById('prodEditUnit' + idx);
-  if (unitInput) unitInput.value = unit || 'PIECE';
+  if (unitInput) {
+    if (unitInput.tagName === 'SELECT' && window.ErpUom) ErpUom.setValue(unitInput, unit || 'PIECE');
+    else unitInput.value = unit || 'PIECE';
+  }
 
   setTimeout(function() {
     var row = codeInput ? codeInput.closest('tr') : null;
