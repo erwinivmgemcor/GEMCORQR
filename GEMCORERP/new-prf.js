@@ -520,7 +520,7 @@ function renderReorderItems() {
           'placeholder="' + Math.ceil(suggested) + '" onchange="updateQty(' + originalIdx + ', this.value)">' +
       '</td>' +
       '<td class="text-center">' +
-        '<select class="form-select form-select-sm unit-select" data-idx="' + originalIdx + '" onchange="updateUnit(' + originalIdx + ', this.value)" style="font-size:0.75rem;padding:2px 4px;">' +
+        '<select class="form-select form-select-sm unit-select" data-idx="' + originalIdx + '" onchange="ErpUom.pick(this, function(v){ updateUnit(' + originalIdx + ', v); })" style="font-size:0.75rem;padding:2px 4px;">' +
           buildUnitOptions(it.base_unit || 'PIECE') +
         '</select>' +
       '</td>' +
@@ -860,7 +860,7 @@ function renderManualItems() {
 
     html += '<div class="manual-item-row" data-idx="' + idx + '">' +
       '<div class="row g-2 align-items-end">' +
-        '<div class="col-md-4">' +
+        '<div class="col-md-3">' +
           '<label class="form-label small fw-bold mb-1">Item Code <span class="text-danger">*</span></label>' +
           '<div class="item-search-wrapper">' +
             '<input type="text" class="form-control form-control-sm manual-item-search-input" ' +
@@ -889,9 +889,9 @@ function renderManualItems() {
             'oninput="onManualQtyChange(' + idx + ', this.value)">' +
           (suggestedQty > 0 ? '<div class="suggested-qty-hint">Net: <strong>' + suggestedQty + '</strong></div>' : '') +
         '</div>' +
-        '<div class="col-md-1">' +
+        '<div class="col-md-2">' +
           '<label class="form-label small fw-bold mb-1">Unit</label>' +
-          '<select class="form-select form-select-sm" id="manualUnit' + idx + '" onchange="onManualUnitChange(' + idx + ', this.value)">' +
+          '<select class="form-select form-select-sm" id="manualUnit' + idx + '" onchange="ErpUom.pick(this, function(v){ onManualUnitChange(' + idx + ', v); })">' +
             buildUnitOptions(it.unit || 'PIECE') +
           '</select>' +
         '</div>' +
@@ -1249,9 +1249,11 @@ async function submitPrf() {
     });
   });
 
-  _prf.manualItems.forEach(function(it) {
+  _prf.manualItems.forEach(function(it, mi) {
     if (!it.inventoryId || !it.inventoryId.trim()) return;
     if (!it.qty || it.qty <= 0) return;
+    var unitEl = document.getElementById('manualUnit' + mi);          // ang nakikita sa screen ang masusunod
+    if (unitEl && unitEl.value && unitEl.value !== '__other__') it.unit = unitEl.value;
 
     var erpItem = _prf.erpItemsMap[it.inventoryId] || {};
     allItems.push({
@@ -1359,6 +1361,7 @@ window.cancelCreate = cancelCreate;
 // HELPERS
 // ═══════════════════════════════════════════════════════════
 function buildUnitOptions(selected) {
+  if (window.ErpUom) return ErpUom.optionsHtml(selected);   // inventory units + selected + "+ Other…"
   var units = ['PIECE', 'PCS', 'PAIR', 'SET', 'BOX', 'ROLL', 'SHEET',
     'KG', 'LITERS', 'GAL', 'METER', 'MM', 'LENGTH',
     'ASSEMB', 'CAN', 'REAM', 'TANK', 'UNIT'];
