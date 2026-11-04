@@ -1,0 +1,148 @@
+/* ============================================================
+   GEMCOR ERP — SOF Tracker design (scoped sa .sof-* at #sof-page)
+   Niloload pagkatapos ng ibang CSS. Para ibalik ang dating itsura:
+   tanggalin ang <link ... sof-tracker.css> sa sof-tracker.html
+   ============================================================ */
+:root {
+  --sof-navy: #1e3a5f;
+  --sof-navy-dark: #152a47;
+  --sof-blue: #2563eb;
+  --sof-blue-soft: #eaf1ff;
+  --sof-green: #059669;
+  --sof-green-soft: #e7f8f0;
+  --sof-amber: #b45309;
+  --sof-amber-soft: #fff4dc;
+  --sof-red: #dc2626;
+  --sof-red-soft: #fdeceb;
+  --sof-ink: #0f172a;
+  --sof-muted: #64748b;
+  --sof-line: #e5eaf2;
+}
+
+/* ---------- KPI cards ---------- */
+#sof-page .erp-kpi-card {
+  position: relative; overflow: hidden;
+  border: 1px solid var(--sof-line); border-radius: 16px;
+  background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(30,58,95,.18);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+#sof-page .erp-kpi-card::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--sof-blue);
+}
+#sof-page .erp-kpi-card.kpi-green::before { background: var(--sof-green); }
+#sof-page .erp-kpi-card.kpi-amber::before { background: #f59e0b; }
+#sof-page .erp-kpi-card.kpi-red::before   { background: var(--sof-red); }
+#sof-page .erp-kpi-card:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(15,23,42,.05), 0 14px 30px -12px rgba(30,58,95,.28); }
+#sof-page .erp-kpi-card .kpi-value { font-size: 2rem; font-weight: 800; letter-spacing: -.02em; color: var(--sof-ink); }
+#sof-page .erp-kpi-card .kpi-label { font-weight: 700; letter-spacing: .06em; }
+
+/* ---------- Filter bar + status pills ---------- */
+.sof-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.sof-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 14px; border-radius: 999px; cursor: pointer;
+  background: #f4f6fa; color: #475569; border: 1.5px solid transparent;
+  font-size: .82rem; font-weight: 600; transition: all .15s ease; user-select: none;
+}
+.sof-pill:hover { background: #e9eef6; color: var(--sof-navy); }
+.sof-pill .sof-pill-n {
+  min-width: 22px; padding: 1px 7px; border-radius: 999px; text-align: center;
+  background: #fff; color: var(--sof-navy); font-size: .72rem; font-weight: 800;
+  box-shadow: inset 0 0 0 1px var(--sof-line);
+}
+.sof-pill.active { background: var(--sof-navy); color: #fff; box-shadow: 0 4px 12px -4px rgba(30,58,95,.55); }
+.sof-pill.active .sof-pill-n { background: rgba(255,255,255,.18); color: #fff; box-shadow: none; }
+.sof-pill .sof-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: .75; }
+
+/* ---------- Table card ---------- */
+#sof-page .erp-table-card { border-radius: 16px; border: 1px solid var(--sof-line); overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 10px 28px -14px rgba(30,58,95,.2); }
+.sof-hint {
+  display: flex; align-items: center; gap: 8px; padding: 10px 18px;
+  background: linear-gradient(90deg, var(--sof-blue-soft), #fff 70%);
+  border-bottom: 1px solid var(--sof-line); color: var(--sof-navy); font-size: .8rem; font-weight: 500;
+}
+.sof-hint i { color: var(--sof-blue); font-size: 1rem; }
+
+table.sof-table { border-collapse: separate; border-spacing: 0; width: 100%; }
+table.sof-table thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: #f7f9fc; color: var(--sof-muted); font-size: .68rem; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; padding: 12px 14px;
+  border-bottom: 1px solid var(--sof-line);
+}
+table.sof-table tbody td { padding: 14px; border-bottom: 1px solid #eef2f7; vertical-align: middle; background: #fff; transition: background .12s; }
+table.sof-table tbody tr.sof-row { cursor: pointer; }
+table.sof-table tbody tr.sof-row:hover td { background: #f3f8ff; }
+table.sof-table tbody tr.sof-row:hover td:first-child { box-shadow: inset 4px 0 0 var(--sof-blue); }
+table.sof-table tbody tr:last-child td { border-bottom: 0; }
+
+/* ---------- SOF No. — mukhang button ---------- */
+.sof-link {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 10px 7px 12px; border-radius: 10px;
+  background: var(--sof-blue-soft); color: var(--sof-navy);
+  border: 1.5px solid #cfdcf7; font-weight: 800; font-size: .88rem; letter-spacing: .01em;
+  text-decoration: none; cursor: pointer; transition: all .15s ease; white-space: nowrap;
+  box-shadow: 0 1px 0 rgba(30,58,95,.06);
+}
+.sof-link i.bi-file-earmark-text { color: var(--sof-blue); font-size: 1rem; }
+.sof-link .sof-go {
+  display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  background: #fff; color: var(--sof-blue); font-size: .7rem; transition: all .15s ease;
+}
+.sof-row:hover .sof-link, .sof-link:hover {
+  background: var(--sof-navy); color: #fff; border-color: var(--sof-navy);
+  transform: translateX(2px); box-shadow: 0 6px 14px -6px rgba(30,58,95,.6);
+}
+.sof-row:hover .sof-link i.bi-file-earmark-text, .sof-link:hover i.bi-file-earmark-text { color: #fff; }
+.sof-row:hover .sof-go, .sof-link:hover .sof-go { background: rgba(255,255,255,.2); color: #fff; transform: translateX(2px); }
+
+/* ---------- Client cell ---------- */
+.sof-client { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.sof-avatar {
+  flex: 0 0 auto; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
+  font-weight: 800; font-size: .8rem; color: #fff; letter-spacing: .02em;
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,.12);
+}
+.sof-client-name { font-weight: 700; color: var(--sof-ink); line-height: 1.2; }
+.sof-client-sub { font-size: .74rem; color: var(--sof-muted); margin-top: 2px; display: flex; align-items: center; gap: 5px; }
+
+.sof-jo { display: inline-block; padding: 3px 9px; border-radius: 7px; background: #f1f5f9; color: #334155;
+  font-family: "SFMono-Regular", Consolas, monospace; font-size: .78rem; font-weight: 700; }
+.sof-date { color: #475569; white-space: nowrap; }
+.sof-items-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px;
+  background: #f1f5f9; color: #334155; font-weight: 700; font-size: .78rem; }
+
+/* ---------- Usage progress ---------- */
+.sof-usage { min-width: 170px; }
+.sof-usage-top { display: flex; justify-content: space-between; font-size: .76rem; margin-bottom: 5px; color: var(--sof-muted); }
+.sof-usage-top b { color: var(--sof-ink); font-weight: 800; }
+.sof-bar { height: 8px; border-radius: 999px; background: #e8edf5; overflow: hidden; }
+.sof-bar > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #38bdf8, var(--sof-blue)); transition: width .5s ease; }
+.sof-bar.full > span { background: linear-gradient(90deg, #34d399, var(--sof-green)); }
+.sof-bar.cancelled > span { background: #cbd5e1; }
+
+/* ---------- Remaining ---------- */
+.sof-rem { display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; border-radius: 999px; font-weight: 800; font-size: .82rem; }
+.sof-rem.zero { background: #f1f5f9; color: #64748b; }
+.sof-rem.has { background: var(--sof-amber-soft); color: var(--sof-amber); }
+
+/* ---------- Status badge ---------- */
+.sof-status { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px;
+  font-size: .68rem; font-weight: 800; letter-spacing: .06em; }
+.sof-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.sof-status.ACTIVE { background: var(--sof-blue-soft); color: #1d4ed8; }
+.sof-status.COMPLETED { background: var(--sof-green-soft); color: #047857; }
+.sof-status.CANCELLED { background: var(--sof-red-soft); color: #b91c1c; }
+.sof-status.OTHER { background: #f1f5f9; color: #475569; }
+
+/* ---------- Empty state ---------- */
+.sof-empty { padding: 56px 16px; text-align: center; color: var(--sof-muted); }
+.sof-empty i { font-size: 2.6rem; color: #b6c4da; display: block; margin-bottom: 8px; }
+
+@media (max-width: 900px) {
+  #sof-page .erp-kpi-row { grid-template-columns: repeat(2, 1fr) !important; }
+  .sof-usage { min-width: 130px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
