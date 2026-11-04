@@ -29,6 +29,7 @@
 <script defer src="prints-erp.js"></script>
 <script defer src="print-log.js"></script>
 <script defer src="js/warehouse-edit.js"></script>
+<script defer src="js/mrif-cancel.js"></script>
 <script defer src="all-requests.js"></script>
   <script defer src="notif-alerts.js"></script>
   <script defer src="notifications.js"></script>
@@ -154,6 +155,7 @@ tr.ar-mine td:first-child{box-shadow:inset 4px 0 0 #0ea5e9;}
         <option value="PENDING">Pending Only</option>
         <option value="PARTIAL">Partial Only</option>
         <option value="COMPLETED">Completed</option>
+        <option value="CANCELLED">Cancelled</option>
         <option value="">All Status</option>
       </select>
       <select id="allCatFilter" class="erp-select" onchange="allRequestsOnCatChange()" title="Filter by item category (Components / Consumables / Fabmat)">
