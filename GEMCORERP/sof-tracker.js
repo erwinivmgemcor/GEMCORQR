@@ -46,7 +46,7 @@ async function sofTrackerCheckHealth() {
 async function sofTrackerLoad() {
   var tbody = document.getElementById('sofTableBody');
   if (tbody) {
-    tbody.innerHTML = '<tr><td colspan="10" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
       '<div class="erp-spinner"></div>' +
       '<div class="mt-2">Loading SOF allocations...</div></td></tr>';
   }
@@ -71,7 +71,7 @@ async function sofTrackerLoad() {
   } catch(err) {
     console.error('[sofTrackerLoad]', err);
     if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="10" class="erp-empty text-danger">' +
+      tbody.innerHTML = '<tr><td colspan="8" class="erp-empty text-danger">' +
         '<i class="bi bi-exclamation-triangle-fill me-2"></i>Failed: ' + erpEsc(err.message) + '</td></tr>';
     }
   }
@@ -132,6 +132,14 @@ function sofTrackerComputeKPIs() {
     totalRemaining += Number(a.total_remaining_qty || 0);
   });
 
+  var completed = 0;
+  _sofTracker.allAllocations.forEach(function(a) { if (String(a.status || '').toUpperCase() === 'COMPLETED') completed++; });
+  var pe;
+  pe = document.getElementById('sofPillAll'); if (pe) pe.textContent = total;
+  pe = document.getElementById('sofPillActive'); if (pe) pe.textContent = active;
+  pe = document.getElementById('sofPillCompleted'); if (pe) pe.textContent = completed;
+  pe = document.getElementById('sofPillCancelled'); if (pe) pe.textContent = cancelled;
+
   var el;
   el = document.getElementById('sofKpiTotal'); if (el) el.textContent = sofTrackerNum(total);
   el = document.getElementById('sofKpiActive'); if (el) el.textContent = sofTrackerNum(active);
@@ -163,6 +171,7 @@ function sofTrackerApplyFilters() {
     return true;
   });
 
+  sofSyncPills(statusFilter);
   sofTrackerRender();
 }
 
@@ -179,9 +188,8 @@ function sofTrackerRender() {
   if (elCount) elCount.textContent = total + ' items';
 
   if (total === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="erp-empty">' +
-      '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
-      'No SOF allocations found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
+      '<div class="sof-empty"><i class="bi bi-inbox"></i>No SOF allocations found.</div></td></tr>';
     return;
   }
 
@@ -195,23 +203,32 @@ function sofTrackerRender() {
     var allocated = Number(a.total_allocated_qty || 0);
     var used = Number(a.total_used_qty || 0);
     var remaining = Number(a.total_remaining_qty || 0);
+    var pct = allocated > 0 ? Math.max(0, Math.min(100, Math.round(used / allocated * 100))) : 0;
+    var barCls = status === 'CANCELLED' ? 'cancelled' : (allocated > 0 && remaining <= 0 ? 'full' : '');
+    var stCls = (status === 'ACTIVE' || status === 'COMPLETED' || status === 'CANCELLED') ? status : 'OTHER';
 
-    var statusClass = 'bg-secondary';
-    if (status === 'ACTIVE') statusClass = 'bg-primary';
-    else if (status === 'COMPLETED') statusClass = 'bg-success';
-    else if (status === 'CANCELLED') statusClass = 'bg-danger';
+    var sofJs = sofTrackerEsc(a.sof_no).replace(/'/g, "\\'");
+    var client = a.client_name || '';
+    var project = a.project_name || '';
 
-    html += '<tr>' +
-          '<td><a href="javascript:void(0)" style="font-weight:700;color:#1e3a5f;text-decoration:underline;cursor:pointer;" onclick="sofViewItems(\'' + sofTrackerEsc(a.sof_no) + '\')">' + sofTrackerEsc(a.sof_no) + '</a></td>' +
-      '<td>' + sofTrackerEsc(a.client_name || '—') + '</td>' +
-      '<td>' + sofTrackerEsc(a.project_name || '—') + '</td>' +
-      '<td>' + sofTrackerEsc(a.jo_no || '—') + '</td>' +
-      '<td>' + sofTrackerEsc(dateStr) + '</td>' +
-      '<td class="text-center">' + (a.total_items || 0) + '</td>' +
-      '<td class="text-end fw-bold">' + sofTrackerNum(allocated) + '</td>' +
-      '<td class="text-end text-success fw-bold">' + sofTrackerNum(used) + '</td>' +
-      '<td class="text-end text-danger fw-bold">' + sofTrackerNum(remaining) + '</td>' +
-      '<td class="text-center"><span class="badge ' + statusClass + '">' + status + '</span></td>' +
+    html += '<tr class="sof-row" onclick="sofViewItems(\'' + sofJs + '\')" title="I-click para makita ang mga item">' +
+      '<td><a href="javascript:void(0)" class="sof-link" onclick="event.stopPropagation();sofViewItems(\'' + sofJs + '\')">' +
+        '<i class="bi bi-file-earmark-text"></i><span>' + sofTrackerEsc(a.sof_no) + '</span>' +
+        '<span class="sof-go"><i class="bi bi-arrow-right"></i></span></a></td>' +
+      '<td><div class="sof-client">' +
+        '<div class="sof-avatar" style="background:' + sofAvatarColor(client || a.sof_no) + '">' + sofInitials(client) + '</div>' +
+        '<div style="min-width:0"><div class="sof-client-name">' + sofTrackerEsc(client || '—') + '</div>' +
+        '<div class="sof-client-sub"><i class="bi bi-folder2-open"></i>' + sofTrackerEsc(project || 'No project') + '</div></div>' +
+      '</div></td>' +
+      '<td><span class="sof-jo">' + sofTrackerEsc(a.jo_no || '—') + '</span></td>' +
+      '<td class="sof-date">' + sofTrackerEsc(dateStr) + '</td>' +
+      '<td class="text-center"><span class="sof-items-chip"><i class="bi bi-box-seam"></i>' + (a.total_items || 0) + '</span></td>' +
+      '<td><div class="sof-usage">' +
+        '<div class="sof-usage-top"><span><b>' + sofTrackerNum(used) + '</b> / ' + sofTrackerNum(allocated) + ' used</span><b>' + pct + '%</b></div>' +
+        '<div class="sof-bar ' + barCls + '"><span style="width:' + pct + '%"></span></div>' +
+      '</div></td>' +
+      '<td class="text-center"><span class="sof-rem ' + (remaining > 0 ? 'has' : 'zero') + '">' + sofTrackerNum(remaining) + '</span></td>' +
+      '<td class="text-center"><span class="sof-status ' + stCls + '">' + sofTrackerEsc(status) + '</span></td>' +
     '</tr>';
   });
   tbody.innerHTML = html;
@@ -223,6 +240,31 @@ function sofTrackerRender() {
 function sofTrackerOnSearch() {
   clearTimeout(_sofTracker.searchTimer);
   _sofTracker.searchTimer = setTimeout(sofTrackerApplyFilters, 300);
+}
+
+function sofSyncPills(status) {
+  document.querySelectorAll('#sofPills .sof-pill').forEach(function(p) {
+    p.classList.toggle('active', (p.getAttribute('data-status') || '') === (status || ''));
+  });
+}
+function sofSetStatus(status) {
+  var sel = document.getElementById('sofStatusFilter');
+  if (sel) sel.value = status || '';
+  sofTrackerApplyFilters();
+}
+window.sofSetStatus = sofSetStatus;
+
+// Initials + pare-parehong kulay para sa bawat client
+function sofInitials(name) {
+  var parts = String(name || '').replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '—';
+  return ((parts[0][0] || '') + (parts.length > 1 ? parts[1][0] : (parts[0][1] || ''))).toUpperCase();
+}
+function sofAvatarColor(seed) {
+  var palette = ['#2563eb', '#7c3aed', '#0891b2', '#059669', '#d97706', '#db2777', '#4f46e5', '#0d9488'];
+  var h = 0, s = String(seed || '');
+  for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return palette[h % palette.length];
 }
 
 function sofTrackerClearFilters() {
