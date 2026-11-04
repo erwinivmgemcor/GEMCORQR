@@ -62,6 +62,20 @@ function initUserInfo() {
   var department = localStorage.getItem('ivm_userDepartment') || '';
   document.getElementById('prfPreparedBy').value = fullname;
   document.getElementById('prfDepartment').value = department;
+  initDateNeeded();
+}
+
+// Date Needed: default = ngayon + 7 araw (lead time ng warehouse sa PRF)
+var PRF_LEAD_DAYS_NEW = 7;
+function defaultDateNeededIso() {
+  var d = new Date();
+  d.setDate(d.getDate() + PRF_LEAD_DAYS_NEW);
+  var p = function(n) { return String(n).padStart(2, '0'); };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function initDateNeeded() {
+  var el = document.getElementById('prfDateNeeded');
+  if (el && !el.value) el.value = defaultDateNeededIso();
 }
 
 function generatePrfNo() {
@@ -1226,6 +1240,8 @@ async function submitPrf() {
   var notedBy = document.getElementById('prfNotedBy').value.trim();
   var approvedBy = document.getElementById('prfApprovedBy').value.trim();
   var notes = document.getElementById('prfNotes').value.trim();
+  var dateNeededEl = document.getElementById('prfDateNeeded');
+  var dateNeeded = (dateNeededEl && dateNeededEl.value) ? dateNeededEl.value : defaultDateNeededIso();   // blangko → +7 araw
 
   if (!prfNo) { erpShowToast('PRF No. required', 'warning'); return; }
   if (!category) { erpShowToast('Category required', 'warning'); return; }
@@ -1307,7 +1323,8 @@ async function submitPrf() {
         noted_by: notedBy,
         approved_by: approvedBy,
         notes: notes,
-        purpose: 'STOCK'
+        purpose: 'STOCK',
+        date_needed: dateNeeded
       },
       splitByCategory: false,
       maxItems: MAX_ITEMS_PER_PRF,
@@ -1319,6 +1336,21 @@ async function submitPrf() {
     }
 
     var createdPrfs = res.prfs || [];
+
+    // I-save ang Date Needed sa bawat nagawang PRF (hindi na kailangang baguhin ang erp_create_prf).
+    // Kung wala pa ang column (hindi pa na-run ang SQL), tahimik lang — 7 araw pa rin ang default sa print.
+    try {
+      for (var ci = 0; ci < createdPrfs.length; ci++) {
+        var cp = createdPrfs[ci];
+        var filter = cp.id ? 'id=eq.' + encodeURIComponent(cp.id) : 'prf_no=eq.' + encodeURIComponent(cp.prf_no);
+        var pr = await fetch(erpUrl('prf_documents?' + filter), {
+          method: 'PATCH',
+          headers: erpHeaders({ 'Prefer': 'return=minimal' }),
+          body: JSON.stringify({ date_needed: dateNeeded })
+        });
+        if (!pr.ok) console.warn('[PRF] date_needed not saved (HTTP ' + pr.status + ') — run erp-prf-date-needed.sql');
+      }
+    } catch (dnErr) { console.warn('[PRF] date_needed save failed', dnErr); }
     if (createdPrfs.length && createdPrfs[0].prf_no !== prfNo) {
       erpShowToast('PRF No. adjusted to ' + createdPrfs[0].prf_no, 'info');
     }
@@ -1417,4 +1449,4 @@ window.addEventListener('resize', function() {
   });
 });
 
-console.log('✅ new-prf.js v2.5 loaded (pending PRF + net need)');
+console.log('✅ new-prf.js v2.6 loaded (pending PRF + net need + date needed)');
