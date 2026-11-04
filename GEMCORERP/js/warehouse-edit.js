@@ -85,6 +85,7 @@ async function openWarehouseEdit(docNo, docType) {
 
     _whEditState.currentItems = JSON.parse(JSON.stringify(_whEditState.originalItems));
 
+    if (window.ErpUom) { try { await ErpUom.load(); } catch (e) {} }   // UOM suggestions
     if (_whEditState.correctionMode) await _whAcLoad(); // para kumpleto agad ang UOM list at item suggestions
 
     _renderEditForm(doc);
@@ -334,10 +335,7 @@ function _renderWhEditItems() {
          +      'data-field="issuedQty" '
          +      'value="' + (it.issuedQty || 0) + '" min="0" step="0.01" '
          +      'oninput="_whUpdateItem(' + idx + ', \'issuedQty\', parseFloat(this.value)||0)"></td>'
-         +    '<td><input type="text" class="form-control form-control-sm text-center" '
-         +      'data-field="unit" '
-         +      'value="' + _escWh(it.unit) + '" '
-         +      'oninput="_whUpdateItem(' + idx + ', \'unit\', this.value)"></td>'
+         +    '<td>' + _whUnitSelect(idx, it.unit) + '</td>'
          +    '<td><input type="text" class="form-control form-control-sm" '
          +      'data-field="remarks" '
          +      'value="' + _escWh(it.remarks) + '" maxlength="200" '
@@ -421,7 +419,7 @@ function _whSyncInputsToState() {
     if (!_whEditState.currentItems[idx]) return;
 
     var getVal = function(field) {
-      var el = row.querySelector('input[data-field="' + field + '"]');
+      var el = row.querySelector('[data-field="' + field + '"]');
       return el ? el.value : '';
     };
 
@@ -783,9 +781,23 @@ function _whUnitOptions(current) {
   add(current);
   (_whAc.list || []).forEach(function(r) { add(r.unit); });
   _whEditState.originalItems.forEach(function(it) { add(it.unit); });
+  if (window.ErpUom) ErpUom.list().forEach(add);
   base.forEach(add);
   out.sort(function(a, b) { return a.localeCompare(b); });
   return out;
+}
+
+// Unit dropdown (suggestions mula sa inventory + "+ Other…")
+function _whUnitSelect(idx, current) {
+  var cur = String(current == null ? '' : current).trim();
+  var opts = _whUnitOptions(cur).map(function(u) {
+    return '<option value="' + _escWh(u) + '"' + (u.toUpperCase() === cur.toUpperCase() ? ' selected' : '') + '>' + _escWh(u) + '</option>';
+  }).join('');
+  if (window.ErpUom) opts += '<option value="__other__">+ Other…</option>';
+  var handler = window.ErpUom
+    ? 'ErpUom.pick(this, function(v){ _whUpdateItem(' + idx + ', \'unit\', v); })'
+    : '_whUpdateItem(' + idx + ', \'unit\', this.value)';
+  return '<select class="form-select form-select-sm" data-field="unit" data-prev="' + _escWh(cur) + '" onchange="' + handler + '">' + opts + '</select>';
 }
 
 function _whSetUnit(row, idx, val) {
@@ -875,8 +887,7 @@ function _renderWhCorrectionItems() {
          +      'value="' + _escWh(it.description) + '" oninput="_whUpdateItem(' + idx + ', \'description\', this.value)"></td>'
          +    '<td class="text-center text-muted">' + (Number(it.qty) || 0) + '</td>'
          +    '<td class="text-center text-muted">' + (Number(it.issuedQty) || 0) + '</td>'
-         +    '<td><select class="form-select form-select-sm" data-field="unit" '
-         +      'onchange="_whUpdateItem(' + idx + ', \'unit\', this.value)">' + opts + '</select></td>'
+         +    '<td>' + _whUnitSelect(idx, it.unit) + '</td>'
          +    '<td class="text-muted small">' + _escWh(it.remarks || '') + '</td>'
          +  '</tr>';
   });
