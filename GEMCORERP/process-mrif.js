@@ -83,6 +83,13 @@ async function loadDocument() {
     }
     _process.doc = docRes[0];
 
+    // ── CANCELLED na MRIF: hindi na puwedeng i-process ──
+    if (String(_process.doc.status || '').toUpperCase() === 'CANCELLED') {
+      erpShowToast(_process.docNo + ' ay CANCELLED na at hindi na maipoproseso.', 'warning');
+      setTimeout(function() { window.location.href = 'all-requests.html'; }, 1800);
+      return;
+    }
+
     // ── lock: stop two staff from processing the same request ──
     var _lockStatus = String(_process.doc.status || '').toUpperCase();
     if ((_lockStatus === 'PENDING' || _lockStatus === 'PARTIAL') && window.erpDocLock) {
