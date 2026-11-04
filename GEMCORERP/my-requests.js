@@ -239,6 +239,7 @@ async function myRequestsRender() {
     var statusClass = 'status-pending';
     if (statusUpper === 'COMPLETED') statusClass = 'status-completed';
     else if (statusUpper === 'PARTIAL') statusClass = 'status-partial';
+    else if (statusUpper === 'CANCELLED') statusClass = 'status-cancelled';
     
     var typeUpper = String(d.doc_type || '').toUpperCase();
     var typeBadge = typeUpper === 'MRIF' ? 'bg-warning text-dark' : 'bg-info text-dark';
