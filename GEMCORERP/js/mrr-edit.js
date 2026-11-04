@@ -229,10 +229,10 @@ function _mrrEdHint() {
       'Hindi ito papayagan kung nagamit na ng MRIF ang allocation ng lumang SOF.</div>';
   }
   if (prfNew !== String(d.prf_no || '')) {
-    html += '<div class="alert alert-warning py-2 small mb-1"><i class="bi bi-exclamation-triangle me-1"></i>' +
+    html += '<div class="alert alert-info py-2 small mb-1"><i class="bi bi-arrow-repeat me-1"></i>' +
       '<strong>PRF:</strong> ' + erpEsc(d.prf_no || '—') + ' → <strong>' + erpEsc(prfNew || '—') + '</strong>. ' +
-      'Ang PRF No. sa MRR ang mababago; <em>hindi</em> nito awtomatikong ina-update ang status ng mga line sa PRF Monitor. ' +
-      'I-check ang PRF Monitor pagkatapos.</div>';
+      'Awtomatikong ire-recompute ang status ng <em>lumang</em> at <em>bagong</em> PRF sa PRF Monitor ' +
+      '(maliban sa mga line na manual ang status 🔒).</div>';
   }
   el.innerHTML = html;
 }
@@ -289,7 +289,7 @@ async function mrrEdSave() {
   }
   if (header.prf_no !== String(d.prf_no || '')) {
     msg += '\n\nPRF: ' + (d.prf_no || '—') + ' → ' + (header.prf_no || '—') +
-           '\n(Label lang — i-check ang PRF Monitor pagkatapos.)';
+           '\n(Awtomatikong ire-recompute ang PRF status ng luma at bago.)';
   }
   if (!confirm(msg)) return;
 
