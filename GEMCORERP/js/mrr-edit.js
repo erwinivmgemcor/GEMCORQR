@@ -149,7 +149,8 @@ function _mrrEdRender() {
   var h = '<div class="alert alert-warning py-2 small mb-3">' +
     '<i class="bi bi-info-circle me-1"></i>Kapag binago ang <strong>Received</strong>, ang <em>pagkakaiba lang</em> ' +
     'ang idadagdag o ibabawas sa stock ledger at sa SOF allocation. Hindi ito papayagan kung magiging negative ang on-hand ' +
-    'o mas mababa sa nagamit na ng SOF.</div>';
+    'o mas mababa sa nagamit na ng SOF.<br>' +
+    'Kapag binago ang <strong>SOF No.</strong>, ililipat ang allocation ng natanggap na qty mula sa lumang SOF papunta sa bago.</div>';
 
   h += '<div class="row g-3 mb-3">' +
     '<div class="col-md-4"><label class="form-label small fw-bold">MRR No.</label>' +
@@ -160,8 +161,8 @@ function _mrrEdRender() {
     fld('mrrEdPrf', 'PRF No.', d.prf_no) +
     fld('mrrEdSite', 'Receiving Site', d.receiving_site) +
     fld('mrrEdDate', 'Receiving Date', rd, 'date') +
-    '<div class="col-md-4"><label class="form-label small fw-bold">SOF No. (naka-lock)</label>' +
-      '<input class="form-control form-control-sm" value="' + erpEsc(d.sof_no || '—') + '" disabled></div>' +
+    fld('mrrEdSof', 'SOF No.', d.sof_no) +
+    '<div class="col-12" id="mrrEdHint"></div>' +
     '</div>';
 
   h += '<div class="table-responsive"><table class="table table-sm table-bordered align-middle">' +
@@ -187,6 +188,53 @@ function _mrrEdRender() {
     '<textarea class="form-control" id="mrrEdReason" rows="2" placeholder="Hal. maling bilang sa DR, na-encode nang mali..."></textarea></div>';
 
   document.getElementById('mrrEdBody').innerHTML = h;
+
+  // Auto-format (SOF → 12897, PRF → PRF#26-878) at hint kapag may binago
+  var bindFmt = function(id, fn) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', _mrrEdHint);
+    el.addEventListener('blur', function() {
+      var v = fn(el.value);
+      if (v !== el.value) el.value = v;
+      _mrrEdHint();
+    });
+  };
+  bindFmt('mrrEdSof', _mrrEdFmtSof);
+  bindFmt('mrrEdPrf', _mrrEdFmtPrf);
+}
+
+// ─── SOF / PRF normalization (gamit ang erp-docno-format.js kung naka-load) ───
+function _mrrEdFmtSof(v) { return typeof window.erpFmtSof === 'function' ? window.erpFmtSof(v) : String(v || '').trim(); }
+function _mrrEdFmtPrf(v) { return typeof window.erpFmtPrfList === 'function' ? window.erpFmtPrfList(v) : String(v || '').trim(); }
+
+// Ibalik ang ORIGINAL kung pareho lang ang normalized form (para hindi magmukhang "binago" ang SOF/PRF
+// na iba lang ang pagkaka-type, hal. "SOF#18333" vs "18333" — iiwas sa maling paglipat ng allocation).
+function _mrrEdResolve(inputId, fmt, original) {
+  var typed = fmt(document.getElementById(inputId).value);
+  var orig = String(original || '');
+  return typed === fmt(orig) ? orig : typed;
+}
+
+function _mrrEdHint() {
+  var el = document.getElementById('mrrEdHint');
+  if (!el || !_mrrEd.doc) return;
+  var d = _mrrEd.doc, html = '';
+  var sofNew = _mrrEdResolve('mrrEdSof', _mrrEdFmtSof, d.sof_no);
+  var prfNew = _mrrEdResolve('mrrEdPrf', _mrrEdFmtPrf, d.prf_no);
+  if (sofNew !== String(d.sof_no || '')) {
+    html += '<div class="alert alert-info py-2 small mb-1"><i class="bi bi-arrow-left-right me-1"></i>' +
+      '<strong>SOF:</strong> ' + erpEsc(d.sof_no || '—') + ' → <strong>' + erpEsc(sofNew || '—') + '</strong>. ' +
+      'Ililipat ang allocation ng natanggap na qty ng bawat line. ' +
+      'Hindi ito papayagan kung nagamit na ng MRIF ang allocation ng lumang SOF.</div>';
+  }
+  if (prfNew !== String(d.prf_no || '')) {
+    html += '<div class="alert alert-warning py-2 small mb-1"><i class="bi bi-exclamation-triangle me-1"></i>' +
+      '<strong>PRF:</strong> ' + erpEsc(d.prf_no || '—') + ' → <strong>' + erpEsc(prfNew || '—') + '</strong>. ' +
+      'Ang PRF No. sa MRR ang mababago; <em>hindi</em> nito awtomatikong ina-update ang status ng mga line sa PRF Monitor. ' +
+      'I-check ang PRF Monitor pagkatapos.</div>';
+  }
+  el.innerHTML = html;
 }
 
 function _mrrEdDelta(i) {
@@ -223,7 +271,8 @@ async function mrrEdSave() {
     po_no: document.getElementById('mrrEdPo').value.trim(),
     vendor: document.getElementById('mrrEdVendor').value.trim(),
     dr_no: document.getElementById('mrrEdDr').value.trim(),
-    prf_no: document.getElementById('mrrEdPrf').value.trim(),
+    prf_no: _mrrEdResolve('mrrEdPrf', _mrrEdFmtPrf, d.prf_no),
+    sof_no: _mrrEdResolve('mrrEdSof', _mrrEdFmtSof, d.sof_no),
     receiving_site: document.getElementById('mrrEdSite').value.trim(),
     receiving_date: document.getElementById('mrrEdDate').value
   };
@@ -234,6 +283,14 @@ async function mrrEdSave() {
   }).length;
   var msg = 'I-save ang pagbabago sa ' + _mrrEd.docNo + '?';
   if (stockLines > 0) msg += '\n\n' + stockLines + ' line(s) ang magbabago ng stock at SOF allocation.';
+  if (header.sof_no !== String(d.sof_no || '')) {
+    msg += '\n\nSOF: ' + (d.sof_no || '—') + ' → ' + (header.sof_no || '—') +
+           '\nIlilipat ang SOF allocation ng natanggap na qty.';
+  }
+  if (header.prf_no !== String(d.prf_no || '')) {
+    msg += '\n\nPRF: ' + (d.prf_no || '—') + ' → ' + (header.prf_no || '—') +
+           '\n(Label lang — i-check ang PRF Monitor pagkatapos.)';
+  }
   if (!confirm(msg)) return;
 
   _mrrEd.busy = true;
@@ -249,7 +306,8 @@ async function mrrEdSave() {
     });
     if (!res || !res.success) throw new Error(_mrrEdFriendly(res && res.error));
     mrrEdClose();
-    _mrrEdToast('✅ ' + _mrrEd.docNo + ' updated (' + res.status + ')', 'success');
+    _mrrEdToast('✅ ' + _mrrEd.docNo + ' updated (' + res.status + ')' +
+      (res.sof_lines_moved ? ' · SOF allocation: ' + res.sof_lines_moved + ' line(s) inilipat' : ''), 'success');
     if (typeof mrrListRefresh === 'function') setTimeout(mrrListRefresh, 400);
   } catch (err) {
     _mrrEdToast(err.message, 'danger');
@@ -296,5 +354,6 @@ window.mrrVoid = mrrVoid;
 window.mrrEdSave = mrrEdSave;
 window.mrrEdClose = mrrEdClose;
 window._mrrEdDelta = _mrrEdDelta;
+window._mrrEdHint = _mrrEdHint;
 
-console.log('✅ mrr-edit.js v1.0 loaded');
+console.log('✅ mrr-edit.js v1.1 loaded (SOF/PRF edit)');
