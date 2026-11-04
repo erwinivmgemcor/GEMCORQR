@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="erp-styles.css">
 <link rel="stylesheet" href="erp-nav.css">
 <link rel="stylesheet" href="erp-notif.css">
+<link rel="stylesheet" href="sof-tracker.css">
 
 <script src="erp-theme.js"></script>
 <script src="erp-guard.js"></script>
@@ -55,7 +56,7 @@
   </div>
 </nav>
 
-<div class="erp-container">
+<div class="erp-container" id="sof-page">
 
   <!-- PAGE HEADER -->
   <div class="erp-page-header">
@@ -127,6 +128,12 @@
         <i class="bi bi-x-lg"></i> Clear
       </button>
     </div>
+    <div class="sof-pills" id="sofPills">
+      <span class="sof-pill active" data-status="" onclick="sofSetStatus('')">All <span class="sof-pill-n" id="sofPillAll">0</span></span>
+      <span class="sof-pill" data-status="ACTIVE" onclick="sofSetStatus('ACTIVE')"><span class="sof-dot"></span>Active <span class="sof-pill-n" id="sofPillActive">0</span></span>
+      <span class="sof-pill" data-status="COMPLETED" onclick="sofSetStatus('COMPLETED')"><span class="sof-dot"></span>Completed <span class="sof-pill-n" id="sofPillCompleted">0</span></span>
+      <span class="sof-pill" data-status="CANCELLED" onclick="sofSetStatus('CANCELLED')"><span class="sof-dot"></span>Cancelled <span class="sof-pill-n" id="sofPillCancelled">0</span></span>
+    </div>
   </div>
 
   <!-- SOF TABLE -->
@@ -140,25 +147,24 @@
       <span class="erp-badge" id="sofTableCount">0 items</span>
     </div>
 
+    <div class="sof-hint"><i class="bi bi-hand-index-thumb"></i><span>I-click ang <b>SOF No.</b> (o kahit anong row) para makita ang mga item at mag-release ng stock.</span></div>
     <div class="erp-table-wrap" style="max-height:65vh;">
-      <table class="erp-table" style="font-size:0.82rem;">
+      <table class="erp-table sof-table" style="font-size:0.85rem;">
         <thead>
           <tr>
-            <th style="width:12%">SOF No.</th>
-            <th style="width:18%">Client</th>
-            <th style="width:15%">Project</th>
-            <th style="width:10%">JO No.</th>
+            <th style="width:13%">SOF No.</th>
+            <th style="width:25%">Client / Project</th>
+            <th style="width:9%">JO No.</th>
             <th style="width:10%">Date</th>
-            <th style="width:8%" class="text-center">Items</th>
-            <th style="width:10%" class="text-end">Allocated</th>
-            <th style="width:10%" class="text-end">Used</th>
-            <th style="width:10%" class="text-end">Remaining</th>
-            <th style="width:12%" class="text-center">Status</th>
+            <th style="width:7%" class="text-center">Items</th>
+            <th style="width:20%">Usage</th>
+            <th style="width:8%" class="text-center">Remaining</th>
+            <th style="width:8%" class="text-center">Status</th>
           </tr>
         </thead>
         <tbody id="sofTableBody">
           <tr>
-            <td colspan="10" class="erp-empty">
+            <td colspan="8" class="erp-empty">
               <div class="erp-spinner"></div>
               <div class="mt-2">Loading SOF allocations...</div>
             </td>
