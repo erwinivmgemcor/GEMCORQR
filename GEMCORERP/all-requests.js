@@ -464,11 +464,13 @@ function allRequestsRenderNow() {
     var statusClass = 'status-pending';
     if (statusUpper === 'COMPLETED') statusClass = 'status-completed';
     else if (statusUpper === 'PARTIAL') statusClass = 'status-partial';
+    else if (statusUpper === 'CANCELLED') statusClass = 'status-cancelled';
     
     var typeUpper = String(d.doc_type || '').toUpperCase();
     var typeBadge = typeUpper === 'MRIF' ? 'bg-warning text-dark' : 'bg-info text-dark';
     
     var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
+    var canCancelDoc = typeUpper === 'MRIF' && statusUpper === 'PENDING' && typeof window.mrifCanCancel === 'function' && window.mrifCanCancel();
     var canEditDoc = (localStorage.getItem('ivm_userRole') === 'warehouse') && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL' || (statusUpper === 'COMPLETED' && typeUpper === 'MRIF'));
     
     html += '<tr' + (arIsMine(d.doc_no) ? ' class="ar-mine"' : '') + '>' +
@@ -490,6 +492,9 @@ function allRequestsRenderNow() {
         '</button>' +
         (canEditDoc ? ' <button class="erp-action-btn" onclick="openWarehouseEdit(\'' + safeDoc + '\', \'' + typeUpper + '\')" title="Edit (fix unit, qty, items)">' +
           '<i class="bi bi-pencil-square"></i>' +
+        '</button>' : '') +
+        (canCancelDoc ? ' <button class="erp-action-btn" style="color:#b91c1c" onclick="mrifCancel(\'' + safeDoc + '\')" title="Cancel MRIF (nagawa nang mali / duplicate)">' +
+          '<i class="bi bi-x-circle"></i>' +
         '</button>' : '') +
       '</td>' +
       '</tr>';
