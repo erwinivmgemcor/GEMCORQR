@@ -31,6 +31,7 @@
 <script defer src="prints-erp.js"></script>
 <script defer src="stock-monitor.js"></script>
 <script defer src="stock-colfilters.js"></script>
+<script defer src="js/bulk-price-update.js"></script>
   <script defer src="notif-alerts.js"></script>
   <script defer src="notifications.js"></script>
   <script defer src="js/update.js"></script>
@@ -251,6 +252,9 @@
     </button>
     <button class="erp-btn-primary" onclick="erpOpenCsvImport()" title="Bulk import via CSV">
       <i class="bi bi-upload me-1"></i>Bulk Import
+    </button>
+    <button class="erp-btn-outline-dark" onclick="bpuOpen()" title="Bulk update ng Unit Price (Unit Cost) — unit cost lang ang mababago">
+      <i class="bi bi-tag me-1"></i>Bulk Price Update
     </button>
     
     <!-- ✅ Dito na nakalagay sa dulo ang badge at Deactivated Items -->
