@@ -16,7 +16,7 @@
   document.head.appendChild(st);
 })();
 
-var _mrrEd = { docNo: null, doc: null, items: [], busy: false };
+var _mrrEd = { docNo: null, doc: null, items: [], busy: false, catalog: null, catLoading: null };
 
 function _mrrEdToast(msg, type) {
   if (typeof erpShowToast === 'function') erpShowToast(msg, type || 'info');
@@ -124,12 +124,17 @@ async function openMrrEdit(docNo) {
 
     _mrrEd.doc = doc;
     _mrrEd.items = (items || []).map(function(it) {
-      return {
-        id: it.id, lineNo: it.line_no, itemCode: it.item_code,
+      var row = {
+        id: it.id, lineNo: it.line_no, itemCode: it.item_code || '',
         description: it.description || '', unit: it.unit || '',
-        reqQty: Number(it.requested_qty || 0), recvQty: Number(it.issued_qty || 0)
+        reqQty: Number(it.requested_qty || 0), recvQty: Number(it.issued_qty || 0),
+        isNew: false, deleted: false
       };
+      row.orig = { itemCode: row.itemCode, description: row.description, unit: row.unit, reqQty: row.reqQty, recvQty: row.recvQty };
+      return row;
     });
+    _mrrEdLoadCatalog();   // i-preload ang item suggestions + units
+    if (window.ErpUom) { try { await ErpUom.load(); } catch (e) {} }
     _mrrEdRender();
   } catch (err) {
     mrrEdClose();
@@ -147,9 +152,10 @@ function _mrrEdRender() {
   var rd = String(d.receiving_date || '').substring(0, 10);
 
   var h = '<div class="alert alert-warning py-2 small mb-3">' +
-    '<i class="bi bi-info-circle me-1"></i>Kapag binago ang <strong>Received</strong>, ang <em>pagkakaiba lang</em> ' +
-    'ang idadagdag o ibabawas sa stock ledger at sa SOF allocation. Hindi ito papayagan kung magiging negative ang on-hand ' +
-    'o mas mababa sa nagamit na ng SOF.<br>' +
+    '<i class="bi bi-info-circle me-1"></i>Lahat ay puwedeng baguhin: <strong>Item Code, Description, Unit, Expected, Received</strong>, ' +
+    'at puwede ring <strong>magdagdag</strong> o <strong>magbura</strong> ng line. ' +
+    'Ang pagbabago sa <em>natanggap</em> ay ia-adjust sa stock ledger at SOF allocation (pagkakaiba lang). ' +
+    'Hindi ito papayagan kung magiging negative ang on-hand o mas mababa sa nagamit na ng SOF.<br>' +
     'Kapag binago ang <strong>SOF No.</strong>, ililipat ang allocation ng natanggap na qty mula sa lumang SOF papunta sa bago.</div>';
 
   h += '<div class="row g-3 mb-3">' +
@@ -165,29 +171,19 @@ function _mrrEdRender() {
     '<div class="col-12" id="mrrEdHint"></div>' +
     '</div>';
 
-  h += '<div class="table-responsive"><table class="table table-sm table-bordered align-middle">' +
-    '<thead><tr><th>#</th><th>Item Code</th><th>Description</th><th>Unit</th>' +
-    '<th style="width:110px;">Expected</th><th style="width:110px;">Received</th><th style="width:110px;">Change</th>' +
-    '</tr></thead><tbody>';
-  _mrrEd.items.forEach(function(it, i) {
-    h += '<tr>' +
-      '<td>' + it.lineNo + '</td>' +
-      '<td><code>' + erpEsc(it.itemCode) + '</code></td>' +
-      '<td>' + erpEsc(it.description) + '</td>' +
-      '<td>' + erpEsc(it.unit) + '</td>' +
-      '<td><input type="number" min="0.0001" step="any" class="form-control form-control-sm" ' +
-        'id="mrrEdReq' + i + '" value="' + it.reqQty + '" oninput="_mrrEdDelta(' + i + ')"></td>' +
-      '<td><input type="number" min="0" step="any" class="form-control form-control-sm" ' +
-        'id="mrrEdRecv' + i + '" value="' + it.recvQty + '" oninput="_mrrEdDelta(' + i + ')"></td>' +
-      '<td class="text-center" id="mrrEdDelta' + i + '">—</td>' +
-      '</tr>';
-  });
-  h += '</tbody></table></div>';
+  h += '<div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-2" style="min-width:980px;">' +
+    '<thead><tr><th style="width:44px;">#</th><th style="width:190px;">Item Code</th><th>Description</th>' +
+    '<th style="width:110px;">Unit</th>' +
+    '<th style="width:100px;">Expected</th><th style="width:100px;">Received</th><th style="width:110px;">Change</th>' +
+    '<th style="width:48px;"></th></tr></thead><tbody id="mrrEdRows"></tbody></table></div>' +
+    '<button type="button" class="btn btn-sm btn-outline-primary" onclick="mrrEdAddRow()">' +
+    '<i class="bi bi-plus-circle me-1"></i>Add Item</button>';
 
   h += '<div class="mt-3"><label class="form-label small fw-bold">Reason for change <span class="text-danger">*</span></label>' +
-    '<textarea class="form-control" id="mrrEdReason" rows="2" placeholder="Hal. maling bilang sa DR, na-encode nang mali..."></textarea></div>';
+    '<textarea class="form-control" id="mrrEdReason" rows="2" placeholder="Hal. maling bilang sa DR, na-encode nang mali, nadagdag na item..."></textarea></div>';
 
   document.getElementById('mrrEdBody').innerHTML = h;
+  _mrrEdRenderRows();
 
   // Auto-format (SOF → 12897, PRF → PRF#26-878) at hint kapag may binago
   var bindFmt = function(id, fn) {
@@ -202,6 +198,164 @@ function _mrrEdRender() {
   };
   bindFmt('mrrEdSof', _mrrEdFmtSof);
   bindFmt('mrrEdPrf', _mrrEdFmtPrf);
+}
+
+// ─── Mga row ng item ───
+function _mrrEdRenderRows() {
+  var tb = document.getElementById('mrrEdRows');
+  if (!tb) return;
+  var h = '';
+  var n = 0;
+  _mrrEd.items.forEach(function(it, i) {
+    var dis = it.deleted ? ' disabled' : '';
+    if (!it.deleted) n++;
+    h += '<tr id="mrrEdRow' + i + '" class="' + (it.deleted ? 'table-danger' : (it.isNew ? 'table-success' : '')) + '">' +
+      '<td class="text-muted small">' + (it.isNew ? '<span class="badge bg-success">NEW</span>' : (it.deleted ? '<s>' + it.lineNo + '</s>' : it.lineNo)) + '</td>' +
+      '<td><input type="text" class="form-control form-control-sm mrrEdCode" id="mrrEdCode' + i + '" autocomplete="off" ' +
+        'style="font-family:monospace;font-size:.78rem;" value="' + erpEsc(it.itemCode) + '"' + dis + ' ' +
+        'oninput="_mrrEdCodeInput(' + i + ')" onfocus="_mrrEdCodeInput(' + i + ')" onblur="_mrrEdCodeBlur()" placeholder="Item code / description"></td>' +
+      '<td><input type="text" class="form-control form-control-sm" id="mrrEdDesc' + i + '" value="' + erpEsc(it.description) + '"' + dis + '></td>' +
+      '<td><select class="form-select form-select-sm" id="mrrEdUnit' + i + '"' + dis + ' onchange="ErpUom.pick(this)">' +
+        (it.unit ? '' : '<option value="" selected>— unit —</option>') +
+        (window.ErpUom ? ErpUom.optionsHtml(it.unit) : '<option value="' + erpEsc(it.unit) + '" selected>' + erpEsc(it.unit) + '</option>') +
+      '</select></td>' +
+      '<td><input type="number" min="0.0001" step="any" class="form-control form-control-sm" id="mrrEdReq' + i + '" value="' + it.reqQty + '"' + dis + '></td>' +
+      '<td><input type="number" min="0" step="any" class="form-control form-control-sm" id="mrrEdRecv' + i + '" value="' + it.recvQty + '"' + dis +
+        ' oninput="_mrrEdDelta(' + i + ')"></td>' +
+      '<td class="text-center small" id="mrrEdDelta' + i + '">—</td>' +
+      '<td class="text-center">' +
+        (it.deleted
+          ? '<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Ibalik ang line" onclick="mrrEdRemoveRow(' + i + ')"><i class="bi bi-arrow-counterclockwise"></i></button>'
+          : '<button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" title="' + (it.isNew ? 'Alisin' : 'Burahin ang line') + '" onclick="mrrEdRemoveRow(' + i + ')"><i class="bi bi-trash"></i></button>') +
+      '</td></tr>';
+  });
+  if (!_mrrEd.items.length) h = '<tr><td colspan="8" class="text-center text-muted py-3">Walang line.</td></tr>';
+  tb.innerHTML = h;
+  _mrrEd.items.forEach(function(it, i) {
+    var sel = document.getElementById('mrrEdUnit' + i);
+    if (sel && window.ErpUom && it.unit) ErpUom.setValue(sel, it.unit);
+    _mrrEdDelta(i);
+  });
+}
+
+// Kunin sa state ang laman ng mga input (bago mag-add/delete/render ulit)
+function _mrrEdSync() {
+  _mrrEd.items.forEach(function(it, i) {
+    var g = function(id) { return document.getElementById(id); };
+    if (!g('mrrEdCode' + i) || it.deleted) return;
+    it.itemCode = g('mrrEdCode' + i).value.trim();
+    it.description = g('mrrEdDesc' + i).value;
+    var u = g('mrrEdUnit' + i).value;
+    it.unit = (u === '__other__') ? it.unit : u;
+    it.reqQty = g('mrrEdReq' + i).value;
+    it.recvQty = g('mrrEdRecv' + i).value;
+  });
+}
+
+function mrrEdAddRow() {
+  _mrrEdSync();
+  _mrrEd.items.push({ id: null, lineNo: '', itemCode: '', description: '', unit: '', reqQty: '', recvQty: '',
+                      isNew: true, deleted: false, orig: null });
+  _mrrEdRenderRows();
+  var last = _mrrEd.items.length - 1;
+  var el = document.getElementById('mrrEdCode' + last);
+  if (el) { el.focus(); el.scrollIntoView({ block: 'nearest' }); }
+}
+
+function mrrEdRemoveRow(i) {
+  _mrrEdSync();
+  var it = _mrrEd.items[i];
+  if (!it) return;
+  if (it.isNew) { _mrrEd.items.splice(i, 1); }
+  else { it.deleted = !it.deleted; }
+  _mrrEdRenderRows();
+}
+
+// ─── Item auto-suggest (code o description) ───
+function _mrrEdLoadCatalog() {
+  if (_mrrEd.catalog) return Promise.resolve(_mrrEd.catalog);
+  if (_mrrEd.catLoading) return _mrrEd.catLoading;
+  if (typeof erpGetInventoryListForDropdown !== 'function') return Promise.resolve([]);
+  _mrrEd.catLoading = erpGetInventoryListForDropdown().then(function(list) {
+    _mrrEd.catalog = (list || []).map(function(r) {
+      return { code: String(r.code || ''), description: String(r.description || ''), unit: String(r.unit || r.base_unit || ''),
+               _k: (String(r.code || '') + ' ' + String(r.description || '')).toLowerCase() };
+    });
+    _mrrEd.catLoading = null;
+    return _mrrEd.catalog;
+  }).catch(function(err) {
+    console.warn('[MRR Edit] inventory load failed', err && err.message);
+    _mrrEd.catLoading = null;
+    return [];
+  });
+  return _mrrEd.catLoading;
+}
+
+var _mrrAc = { box: null, idx: -1, matches: [] };
+
+function _mrrEdAcBox() {
+  if (_mrrAc.box && document.body.contains(_mrrAc.box)) return _mrrAc.box;
+  var b = document.createElement('div');
+  b.style.cssText = 'position:fixed;z-index:3000;background:#fff;border:1px solid #cbd5e1;border-radius:8px;' +
+    'box-shadow:0 10px 30px rgba(15,23,42,.25);max-height:260px;overflow:auto;display:none;font-size:.8rem;';
+  b.addEventListener('mousedown', function(e) {
+    var row = e.target.closest('[data-i]');
+    if (row) { e.preventDefault(); _mrrEdAcPick(parseInt(row.getAttribute('data-i'), 10)); }
+  });
+  document.body.appendChild(b);
+  _mrrAc.box = b;
+  return b;
+}
+
+function _mrrEdCodeInput(i) {
+  var inp = document.getElementById('mrrEdCode' + i);
+  if (!inp) return;
+  _mrrAc.row = i;
+  var q = inp.value.trim().toLowerCase();
+  var b = _mrrEdAcBox();
+  if (!q || !_mrrEd.catalog) { b.style.display = 'none'; if (!_mrrEd.catalog) _mrrEdLoadCatalog(); return; }
+  var tokens = q.split(/\s+/), out = [];
+  for (var k = 0; k < _mrrEd.catalog.length; k++) {
+    var it = _mrrEd.catalog[k], ok = true;
+    for (var t = 0; t < tokens.length; t++) { if (it._k.indexOf(tokens[t]) === -1) { ok = false; break; } }
+    if (!ok) continue;
+    var c = it.code.toLowerCase();
+    out.push({ it: it, rank: c === q ? 0 : (c.indexOf(q) === 0 ? 1 : (c.indexOf(q) > -1 ? 2 : 3)) });
+  }
+  out.sort(function(a, b2) { return a.rank - b2.rank || a.it.code.localeCompare(b2.it.code); });
+  _mrrAc.matches = out.slice(0, 30).map(function(o) { return o.it; });
+  if (!_mrrAc.matches.length) {
+    b.innerHTML = '<div class="p-2 text-muted">Walang nakitang item sa inventory</div>';
+  } else {
+    b.innerHTML = _mrrAc.matches.map(function(it, n) {
+      return '<div data-i="' + n + '" style="padding:6px 10px;cursor:pointer;border-bottom:1px solid #eef2f7;" ' +
+        'onmouseover="this.style.background=\'#eaf1ff\'" onmouseout="this.style.background=\'\'">' +
+        '<code style="font-size:.74rem;">' + erpEsc(it.code) + '</code> <span class="text-muted">' + erpEsc(it.unit) + '</span><br>' +
+        '<span>' + erpEsc(it.description) + '</span></div>';
+    }).join('');
+  }
+  var r = inp.getBoundingClientRect();
+  b.style.left = r.left + 'px';
+  b.style.top = (r.bottom + 2) + 'px';
+  b.style.width = Math.max(r.width, 380) + 'px';
+  b.style.display = 'block';
+}
+
+function _mrrEdAcPick(n) {
+  var it = _mrrAc.matches[n], i = _mrrAc.row;
+  if (!it || i == null) return;
+  document.getElementById('mrrEdCode' + i).value = it.code;
+  document.getElementById('mrrEdDesc' + i).value = it.description;
+  var sel = document.getElementById('mrrEdUnit' + i);
+  if (sel && window.ErpUom && it.unit) ErpUom.setValue(sel, it.unit);
+  _mrrEdAcBox().style.display = 'none';
+  _mrrEdDelta(i);
+  var rq = document.getElementById('mrrEdReq' + i);
+  if (rq) rq.focus();
+}
+
+function _mrrEdCodeBlur() {
+  setTimeout(function() { if (_mrrAc.box) _mrrAc.box.style.display = 'none'; }, 150);
 }
 
 // ─── SOF / PRF normalization (gamit ang erp-docno-format.js kung naka-load) ───
@@ -239,14 +393,25 @@ function _mrrEdHint() {
 
 function _mrrEdDelta(i) {
   var it = _mrrEd.items[i];
-  var v = Number(document.getElementById('mrrEdRecv' + i).value);
   var cell = document.getElementById('mrrEdDelta' + i);
+  if (!it || !cell) return;
+  var fmt = function(d) {
+    return d > 0 ? '<span class="text-success fw-bold">+' + d + '</span>'
+                 : '<span class="text-danger fw-bold">' + d + '</span>';
+  };
+  if (it.deleted) { cell.innerHTML = it.orig && it.orig.recvQty ? fmt(-it.orig.recvQty) + ' <small>(burado)</small>' : '<span class="text-danger small">burado</span>'; return; }
+  var rEl = document.getElementById('mrrEdRecv' + i);
+  var v = Number(rEl ? rEl.value : it.recvQty);
   if (isNaN(v)) { cell.textContent = '—'; return; }
-  var delta = Math.round((v - it.recvQty) * 10000) / 10000;
-  if (delta === 0) { cell.innerHTML = '<span class="text-muted">—</span>'; return; }
-  cell.innerHTML = delta > 0
-    ? '<span class="text-success fw-bold">+' + delta + '</span>'
-    : '<span class="text-danger fw-bold">' + delta + '</span>';
+  if (it.isNew) { cell.innerHTML = v > 0 ? fmt(v) + ' <small>(bago)</small>' : '<span class="text-success small">bago</span>'; return; }
+  var cEl = document.getElementById('mrrEdCode' + i);
+  var code = cEl ? cEl.value.trim() : it.itemCode;
+  if (code && code.toUpperCase() !== String(it.orig.itemCode).toUpperCase()) {
+    cell.innerHTML = '<span class="text-primary small fw-bold">item ↔</span>';
+    return;
+  }
+  var delta = Math.round((v - it.orig.recvQty) * 10000) / 10000;
+  cell.innerHTML = delta === 0 ? '<span class="text-muted">—</span>' : fmt(delta);
 }
 
 async function mrrEdSave() {
@@ -255,17 +420,53 @@ async function mrrEdSave() {
   var reason = (document.getElementById('mrrEdReason').value || '').trim();
   if (!reason) { _mrrEdToast('Reason for change is required', 'warning'); document.getElementById('mrrEdReason').focus(); return; }
 
-  var items = [];
+  _mrrEdSync();
+  var catalogCodes = null;
+  if (_mrrEd.catalog && _mrrEd.catalog.length) {
+    catalogCodes = {};
+    _mrrEd.catalog.forEach(function(c) { catalogCodes[c.code.toUpperCase()] = true; });
+  }
+
+  var items = [], newItems = [], deletedIds = [];
+  var changedItemLines = 0, stockLines = 0, active = 0;
   for (var i = 0; i < _mrrEd.items.length; i++) {
     var it = _mrrEd.items[i];
-    var recv = Number(document.getElementById('mrrEdRecv' + i).value);
-    var req = Number(document.getElementById('mrrEdReq' + i).value);
-    if (isNaN(recv) || recv < 0) { _mrrEdToast('Line ' + it.lineNo + ': invalid Received qty', 'warning'); return; }
-    if (isNaN(req) || req <= 0) { _mrrEdToast('Line ' + it.lineNo + ': Expected qty must be greater than 0', 'warning'); return; }
-    if (recv !== it.recvQty || req !== it.reqQty) {
-      items.push({ id: it.id, received_qty: recv, requested_qty: req });
+    var label = it.isNew ? ('Bagong line ' + (i + 1)) : ('Line ' + it.lineNo);
+    if (it.deleted) {
+      deletedIds.push(it.id);
+      if (it.orig.recvQty > 0) stockLines++;
+      continue;
+    }
+    active++;
+    var code = String(it.itemCode || '').trim();
+    var recv = Number(it.recvQty), req = Number(it.reqQty);
+    if (!code) { _mrrEdToast(label + ': kailangan ang Item Code', 'warning'); return; }
+    // Suriin sa inventory ang BAGO o PINALITANG code lang (ang lumang line na hindi ginalaw ay hindi na sinusuri)
+    var codeIsNewOrChanged = it.isNew || code.toUpperCase() !== String(it.orig.itemCode).toUpperCase();
+    if (codeIsNewOrChanged && catalogCodes && !catalogCodes[code.toUpperCase()]) { _mrrEdToast(label + ': "' + code + '" ay wala sa inventory. Pumili sa listahan.', 'warning'); return; }
+    if (it.recvQty === '' || isNaN(recv) || recv < 0) { _mrrEdToast(label + ': invalid Received qty', 'warning'); return; }
+    if (it.reqQty === '' || isNaN(req) || req <= 0) { _mrrEdToast(label + ': Expected qty must be greater than 0', 'warning'); return; }
+
+    if (!it.unit && catalogCodes) {   // walang napiling unit → kunin sa inventory
+      var hit = _mrrEd.catalog.filter(function(c) { return c.code.toUpperCase() === code.toUpperCase(); })[0];
+      if (hit) it.unit = hit.unit;
+    }
+    if (it.isNew && !it.unit) { _mrrEdToast(label + ': piliin ang Unit', 'warning'); return; }
+    if (it.isNew) {
+      newItems.push({ item_code: code, description: it.description, unit: it.unit, requested_qty: req, received_qty: recv });
+      if (recv > 0) stockLines++;
+    } else {
+      var o = it.orig;
+      var codeChanged = code.toUpperCase() !== String(o.itemCode).toUpperCase();
+      var meta = String(it.description) !== String(o.description) || String(it.unit) !== String(o.unit);
+      if (codeChanged) { changedItemLines++; if (o.recvQty > 0 || recv > 0) stockLines++; }
+      else if (recv !== o.recvQty) stockLines++;
+      if (codeChanged || meta || recv !== o.recvQty || req !== o.reqQty) {
+        items.push({ id: it.id, item_code: code, description: it.description, unit: it.unit, received_qty: recv, requested_qty: req });
+      }
     }
   }
+  if (active === 0) { _mrrEdToast('Hindi puwedeng walang item ang MRR. Gamitin ang Void para i-cancel ang buong MRR.', 'warning'); return; }
 
   var header = {
     po_no: document.getElementById('mrrEdPo').value.trim(),
@@ -277,11 +478,10 @@ async function mrrEdSave() {
     receiving_date: document.getElementById('mrrEdDate').value
   };
 
-  var stockLines = items.filter(function(x) {
-    var o = _mrrEd.items.filter(function(y) { return y.id === x.id; })[0];
-    return o && x.received_qty !== o.recvQty;
-  }).length;
   var msg = 'I-save ang pagbabago sa ' + _mrrEd.docNo + '?';
+  if (newItems.length) msg += '\n\n+ ' + newItems.length + ' bagong line';
+  if (deletedIds.length) msg += '\n- ' + deletedIds.length + ' line na buburahin';
+  if (changedItemLines) msg += '\n↔ ' + changedItemLines + ' line na pinalitan ang item';
   if (stockLines > 0) msg += '\n\n' + stockLines + ' line(s) ang magbabago ng stock at SOF allocation.';
   if (header.sof_no !== String(d.sof_no || '')) {
     msg += '\n\nSOF: ' + (d.sof_no || '—') + ' → ' + (header.sof_no || '—') +
@@ -300,13 +500,31 @@ async function mrrEdSave() {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
 
   try {
-    var res = await _mrrEdRpc('erp_edit_mrr', {
-      p_doc_no: _mrrEd.docNo, p_header: header, p_items: items,
-      p_reason: reason, p_user: _mrrEdUser()
-    });
+    var structural = newItems.length || deletedIds.length || changedItemLines ||
+      items.some(function(x) { var o = _mrrEd.items.filter(function(y) { return y.id === x.id; })[0];
+        return o && (String(x.description) !== String(o.orig.description) || String(x.unit) !== String(o.orig.unit)); });
+    var res;
+    try {
+      res = await _mrrEdRpc('erp_edit_mrr_v2', {
+        p_doc_no: _mrrEd.docNo, p_header: header, p_items: items,
+        p_new_items: newItems, p_deleted_ids: deletedIds,
+        p_reason: reason, p_user: _mrrEdUser()
+      });
+    } catch (e1) {
+      // Wala pa ang v2 sa database → gamitin ang lumang function kung qty/header lang ang binago
+      if (/erp_edit_mrr_v2|Could not find the function|PGRST202/i.test(String(e1.message))) {
+        if (structural) throw new Error('Hindi pa naka-install ang bagong function sa database.\nI-run muna ang erp-mrr-edit-v2.sql sa Supabase, tapos subukan ulit.');
+        res = await _mrrEdRpc('erp_edit_mrr', {
+          p_doc_no: _mrrEd.docNo, p_header: header,
+          p_items: items.map(function(x) { return { id: x.id, received_qty: x.received_qty, requested_qty: x.requested_qty }; }),
+          p_reason: reason, p_user: _mrrEdUser()
+        });
+      } else { throw e1; }
+    }
     if (!res || !res.success) throw new Error(_mrrEdFriendly(res && res.error));
     mrrEdClose();
     _mrrEdToast('✅ ' + _mrrEd.docNo + ' updated (' + res.status + ')' +
+      (res.line_changes ? ' · ' + res.line_changes + ' line change(s)' : '') +
       (res.sof_lines_moved ? ' · SOF allocation: ' + res.sof_lines_moved + ' line(s) inilipat' : ''), 'success');
     if (typeof mrrListRefresh === 'function') setTimeout(mrrListRefresh, 400);
   } catch (err) {
@@ -354,6 +572,10 @@ window.mrrVoid = mrrVoid;
 window.mrrEdSave = mrrEdSave;
 window.mrrEdClose = mrrEdClose;
 window._mrrEdDelta = _mrrEdDelta;
+window.mrrEdAddRow = mrrEdAddRow;
+window.mrrEdRemoveRow = mrrEdRemoveRow;
+window._mrrEdCodeInput = _mrrEdCodeInput;
+window._mrrEdCodeBlur = _mrrEdCodeBlur;
 window._mrrEdHint = _mrrEdHint;
 
-console.log('✅ mrr-edit.js v1.1 loaded (SOF/PRF edit)');
+console.log('✅ mrr-edit.js v1.2 loaded (add/delete/edit lines + item suggest)');
