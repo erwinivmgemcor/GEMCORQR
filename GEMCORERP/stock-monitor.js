@@ -63,20 +63,105 @@ async function erpLoadSummary() {
   if (!result.success) return;
   var s = result.summary || {};
   document.getElementById('kpiTotalItems').textContent = erpNum(s.total_items);
-  document.getElementById('kpiStockValue').textContent = erpPeso(s.total_stock_value);
-  (function () { // i-shrink ang font kung kulang pa rin ang lapad (para di maputol)
-    var el = document.getElementById('kpiStockValue');
-    el.title = erpPeso(s.total_stock_value);
-    el.style.fontSize = '';
-    var box = el.parentElement, size = parseFloat(getComputedStyle(el).fontSize);
-    while (el.scrollWidth > box.clientWidth && size > 14) { size -= 1; el.style.fontSize = size + 'px'; }
-  })();
+  _erpValueKpi.onhand = Number(s.total_stock_value || 0);
+  erpInitValueMode();
+  erpRenderValueKpi();                 // ipakita agad ang on-hand habang kinukuha ang allocated/available
+  erpLoadAllocatedValue();             // async: SOF allocated + available stock value
   document.getElementById('kpiBelowReorder').textContent = erpNum(s.below_reorder);
   document.getElementById('kpiNewBelowBuffer').textContent = erpNum(s.new_below_buffer || 0);
   document.getElementById('kpiZeroStock').textContent = erpNum(s.zero_stock_items);
   var subEl = document.getElementById('kpiTotalItemsSub');
   if (subEl) subEl.textContent = (s.active_items || 0) + ' with stock';
 }
+
+// ═══════════════════════════════════════════════════════════
+// STOCK VALUE KPI — dropdown: Overall On-Hand / SOF Allocated / Available Stock
+// ═══════════════════════════════════════════════════════════
+var _erpValueKpi = { onhand: 0, allocated: null, available: null, mode: 'onhand' };
+var ERP_VALUE_MODE_KEY = 'erp_stock_value_mode';
+
+function erpInitValueMode() {
+  var saved = null;
+  try { saved = localStorage.getItem(ERP_VALUE_MODE_KEY); } catch (e) {}
+  if (saved === 'onhand' || saved === 'allocated' || saved === 'available') _erpValueKpi.mode = saved;
+  var sel = document.getElementById('kpiValueMode');
+  if (sel) sel.value = _erpValueKpi.mode;
+}
+
+function erpSetValueMode(mode) {
+  _erpValueKpi.mode = mode;
+  try { localStorage.setItem(ERP_VALUE_MODE_KEY, mode); } catch (e) {}
+  erpRenderValueKpi();
+}
+
+// Pure function (madaling i-test): kinukuwenta ang allocated at available value
+//   rows  = [{ item_code, allocated_qty, used_qty }]   (galing erp_sof_allocation_items)
+//   items = { code: { on_hand, unit_cost } }           (para sa mga item na may allocation)
+//   Allocated  = Σ (natitirang allocation × unit cost)
+//   Available  = Overall on-hand − Σ (min(natitirang allocation, on-hand ng item) × unit cost)
+function erpComputeAllocValues(onhandTotal, rows, items) {
+  var remainingByCode = {};
+  (rows || []).forEach(function (r) {
+    var rem = Number(r.allocated_qty || 0) - Number(r.used_qty || 0);
+    if (rem > 0) remainingByCode[r.item_code] = (remainingByCode[r.item_code] || 0) + rem;
+  });
+  var allocated = 0, reserved = 0;
+  Object.keys(remainingByCode).forEach(function (code) {
+    var it = items[code]; if (!it) return;
+    var cost = Number(it.unit_cost || 0), rem = remainingByCode[code];
+    allocated += rem * cost;
+    reserved += Math.min(rem, Math.max(Number(it.on_hand || 0), 0)) * cost;
+  });
+  return { allocated: allocated, available: onhandTotal - reserved };
+}
+
+async function erpLoadAllocatedValue() {
+  try {
+    var rows = await erpFetch('erp_sof_allocation_items', 'select=item_code,allocated_qty,used_qty');
+    var codes = {};
+    (rows || []).forEach(function (r) {
+      if (Number(r.allocated_qty || 0) - Number(r.used_qty || 0) > 0) codes[r.item_code] = true;
+    });
+    var list = Object.keys(codes), items = {};
+    for (var i = 0; i < list.length; i += 80) {
+      var chunk = list.slice(i, i + 80).map(function (c) { return '"' + String(c).replace(/"/g, '') + '"'; }).join(',');
+      var res = await erpFetch('erp_items', 'select=item_code,on_hand,unit_cost&item_code=in.(' + encodeURIComponent(chunk) + ')');
+      (res || []).forEach(function (r) { items[r.item_code] = r; });
+    }
+    var v = erpComputeAllocValues(_erpValueKpi.onhand, rows, items);
+    _erpValueKpi.allocated = v.allocated;
+    _erpValueKpi.available = v.available;
+  } catch (err) {
+    console.warn('[Stock Monitor] Allocated value failed:', err.message);
+    _erpValueKpi.allocated = null;
+    _erpValueKpi.available = null;
+  }
+  erpRenderValueKpi();
+}
+
+function erpRenderValueKpi() {
+  var el = document.getElementById('kpiStockValue');
+  var sub = document.getElementById('kpiStockValueSub');
+  if (!el) return;
+  var mode = _erpValueKpi.mode, val = _erpValueKpi[mode];
+  var labels = {
+    onhand: 'Total on-hand value (lahat ng physical stock)',
+    allocated: 'Value ng stock na naka-reserve sa SOF',
+    available: 'On-hand − SOF allocated (libre pang magamit)'
+  };
+  if (val === null || val === undefined) {
+    el.textContent = '…';
+    if (sub) sub.textContent = labels[mode];
+    return;
+  }
+  el.textContent = erpPeso(val);
+  el.title = erpPeso(val);
+  if (sub) sub.textContent = labels[mode];
+  el.style.fontSize = '';   // i-shrink ang font kung kulang pa rin ang lapad (para di maputol)
+  var box = el.parentElement, size = parseFloat(getComputedStyle(el).fontSize);
+  while (el.scrollWidth > box.clientWidth && size > 14) { size -= 1; el.style.fontSize = size + 'px'; }
+}
+window.erpSetValueMode = erpSetValueMode;
 
 // ═══════════════════════════════════════════════════════════
 // CHARTS
@@ -363,9 +448,9 @@ function erpRenderTable() {
       ? '<span class="fw-bold" style="color:#f59e0b;">' + erpNum(sofAllocated) + '</span>'
       : '<span class="text-muted">—</span>';
 
-    var availableDisplay = sofAllocated > 0
-      ? '<span class="fw-bold ' + availableClass + '">' + erpNum(available) + '</span>'
-      : '<span class="text-muted">' + erpNum(onHand) + '</span>';
+    // Available Stock = On-Hand − SOF Allocated. Laging kulay-coded (pula = wala/negative, amber = mababa sa buffer)
+    var availableDisplay = '<span class="fw-bold ' + availableClass + '" ' +
+      'title="On-Hand ' + erpNum(onHand) + ' − SOF Allocated ' + erpNum(sofAllocated) + '">' + erpNum(available) + '</span>';
 
     html += '<tr onclick="erpRowClick(event, \'' + safeCode + '\')" style="cursor:pointer;' + rowHighlightStyle + '">' +
       '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
