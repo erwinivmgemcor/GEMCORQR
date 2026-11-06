@@ -1761,14 +1761,31 @@ window.saveEditPrfItems = async function() {
     return;
   }
 
+  var inventory = await _loadEditPrfInventory();
+  var invByCode = {};
+  (inventory || []).forEach(function(c) { invByCode[String(c.code || '').toLowerCase()] = c; });
+
   var validItems = [];
   for (var i = 0; i < _editPrfState.currentItems.length; i++) {
     var it = _editPrfState.currentItems[i];
     if (!it.item_code || !it.item_code.trim()) {
-      erpShowToast('Item #' + (i + 1) + ' has no item code', 'warning'); return;
+      erpShowToast('Item #' + (i + 1) + ': kailangan ang Item Code', 'warning'); return;
     }
-    if (it.qty_for_order <= 0) {
-      erpShowToast('Item #' + (i + 1) + ' has invalid qty', 'warning'); return;
+    if (!(Number(it.qty_for_order) > 0)) {
+      erpShowToast('Item #' + (i + 1) + ' (' + it.item_code + '): ilagay ang Qty Order (dapat higit sa 0)', 'warning'); return;
+    }
+    // Suriin sa inventory ang BAGONG line o PINALITANG code (ang lumang line na hindi ginalaw ay hindi sinusuri)
+    var orig = (_editPrfState.originalItems || []).filter(function(o) { return o.id === it.id; })[0];
+    var changed = it._isNew || !orig || String(orig.item_code || '').toLowerCase() !== String(it.item_code).trim().toLowerCase();
+    if (changed && inventory && inventory.length) {
+      var key = String(it.item_code).trim().toLowerCase();
+      var hit = invByCode[key] || invByCode['gem-' + key];
+      if (!hit) {
+        erpShowToast('Item #' + (i + 1) + ': "' + it.item_code + '" ay wala sa inventory. Pumili sa listahan.', 'warning'); return;
+      }
+      it.item_code = String(hit.code);
+      if (!String(it.description || '').trim()) it.description = String(hit.description || '');
+      if (!String(it.unit || '').trim()) it.unit = String(hit.unit || 'PIECE');
     }
     validItems.push(it);
   }
@@ -1981,20 +1998,19 @@ window.onEditPrfItemSearch = async function(idx, value) {
       return;
     }
 
+    window._editPrfMatches = window._editPrfMatches || {};
+    window._editPrfMatches[idx] = matches;   // iniimbak dito; index lang ang ipinapasa sa onmousedown
+
     var html = '';
-    matches.forEach(function(it) {
+    matches.forEach(function(it, n) {
       var code = String(it.code || '');
       var desc = String(it.description || '');
       var unit = String(it.unit || 'PIECE');
       var category = String(it.category || '');
-      var safeCode = code.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-      var safeDesc = desc.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-      var safeUnit = unit.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
       html += '<div class="list-group-item list-group-item-action" ' +
         'style="padding:10px 14px;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f0f0f0;background:#fff;" ' +
-        'onmousedown="event.preventDefault();selectEditPrfItem(' + idx + ', \'' +
-          safeCode + '\', \'' + safeDesc + '\', \'' + safeUnit + '\')">' +
+        'onmousedown="event.preventDefault();selectEditPrfItemAt(' + idx + ', ' + n + ')">' +
         '<div style="font-family:\'Courier New\',monospace;font-weight:700;color:#1e3a5f;">' + erpEsc(code) + '</div>' +
         '<div style="color:#4b5563;font-size:0.8rem;">' + erpEsc(desc.substring(0, 100)) + (desc.length > 100 ? '…' : '') + '</div>' +
         '<div style="display:flex;gap:8px;margin-top:3px;font-size:0.7rem;color:#6b7280;">' +
@@ -2033,7 +2049,12 @@ function _positionEditPrfDropdown(dropdown, input) {
   }
 }
 
-window.selectEditPrfItem = function(idx, code, description, unit) {
+window.selectEditPrfItemAt = function(idx, n) {
+  var it = ((window._editPrfMatches || {})[idx] || [])[n];
+  if (it) selectEditPrfItem(idx, String(it.code || ''), String(it.description || ''), String(it.unit || 'PIECE'));
+};
+
+window.selectEditPrfItem = function(idx, code, description, unit, noFocus) {
   if (!_editPrfState.currentItems[idx]) return;
 
   _editPrfState.currentItems[idx].item_code = code;
@@ -2055,6 +2076,7 @@ window.selectEditPrfItem = function(idx, code, description, unit) {
   var dropdown = document.getElementById('editPrfDropdown' + idx);
   if (dropdown) dropdown.classList.add('d-none');
 
+  if (noFocus) return;
   setTimeout(function() {
     if (row) {
       var qtyInput = row.querySelector('input[data-field="qty_for_order"]');
@@ -2067,9 +2089,26 @@ window.selectEditPrfItem = function(idx, code, description, unit) {
 };
 
 window.onEditPrfItemBlur = function(idx) {
-  setTimeout(function() {
+  setTimeout(async function() {
     var dropdown = document.getElementById('editPrfDropdown' + idx);
     if (dropdown) dropdown.classList.add('d-none');
+
+    // Na-type nang buo ang code (hal. "nut0035" o "GEM-NUT0035") pero hindi pumili sa listahan:
+    // itugma sa inventory, ayusin ang malaki/maliit na letra, at punan ang description/unit.
+    var input = document.getElementById('editPrfItemCode' + idx);
+    if (!input) return;
+    var typed = input.value.trim();
+    if (!typed || !_editPrfState.currentItems[idx]) return;
+    var inv = await _loadEditPrfInventory();
+    var t = typed.toLowerCase();
+    var hit = inv.filter(function(c) { return String(c.code || '').toLowerCase() === t; })[0] ||
+              inv.filter(function(c) { return String(c.code || '').toLowerCase() === 'gem-' + t; })[0];
+    if (!hit) return;
+    var row = input.closest('tr');
+    var descInput = row ? row.querySelector('input[data-field="description"]') : null;
+    if (hit.code !== typed || (descInput && !descInput.value.trim())) {
+      selectEditPrfItem(idx, String(hit.code), String(hit.description || ''), String(hit.unit || 'PIECE'), true);
+    }
   }, 200);
 };
 
@@ -2198,4 +2237,4 @@ function renderVersionHistory(versions, audits) {
   body.innerHTML = html;
 }
 
-console.log('✅ prf-monitor.js v3.4 loaded (with version filter)');
+console.log('✅ prf-monitor.js v3.5 loaded (with version filter)');
