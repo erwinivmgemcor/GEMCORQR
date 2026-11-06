@@ -240,6 +240,11 @@
                  ['NOT_FOUND', 'Wala sa system', s.not_found], ['INVALID', 'Invalid', s.invalid], ['DUPLICATE', 'Doble sa file', s.duplicate], ['ALL', 'Lahat', s.total]];
     var html = '<div class="small text-muted mb-2"><i class="bi bi-file-earmark-spreadsheet me-1"></i>' + erpEsc(S.fileName) +
       ' · ' + s.total + ' row na may presyo' + (S.skippedBlank ? ' · ' + S.skippedBlank + ' blangko (hindi gagalawin)' : '') + '</div>';
+    if (!p.freeze_active) html += '<div class="alert alert-danger py-2 small"><i class="bi bi-exclamation-octagon me-1"></i><strong>Hindi pa naka-install ang Ledger Cost Freeze.</strong> ' +
+      'Kapag nag-apply ka ngayon, <strong>magbabago ang gastos ng mga lumang project</strong> (gagamitin ang bagong presyo). ' +
+      'I-run muna ang <code>erp-ledger-cost-freeze.sql</code> sa Supabase.</div>';
+    else html += '<div class="alert alert-success py-2 small"><i class="bi bi-lock me-1"></i>Naka-freeze ang gastos ng mga lumang transaksyon at project (mananatili sa dating presyo). ' +
+      'Ang bagong presyo ay para sa mga susunod na transaksyon at sa mga item na walang presyo dati.</div>';
     if (blocked) html += '<div class="alert alert-danger py-2 small"><strong>May dobleng item code sa file.</strong> Hindi ito maa-apply hangga\'t hindi naaayos. Piliin ang "Doble sa file" para makita.</div>';
     if (s.not_found || s.invalid) html += '<div class="alert alert-warning py-2 small">May ' + (s.not_found + s.invalid) + ' row na <strong>lalaktawan</strong> (hindi mahanap ang item o invalid ang presyo). Ang iba ay maa-apply pa rin.</div>';
     if (s.big) html += '<div class="alert alert-warning py-2 small"><i class="bi bi-exclamation-triangle me-1"></i><strong>' + s.big + ' item</strong> ang may pagbabagong 50% pataas (o walang dating presyo). Tingnan kung typo.</div>';
@@ -287,6 +292,7 @@
     var reason = (document.getElementById('bpuReason').value || '').trim();
     if (!reason) { toast('Ilagay ang dahilan ng pagbabago', 'warning'); document.getElementById('bpuReason').focus(); return; }
     var s = S.preview.summary;
+    if (!S.preview.freeze_active && !confirm('BABALA: Hindi naka-install ang Ledger Cost Freeze.\n\nMagbabago ang gastos ng LAHAT ng lumang project at transaksyon.\n\nTuloy pa rin?')) return;
     if (!confirm('I-a-apply ang ' + s.change + ' bagong presyo.\n\n' +
       '• Unit Cost lang ang mababago (hindi ang stock o transaksyon)\n' +
       '• Magbabago ang Stock Value at mga report na gumagamit ng kasalukuyang presyo\n' +
@@ -316,5 +322,5 @@
     ensureModal(); renderStart(); show();
   };
   window._bpuTest = { parseCsv: parseCsv, buildRows: buildRows, money: money, findColumns: findColumns };
-  console.log('✅ bulk-price-update.js v1.0 loaded');
+  console.log('✅ bulk-price-update.js v1.1 loaded');
 })();
