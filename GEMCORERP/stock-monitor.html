@@ -39,6 +39,16 @@
     body .erp-kpi-row.kpi-row-sm { grid-template-columns: 1fr 1.8fr 1fr 1fr 1fr 1fr !important; }
     body .erp-kpi-row.kpi-row-sm .kpi-content { min-width: 0; }
     body #kpiStockValue { white-space: nowrap; font-size: clamp(1.25rem, 1.9vw, 1.75rem); }
+    /* Dropdown sa Stock Value card */
+    .kpi-mode-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .kpi-mode-select {
+      appearance: none; -webkit-appearance: none; cursor: pointer;
+      border: 1.5px solid #bfe9d6; background: #e7f8f0 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23047857' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 9px center;
+      color: #047857; font-size: .72rem; font-weight: 700; letter-spacing: .02em;
+      padding: 3px 26px 3px 10px; border-radius: 999px; transition: all .15s ease;
+    }
+    .kpi-mode-select:hover { background-color: #d3f3e4; border-color: #6ee7b7; }
+    .kpi-mode-select:focus { outline: 0; box-shadow: 0 0 0 3px rgba(16,185,129,.25); }
     @media (max-width: 1400px) {
       body .erp-kpi-row.kpi-row-sm { grid-template-columns: repeat(3, 1fr) !important; }
     }
@@ -96,9 +106,17 @@
     <div class="erp-kpi-card kpi-green">
       <div class="kpi-icon"><i class="bi bi-cash-stack"></i></div>
       <div class="kpi-content">
-        <div class="kpi-label">Stock Value</div>
+        <div class="kpi-label kpi-mode-wrap">
+          <span>Stock Value</span>
+          <select id="kpiValueMode" class="kpi-mode-select" onchange="erpSetValueMode(this.value)"
+                  title="Piliin kung anong halaga ang ipapakita">
+            <option value="onhand">Overall On-Hand</option>
+            <option value="allocated">SOF Allocated</option>
+            <option value="available">Available Stock</option>
+          </select>
+        </div>
         <div class="kpi-value" id="kpiStockValue">—</div>
-        <div class="kpi-sub">Total on-hand value</div>
+        <div class="kpi-sub" id="kpiStockValueSub">Total on-hand value</div>
       </div>
     </div>
 
@@ -254,7 +272,7 @@
     <th class="col-qty text-end">On-Hand</th>
     <th class="col-qty text-center" style="color:#f59e0b;">Variance</th>
     <th class="col-qty text-end" title="SOF Allocated Qty" style="color:#f59e0b;">SOF Allocated</th>
-    <th class="col-qty text-end" title="Available" style="color:#10b981;">Available</th>
+    <th class="col-qty text-end" title="Available Stock = On-Hand − SOF Allocated" style="color:#10b981;">Available</th>
     <th class="col-buffer text-end" title="Buffer Stock">Buffer</th>
     <th class="col-unit text-center">Unit</th>
     <th class="col-cost text-end">Unit Cost</th>
