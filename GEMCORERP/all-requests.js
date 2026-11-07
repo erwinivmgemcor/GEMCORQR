@@ -470,7 +470,9 @@ function allRequestsRenderNow() {
     var typeBadge = typeUpper === 'MRIF' ? 'bg-warning text-dark' : 'bg-info text-dark';
     
     var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
-    var canCancelDoc = typeUpper === 'MRIF' && statusUpper === 'PENDING' && typeof window.mrifCanCancel === 'function' && window.mrifCanCancel();
+    var canCancelDoc = statusUpper === 'PENDING' && (
+      (typeUpper === 'MRIF' && typeof window.mrifCanCancel === 'function' && window.mrifCanCancel()) ||
+      (typeUpper === 'MRS'  && typeof window.mrsCanCancel  === 'function' && window.mrsCanCancel()));
     var canEditDoc = (localStorage.getItem('ivm_userRole') === 'warehouse') && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL' || (statusUpper === 'COMPLETED' && typeUpper === 'MRIF'));
     
     html += '<tr' + (arIsMine(d.doc_no) ? ' class="ar-mine"' : '') + '>' +
@@ -493,7 +495,7 @@ function allRequestsRenderNow() {
         (canEditDoc ? ' <button class="erp-action-btn" onclick="openWarehouseEdit(\'' + safeDoc + '\', \'' + typeUpper + '\')" title="Edit (fix unit, qty, items)">' +
           '<i class="bi bi-pencil-square"></i>' +
         '</button>' : '') +
-        (canCancelDoc ? ' <button class="erp-action-btn" style="color:#b91c1c" onclick="mrifCancel(\'' + safeDoc + '\')" title="Cancel MRIF (nagawa nang mali / duplicate)">' +
+        (canCancelDoc ? ' <button class="erp-action-btn" style="color:#b91c1c" onclick="' + (typeUpper === 'MRS' ? 'mrsCancel' : 'mrifCancel') + '(\'' + safeDoc + '\')" title="Cancel ' + typeUpper + ' (nagawa nang mali / duplicate)">' +
           '<i class="bi bi-x-circle"></i>' +
         '</button>' : '') +
       '</td>' +
@@ -748,6 +750,11 @@ function processCurrentRequest() {
   var doc = _allRequests.currentDoc.doc;
   var docNo = doc.doc_no;
   var docType = String(doc.doc_type || '').toUpperCase();
+
+  if (String(doc.status || '').toUpperCase() === 'CANCELLED') {
+    erpShowToast(docNo + ' ay CANCELLED na at hindi na maipoproseso.', 'warning');
+    return;
+  }
 
   var lk = arLockOf(docNo);
   if (lk && !lk.mine && !arIsAdmin()) {
