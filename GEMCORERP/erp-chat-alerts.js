@@ -1,10 +1,15 @@
 // ============================================================
-// GEMCOR ERP — Chat Alerts  v1.0
+// GEMCOR ERP — Chat Alerts  v1.1
 // Runs on EVERY page (loaded by erp-nav.js), so a new message pops up
 // wherever the user is — with the sender's photo, a sound, and a quick-reply box.
 //
 //   DM            : any new unread message sent to me
-//   Doc thread    : new messages in a document discussion I took part in
+//   Doc thread    : new messages in a document discussion that concerns me:
+//                   I posted in it, OR it is my own document (requestor), OR I am warehouse
+//   Unread (docs) : tracked PER USER with a read pointer (localStorage) — the shared
+//                   messages.is_read flag cannot work for threads with 2+ readers
+//   Badges        : sidebar Messages (DM + docs), mobile menu button, and a count on every
+//                   "Discuss" button in the document lists
 //   Session start : one popup for messages that arrived while I was away
 //
 // Also keeps the sidebar "Messages" badge and the tab title up to date.
@@ -25,13 +30,28 @@
   var ROLE = ls('ivm_userRole') || '';
   var CHAT_PAGE = /chat\.html$/i.test(location.pathname);
 
-  var CFG = { dmMs: 5000, hiddenMs: 20000, docEvery: 2, countEvery: 4, maxPopups: 3, popupMs: 15000, partMs: 180000 };
+  var CFG = { sumEvery: 6, dmMs: 5000, hiddenMs: 20000, docEvery: 2, countEvery: 4, maxPopups: 3, popupMs: 15000, partMs: 180000 };
   var CUR_KEY = 'ivm_chatcur_' + ME;
   var EPOCH = '1970-01-01T00:00:00Z';
 
   var cur = { dm: '', doc: '' };
   try { var c0 = JSON.parse(ls(CUR_KEY) || '{}'); cur.dm = c0.dm || ''; cur.doc = c0.doc || ''; } catch (e) {}
-  var seen = {}, participates = {}, partAt = 0, unread = 0, ticks = 0, busy = false, timer = null, started = false;
+  var seen = {}, participates = {}, owned = {}, partAt = 0, ticks = 0, busy = false, timer = null, started = false;
+  var dmUnread = 0, docUnread = 0, docInfo = {};   // docInfo[docNo] = { type, total, unread, last, msgs:[{s,t}] }
+  var WAREHOUSE_SEES_ALL_DOCS = true;              // warehouse handles every request → alert on every doc thread
+  var RETENTION_MS = 7 * 86400000;                 // same as chat.js (older rows are purged)
+
+  // ── per-user read pointers for document threads ───────────
+  var RD_KEY = 'ivm_docread_' + ME, BASE_KEY = 'ivm_docread_base_' + ME;
+  var baseTs = ls(BASE_KEY);
+  if (!baseTs) { baseTs = new Date().toISOString(); lsSet(BASE_KEY, baseTs); }
+  function loadRead() { try { return JSON.parse(ls(RD_KEY) || '{}') || {}; } catch (e) { return {}; } }
+  function docReadTs(docNo) { var m = loadRead(); return m[docNo] || baseTs; }
+  function isRelevant(docNo, type) {
+    if (!allowedDoc(type)) return false;
+    if (ROLE === 'warehouse' && WAREHOUSE_SEES_ALL_DOCS) return true;
+    return !!(participates[docNo] || owned[docNo]);
+  }
 
   // ── tiny helpers ───────────────────────────────────────────
   function esc(s) {
@@ -70,18 +90,130 @@
   }
 
   // ── badge + title ─────────────────────────────────────────
-  function paintBadge() {
+  function totalUnread() { return dmUnread + docUnread; }
+
+  // paint the sidebar badge + the mobile menu button dot (idempotent, safe to call often)
+  function syncBadgeEl() {
+    var n = totalUnread(), txt = n > 99 ? '99+' : String(n);
     var b = document.getElementById('chatBadgeSidebar');
-    if (b) { b.textContent = unread > 99 ? '99+' : unread; b.classList.toggle('d-none', unread <= 0); }
-    lsSet('ivm_chatUnread', String(unread));
-    window.dispatchEvent(new CustomEvent('erp-chat-count', { detail: unread }));
+    if (b) {
+      if (b.textContent !== txt) b.textContent = txt;
+      var hide = n <= 0;
+      if (b.classList.contains('d-none') !== hide) b.classList.toggle('d-none', hide);
+    }
+    var mb = document.querySelector('.erp-mobile-menu-btn');
+    if (mb) {
+      var dot = mb.querySelector('.erp-mob-dot');
+      if (n > 0) {
+        if (!dot) { dot = document.createElement('span'); dot.className = 'erp-mob-dot'; mb.appendChild(dot); }
+        if (dot.textContent !== txt) dot.textContent = txt;
+      } else if (dot) dot.remove();
+    }
+  }
+
+  function paintBadge() {
+    syncBadgeEl();
+    lsSet('ivm_chatUnread', String(totalUnread()));
+    window.dispatchEvent(new CustomEvent('erp-chat-count', { detail: totalUnread() }));
   }
 
   async function refreshCount() {
     try {
       var rows = await get('messages?select=id&recipient=eq.' + q(ME) + '&is_read=eq.false&limit=1000');
-      unread = (rows || []).length; paintBadge();
+      dmUnread = (rows || []).length; paintBadge();
     } catch (e) {}
+  }
+
+  // ── document discussions: summary of the last 7 days ──────
+  function viewingDoc(docNo) {
+    var st = window._chatState;
+    return CHAT_PAGE && !document.hidden && st && st.openType === 'doc' && st.openWith === docNo;
+  }
+
+  function markDocRead(docNo, ts) {
+    if (!docNo) return;
+    var info = docInfo[docNo];
+    var t = ts || (info && info.last) || '';
+    if (!t) return;                                   // nothing known yet — chat.js calls again once the thread is loaded
+    var map = loadRead();
+    if (map[docNo] && new Date(map[docNo]) >= new Date(t)) return;
+    map[docNo] = t;
+    var keys = Object.keys(map);
+    if (keys.length > 400) {                          // keep the pointer list small
+      keys.sort(function (a, b) { return new Date(map[a]) - new Date(map[b]); });
+      keys.slice(0, keys.length - 400).forEach(function (k) { delete map[k]; });
+    }
+    lsSet(RD_KEY, JSON.stringify(map));
+    recomputeDocUnread(); paintBadge();
+  }
+
+  function recomputeDocUnread() {
+    var map = loadRead(), total = 0;
+    Object.keys(docInfo).forEach(function (d) {
+      var info = docInfo[d];
+      if (viewingDoc(d) && info.last) {              // I'm looking at it right now → it's read
+        if (!map[d] || new Date(map[d]) < new Date(info.last)) { map[d] = info.last; lsSet(RD_KEY, JSON.stringify(map)); }
+      }
+      var ptr = new Date(map[d] || baseTs).getTime(), n = 0;
+      if (isRelevant(d, info.type)) {
+        info.msgs.forEach(function (m) { if (m.s !== ME && new Date(m.t).getTime() > ptr) n++; });
+      }
+      info.unread = n; total += n;
+    });
+    docUnread = total;
+    decorateDiscuss();
+  }
+
+  async function refreshDocs() {
+    try {
+      await loadParticipation();
+      var cut = new Date(Date.now() - RETENTION_MS).toISOString();
+      var rows = await get('messages?select=doc_no,doc_type,sender,created_at&doc_no=not.is.null&doc_no=neq.' +
+        '&doc_type=in.(' + docTypes() + ')&created_at=gte.' + q(cut) + '&order=created_at.desc&limit=2000');
+      var info = {};
+      (rows || []).forEach(function (m) {
+        if (!m.doc_no || !allowedDoc(m.doc_type)) return;
+        var d = info[m.doc_no] || (info[m.doc_no] = { type: m.doc_type || '', total: 0, unread: 0, last: '', msgs: [] });
+        d.total++; d.last = maxTs(d.last, m.created_at); d.msgs.push({ s: m.sender, t: m.created_at });
+        if (m.sender === ME) participates[m.doc_no] = 1;
+      });
+      docInfo = info;
+      recomputeDocUnread(); paintBadge();
+      window.dispatchEvent(new CustomEvent('erp-chat-docs'));
+    } catch (e) {}
+  }
+
+  // ── a count on every "Discuss" button of the document lists ──
+  function decorateDiscuss() {
+    var btns = document.querySelectorAll('[onclick*="discussDocument("]');
+    for (var i = 0; i < btns.length; i++) {
+      var b = btns[i];
+      var mm = /discussDocument\(\s*'((?:\\.|[^'\\])*)'/.exec(b.getAttribute('onclick') || '');
+      if (!mm) continue;
+      var doc = mm[1].replace(/\\(.)/g, '$1');
+      var info = docInfo[doc], n = info ? info.unread : 0, tot = info ? info.total : 0;
+      var want = n > 0 ? 'u' + n : (tot > 0 ? 't' + tot : '-');
+      if (b.getAttribute('data-disc') === want) continue;
+      b.setAttribute('data-disc', want);
+      var old = b.querySelector('.erp-disc-badge'); if (old) old.remove();
+      if (want === '-') continue;
+      b.style.position = 'relative';
+      var el = document.createElement('span');
+      el.className = 'erp-disc-badge' + (n > 0 ? ' unread' : '');
+      el.textContent = n > 0 ? (n > 99 ? '99+' : n) : (tot > 99 ? '99+' : tot);
+      b.appendChild(el);
+      b.setAttribute('title', n > 0 ? n + ' new message' + (n > 1 ? 's' : '') + ' in this discussion' : tot + ' message' + (tot > 1 ? 's' : '') + ' in this discussion');
+    }
+  }
+
+  // tables re-render dynamically, and the sidebar may be rebuilt after our first paint
+  var moTimer = null;
+  function watchDom() {
+    if (!window.MutationObserver || !document.body) return;
+    new MutationObserver(function () {
+      clearTimeout(moTimer);
+      moTimer = setTimeout(function () { decorateDiscuss(); syncBadgeEl(); }, 250);
+    }).observe(document.body, { childList: true, subtree: true });
   }
 
   var baseTitle = null, titleN = 0;
@@ -137,7 +269,11 @@
       '@keyframes erpMsgOut{to{opacity:0;transform:translateX(40px)}}' +
       '@keyframes erpMsgBar{from{transform:scaleX(1)}to{transform:scaleX(0)}}' +
       '@media (max-width:520px){#erpMsgHost{right:8px;left:8px;width:auto;bottom:10px}.erp-msg-reply{padding-left:13px}.erp-msg-sent{padding-left:13px}}' +
-      '@media (prefers-reduced-motion:reduce){.erp-msg,.erp-msg-bar{animation:none !important}}';
+      '@media (prefers-reduced-motion:reduce){.erp-msg,.erp-msg-bar{animation:none !important}}' +
+      '.erp-disc-badge{position:absolute;top:-7px;right:-7px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#64748b;color:#fff;font:700 10px/17px system-ui,sans-serif;text-align:center;pointer-events:none;box-shadow:0 0 0 2px #fff}' +
+      '.erp-disc-badge.unread{background:#dc2626;animation:erpPulse 1.6s ease-in-out infinite}' +
+      '@keyframes erpPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.18)}}' +
+      '.erp-mob-dot{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#dc2626;color:#fff;font:700 10px/17px system-ui,sans-serif;text-align:center;box-shadow:0 0 0 2px #fff}';
     document.head.appendChild(st);
   }
 
@@ -216,7 +352,7 @@
 
   // ── actions ───────────────────────────────────────────────
   function openThread(g) {
-    if (g.type === 'summary') { location.href = 'chat.html'; return; }
+    if (g.type === 'summary') { location.href = g.docs ? 'chat.html?tab=documents' : 'chat.html'; return; }
     var url = g.type === 'doc'
       ? 'chat.html?doc=' + q(g.docNo) + '&type=' + q(g.docType || '')
       : 'chat.html?user=' + q(g.user);
@@ -283,7 +419,7 @@
     window.dispatchEvent(new CustomEvent('erp-chat-new', { detail: fresh }));
 
     var dmCount = fresh.filter(function (m) { return !m.doc_no && m.recipient === ME; }).length;
-    if (dmCount) { unread += dmCount; paintBadge(); }
+    if (dmCount) { dmUnread += dmCount; paintBadge(); }
 
     var groups = {}, order = [];
     fresh.forEach(function (m) {
@@ -298,6 +434,7 @@
       }
       var g = groups[key]; g.count++; g.text = m.body || ''; g.fromName = String(m.sender_fullname || m.sender).split(' ')[0];
     });
+    if (fresh.some(function (m) { return !!m.doc_no; })) refreshDocs();
     if (!order.length) return;
 
     // fold in what an open popup for the same thread already counted
@@ -327,6 +464,12 @@
       var rows = await get('messages?select=doc_no&sender=eq.' + q(ME) + '&doc_no=not.is.null&limit=1000');
       (rows || []).forEach(function (r) { if (r.doc_no) participates[r.doc_no] = 1; });
     } catch (e) {}
+    // my own documents (requestor) — I must hear about a discussion on them even if I haven't replied yet
+    try {
+      var who = MYNAME !== ME ? '&or=(requestor.eq.' + q(MYNAME) + ',requestor.eq.' + q(ME) + ')' : '&requestor=eq.' + q(ME);
+      var mine = await get('documents?select=doc_no' + who + '&order=created_at.desc&limit=1000');
+      (mine || []).forEach(function (r) { if (r.doc_no) owned[r.doc_no] = 1; });
+    } catch (e) {}
   }
 
   async function startOfSession() {
@@ -337,7 +480,7 @@
     cur.dm = maxTs(cur.dm, dmNewest && dmNewest[0] && dmNewest[0].created_at);
     cur.doc = maxTs(cur.doc, docNewest && docNewest[0] && docNewest[0].created_at);
     saveCur();
-    unread = (unreadRows || []).length; paintBadge();
+    dmUnread = (unreadRows || []).length; paintBadge();
 
     if (unreadRows && unreadRows.length && !CHAT_PAGE) {
       var bySender = {}, n = 0;
@@ -356,6 +499,14 @@
     } else if (unreadRows) {
       unreadRows.forEach(function (m) { seen[m.id != null ? 'i' + m.id : m.created_at + m.sender] = 1; });
     }
+
+    // document discussions that moved while I was away
+    await refreshDocs();
+    if (docUnread > 0 && !CHAT_PAGE) {
+      renderPopup({ key: 'docsum', type: 'summary', docs: true, user: '', name: docUnread + ' new message' + (docUnread > 1 ? 's' : '') + ' in document discussions',
+        text: 'Click to open the Documents tab', count: 1 });
+      bumpTitle(docUnread); playSound();
+    }
   }
 
   async function tick() {
@@ -366,7 +517,7 @@
         started = true;
         if (!ss('ivm_chat_sess')) { ssSet('ivm_chat_sess', '1'); await startOfSession(); }
         else if (!cur.dm && !cur.doc) { await startOfSession(); }
-        else { await refreshCount(); }
+        else { await refreshCount(); await refreshDocs(); }
         loadParticipation();
         if (window.erpAvatars) window.erpAvatars.refresh();
       } else {
@@ -378,12 +529,15 @@
 
         if (ticks % CFG.docEvery === 0) {
           await loadParticipation();
+          // NOTE: no is_read filter — that flag is shared by every reader of a thread, so it hid
+          // new messages from everyone except the first person who opened them.
           var docs = await get('messages?' + SEL + '&doc_no=not.is.null&doc_no=neq.&sender=neq.' + q(ME) +
-            '&doc_type=in.(' + docTypes() + ')&is_read=eq.false&created_at=gt.' + q(cur.doc || EPOCH) + '&order=created_at.asc&limit=50');
+            '&doc_type=in.(' + docTypes() + ')&created_at=gt.' + q(cur.doc || EPOCH) + '&order=created_at.asc&limit=50');
           (docs || []).forEach(function (m) {
             cur.doc = maxTs(cur.doc, m.created_at);
-            if (participates[m.doc_no] && allowedDoc(m.doc_type)) rows.push(m);
+            if (isRelevant(m.doc_no, m.doc_type)) rows.push(m);
           });
+          if (ticks % CFG.sumEvery === 0) refreshDocs();     // keeps counts right when messages are read elsewhere
         }
         if (rows.length || ticks % CFG.countEvery === 0) saveCur();
         if (rows.length) handle(rows);
@@ -394,11 +548,20 @@
     timer = setTimeout(tick, document.hidden ? CFG.hiddenMs : CFG.dmMs);
   }
 
-  window.addEventListener('erp-chat-read', function () { refreshCount(); });
+  window.addEventListener('erp-chat-read', function () { refreshCount(); refreshDocs(); });
+  window.addEventListener('storage', function (e) {      // read pointer moved in another tab
+    if (e.key === RD_KEY) { recomputeDocUnread(); paintBadge(); }
+  });
 
   window.erpChatAlerts = {
     refreshCount: refreshCount,
-    unread: function () { return unread; },
+    refreshDocs: refreshDocs,
+    unread: totalUnread,
+    counts: function () { return { dm: dmUnread, doc: docUnread, total: totalUnread() }; },
+    markDocRead: markDocRead,
+    docReadTs: docReadTs,
+    isDocRelevant: isRelevant,
+    docUnread: function (docNo) { return docInfo[docNo] ? docInfo[docNo].unread : 0; },
     poll: tick,
     _test: function (m) { handle([m]); }
   };
@@ -406,7 +569,9 @@
   function boot() {
     if (!window.erpAvatars) loadScript('erpAvatarsScript', 'erp-avatars.js', function () { window.erpAvatars.refresh(); });
     setTimeout(tick, 400);
+    watchDom();
+    setTimeout(function () { decorateDiscuss(); syncBadgeEl(); }, 1500);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
-  console.log('✅ erp-chat-alerts.js v1.0 loaded');
+  console.log('✅ erp-chat-alerts.js v1.1 loaded');
 })();
