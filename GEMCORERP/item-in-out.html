@@ -390,5 +390,15 @@ tr.row-adj { border-left: 4px solid #f59e0b; }
   </div>
 </div>
 
+<script>
+// Ang Item In & Out ay makikita na ng lahat ng role. Ang Stock Monitor ay warehouse lang,
+// kaya ibang "Home" ang link para sa ibang role.
+document.addEventListener('DOMContentLoaded', function () {
+  var role = ''; try { role = localStorage.getItem('ivm_userRole') || ''; } catch (e) {}
+  var HOME = { production: 'my-requests.html', procurement: 'mrr-monitoring.html', finance: 'mrif-monitoring.html' };
+  if (!HOME[role]) return;
+  document.querySelectorAll('a[href="stock-monitor.html"]').forEach(function (a) { a.setAttribute('href', HOME[role]); });
+});
+</script>
 </body>
 </html>
