@@ -1507,7 +1507,89 @@ var _editPrfState = {
   originalItems: [],
   currentItems: [],
   newVersionNumber: 2,
-  isSaving: false
+  isSaving: false,
+  stockMap: null          // live erp_items snapshot source (on_hand, buffer, ave consumption)
+};
+
+// ═══════════════════════════════════════════════════════════
+// STOCK SNAPSHOT (On-Hand / Buffer / Ave Consumption) para sa Edit PRF
+// Dati: ang item na idinagdag sa revision ay laging 0 ang on-hand, buffer at ave consumption
+// → walang laman ang printed PRF. Ngayon: kinukuha sa erp_items (live) sa tuwing may idinadagdag/pinapalitan.
+// ═══════════════════════════════════════════════════════════
+async function _loadEditPrfStockMap(force) {
+  if (_editPrfState.stockMap && !force) return _editPrfState.stockMap;
+  var map = {};
+  try {
+    var rows = await erpFetchAll('erp_items',
+      'select=item_code,location,on_hand,buffer_stock,ave_monthly_consumption&is_deleted=eq.false&order=item_code.asc');
+    (rows || []).forEach(function(r) {
+      map[String(r.item_code || '').trim().toLowerCase()] = {
+        location: r.location || '',
+        on_hand: Number(r.on_hand || 0),
+        buffer_stock: Number(r.buffer_stock || 0),
+        ave_monthly: Number(r.ave_monthly_consumption || 0)
+      };
+    });
+    _editPrfState.stockMap = map;
+  } catch (e) {
+    console.warn('[EditPRF] Stock map load failed:', e.message);
+    if (!_editPrfState.stockMap) _editPrfState.stockMap = {};
+  }
+  return _editPrfState.stockMap;
+}
+
+function _editPrfStockFor(code) {
+  var m = _editPrfState.stockMap || {};
+  var k = String(code || '').trim().toLowerCase();
+  return m[k] || m['gem-' + k] || null;
+}
+
+function _editPrfSnapshotMissing(it) {
+  return !Number(it.stock_on_hand) && !Number(it.buffer_stock) && !Number(it.average_consumption);
+}
+
+// Ipasok ang live stock data sa line. Ibinabalik true kung may nahanap na item sa erp_items.
+function _applyEditPrfStock(it) {
+  var st = _editPrfStockFor(it.item_code);
+  if (!st) return false;
+  it.stock_on_hand = st.on_hand;
+  it.buffer_stock = st.buffer_stock;
+  it.average_consumption = st.ave_monthly;
+  if (!String(it.location || '').trim()) it.location = st.location;
+  return true;
+}
+
+function _editPrfStockCells(it) {
+  var perDay = Number(it.average_consumption || 0) / 30;
+  return {
+    onhand: erpNum(it.stock_on_hand || 0),
+    buffer: erpNum(it.buffer_stock || 0),
+    aveday: perDay > 0 ? perDay.toFixed(3) : '0.000'
+  };
+}
+
+function _refreshEditPrfStockCells(idx) {
+  var it = _editPrfState.currentItems[idx];
+  if (!it) return;
+  var c = _editPrfStockCells(it);
+  ['onhand', 'buffer', 'aveday'].forEach(function(k) {
+    var el = document.getElementById('editPrfStock_' + k + '_' + idx);
+    if (el) el.textContent = c[k];
+  });
+}
+
+window.refreshEditPrfStock = async function() {
+  _syncEditPrfInputs();
+  var map = await _loadEditPrfStockMap(true);
+  var updated = 0, notFound = [];
+  _editPrfState.currentItems.forEach(function(it) {
+    if (!String(it.item_code || '').trim()) return;
+    if (_applyEditPrfStock(it)) updated++; else notFound.push(it.item_code);
+  });
+  renderEditPrfItems();
+  var msg = '✅ Stock data refreshed (' + updated + ' item' + (updated === 1 ? '' : 's') + ')';
+  if (notFound.length) msg += ' · wala sa inventory: ' + notFound.join(', ');
+  erpShowToast(msg, notFound.length ? 'warning' : 'success');
 };
 
 window.openEditPrfItems = async function(prfId) {
@@ -1578,7 +1660,10 @@ window.openEditPrfItems = async function(prfId) {
     });
     
     _editPrfState.currentItems = JSON.parse(JSON.stringify(_editPrfState.originalItems));
-    
+
+    // Kunin ang live stock data para sa mga bagong item / PRF line na walang laman ang snapshot
+    await _loadEditPrfStockMap(true);
+
     renderEditPrfItems();
     
   } catch(err) {
@@ -1622,25 +1707,34 @@ function renderEditPrfItems() {
       '<strong>Items</strong> ' +
       '<span class="badge bg-secondary ms-1">' + items.length + '</span>' +
     '</div>' +
-    '<button class="btn btn-sm btn-primary" onclick="addEditPrfItem()">' +
-      '<i class="bi bi-plus-lg me-1"></i>Add Item' +
-    '</button>' +
+    '<div class="d-flex gap-2">' +
+      '<button class="btn btn-sm btn-outline-secondary" onclick="refreshEditPrfStock()" ' +
+        'title="Kunin ulit ang On-Hand, Buffer at Ave Consumption mula sa Stock Monitor para sa lahat ng line">' +
+        '<i class="bi bi-arrow-repeat me-1"></i>Refresh Stock Data' +
+      '</button>' +
+      '<button class="btn btn-sm btn-primary" onclick="addEditPrfItem()">' +
+        '<i class="bi bi-plus-lg me-1"></i>Add Item' +
+      '</button>' +
+    '</div>' +
     '</div>';
   
   html += '<div class="table-responsive" style="max-height:50vh;overflow-y:auto;">' +
     '<table class="table table-sm table-bordered align-middle" style="font-size:0.85rem;">' +
     '<thead class="table-light sticky-top"><tr>' +
-      '<th style="width:4%">#</th>' +
-      '<th style="width:18%">Item Code</th>' +
-      '<th style="width:28%">Description</th>' +
-      '<th style="width:10%" class="text-center">Qty Order</th>' +
-      '<th style="width:8%" class="text-center">Unit</th>' +
+      '<th style="width:3%">#</th>' +
+      '<th style="width:15%">Item Code</th>' +
+      '<th style="width:22%">Description</th>' +
+      '<th style="width:7%" class="text-center" title="Average consumption per day">Ave/Day</th>' +
+      '<th style="width:6%" class="text-center">Buffer</th>' +
+      '<th style="width:6%" class="text-center">On-Hand</th>' +
+      '<th style="width:9%" class="text-center">Qty Order</th>' +
+      '<th style="width:7%" class="text-center">Unit</th>' +
       '<th style="width:12%">Remarks</th>' +
-      '<th style="width:5%"></th>' +
+      '<th style="width:4%"></th>' +
     '</tr></thead><tbody>';
   
   if (items.length === 0) {
-    html += '<tr><td colspan="7" class="text-center text-muted py-3">' +
+    html += '<tr><td colspan="10" class="text-center text-muted py-3">' +
       'No items. Click "Add Item" above.</td></tr>';
   } else {
     items.forEach(function(it, idx) {
@@ -1664,6 +1758,9 @@ function renderEditPrfItems() {
         '<td><input type="text" class="form-control form-control-sm" ' +
             'value="' + erpEsc(it.description) + '" data-field="description" ' +
             'oninput="editPrfUpdateItem(' + idx + ', \'description\', this.value)"></td>' +
+        '<td class="text-center text-muted" id="editPrfStock_aveday_' + idx + '">' + _editPrfStockCells(it).aveday + '</td>' +
+        '<td class="text-center text-muted" id="editPrfStock_buffer_' + idx + '">' + _editPrfStockCells(it).buffer + '</td>' +
+        '<td class="text-center text-muted" id="editPrfStock_onhand_' + idx + '">' + _editPrfStockCells(it).onhand + '</td>' +
         '<td><input type="number" class="form-control form-control-sm text-center" ' +
             'value="' + (it.qty_for_order || 0) + '" min="0" step="1" data-field="qty_for_order" ' +
             'oninput="editPrfUpdateItem(' + idx + ', \'qty_for_order\', parseFloat(this.value) || 0)"></td>' +
@@ -1803,6 +1900,18 @@ window.saveEditPrfItems = async function() {
   }
 
   if (validItems.length === 0) { erpShowToast('Add at least one item', 'warning'); return; }
+
+  // ✅ Siguraduhing may On-Hand / Buffer / Ave Consumption ang bawat line bago i-save.
+  // Bago o pinalitang line → kunin sa live stock. Lumang line na may laman ang snapshot → hindi ginagalaw.
+  await _loadEditPrfStockMap(false);
+  validItems.forEach(function(it) {
+    var orig = (_editPrfState.originalItems || []).filter(function(o) { return o.id === it.id; })[0];
+    var codeChanged = !orig || String(orig.item_code || '').toLowerCase() !== String(it.item_code || '').trim().toLowerCase();
+    if (it._isNew || codeChanged || _editPrfSnapshotMissing(it)) {
+      if (codeChanged) it.location = '';
+      _applyEditPrfStock(it);
+    }
+  });
 
   if (!confirm('Save changes to ' + prf.prf_no + ' as v' + _editPrfState.newVersionNumber + '?\n\n' +
     validItems.length + ' item(s) will be saved. Same PRF number, updated version.')) return;
@@ -2072,6 +2181,11 @@ window.selectEditPrfItem = function(idx, code, description, unit, noFocus) {
   _editPrfState.currentItems[idx].item_code = code;
   _editPrfState.currentItems[idx].description = description;
   _editPrfState.currentItems[idx].unit = unit;
+
+  // ✅ Isama ang On-Hand / Buffer / Ave Consumption (dati laging 0 sa idinadagdag na item)
+  _editPrfState.currentItems[idx].location = '';
+  _applyEditPrfStock(_editPrfState.currentItems[idx]);
+  _refreshEditPrfStockCells(idx);
 
   var codeInput = document.getElementById('editPrfItemCode' + idx);
   if (codeInput) codeInput.value = code;
