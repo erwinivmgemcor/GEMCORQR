@@ -295,6 +295,19 @@
           roles: ['warehouse', 'production']
         }
       ]
+    },
+    {
+      id: 'help',
+      label: 'Help',
+      items: [
+        {
+          id: 'about',
+          label: 'About GEMCOR ERP',
+          icon: 'bi-info-circle',
+          href: 'about.html',
+          roles: ['warehouse', 'production', 'procurement', 'finance']
+        }
+      ]
     }
   ];
 
@@ -330,7 +343,8 @@
     'new-mrif': 'New MRIF',
     'new-mrr': 'New MRR',
     'new-mrs': 'New MRS',
-    'block-blast': 'Break Room'
+    'block-blast': 'Break Room',
+    'about': 'About GEMCOR ERP'
   };
 
   var STORAGE_KEYS = {
@@ -517,7 +531,8 @@
     footer.className = 'erp-sidebar-footer';
     var version = 'v1.0.0';
     try { version = 'v' + (window.ERP_APP_VERSION || '1.0.0'); } catch(e) {}
-    footer.innerHTML = '<span class="erp-sidebar-version">' + version + '</span>';
+    footer.innerHTML = '<span class="erp-sidebar-version">' + version + '</span>' +
+      '<a class="erp-sidebar-credit" href="https://tinyurl.com/negosyowebph" target="_blank" rel="noopener noreferrer" title="Business portfolio">Engineered by Erwin Sister</a>';
     sidebar.appendChild(footer);
 
     return sidebar;
