@@ -35,7 +35,7 @@
   var READONLY_WRITE_FNS = [
     'openTransmittalModal', 'openEditPrfItems', 'openEditPrfNo', 'bulkUpdateStatus',
     'prfSyncAndRecompute', 'savePoEdit', 'openPoEditModal', 'saveEditPrfItems', 'saveEditedPrfNo',
-    'addEditPrfItem', 'editPrfRemoveItem', 'sofOpenManual', 'sofReleaseItem', 'sofManualSubmit'
+    'prfCancel', 'addEditPrfItem', 'editPrfRemoveItem', 'sofOpenManual', 'sofReleaseItem', 'sofManualSubmit'
   ];
 
   function _applyReadOnly(role) {
