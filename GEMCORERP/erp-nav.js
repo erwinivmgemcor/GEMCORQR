@@ -185,7 +185,7 @@
           label: 'Item In & Out',
           icon: 'bi-arrow-left-right',
           href: 'item-in-out.html',
-          roles: ['warehouse']
+          roles: ['warehouse', 'production', 'procurement', 'finance']
         },
         {
           id: 'usage-trend',
@@ -212,7 +212,7 @@
           label: 'Messages',
           icon: 'bi-chat-dots',
           href: 'chat.html',
-          roles: ['warehouse', 'production'],
+          roles: ['warehouse', 'production', 'procurement', 'finance'],
           badgeId: 'chatBadgeSidebar'
         }
       ]
@@ -299,7 +299,7 @@
           label: 'Crate Blast',
           icon: 'bi-controller',
           href: 'block-blast.html',
-          roles: ['warehouse', 'production']
+          roles: ['warehouse', 'production', 'procurement', 'finance']
         }
       ]
     },
@@ -691,7 +691,7 @@
             '</div>' +
             '<button class="erp-user-dropdown-item" type="button" onclick="erpUserRefresh()"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>' +
             '<button class="erp-user-dropdown-item" type="button" onclick="erpUserSettings()"><i class="bi bi-gear"></i> Settings</button>' +
-            (userInfo.role === 'production' ? '<button class="erp-user-dropdown-item" type="button" onclick="erpStartTour(true)"><i class="bi bi-signpost-split"></i> Quick Guide</button>' : '') +
+            '<button class="erp-user-dropdown-item" type="button" onclick="erpStartTour(true)"><i class="bi bi-signpost-split"></i> Quick Guide</button>' +
             '<div class="erp-user-dropdown-divider"></div>' +
             '<button class="erp-user-dropdown-item danger" type="button" onclick="erpUserLogout()"><i class="bi bi-box-arrow-right"></i> Logout</button>' +
           '</div>' +
