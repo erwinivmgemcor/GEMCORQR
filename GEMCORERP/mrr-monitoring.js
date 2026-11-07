@@ -77,6 +77,7 @@ async function mrrMonLoad() {
       'select=*&order=mrr_date.desc,line_no.asc&limit=10000');
 
     _mrrMon.allItems = rows || [];
+    mrrMonNormalizeStatuses(_mrrMon.allItems);   // staggered delivery: pinagsama-samang dating na ang basehan
 
     var elapsed = Date.now() - t0;
     console.log('[MRR Monitoring] Loaded ' + _mrrMon.allItems.length + ' items in ' + elapsed + 'ms');
@@ -91,6 +92,57 @@ async function mrrMonLoad() {
         '<i class="bi bi-exclamation-triangle-fill me-2"></i>Failed: ' + erpEsc(err.message) + '</td></tr>';
     }
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+// STAGGERED DELIVERY — status batay sa KABUUANG dumating, hindi sa isang MRR lang
+// Ang bawat susunod na delivery ng parehong PO + item ay bagong MRR na dala pa rin ang buong PO qty
+// (hal. QTY 200, RECV 100). Kapag per-MRR lang ang tingin, laging PARTIAL ang dalawa.
+// Dito: pinagsasama ang received ng lahat ng (hindi-cancelled) MRR na may parehong PO + Item Code + PO Qty.
+//   Kabuuan >= PO Qty  → COMPLETE ang LAHAT ng line na iyon (pati ang naunang MRR)
+//   0 < kabuuan < Qty  → PARTIAL (may Balance na ipapakita)
+// Kapag COMPLETE na ang lahat ng line ng isang MRR, COMPLETED na rin ang doc status niya.
+// Display lang ito — walang binabago sa database. Walang PO No.? Gagamitin ang status mula sa view.
+// ═══════════════════════════════════════════════════════════
+function mrrMonNormalizeStatuses(rows) {
+  var groups = {};
+  rows.forEach(function(it) {
+    it._viewStatus = it.item_status;
+    it._viewDocStatus = it.doc_status;
+    var ds = String(it.doc_status || '').toUpperCase();
+    if (ds === 'CANCELLED' || ds === 'VOID' || ds === 'VOIDED') return;
+    var po = String(it.po_no || '').trim().toUpperCase();
+    var code = String(it.item_code || '').trim().toUpperCase();
+    var qty = Number(it.requested_qty || 0);
+    if (!po || !code || !(qty > 0)) return;
+    var key = po + '|' + code + '|' + qty;
+    it._grpKey = key;
+    var g = groups[key] || (groups[key] = { recv: 0, qty: qty, mrrs: {} });
+    g.recv += Number(it.received_qty || 0);
+    g.mrrs[it.mrr_no] = true;
+  });
+
+  rows.forEach(function(it) {
+    var g = it._grpKey && groups[it._grpKey];
+    if (!g) return;
+    it._cumRecv = g.recv;
+    it._cumQty = g.qty;
+    it._cumDocs = Object.keys(g.mrrs).length;
+    var eff = g.recv >= g.qty ? 'COMPLETE' : (g.recv > 0 ? 'PARTIAL' : 'PENDING');
+    // huwag ibababa ang COMPLETE na galing na sa view
+    if (String(it.item_status || '').toUpperCase() === 'COMPLETE') eff = 'COMPLETE';
+    it.item_status = eff;
+  });
+
+  var byDoc = {};
+  rows.forEach(function(it) { (byDoc[it.mrr_no] = byDoc[it.mrr_no] || []).push(it); });
+  Object.keys(byDoc).forEach(function(no) {
+    var ls = byDoc[no];
+    var ds = String(ls[0].doc_status || '').toUpperCase();
+    if (ds !== 'PARTIAL' && ds !== 'PENDING') return;
+    var allDone = ls.every(function(l) { return String(l.item_status || '').toUpperCase() === 'COMPLETE'; });
+    if (allDone) ls.forEach(function(l) { l.doc_status = 'COMPLETED'; });
+  });
 }
 
 function mrrMonComputeKPIs() {
@@ -335,7 +387,8 @@ function mrrMonRender() {
       statusBadge = '<span class="badge bg-warning text-dark"><i class="bi bi-clock-history me-1"></i>PENDING</span>';
     } else if (itemStatus === 'PARTIAL') {
       rowClass = 'partial-attention';
-      statusBadge = '<span class="badge bg-primary"><i class="bi bi-hourglass-split me-1"></i>PARTIAL</span>';
+      statusBadge = '<span class="badge bg-primary"><i class="bi bi-hourglass-split me-1"></i>PARTIAL</span>' +
+        (it._cumQty ? '<div class="text-muted" style="font-size:0.68rem;">Balance: <b>' + erpNum(Math.max(it._cumQty - it._cumRecv, 0)) + '</b></div>' : '');
     } else {
       rowClass = 'completed-row';
       statusBadge = '<span class="badge bg-success"><i class="bi bi-check-circle-fill me-1"></i>COMPLETE</span>';
@@ -361,7 +414,9 @@ function mrrMonRender() {
       '<td><code style="font-size:0.72rem;">' + erpEsc(it.item_code) + '</code></td>' +
       '<td title="' + erpEsc(it.description || '') + '">' + erpEsc(truncate(it.description || '—', 45)) + '</td>' +
       '<td class="text-center">' + erpNum(qty) + '</td>' +
-      '<td class="text-center">' + (recv > 0 ? '<strong>' + erpNum(recv) + '</strong>' : '—') + '</td>' +
+      '<td class="text-center">' + (recv > 0 ? '<strong>' + erpNum(recv) + '</strong>' : '—') +
+        (it._cumDocs > 1 ? '<div class="text-muted" style="font-size:0.68rem;" title="Kabuuang dumating sa ' + it._cumDocs + ' MRR ng PO na ito">Σ ' + erpNum(it._cumRecv) + ' / ' + erpNum(it._cumQty) + '</div>' : '') +
+      '</td>' +
       '<td class="text-center">' + erpEsc(it.unit || '—') + '</td>' +
       '<td class="text-center">' + statusBadge + '</td>' +
       '<td><span class="creator-badge"><i class="bi bi-person"></i> ' + erpEsc(truncate(creatorName, 18)) + '</span></td>' +
