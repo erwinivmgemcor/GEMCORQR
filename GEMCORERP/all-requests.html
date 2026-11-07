@@ -163,6 +163,11 @@ tr.ar-mine td:first-child{box-shadow:inset 4px 0 0 #0ea5e9;}
       <select id="allCatFilter" class="erp-select" onchange="allRequestsOnCatChange()" title="Filter by item category (Components / Consumables / Fabmat)">
         <option value="">All Categories</option>
       </select>
+      <select id="allAvailFilter" class="erp-select" onchange="allRequestsOnAvailChange()" title="Ipakita lang ang MRIF na may stock na para ma-issue">
+        <option value="">Any Stock Status</option>
+        <option value="ready">✅ Ready to issue (kumpleto)</option>
+        <option value="any">🟡 May available (kumpleto o partial)</option>
+      </select>
       <select id="allDeptFilter" class="erp-select" onchange="allRequestsLoad()">
         <option value="">All Departments</option>
       </select>
@@ -198,6 +203,7 @@ tr.ar-mine td:first-child{box-shadow:inset 4px 0 0 #0ea5e9;}
     </div>
 
     <div id="allAssignWarn" style="display:none;margin:0 0 12px;padding:10px 14px;border-radius:10px;font-size:0.9rem;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;"></div>
+    <div id="allAvailBanner" style="display:none;margin:0 0 12px;padding:10px 14px;border-radius:10px;font-size:0.9rem;"></div>
     <div id="allMineBanner" style="display:none;margin:0 0 12px;padding:10px 14px;border-radius:10px;font-size:0.9rem;"></div>
 
     <div class="erp-table-wrap">
