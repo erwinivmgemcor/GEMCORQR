@@ -343,7 +343,7 @@ function prfMonitorComputeStatus() {
     var canceledCount = counts.CANCELED;
     var activeCount = total - canceledCount;
 
-    if (activeCount === 0 && total > 0) {
+    if ((activeCount === 0 && total > 0) || (prf.cancelled_at && activeCount === 0)) {
       prf._status = 'CANCELED';
     } else if (servedCount === activeCount && activeCount > 0) {
       prf._status = 'SERVED';
@@ -493,7 +493,7 @@ html += '<tr>' +
       '<td class="text-center"><span class="badge ' + categoryBadge + '">' + erpEsc(cat || '—') + '</span></td>' +
       '<td class="text-center">' + (p.total_items || 0) + '</td>' +
       '<td class="text-center">' + erpNum(p.total_qty || 0) + '</td>' +
-      '<td class="text-center"><span class="' + statusClass + '"><i class="bi ' + statusIcon + ' me-1"></i>' + status + '</span></td>' +
+      '<td class="text-center"><span class="' + statusClass + '"' + (p.cancel_reason ? ' title="' + erpEsc('Cancelled by ' + (p.cancelled_by || '—') + ': ' + p.cancel_reason) + '"' : '') + '><i class="bi ' + statusIcon + ' me-1"></i>' + status + '</span></td>' +
       '<td class="text-center">' +
         '<button class="erp-action-btn primary" onclick="viewPrfDetails(' + safeId + ')" title="View Details">' +
           '<i class="bi bi-eye"></i>' +
@@ -504,10 +504,15 @@ html += '<tr>' +
         '<button class="erp-action-btn" onclick="openEditPrfNo(' + safeId + ', \'' + safePrf + '\')" title="Edit PRF No.">' +
           '<i class="bi bi-tag"></i>' +
         '</button>' +
+        (status === 'CANCELED' ? '' :
         '<button class="erp-action-btn" style="background:#f59e0b;color:#fff;" ' +
           'onclick="openEditPrfItems(' + safeId + ')" title="Edit Items (New Version)">' +
           '<i class="bi bi-pencil-square"></i>' +
         '</button>' +
+        '<button class="erp-action-btn" style="background:#ef4444;color:#fff;" ' +
+          'onclick="prfCancel(' + safeId + ')" title="Cancel PRF">' +
+          '<i class="bi bi-x-octagon"></i>' +
+        '</button>') +
         '<button class="erp-action-btn" onclick="openPrfVersionHistory(\'' + safeBasePrf + '\')" title="Version History">' +
           '<i class="bi bi-clock-history"></i>' +
         '</button>' +
@@ -950,6 +955,11 @@ async function viewPrfDetails(prfId) {
     if (prf.notes) html += '<div class="col-12"><strong>Notes:</strong> ' + erpEsc(prf.notes) + '</div>';
     html += '</div>';
 
+    if (prf.cancelled_at && prf._status === 'CANCELED') {
+      html += '<div class="alert alert-danger small"><i class="bi bi-x-octagon-fill me-1"></i><strong>CANCELLED</strong> ' +
+        erpEsc(new Date(prf.cancelled_at).toLocaleString()) + ' by ' + erpEsc(prf.cancelled_by || '—') +
+        '<br><strong>Reason:</strong> ' + erpEsc(prf.cancel_reason || '—') + '</div>';
+    }
     var counts = prf._statusCounts || {};
     html += '<div class="alert alert-info small">' +
       '<strong>Items:</strong> ' + (items.length) +
@@ -1501,6 +1511,8 @@ var _editPrfState = {
 };
 
 window.openEditPrfItems = async function(prfId) {
+  var _cp = (_prfMonitor.allPrfs || []).find(function(p) { return p.id === prfId; });
+  if (_cp && _cp._status === 'CANCELED') { erpShowToast('Cancelled na ang PRF na ito — hindi na puwedeng i-edit', 'warning'); return; }
   console.log('[EditPRF] Opening:', prfId);
   
   var prf = _prfMonitor.allPrfs.find(function(p) { return p.id === prfId; });
