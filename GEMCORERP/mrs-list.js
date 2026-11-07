@@ -80,6 +80,7 @@ function mrsListComputeKPIs() {
   var pending = 0, completed = 0, partial = 0;
   _mrsAllDocs.forEach(function(d) {
     var s = String(d.status || '').toUpperCase();
+    if (s === 'CANCELLED') { total--; return; }   // hindi bilang sa Total
     if (s === 'PENDING') pending++;
     else if (s === 'COMPLETED') completed++;
     else if (s === 'PARTIAL') partial++;
@@ -134,6 +135,7 @@ function mrsListRender() {
     var statusClass = 'status-pending';
     if (statusUpper === 'COMPLETED') statusClass = 'status-completed';
     else if (statusUpper === 'PARTIAL') statusClass = 'status-partial';
+    else if (statusUpper === 'CANCELLED') statusClass = 'status-cancelled';
     
     var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
     
@@ -159,6 +161,11 @@ function mrsListRender() {
     '<button class="erp-action-btn" onclick="openWarehouseEdit(\'' + safeDoc + '\', \'MRS\')" title="Edit (Warehouse)">' +
       '<i class="bi bi-pencil-square"></i>' +
     '</button>' 
+    : '') +
+  (canEdit && statusUpper === 'PENDING' ?
+    '<button class="erp-action-btn" style="color:#b91c1c" onclick="mrsCancel(\'' + safeDoc + '\')" title="Cancel MRS (nagawa nang mali / duplicate)">' +
+      '<i class="bi bi-x-circle"></i>' +
+    '</button>'
     : '') +
 '</td>' +
       '</tr>';
