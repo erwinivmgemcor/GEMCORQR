@@ -239,3 +239,16 @@
 /* donut card: centre the content in the available height */
 .mrd-grid-2 > .mrd-card { display: flex; flex-direction: column; }
 .mrd-grid-2 > .mrd-card .mrd-donut-wrap { flex: 1; align-content: center; }
+
+/* ── Two clearly different entry buttons: Request (MRIF) vs Return (MRS) ── */
+.mrd-btn-mrif, .mrd-btn-mrs { padding: 10px 18px; align-items: center; }
+.mrd-btn-mrif { background: #fff; color: #92400e; border-left: 6px solid #f59e0b; }
+.mrd-btn-mrs  { background: #fff; color: #5b21b6; border-left: 6px solid #7c3aed; }
+.mrd-btn-mrif:hover { color: #92400e; } .mrd-btn-mrs:hover { color: #5b21b6; }
+.mrd-btn i { font-size: 1.25rem; }
+.mrd-btn-txt { display: flex; flex-direction: column; line-height: 1.15; text-align: left; }
+.mrd-btn-txt b { font-size: .92rem; }
+.mrd-btn-txt small { font-size: .68rem; font-weight: 600; opacity: .8; }
+.mrd-type { display: inline-block; padding: 3px 9px; border-radius: 6px; font-size: .68rem; font-weight: 800; letter-spacing: .03em; white-space: nowrap; }
+.mrd-type-mrif { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+.mrd-type-mrs  { background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd; }
