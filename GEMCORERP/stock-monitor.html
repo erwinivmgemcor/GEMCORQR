@@ -1066,6 +1066,20 @@
           </div>
           <div id="csvUploadStatus"></div>
           
+          <div class="p-3 mb-3 rounded" style="background:#f0fdf4;border:1px solid #86efac;">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="csvSafeMode" checked onchange="erpCsvSafeModeChanged()">
+              <label class="form-check-label fw-bold" for="csvSafeMode">
+                <i class="bi bi-shield-lock-fill text-success me-1"></i>Safe Mode — live na ang system
+              </label>
+            </div>
+            <div class="small text-muted mt-1" style="margin-left:1.5rem;">
+              Sa mga <b>existing na item</b>, <b>HINDI</b> gagalawin ang <code>On-Hand</code>, <code>Buffer</code>, <code>Active Mo</code>, <code>Ave/Mo</code>,
+              <code>Ave/Day</code>, <code>ABC</code> at <code>Movement</code> (kahit nasa file pa). Description, Category, Location, Unit at Unit Cost lang ang maa-update.
+              Ang <b>bagong item</b> ay idadagdag nang buo. <b>I-uncheck lang ito para sa starting inventory (cut-over).</b>
+            </div>
+          </div>
+
           <div class="mb-3">
             <label class="form-label fw-bold">CSV File</label>
             <input type="file" class="form-control form-control-lg" id="csvFileInput" accept=".csv" onchange="erpHandleCsvUpload(event)">
@@ -1092,8 +1106,11 @@
           </div>
           
           <div class="d-flex gap-2">
+            <button class="btn btn-success" onclick="erpDownloadCsvTemplateSafe()" title="Item Code, Description, Category, Location, Unit, Unit Cost — walang On-Hand">
+              <i class="bi bi-download me-1"></i>Template (Safe Mode)
+            </button>
             <button class="btn btn-outline-secondary" onclick="erpDownloadCsvTemplate()">
-              <i class="bi bi-download me-1"></i>Download Template
+              <i class="bi bi-download me-1"></i>Full Template (cut-over)
             </button>
           </div>
         </div>
