@@ -1,5 +1,5 @@
 // ============================================================
-// GEMCOR ERP — First-time Guide (production users)
+// GEMCOR ERP — Quick Guide (production auto-start; lahat ng role puwedeng buksan sa user menu)
 // Auto-starts once per user (localStorage). Replay: user menu → "Quick Guide".
 // Buttons: Back / Next / Skip tour. Keys: → ← Esc.
 // Self-contained: no libraries.
@@ -23,20 +23,45 @@
     return null;
   }
 
+  function role() { try { return localStorage.getItem('ivm_userRole') || ''; } catch (e) { return ''; } }
+
+  // Mga step na pare-pareho para sa lahat ng role
+  function commonSteps() {
+    return [
+      { target: function () { return sidebarLink('chat.html'); }, title: 'Messages', body: 'Mag-chat sa ibang departamento kung may tanong, para hindi na kailangang pumunta o tumawag.' },
+      { target: function () { return sidebarLink('item-in-out.html'); }, title: 'Item In & Out', body: 'Tingnan ang kasaysayan ng bawat item: kailan pumasok at kailan lumabas. View-only ito para sa lahat.' },
+      { target: function () { return q('.erp-search-bar'); }, title: 'Search', body: 'Hanapin agad ang kahit anong Doc No. o item. Shortcut: <b>Ctrl + K</b> (⌘K sa Mac).' },
+      { target: function () { return q('#erpBellContainer') || q('#erpNotifContainer'); }, title: 'Notifications', body: 'Dito lalabas kapag may update ang request o dokumento. Tingnan ito kapag may pulang numero.' },
+      { target: function () { return sidebarLink('block-blast.html'); }, title: 'Break Room', body: 'Pahinga muna! Dito ang <b>Crate Blast</b>, isang maikling laro para sa break time.' },
+      { target: function () { return q('.erp-user-toggle'); }, title: 'Account menu', body: '<b>Refresh Data</b> kung hindi mo nakikita ang pinakabagong update, <b>Settings</b> para sa profile at larawan, at <b>Quick Guide</b> para ulitin ang tour na ito.' }
+    ];
+  }
+
   function steps() {
     var n = firstName();
-    return [
-      { title: 'Welcome' + (n ? ', ' + n : '') + '! 👋', body: 'Mabilis na tour lang ito (mga 1 minuto) para malaman mo kung saan gagawa ng request sa warehouse. Pwede mong i-<b>Skip</b> anumang oras, at mabubuksan ulit sa user menu → <b>Quick Guide</b>.' },
-      { target: function () { return sidebarLink('my-requests.html'); }, title: 'My Requests', body: 'Home mo ito. Dito makikita lahat ng request mo at ang status: <b>Pending</b> (hinihintay pa ang warehouse), <b>Partial</b> (may naibigay na, may kulang pa) at <b>Completed</b>.' },
-      { target: function () { return submenuParent('New MRIF'); }, title: 'New MRIF — humingi ng materyales', body: 'Dito ka gagawa ng request ng materyales sa warehouse. Piliin ang <b>With JO</b> kung may Job Order, o <b>Manual (No JO)</b> kung wala. Pagka-submit, may lalabas na <b>QR</b> — ipakita ito sa warehouse.' },
-      { target: function () { return submenuParent('New MRS'); }, title: 'New MRS — magsauli ng sobra', body: 'Gamitin ito kapag may sobra o hindi nagamit na materyales na isasauli sa warehouse. Pareho ang daloy: With JO o Manual.' },
-      { target: function () { return sidebarLink('project-costing.html'); }, title: 'Project Costing', body: 'Tingnan dito ang gastos ng materyales bawat project/JO.' },
-      { target: function () { return sidebarLink('chat.html'); }, title: 'Messages', body: 'Mag-chat sa warehouse kung may tanong sa request mo, para hindi na kailangang pumunta o tumawag.' },
-      { target: function () { return q('.erp-search-bar'); }, title: 'Search', body: 'Hanapin agad ang kahit anong Doc No. o item. Shortcut: <b>Ctrl + K</b> (⌘K sa Mac).' },
-      { target: function () { return q('#erpBellContainer') || q('#erpNotifContainer'); }, title: 'Notifications', body: 'Dito lalabas kapag na-process o may update ang request mo. Tingnan ito kapag may pulang numero.' },
-      { target: function () { return q('.erp-user-toggle'); }, title: 'Account menu', body: '<b>Refresh Data</b> kung hindi mo nakikita ang pinakabagong update, <b>Settings</b> para sa profile at larawan, at <b>Quick Guide</b> para ulitin ang tour na ito.' },
-      { title: 'Handa ka na! ✅', body: 'Simulan sa <b>New MRIF</b> kapag may kailangan kang materyales. Kung may problema, i-message ang warehouse sa <b>Messages</b>.' }
-    ];
+    var r = role();
+    var welcome = { title: 'Welcome' + (n ? ', ' + n : '') + '! 👋', body: 'Mabilis na tour lang ito (mga 1 minuto) para malaman mo kung nasaan ang mga mahahalagang bahagi ng system. Pwede mong i-<b>Skip</b> anumang oras, at mabubuksan ulit sa user menu → <b>Quick Guide</b>.' };
+
+    if (r === 'production') {
+      return [
+        welcome,
+        { target: function () { return sidebarLink('my-requests.html'); }, title: 'My Requests', body: 'Home mo ito. Dito makikita lahat ng request mo at ang status: <b>Pending</b> (hinihintay pa ang warehouse), <b>Partial</b> (may naibigay na, may kulang pa) at <b>Completed</b>.' },
+        { target: function () { return submenuParent('New MRIF'); }, title: 'New MRIF — humingi ng materyales', body: 'Dito ka gagawa ng request ng materyales sa warehouse. Piliin ang <b>With JO</b> kung may Job Order, o <b>Manual (No JO)</b> kung wala. Pagka-submit, may lalabas na <b>QR</b> — ipakita ito sa warehouse.' },
+        { target: function () { return submenuParent('New MRS'); }, title: 'New MRS — magsauli ng sobra', body: 'Gamitin ito kapag may sobra o hindi nagamit na materyales na isasauli sa warehouse. Pareho ang daloy: With JO o Manual.' },
+        { target: function () { return sidebarLink('project-costing.html'); }, title: 'Project Costing', body: 'Tingnan dito ang gastos ng materyales bawat project/JO.' }
+      ].concat(commonSteps(), [
+        { title: 'Handa ka na! ✅', body: 'Simulan sa <b>New MRIF</b> kapag may kailangan kang materyales. Kung may problema, i-message ang warehouse sa <b>Messages</b>.' }
+      ]);
+    }
+
+    var intros = {
+      warehouse: { target: function () { return q('#erpSidebar'); }, title: 'Menu', body: 'Nasa kaliwa ang lahat ng gamit mo: Stock Monitor, mga request (MRIF/MRS/MRR), Replenishment at PRF, at iba pa.' },
+      procurement: { target: function () { return q('#erpSidebar'); }, title: 'Menu', body: 'Nasa kaliwa ang <b>MRR Monitoring</b>, <b>PRF Monitor</b>, <b>Replenishment</b> at <b>SOF Tracker</b>. View-only ang mga ito para sa procurement.' },
+      finance: { target: function () { return q('#erpSidebar'); }, title: 'Menu', body: 'Nasa kaliwa ang <b>MRIF Monitoring</b> at <b>Project Costing</b>. View-only ang mga ito para sa finance.' }
+    };
+    return [welcome].concat(intros[r] ? [intros[r]] : [], commonSteps(), [
+      { title: 'Handa ka na! ✅', body: 'Kung may tanong, gamitin ang <b>Messages</b>. Mabubuksan ulit ang gabay na ito anumang oras sa user menu → <b>Quick Guide</b>.' }
+    ]);
   }
 
   var S = null;   // state
