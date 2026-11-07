@@ -229,6 +229,13 @@
           roles: ['production']
         },
         {
+          id: 'sof-tracker',
+          label: 'SOF Tracker',
+          icon: 'bi-file-earmark-ruled',
+          href: 'sof-tracker.html',
+          roles: ['production']
+        },
+        {
           id: 'project-costing',
           label: 'Project Costing',
           icon: 'bi-cash-coin',
