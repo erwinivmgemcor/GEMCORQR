@@ -1658,6 +1658,7 @@ async function erpSaveEditedCell() {
 // Add + Update ng items (HINDI nagbubura). Para sa starting inventory ng buwan.
 // Ang on_hand ay dumadaan sa Stock Ledger (ADJUSTMENT) kaya may opening balance sa Item In & Out.
 // Blank na cell = huwag galawin ang existing na value.
+var _csvSafeUsed = true;
 var _CSV_HEADERS = ['Item Code', 'Description', 'Category', 'Location', 'On-Hand', 'Buffer', 'Unit', 'Unit Cost', 'Active Mo', 'Ave/Mo', 'Ave/Day', 'ABC', 'Movement'];
 
 function _csvDefaultStartMonth() {
@@ -1679,6 +1680,8 @@ function erpOpenCsvImport() {
   if (sm && !sm.value) sm.value = _csvDefaultStartMonth();
   var lk = document.getElementById('csvLockBuffer');
   if (lk) lk.checked = false;
+  var sf = document.getElementById('csvSafeMode');
+  if (sf) sf.checked = true;                       // live na ang system → Safe Mode ang default
   var st = document.getElementById('csvUploadStatus');
   if (st) st.innerHTML = '';
   bootstrap.Modal.getOrCreateInstance(document.getElementById('csvImportModal')).show();
@@ -1691,6 +1694,22 @@ function erpDownloadCsvTemplate() {
   link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
   link.download = 'stock_import_template.csv';
   document.body.appendChild(link); link.click(); document.body.removeChild(link);
+}
+
+// Template para sa live na system: walang On-Hand / Buffer / Ave column
+function erpDownloadCsvTemplateSafe() {
+  var csv = '\uFEFF' + ['Item Code', 'Description', 'Category', 'Location', 'Unit', 'Unit Cost'].join(',') + '\n' +
+    'GEM-XXX,Sample item description,CONSUMABLES,GEMCATM001,PIECE,12.50\n';
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  link.download = 'stock_master_update_template.csv';
+  document.body.appendChild(link); link.click(); document.body.removeChild(link);
+}
+
+// Kapag binago ang Safe Mode checkbox pagkatapos pumili ng file, basahin ulit ang file
+function erpCsvSafeModeChanged() {
+  var inp = document.getElementById('csvFileInput');
+  if (inp && inp.files && inp.files[0]) erpHandleCsvUpload({ target: inp });
 }
 
 // Full-file parser: BOM, quoted cells na may comma/line-break, CRLF, auto-detect ng delimiter.
@@ -1783,6 +1802,8 @@ async function erpHandleCsvUpload(event) {
   var statusEl = document.getElementById('csvUploadStatus');
   var setStatus = function(html) { if (statusEl) statusEl.innerHTML = html; };
   setStatus('<div class="alert alert-info small py-2"><span class="spinner-border spinner-border-sm me-1"></span>Binabasa ang CSV...</div>');
+  var safe = !!((document.getElementById('csvSafeMode') || {}).checked);
+  _csvSafeUsed = safe;
 
   try {
     var rows = _csvParse(await file.text());
@@ -1815,7 +1836,22 @@ async function erpHandleCsvUpload(event) {
     var numFields = ['on_hand', 'buffer_stock', 'unit_cost', 'active_consumption_months', 'ave_monthly_consumption', 'ave_daily_consumption'];
     var seen = {};
     _csvImportData = [];
-    var counts = { add: 0, change: 0, same: 0, error: 0, dup: 0, reactivate: 0, warnBuf: 0 };
+    var counts = { add: 0, change: 0, same: 0, error: 0, dup: 0, reactivate: 0, warnBuf: 0, protectedRows: 0, nearDup: 0, notInFile: 0 };
+
+    // Para mahuli ang bagong item na mukhang kapareho ng existing (hal. sobra/kulang na gitling o zero)
+    // alisin ang gitling/spaces at ang leading zeros ng bawat bahagi: GEM-1-099939-9 ≈ GEM-1-99939-9
+    var _alnum = function(s) {
+      return String(s || '').toLowerCase().split(/[^a-z0-9]+/).map(function(seg) { return seg.replace(/^0+(?=\d)/, ''); }).join('');
+    };
+    var _normDesc = function(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); };
+    var normCode = {}, normDescMap = {};
+    Object.keys(existing).forEach(function(k) {
+      var e = existing[k];
+      if (e.is_deleted === true) return;
+      normCode[_alnum(e.item_code)] = e.item_code;
+      var nd = _normDesc(e.description);
+      if (nd) normDescMap[nd] = (normDescMap[nd] === undefined) ? e.item_code : null;   // null = hindi unique
+    });
 
     rows.slice(1).forEach(function(r, n) {
       var code = txt(r, 'item_code');
@@ -1847,11 +1883,22 @@ async function erpHandleCsvUpload(event) {
 
       var p = rec.payload, it = existing[key];
       rec.item = it;
+      if (safe && it) {
+        // SAFE MODE: ang stock at mga kinuwentang values ng existing item ay galing sa system — hindi gagalawin
+        var stripped = 0;
+        ['on_hand', 'buffer_stock', 'active_consumption_months', 'ave_monthly_consumption', 'ave_daily_consumption',
+         'abc_classification', 'inventory_movement'].forEach(function(f) { if (p[f] !== undefined) { delete p[f]; stripped++; } });
+        if (p.unit_cost === 0) delete p.unit_cost;      // 0 ay hindi presyo; huwag i-zero ang existing
+        if (stripped) { counts.protectedRows++; rec.protectedN = stripped; }
+      }
       if (p.buffer_stock !== undefined && p.ave_monthly_consumption === undefined && p.active_consumption_months === undefined) {
         counts.warnBuf++; rec.warn = true;
       }
       if (!it) {
         rec.status = 'ADD'; rec.send = true; counts.add++;
+        var near = normCode[_alnum(code)];
+        if (!near && p.description) { var dm = normDescMap[_normDesc(p.description)]; if (dm) near = dm; }
+        if (near) { rec.dupHint = near; counts.nearDup++; }
       } else if (it.is_deleted === true) {
         rec.status = 'REACTIVATE'; rec.send = true; counts.reactivate++;
       } else {
@@ -1871,6 +1918,8 @@ async function erpHandleCsvUpload(event) {
       }
       _csvImportData.push(rec);
     });
+
+    Object.keys(existing).forEach(function(k) { if (existing[k].is_deleted !== true && !seen[k]) counts.notInFile++; });
 
     // Preview
     var badge = {
@@ -1896,6 +1945,8 @@ async function erpHandleCsvUpload(event) {
         '<td>' + cell('ave_monthly_consumption') + '</td>' +
         '<td><span class="badge ' + badge[rec.status] + '">' + rec.status + '</span>' +
           (rec.warn ? ' <i class="bi bi-exclamation-triangle-fill text-warning" title="May Buffer pero walang Ave/Mo o Active Mo"></i>' : '') +
+          (rec.protectedN ? ' <i class="bi bi-shield-lock-fill text-success" title="Safe Mode: ' + rec.protectedN + ' field (On-Hand/Buffer/Ave...) ang hindi ginalaw"></i>' : '') +
+          (rec.dupHint ? '<div class="small text-danger"><i class="bi bi-exclamation-octagon-fill me-1"></i>Posibleng kapareho ng existing: <code>' + erpEsc(rec.dupHint) + '</code></div>' : '') +
           (rec.msg ? '<div class="small text-danger">' + erpEsc(rec.msg) + '</div>' : '') + '</td></tr>';
     });
     if (_csvImportData.length > 500) {
@@ -1912,6 +1963,13 @@ async function erpHandleCsvUpload(event) {
         '<span class="badge bg-secondary me-1">NO CHANGE ' + counts.same + '</span>' +
         (counts.error ? '<span class="badge bg-danger me-1">ERROR ' + counts.error + '</span>' : '') +
         (counts.dup ? '<span class="badge bg-dark me-1">DUPLICATE ' + counts.dup + '</span>' : '') +
+        (safe
+          ? '<div class="small text-success mt-1"><i class="bi bi-shield-lock-fill me-1"></i><b>Safe Mode:</b> hindi gagalawin ang On-Hand, Buffer, Ave/Mo, ABC at Movement ng existing items' +
+            (counts.protectedRows ? ' (' + counts.protectedRows + ' row ang may ganitong column sa file na nilaktawan)' : '') + '.</div>'
+          : '<div class="small text-danger mt-1"><i class="bi bi-exclamation-octagon-fill me-1"></i><b>Safe Mode OFF:</b> ang On-Hand sa file ay isusulat sa Stock Ledger bilang adjustment.</div>') +
+        (counts.nearDup ? '<div class="small text-danger mt-1"><i class="bi bi-exclamation-octagon-fill me-1"></i>' + counts.nearDup +
+          ' bagong item ang <b>mukhang kapareho ng existing</b> (tingnan ang pulang tala) — baka maling code at madoble.</div>' : '') +
+        '<div class="small text-muted mt-1">' + counts.notInFile + ' active item sa system ang wala sa file — hindi sila gagalawin.</div>' +
         (counts.warnBuf ? '<div class="small text-warning-emphasis mt-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>' + counts.warnBuf +
           ' item ang may Buffer pero walang Ave/Mo o Active Mo — mare-recompute ang buffer nila sa unang MRIF maliban kung i-check ang "Lock imported Buffer".</div>' : '');
     }
@@ -1945,9 +2003,18 @@ async function erpConfirmCsvImport() {
   if (!startYm || (startYm % 100) < 1 || (startYm % 100) > 12) { erpShowToast('Piliin ang tamang "First month of real usage"', 'warning'); return; }
   var lock = !!((document.getElementById('csvLockBuffer') || {}).checked);
 
+  var nearList = todo.filter(function(r) { return r.status === 'ADD' && r.dupHint; });
+  if (nearList.length && !confirm('BABALA: ' + nearList.length + ' bagong item ang mukhang kapareho ng existing:\n\n' +
+    nearList.slice(0, 6).map(function(r) { return '• ' + r.code + '  ~  ' + r.dupHint; }).join('\n') +
+    (nearList.length > 6 ? '\n… +' + (nearList.length - 6) + ' pa' : '') +
+    '\n\nKung maling code lang ito, magkakaroon ng DOBLENG item. Tuloy pa rin?')) return;
+
   if (!confirm('Mag-i-import ng ' + todo.length + ' item(s).\n' +
-    'Real usage starts: ' + startVal + '\nLock imported Buffer: ' + (lock ? 'YES' : 'NO') +
-    '\n\nAng On-Hand ay itatala sa Stock Ledger. Walang item na buburahin.\nTuloy?')) return;
+    (_csvSafeUsed
+      ? 'SAFE MODE: hindi gagalawin ang On-Hand/Buffer/Ave ng existing items.\n'
+      : 'Real usage starts: ' + startVal + '\nLock imported Buffer: ' + (lock ? 'YES' : 'NO') +
+        '\n\nAng On-Hand sa file ay itatala sa Stock Ledger.\n') +
+    'Walang item na buburahin.\nTuloy?')) return;
 
   var btn = document.getElementById('btnCsvImport');
   btn.disabled = true;
