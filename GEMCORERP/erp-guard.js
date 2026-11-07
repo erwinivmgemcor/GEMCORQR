@@ -20,14 +20,15 @@
     'new-mrs-manual.html',
     'project-costing.html',
     'block-blast.html',  // Break Room (laro)
+    'item-in-out.html',  // Item In & Out (view-only movement history)
     'about.html',        // About / FAQs / Process flow
     'sof-tracker.html'   // SOF Tracker (view-only for production)
   ];
   
   // Procurement / Finance: read-only, specific pages only
   var VIEWER_PAGES = {
-    procurement: ['mrr-monitoring.html', 'prf-monitor.html', 'replenishment.html', 'sof-tracker.html', 'chat.html', 'about.html'],
-    finance: ['mrif-monitoring.html', 'project-costing.html', 'chat.html', 'about.html']
+    procurement: ['mrr-monitoring.html', 'prf-monitor.html', 'replenishment.html', 'sof-tracker.html', 'chat.html', 'about.html', 'item-in-out.html', 'block-blast.html'],
+    finance: ['mrif-monitoring.html', 'project-costing.html', 'chat.html', 'about.html', 'item-in-out.html', 'block-blast.html']
   };
   var VIEWER_HOME = { procurement: 'mrr-monitoring.html', finance: 'mrif-monitoring.html' };
 
