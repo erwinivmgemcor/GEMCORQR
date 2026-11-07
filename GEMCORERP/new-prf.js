@@ -1351,6 +1351,8 @@ async function submitPrf() {
         if (!pr.ok) console.warn('[PRF] date_needed not saved (HTTP ' + pr.status + ') — run erp-prf-date-needed.sql');
       }
     } catch (dnErr) { console.warn('[PRF] date_needed save failed', dnErr); }
+    // Safety net: siguraduhing may On-Hand / Buffer / Ave Consumption ang bawat line (lalo na ang manual items)
+    try { await backfillPrfSnapshots(createdPrfs); } catch (bfErr) { console.warn('[PRF] snapshot backfill failed', bfErr); }
     if (createdPrfs.length && createdPrfs[0].prf_no !== prfNo) {
       erpShowToast('PRF No. adjusted to ' + createdPrfs[0].prf_no, 'info');
     }
@@ -1371,6 +1373,35 @@ async function submitPrf() {
   }
 }
 window.submitPrf = submitPrf;
+
+// Kapag walang laman (lahat 0) ang stock snapshot ng isang PRF line, punan mula sa erp_items.
+// Hindi ginagalaw ang line na may laman na.
+async function backfillPrfSnapshots(createdPrfs) {
+  for (var i = 0; i < createdPrfs.length; i++) {
+    var cp = createdPrfs[i];
+    if (!cp || !cp.prf_no) continue;
+    var lines = await erpFetch('prf_items',
+      'select=id,item_code,location,stock_on_hand,buffer_stock,average_consumption&prf_no=eq.' + encodeURIComponent(cp.prf_no));
+    for (var j = 0; j < (lines || []).length; j++) {
+      var ln = lines[j];
+      if (Number(ln.stock_on_hand) || Number(ln.buffer_stock) || Number(ln.average_consumption)) continue;
+      var st = _prf.erpItemsMap[String(ln.item_code || '').trim()];
+      if (!st || (!st.on_hand && !st.buffer_stock && !st.ave_monthly_consumption)) continue;
+      var patch = {
+        stock_on_hand: st.on_hand,
+        buffer_stock: st.buffer_stock,
+        average_consumption: st.ave_monthly_consumption
+      };
+      if (!String(ln.location || '').trim() && st.location) patch.location = st.location;
+      var r = await fetch(erpUrl('prf_items?id=eq.' + encodeURIComponent(ln.id)), {
+        method: 'PATCH',
+        headers: erpHeaders({ 'Prefer': 'return=minimal' }),
+        body: JSON.stringify(patch)
+      });
+      if (!r.ok) console.warn('[PRF] snapshot backfill HTTP ' + r.status + ' for ' + ln.item_code);
+    }
+  }
+}
 
 function closeSuccessAndReset() {
   var modal = bootstrap.Modal.getInstance(document.getElementById('successModal'));
