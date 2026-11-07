@@ -288,7 +288,7 @@
       a: '<ol><li>In <b>Inventory Count</b>, create a new session (full count or SPOT count).</li><li>Count the items by scanning or manual entry.</li><li>Submit for review. The variance is shown, taking movements after the count into account.</li><li>The approver approves or rejects the count. A session can be reopened or cancelled.</li></ol>' },
 
     { c: 'access', q: 'Why can’t I see some pages?',
-      a: '<p>Menus and access depend on your role:</p><ul><li><b>Production</b>: My Requests, New MRIF and MRS, Messages, Project Costing, Break Room.</li><li><b>Warehouse</b>: all operational pages.</li><li><b>Procurement</b>: PRF Monitor, Replenishment (PRFs), MRR Monitoring, SOF Tracker. View-only.</li><li><b>Finance</b>: MRIF Monitoring and Project Costing. View-only.</li><li><b>Admin</b>: additionally User Management, Supabase Admin, Warehouse KPI and System Health.</li></ul>' },
+      a: '<p>Menus and access depend on your role:</p><ul><li><b>Production</b>: My Requests, New MRIF and MRS, Messages, SOF Tracker (view-only), Project Costing, Break Room.</li><li><b>Warehouse</b>: all operational pages.</li><li><b>Procurement</b>: PRF Monitor, Replenishment (PRFs), MRR Monitoring, SOF Tracker. View-only.</li><li><b>Finance</b>: MRIF Monitoring and Project Costing. View-only.</li><li><b>Admin</b>: additionally User Management, Supabase Admin, Warehouse KPI and System Health.</li></ul>' },
     { c: 'access', q: 'How do I change my profile photo or password?',
       a: '<p>Click your name at the top right, then <b>Settings</b>. You can change your photo, password and preferences there.</p>' },
     { c: 'access', q: 'How do I install the system on my phone or desktop?',
@@ -403,7 +403,7 @@
       ['bi-clipboard-data', 'Inventory Count', 'Full or spot counts, by scan or manual entry, with review and approval.', 'W'],
       ['bi-cart-plus-fill', 'Replenishment and PRF', 'Items below buffer, net of open orders, and PRF creation.', 'W'],
       ['bi-file-earmark-text', 'PRF Monitor', 'PRF and PO status, view-only for procurement.', 'RW'],
-      ['bi-file-earmark-ruled', 'SOF Tracker', 'Stock reserved for sales orders and how much has been used.', 'WR'],
+      ['bi-file-earmark-ruled', 'SOF Tracker', 'Stock reserved for sales orders and how much has been used. View-only for production and procurement.', 'PWR'],
       ['bi-cash-coin', 'Project Costing', 'The cost of each project and the movements behind it.', 'PWF'],
       ['bi-calendar-week', 'Weekly and document monitoring', 'Weekly Monitoring plus MRIF, MRR and MRS Monitoring.', 'WRF'],
       ['bi-arrow-left-right', 'Item In & Out', 'Beginning balance, total in, total out and ending balance per item.', 'W'],
