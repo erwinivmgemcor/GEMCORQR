@@ -99,62 +99,12 @@ async function loadUserDepartment() {
 // ═══════════════════════════════════════════════════════════
 async function preloadInventory() {
   if (_mrifState.inventoryLoaded) return;
-  
+
   try {
-    console.log('[Inventory] Starting paginated fetch from erp_items...');
-    
-    var allItems = [];
-    var pageSize = 1000;
-    var offset = 0;
-    var hasMore = true;
-    var maxPages = 20;  // Safety cap: 20,000 items max
-    var pageNum = 0;
-    
-    while (hasMore && pageNum < maxPages) {
-      pageNum++;
-      
-      var query = 'select=item_code,description,base_unit,category,location' +
-                  '&is_active=eq.true' +
-                  '&is_deleted=eq.false' +
-                  '&is_deprecated_2026=eq.false' +
-                  '&order=item_code.asc' +
-                  '&limit=' + pageSize +
-                  '&offset=' + offset;
-      
-      var rows = await erpFetch('erp_items', query);
-      
-      if (!rows || rows.length === 0) {
-        console.log('[Inventory] Page ' + pageNum + ': empty — done');
-        hasMore = false;
-        break;
-      }
-      
-      allItems = allItems.concat(rows);
-      offset += rows.length;
-      
-      console.log('[Inventory] Page ' + pageNum + ': fetched ' + 
-                  rows.length + ' items (total: ' + allItems.length + ')');
-      
-      // If fewer than pageSize, we've reached the end
-      if (rows.length < pageSize) {
-        hasMore = false;
-      }
-    }
-    
-    // ═══ Map to frontend format ═══
-    _mrifState.inventoryList = allItems.map(function(r) {
-      return { 
-        code: r.item_code, 
-        description: r.description || '', 
-        unit: r.base_unit || 'PIECE',
-        category: r.category || '',
-        location: r.location || ''
-      };
-    });
-    
+    // Shared helper — para makasama sa live sync ng bagong items (in-place update ng array)
+    _mrifState.inventoryList = await erpGetInventoryListForDropdown();
     _mrifState.inventoryLoaded = true;
-    console.log('[Inventory] ✅ COMPLETE — Loaded ' + _mrifState.inventoryList.length + ' items');
-    
+    console.log('[Inventory] ✅ Loaded ' + _mrifState.inventoryList.length + ' items');
   } catch(err) {
     console.warn('[Inventory] Failed:', err.message);
     _mrifState.inventoryList = [];
@@ -242,8 +192,14 @@ function onItemCodeInput(input) {
   }).slice(0, 15);
   
   if (matches.length === 0) {
-    dropdown.innerHTML = '<div class="erp-item-dropdown-item muted">No matches — you can type manually</div>';
+    // Baka kaka-dagdag lang ng bagong item sa system — kunin muna ang pinakabagong listahan
+    // (hindi nire-refresh ang page, hindi mawawala ang naka-encode na)
+    dropdown.innerHTML = '<div class="erp-item-dropdown-item muted">No matches — checking for newly added items…</div>';
     dropdown.classList.remove('d-none');
+    erpInventoryMissRefresh(function(added) {
+      if (added > 0) { onItemCodeInput(input); return; }
+      dropdown.innerHTML = '<div class="erp-item-dropdown-item muted">No matches — you can type manually</div>';
+    });
     return;
   }
   
