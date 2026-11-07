@@ -25,6 +25,10 @@ var _allRequests = {
   catByDoc: {},       // doc_no -> { COMPONENTS: n, ... }
   itemCat: {},        // item_code -> category
   renderToken: 0,
+  avail: {},          // doc_no -> {level:'ready'|'some'|'none'|'na', ok, some, total, lines}  (stock vs outstanding balance)
+  availAt: 0,         // kailan huling na-compute (0 = kailangan ulitin)
+  availBusy: false,
+  readySeen: null,    // doc_no na 'ready' sa huling compute (para malaman kung may BAGONG ready)
   allDocs: [],
   filteredDocs: [],
   currentPage: 1,
@@ -53,6 +57,9 @@ document.addEventListener('DOMContentLoaded', function() {
   // who is processing what: refresh every 20 s while the tab is visible
   arRefreshPrints(false);
   setInterval(function() { if (!document.hidden) { arRefreshLocks(true); arRefreshPrints(true); } }, 20000);
+  // stock availability: bagong MRR natanggap? i-check kada 1 minuto at kapag bumalik sa tab
+  setInterval(function() { if (!document.hidden) arAvailRefresh(); }, 60000);
+  document.addEventListener('visibilitychange', function() { if (!document.hidden) arAvailRefresh(); });
 });
 
 // ── "in process" locks (see doc-lock.js) ──
@@ -356,6 +363,7 @@ async function allRequestsLoad() {
       });
     }
     _allRequests.allDocs = rows;
+    _allRequests.availAt = 0;
 
     console.log('[All Requests] Loaded ' + _allRequests.allDocs.length + ' requests');
     
@@ -407,8 +415,20 @@ async function allRequestsRender() {
     await allRequestsEnsureCats(_allRequests.allDocs);
     if (tok !== _allRequests.renderToken) return;
   }
+  if (arAvailFilterValue() && !_allRequests.availAt) {
+    var tb1 = document.getElementById('allTableBody');
+    if (tb1) tb1.innerHTML = '<tr><td colspan="10" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Checking stock availability...</div></td></tr>';
+    await arLoadAvailability();
+    if (tok !== _allRequests.renderToken) return;
+  }
   allRequestsRenderNow();
   arCatCardsLoad(tok);
+  // stock availability (background) — i-refresh ang view kapag may nagbago
+  if (!_allRequests.availAt || (Date.now() - _allRequests.availAt) > 30000) {
+    arLoadAvailability().then(function(changed) {
+      if (changed && tok === _allRequests.renderToken) allRequestsRenderNow();
+    });
+  }
   // fill the Category column for the rows on screen (and the "for you" banner) if not loaded yet
   var start = (_allRequests.currentPage - 1) * _allRequests.pageSize;
   var visible = _allRequests.filteredDocs.slice(start, start + _allRequests.pageSize);
@@ -426,6 +446,13 @@ function allRequestsRenderNow() {
   var catFilter = arCatFilterValue();
   _allRequests.filteredDocs = _allRequests.allDocs.filter(function(d) {
     if (catFilter && !arDocHasCat(d.doc_no, catFilter)) return false;
+    var af = arAvailFilterValue();
+    if (af) {
+      var av = _allRequests.avail[d.doc_no];
+      if (!av) return false;
+      if (af === 'ready' && av.level !== 'ready') return false;
+      if (af === 'any' && av.level !== 'ready' && av.level !== 'some') return false;
+    }
     if (!search) return true;
     var docNo = String(d.doc_no || '').toLowerCase();
     var req = String(d.requestor || '').toLowerCase();
@@ -483,7 +510,7 @@ function allRequestsRenderNow() {
       '<td class="text-center"><span class="badge ' + typeBadge + '">' + typeUpper + '</span></td>' +
       '<td class="text-center">' + arCatCellHtml(d.doc_no) + '</td>' +
       '<td>' + erpEsc(d.jo_no || '—') + '</td>' +
-      '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span>' + arLockBadge(d.doc_no) + '</td>' +
+      '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span>' + arLockBadge(d.doc_no) + arAvailChip(d) + '</td>' +
       '<td class="text-center">' + (d.item_count || 0) + '</td>' +
       '<td class="text-center" style="white-space:nowrap;">' +
         '<button class="erp-action-btn" onclick="erpOpenPrintPreview(\'' + safeDoc + '\', \'' + typeUpper + '\')" title="Print Preview">' +
@@ -503,6 +530,7 @@ function allRequestsRenderNow() {
   });
   tbody.innerHTML = html;
   allRequestsRenderMineBanner();
+  arRenderAvailBanner();
 }
 
 function arIsMine(docNo) {
@@ -794,6 +822,7 @@ function allRequestsClearFilters() {
   document.getElementById('allTypeFilter').value = '';
   document.getElementById('allStatusFilter').value = 'PENDING,PARTIAL';
   document.getElementById('allDeptFilter').value = '';
+  var avf = document.getElementById('allAvailFilter'); if (avf) avf.value = '';
   document.getElementById('allDateFrom').value = '';
   document.getElementById('allDateTo').value = '';
   try { localStorage.removeItem('ar_cat_filter'); } catch (e) {}
@@ -889,6 +918,183 @@ function erpShowToast(msg, type) {
   if (!toastEl) { console.log('[Toast]', type, msg); return; }
   document.getElementById('erpToastBody').textContent = msg;
   bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3000 }).show();
+}
+
+// ═══════════════════════════════════════════════════════════
+// STOCK AVAILABILITY — may stock na ba para sa naka-pending / partial na MRIF?
+// Parehong rule ng Process MRIF:
+//   Walang SOF ang MRIF : available = on-hand − lahat ng naka-reserve sa SOF
+//   May SOF ang MRIF    : available = natitirang reserve ng SOF na iyon + libreng stock (max: on-hand)
+// Kinukumpara sa BALANSE ng bawat line (requested − issued). Hindi nagbabago ng kahit ano sa database.
+// Paalala: bawat MRIF ay sinusuri nang hiwalay — kung dalawang MRIF ang naghihintay sa parehong item,
+// pareho silang puwedeng lumabas na "ready" kahit hindi sapat para sa dalawa.
+// ═══════════════════════════════════════════════════════════
+(function() {
+  var st = document.createElement('style');
+  st.textContent =
+    '.ar-avail{display:inline-flex;align-items:center;gap:4px;margin-top:4px;padding:2px 8px;border-radius:999px;font-size:.68rem;font-weight:700;white-space:nowrap;cursor:help}' +
+    '.ar-avail-ready{background:#dcfce7;color:#166534;border:1px solid #86efac}' +
+    '.ar-avail-some{background:#fef9c3;color:#854d0e;border:1px solid #fde047}' +
+    '.ar-avail-pulse{animation:arAvailPulse 1.6s ease-in-out 3}' +
+    '@keyframes arAvailPulse{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.55)}50%{box-shadow:0 0 0 6px rgba(34,197,94,0)}}';
+  document.head.appendChild(st);
+})();
+
+function arAvailFilterValue() {
+  var el = document.getElementById('allAvailFilter');
+  return el ? el.value : '';
+}
+
+function allRequestsOnAvailChange() {
+  _allRequests.currentPage = 1;
+  allRequestsRender();
+}
+
+function arIsActiveMrif(d) {
+  var s = String(d.status || '').toUpperCase();
+  return String(d.doc_type || '').toUpperCase() === 'MRIF' && (s === 'PENDING' || s === 'PARTIAL');
+}
+
+function arNumFmt(n) { return Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+
+function arQuote(list) {
+  return list.map(function(c) { return '"' + String(c).replace(/"/g, '') + '"'; }).join(',');
+}
+
+// Ibinabalik true kapag may na-compute (para mag-re-render)
+async function arLoadAvailability() {
+  if (_allRequests.availBusy) return false;
+  var docs = (_allRequests.allDocs || []).filter(arIsActiveMrif);
+  if (!docs.length) {
+    _allRequests.avail = {}; _allRequests.availAt = Date.now(); _allRequests.readySeen = _allRequests.readySeen || {};
+    return true;
+  }
+  _allRequests.availBusy = true;
+  try {
+    // 1) mga line (balanse)
+    var lines = [];
+    for (var i = 0; i < docs.length; i += 60) {
+      var chunk = encodeURIComponent(arQuote(docs.slice(i, i + 60).map(function(d) { return d.doc_no; })));
+      var part = await erpFetchAll('doc_items', 'select=doc_no,item_code,requested_qty,issued_qty&doc_no=in.(' + chunk + ')&order=doc_no.asc');
+      lines = lines.concat(part || []);
+    }
+    var need = lines.filter(function(l) { return l.item_code && (Number(l.requested_qty || 0) - Number(l.issued_qty || 0)) > 0; });
+
+    // 2) on-hand + SOF reservations
+    var codeSet = {}; need.forEach(function(l) { codeSet[l.item_code] = true; });
+    var codes = Object.keys(codeSet);
+    var onHand = {}, reservedAll = {}, reservedBySof = {};
+    for (var k = 0; k < codes.length; k += 120) {
+      var cl = encodeURIComponent(arQuote(codes.slice(k, k + 120)));
+      var items = await erpFetchAll('erp_items', 'select=item_code,on_hand&item_code=in.(' + cl + ')&order=item_code.asc');
+      (items || []).forEach(function(r) { onHand[r.item_code] = Number(r.on_hand || 0); });
+      var alloc = await erpFetchAll('erp_sof_allocation_items', 'select=id,item_code,sof_no,allocated_qty,used_qty&item_code=in.(' + cl + ')&order=id.asc');
+      (alloc || []).forEach(function(r) {
+        var rem = Number(r.allocated_qty || 0) - Number(r.used_qty || 0);
+        if (rem <= 0) return;
+        reservedAll[r.item_code] = (reservedAll[r.item_code] || 0) + rem;
+        var key = r.item_code + '||' + String(r.sof_no || '').trim();
+        reservedBySof[key] = (reservedBySof[key] || 0) + rem;
+      });
+    }
+
+    // 3) per MRIF
+    var byDoc = {};
+    need.forEach(function(l) { (byDoc[l.doc_no] = byDoc[l.doc_no] || []).push(l); });
+    var result = {};
+    docs.forEach(function(d) {
+      var ls = byDoc[d.doc_no] || [];
+      if (!ls.length) { result[d.doc_no] = { level: 'na', ok: 0, some: 0, total: 0, lines: [] }; return; }
+      var sof = String(d.sof_no || d.gem_so_no || '').trim();
+      var ok = 0, some = 0, detail = [];
+      ls.forEach(function(l) {
+        var n = Number(l.requested_qty || 0) - Number(l.issued_qty || 0);
+        var oh = onHand[l.item_code] || 0;
+        var free = Math.max(oh - (reservedAll[l.item_code] || 0), 0);
+        var usable = sof ? Math.max(Math.min(oh, (reservedBySof[l.item_code + '||' + sof] || 0) + free), 0) : free;
+        if (usable >= n) ok++;
+        if (usable > 0) some++;
+        detail.push({ code: l.item_code, need: n, usable: usable });
+      });
+      var level = ok === ls.length ? 'ready' : (some > 0 ? 'some' : 'none');
+      result[d.doc_no] = { level: level, ok: ok, some: some, total: ls.length, lines: detail };
+    });
+
+    // 4) may BAGONG ready? (hindi tumutunog sa unang load)
+    var nowReady = {};
+    Object.keys(result).forEach(function(k) { if (result[k].level === 'ready') nowReady[k] = true; });
+    if (_allRequests.readySeen) {
+      var fresh = Object.keys(nowReady).filter(function(k) { return !_allRequests.readySeen[k]; });
+      if (fresh.length) arAnnounceReady(fresh);
+    }
+    _allRequests.readySeen = nowReady;
+    _allRequests.avail = result;
+    _allRequests.availAt = Date.now();
+    return true;
+  } catch (e) {
+    // Mas mabuting walang indicator kaysa maling "ready"
+    console.warn('[All Requests] stock availability unavailable:', e.message);
+    _allRequests.avail = {};
+    _allRequests.availAt = Date.now();
+    return true;
+  } finally {
+    _allRequests.availBusy = false;
+  }
+}
+
+function arAnnounceReady(docNos) {
+  try {
+    var msg = docNos.length === 1
+      ? '🟢 ' + docNos[0] + ' — may stock na! Pwede nang i-issue.'
+      : '🟢 ' + docNos.length + ' MRIF ang may stock na — pwede nang i-issue.';
+    erpShowToast(msg, 'success');
+    if (window.erpAlerts && typeof window.erpAlerts.play === 'function') window.erpAlerts.play('done');
+  } catch (e) {}
+}
+
+async function arAvailRefresh() {
+  if (!(_allRequests.allDocs || []).length) return;
+  _allRequests.availAt = 0;
+  var changed = await arLoadAvailability();
+  if (changed) allRequestsRenderNow();
+}
+
+function arAvailChip(d) {
+  if (!arIsActiveMrif(d)) return '';
+  var a = _allRequests.avail[d.doc_no];
+  if (!a || (a.level !== 'ready' && a.level !== 'some')) return '';
+  var tip = a.lines.slice(0, 8).map(function(l) {
+    return l.code + ': kailangan ' + arNumFmt(l.need) + ' · available ' + arNumFmt(l.usable);
+  }).join('\n') + (a.lines.length > 8 ? '\n… +' + (a.lines.length - 8) + ' pa' : '');
+  if (a.level === 'ready') {
+    return '<div class="ar-avail ar-avail-ready ar-avail-pulse" title="' + erpEsc('Kumpleto na ang stock para sa balanse ng request na ito.\n' + tip) + '">' +
+      '<i class="bi bi-check-circle-fill"></i> Ready to issue</div>';
+  }
+  return '<div class="ar-avail ar-avail-some" title="' + erpEsc('May stock na ang ilang items (hindi pa lahat).\n' + tip) + '">' +
+    '<i class="bi bi-box-seam"></i> ' + a.some + ' of ' + a.total + ' may stock</div>';
+}
+
+function arRenderAvailBanner() {
+  var el = document.getElementById('allAvailBanner');
+  if (!el) return;
+  var docs = (_allRequests.allDocs || []).filter(arIsActiveMrif);
+  var ready = docs.filter(function(d) { var a = _allRequests.avail[d.doc_no]; return a && a.level === 'ready'; });
+  var some = docs.filter(function(d) { var a = _allRequests.avail[d.doc_no]; return a && a.level === 'some'; });
+  if (!ready.length && !some.length) { el.style.display = 'none'; return; }
+  var mineReady = ready.filter(function(d) { return arIsMine(d.doc_no); }).length;
+  var af = arAvailFilterValue();
+  el.style.display = 'block';
+  el.style.background = ready.length ? '#f0fdf4' : '#fefce8';
+  el.style.border = '1px solid ' + (ready.length ? '#86efac' : '#fde047');
+  el.innerHTML = '<i class="bi bi-box-seam-fill me-2" style="color:' + (ready.length ? '#16a34a' : '#ca8a04') + ';"></i>' +
+    (ready.length
+      ? '<strong>' + ready.length + ' request' + (ready.length === 1 ? '' : 's') + ' ready to issue</strong> <span class="text-muted">— kumpleto na ang stock' +
+        (mineReady ? ' · <b>' + mineReady + ' sa inyo</b>' : '') + '</span>'
+      : '<strong>' + some.length + ' request' + (some.length === 1 ? '' : 's') + ' may available nang items</strong> <span class="text-muted">— hindi pa kumpleto</span>') +
+    (some.length && ready.length ? ' <span class="text-muted">· +' + some.length + ' may partial stock</span>' : '') + ' ' +
+    (af
+      ? '<a href="javascript:void(0)" onclick="document.getElementById(\'allAvailFilter\').value=\'\';allRequestsOnAvailChange()">Show all</a>'
+      : '<a href="javascript:void(0)" onclick="document.getElementById(\'allAvailFilter\').value=\'' + (ready.length ? 'ready' : 'any') + '\';allRequestsOnAvailChange()">Show ' + (ready.length ? 'ready only' : 'them') + '</a>');
 }
 
 console.log('✅ all-requests.js loaded');
