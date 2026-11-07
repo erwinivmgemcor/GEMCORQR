@@ -1599,3 +1599,24 @@ html, body {
   height: 40px !important;
   font-size: 0.9rem !important;
 }
+
+
+/* ─── Sidebar credit (bottom of every page) ─── */
+.erp-sidebar-footer {
+  flex-direction: column !important;
+  gap: 3px !important;
+}
+.erp-sidebar-credit {
+  font-size: 0.64rem !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  text-decoration: none !important;
+  letter-spacing: 0.01em !important;
+  transition: color 0.15s ease !important;
+}
+.erp-sidebar-credit:hover {
+  color: #f59e0b !important;
+  text-decoration: underline !important;
+}
+.erp-sidebar.collapsed .erp-sidebar-credit {
+  display: none !important;
+}
