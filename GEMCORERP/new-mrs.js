@@ -349,7 +349,12 @@ async function _mrsSearchItems(idx, term) {
 
     if (matches.length === 0) {
       dropdown.innerHTML = '<div class="item-search-item muted">' +
-        '<i class="bi bi-x-circle me-2"></i>No matches found</div>';
+        '<i class="bi bi-hourglass-split me-2"></i>No matches — checking for newly added items…</div>';
+      erpInventoryMissRefresh(function(added) {
+        if (added > 0) { _mrsSearchItems(idx, term); return; }
+        dropdown.innerHTML = '<div class="item-search-item muted">' +
+          '<i class="bi bi-x-circle me-2"></i>No matches found</div>';
+      });
       return;
     }
 
