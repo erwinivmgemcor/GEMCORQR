@@ -242,7 +242,9 @@ async function myRequestsRender() {
     else if (statusUpper === 'CANCELLED') statusClass = 'status-cancelled';
     
     var typeUpper = String(d.doc_type || '').toUpperCase();
-    var typeBadge = typeUpper === 'MRIF' ? 'bg-warning text-dark' : 'bg-info text-dark';
+    var typeBadgeHtml = '<span class="mrd-type ' + (typeUpper === 'MRS' ? 'mrd-type-mrs' : 'mrd-type-mrif') + '" title="' +
+      (typeUpper === 'MRS' ? 'MRS — Return (isinauli sa warehouse)' : 'MRIF — Request (hiningi sa warehouse)') + '">' +
+      typeUpper + (typeUpper === 'MRS' ? ' · RETURN' : ' · REQUEST') + '</span>';
     
     var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
     
@@ -253,7 +255,7 @@ async function myRequestsRender() {
     html += '<tr>' +
       '<td><code>' + erpEsc(d.doc_no) + '</code></td>' +
       '<td>' + erpEsc(dateStr) + (typeof mrdAgeSub === 'function' ? mrdAgeSub(d) : '') + '</td>' +
-      '<td class="text-center"><span class="badge ' + typeBadge + '">' + typeUpper + '</span></td>' +
+      '<td class="text-center">' + typeBadgeHtml + '</td>' +
       '<td>' + erpEsc(d.jo_no || '—') + '</td>' +
       '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span></td>' +
       '<td class="text-center" data-prog-doc="' + erpEsc(d.doc_no) + '">' + (typeof mrdProgressCell === 'function' ? mrdProgressCell(d) : '') + '</td>' +
