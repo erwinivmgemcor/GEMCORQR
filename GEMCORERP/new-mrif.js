@@ -354,8 +354,14 @@ function onItemCodeInput(input) {
   }).slice(0, 15);
   
   if (matches.length === 0) {
-    dropdown.innerHTML = '<div class="erp-item-dropdown-item muted">No matches — you can type manually</div>';
+    // Baka kaka-dagdag lang ng bagong item sa system — kunin muna ang pinakabagong listahan
+    // (hindi nire-refresh ang page, hindi mawawala ang naka-encode na)
+    dropdown.innerHTML = '<div class="erp-item-dropdown-item muted">No matches — checking for newly added items…</div>';
     dropdown.classList.remove('d-none');
+    erpInventoryMissRefresh(function(added) {
+      if (added > 0) { onItemCodeInput(input); return; }
+      dropdown.innerHTML = '<div class="erp-item-dropdown-item muted">No matches — you can type manually</div>';
+    });
     return;
   }
   
