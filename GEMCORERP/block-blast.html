@@ -27,11 +27,16 @@
 document.addEventListener('DOMContentLoaded', function () {
   var role = '';
   try { role = localStorage.getItem('ivm_userRole') || ''; } catch (e) {}
-  var production = role === 'production';
+  var HOME = {
+    production: ['my-requests.html', 'My Requests'],
+    procurement: ['mrr-monitoring.html', 'MRR Monitoring'],
+    finance: ['mrif-monitoring.html', 'MRIF Monitoring']
+  };
+  var home = HOME[role] || ['management-dashboard.html', 'Dashboard'];
   BlockBlast.mount(document.getElementById('bbApp'), {
     mode: 'page',
-    backHref: production ? 'my-requests.html' : 'management-dashboard.html',
-    backLabel: production ? 'My Requests' : 'Dashboard'
+    backHref: home[0],
+    backLabel: home[1]
   });
 });
 </script>
