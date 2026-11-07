@@ -68,6 +68,10 @@ document.addEventListener('DOMContentLoaded', function() {
     var list = (e && e.detail) || [];
     if (_chatState.openWith && list.some(_belongsToOpenThread)) pollThread();
   });
+  // unread pills on the Chats / Documents tabs + refresh the list when document relevance/counts change
+  window.addEventListener('erp-chat-count', _paintTabBadges);
+  window.addEventListener('erp-chat-docs', function() { loadConversations(true); _paintTabBadges(); });
+  _paintTabBadges();
   window.addEventListener('erp-avatars-updated', function() {
     _chatState.listSig = ''; _chatState.threadSig = '';
     loadConversations(true);
@@ -84,6 +88,25 @@ document.addEventListener('DOMContentLoaded', function() {
     if (_chatState.openWith) { pollThread(); _markOpenRead(); }
   });
 });
+
+function _paintTabBadges() {
+  var A = window.erpChatAlerts;
+  var c = A && A.counts ? A.counts() : { dm: 0, doc: 0 };
+  if (!document.getElementById('chatTabBadgeCss')) {
+    var st = document.createElement('style'); st.id = 'chatTabBadgeCss';
+    st.textContent = '.chat-tab-pill{display:inline-block;min-width:18px;height:18px;line-height:18px;padding:0 5px;margin-left:6px;border-radius:9px;background:#dc2626;color:#fff;font-size:.68rem;font-weight:700;text-align:center;vertical-align:middle}';
+    document.head.appendChild(st);
+  }
+  document.querySelectorAll('.chat-tab-btn').forEach(function(btn) {
+    var n = btn.getAttribute('data-tab') === 'documents' ? c.doc : c.dm;
+    var pill = btn.querySelector('.chat-tab-pill');
+    if (n > 0) {
+      if (!pill) { pill = document.createElement('span'); pill.className = 'chat-tab-pill'; btn.appendChild(pill); }
+      var t = n > 99 ? '99+' : String(n);
+      if (pill.textContent !== t) pill.textContent = t;
+    } else if (pill) pill.remove();
+  });
+}
 
 function _belongsToOpenThread(m) {
   if (!m || !_chatState.openWith) return false;
@@ -245,7 +268,13 @@ async function loadDocumentThreads(silent) {
   (messagesRes || []).forEach(function(m) {
     if (!m.doc_no) return;
     if (!threadMap[m.doc_no]) threadMap[m.doc_no] = { docNo: m.doc_no, docType: m.doc_type || '', lastMsg: m, unread: 0 };
-    if (m.sender !== me && !m.is_read) threadMap[m.doc_no].unread++;
+    if (m.sender !== me) {
+      var A = window.erpChatAlerts;
+      if (A && A.isDocRelevant) {
+        // per-user read pointer (the shared is_read flag is wrong for threads with 2+ readers)
+        if (A.isDocRelevant(m.doc_no, m.doc_type) && new Date(m.created_at) > new Date(A.docReadTs(m.doc_no))) threadMap[m.doc_no].unread++;
+      } else if (!m.is_read) threadMap[m.doc_no].unread++;
+    }
   });
   var threads = Object.keys(threadMap).map(function(k) { return threadMap[k]; });
   threads.sort(function(a, b) {
@@ -439,6 +468,10 @@ async function loadThread() {
     if (token !== _chatState.openType + '|' + _chatState.openWith) return;   // user switched meanwhile
     _chatState.msgs = []; _mergeMsgs(rows);
     _renderThread(true);
+    if (_chatState.openType === 'doc' && !document.hidden && window.erpChatAlerts && window.erpChatAlerts.markDocRead) {
+      window.erpChatAlerts.markDocRead(_chatState.openWith, _chatState.lastTs || '');
+      loadConversations(true);
+    }
   } catch(err) {
     console.error('[Chat] Load thread failed:', err);
     document.getElementById('chatMessages').innerHTML =
@@ -678,6 +711,7 @@ async function markConversationRead(otherUser) {
 }
 
 async function markDocThreadRead(docNo) {
+  try { if (window.erpChatAlerts && window.erpChatAlerts.markDocRead) window.erpChatAlerts.markDocRead(docNo, _chatState.lastTs || ''); } catch(e) {}
   try {
     await fetch(erpUrl('messages?doc_no=eq.' + encodeURIComponent(docNo) +
                        '&is_read=eq.false&sender=not.eq.' + encodeURIComponent(_chatState.currentUser)), {
@@ -809,6 +843,7 @@ function erpEsc(s) {
 function checkUrlParams() {
   var params = new URLSearchParams(window.location.search);
   var docNo = params.get('doc'), docType = params.get('type'), user = params.get('user');
+  if (!docNo && !user && params.get('tab') === 'documents') { switchChatTab('documents'); return; }
   if (docNo) {
     switchChatTab('documents');
     setTimeout(function() { openDocConversation(docNo, docType || ''); }, 400);
