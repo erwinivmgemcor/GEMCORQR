@@ -244,7 +244,7 @@
         },
         {
           id: 'new-mrif-group',
-          label: 'New MRIF',
+          label: 'New MRIF — Request',
           icon: 'bi-box-arrow-up-right',
           roles: ['production'],
           type: 'submenu',
@@ -267,7 +267,7 @@
         },
         {
           id: 'new-mrs-group',
-          label: 'New MRS',
+          label: 'New MRS — Return',
           icon: 'bi-arrow-counterclockwise',
           roles: ['production'],
           type: 'submenu',
