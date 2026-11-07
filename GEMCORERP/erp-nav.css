@@ -1620,3 +1620,9 @@ html, body {
 .erp-sidebar.collapsed .erp-sidebar-credit {
   display: none !important;
 }
+
+/* ── Production: tell MRIF (request) and MRS (return) apart at a glance ── */
+.erp-sidebar-submenu-parent[data-nav-id="new-mrif-group"] > i:first-child { color: #d97706 !important; }
+.erp-sidebar-submenu-parent[data-nav-id="new-mrs-group"]  > i:first-child { color: #7c3aed !important; }
+.erp-sidebar-submenu:has([data-nav-id="new-mrif-group"]) { border-left: 3px solid #d97706; }
+.erp-sidebar-submenu:has([data-nav-id="new-mrs-group"])  { border-left: 3px solid #7c3aed; }
