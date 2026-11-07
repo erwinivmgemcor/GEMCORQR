@@ -94,7 +94,7 @@
     var ok = null;
     for (var i = 0; i < list.length; i++) { if (allowed(list[i])) { ok = list[i]; break; } }
     if (ok) return '<a class="ab-page" href="' + esc(ok.href) + '"><i class="bi bi-box-arrow-up-right"></i>' + esc(CHIP_LABEL[ref] || ok.label) + '</a>';
-    return '<span class="ab-page is-off" title="Hindi kasama sa access ng role mo"><i class="bi bi-lock"></i>' + esc(CHIP_LABEL[ref] || list[0].label) + '</span>';
+    return '<span class="ab-page is-off" title="Not available for your role"><i class="bi bi-lock"></i>' + esc(CHIP_LABEL[ref] || list[0].label) + '</span>';
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -110,72 +110,72 @@
 
   var FLOWS = [
     {
-      id: 'p2w', icon: 'bi-box-arrow-in-right', label: 'Production → Warehouse', sub: 'Humihingi at nagbabalik',
-      intro: 'Ang production ang nagsisimula: humihingi ng materyales gamit ang MRIF, at nagbabalik ng sobra gamit ang MRS.',
+      id: 'p2w', icon: 'bi-box-arrow-in-right', label: 'Production → Warehouse', sub: 'Requests and returns',
+      intro: 'Production starts the cycle: it requests materials with an MRIF and returns surplus with an MRS.',
       lanes: [
-        { title: 'Humihingi ng materyales (MRIF)', steps: [
-          { a: 'prod', t: 'Gumawa ng MRIF', d: 'Ilagay ang JO number at kusang lalabas ang client at project. Kung walang JO, gamitin ang Manual (No JO). Piliin ang items gamit ang auto-suggest at ilagay ang qty.', pg: ['new-mrif', 'new-mrif-manual'] },
-          { a: 'prod', t: 'I-submit', d: 'Pwedeng lagyan ng SOF number kung ang stock ay naka-reserve para sa isang sales order. Hindi madodoble ang request kahit ma-double click.' },
-          { a: 'sys',  t: 'Pumasok sa warehouse queue', d: 'PENDING ang status. Lalabas ito sa All Requests ng warehouse at madadagdagan ang badge sa sidebar.', pg: ['all-requests'] },
-          { a: 'prod', t: 'Subaybayan ang status', d: 'Makikita ang Pending, Partial o Completed sa My Requests. Pwedeng mag-message sa warehouse tungkol sa request.', pg: ['my-requests', 'chat'] }
+        { title: 'Requesting materials (MRIF)', steps: [
+          { a: 'prod', t: 'Create an MRIF', d: 'Enter the JO number and the client and project fill in automatically. If there is no JO, use Manual (No JO). Select items with auto-suggest and enter the quantities.', pg: ['new-mrif', 'new-mrif-manual'] },
+          { a: 'prod', t: 'Submit', d: 'Optionally add an SOF number when the stock is reserved for a sales order. Double-clicking will not create a duplicate request.' },
+          { a: 'sys',  t: 'Enters the warehouse queue', d: 'The status is PENDING. The request appears in the warehouse All Requests list and the sidebar badge updates.', pg: ['all-requests'] },
+          { a: 'prod', t: 'Track the status', d: 'Follow Pending, Partial or Completed in My Requests, and message the warehouse about the request if needed.', pg: ['my-requests', 'chat'] }
         ] },
-        { title: 'Nagbabalik ng sobra (MRS)', steps: [
-          { a: 'prod', t: 'Gumawa ng MRS', d: 'Piliin ang With JO o Manual. Ang Qty Returned lang ang kailangang ilagay.', pg: ['new-mrs', 'new-mrs-manual'] },
-          { a: 'sys',  t: 'PENDING sa warehouse', d: 'Hihintayin ang pag-verify ng warehouse sa aktwal na bumalik na items.' },
-          { a: 'prod', t: 'Tingnan ang resulta', d: 'Kapag na-verify na, makikita ang bagong status sa My Requests.', pg: ['my-requests'] }
+        { title: 'Returning surplus (MRS)', steps: [
+          { a: 'prod', t: 'Create an MRS', d: 'Choose With JO or Manual. Only the Qty Returned needs to be entered.', pg: ['new-mrs', 'new-mrs-manual'] },
+          { a: 'sys',  t: 'Pending warehouse verification', d: 'The warehouse verifies the items that were actually returned.' },
+          { a: 'prod', t: 'Review the result', d: 'Once verified, the updated status appears in My Requests.', pg: ['my-requests'] }
         ] }
       ]
     },
     {
-      id: 'w2p', icon: 'bi-box-arrow-up-right', label: 'Warehouse → Production', sub: 'Pag-process at paglabas',
-      intro: 'Ito ang ginagawa ng warehouse sa bawat request: bantayan ang stock, ilabas ang materyales, at itala ang bawat galaw.',
+      id: 'w2p', icon: 'bi-box-arrow-up-right', label: 'Warehouse → Production', sub: 'Processing and issuing',
+      intro: 'What the warehouse does with each request: protect stock levels, issue materials and record every movement.',
       status: true,
       lanes: [
-        { title: 'Paglabas ng materyales (MRIF)', steps: [
-          { a: 'wh',  t: 'Buksan ang request', d: 'Nasa All Requests ang lahat ng bukas na MRIF at MRS. Makikita rin kung aling kategorya (Components, Consumables, Fabmat) ang hawak ng bawat staff.', pg: ['all-requests'] },
-          { a: 'sys', t: 'I-lock ang request', d: 'Lalabas ang “in process by…” para hindi sabay na maproseso ng dalawang staff. Kusang nawawala ang lock kapag natapos, umalis, o nawalan ng koneksyon.' },
-          { a: 'wh',  t: 'I-verify ang items', d: 'I-scan ang barcode o i-tick ang item, at ilagay ang qty na ilalabas. Kung mali ang unit na inilagay ng production, pwede itong ayusin dito.', pg: ['Process MRIF'] },
-          { a: 'sys', t: 'Stock check', d: 'Hindi pwedeng lumampas sa available. Ang stock na naka-reserve sa SOF ay hindi magagamit ng MRIF na walang SOF.' },
-          { a: 'sys', t: 'Itala sa ledger', d: 'Isang buong transaksyon: bawas sa stock, tala sa stock ledger at update sa nagamit na SOF. Kapag pumalya, walang nasave na kalahati.' },
-          { a: 'wh',  t: 'Status at print', d: 'Pending → Partial → Completed. Pwedeng i-print ang MRIF, at nakatala kung sino ang nag-print.', pg: ['mrif-list'] }
+        { title: 'Issuing materials (MRIF)', steps: [
+          { a: 'wh',  t: 'Open the request', d: 'All open MRIFs and MRSs are listed in All Requests, including which staff member handles each category (Components, Consumables, Fabmat).', pg: ['all-requests'] },
+          { a: 'sys', t: 'Lock the request', d: 'An “in process by…” lock prevents two staff members from processing the same request. It releases automatically when the work is finished, abandoned or the connection is lost.' },
+          { a: 'wh',  t: 'Verify the items', d: 'Scan the barcode or tick the item and enter the quantity to issue. If production entered the wrong unit, it can be corrected here.', pg: ['Process MRIF'] },
+          { a: 'sys', t: 'Stock check', d: 'The issued quantity cannot exceed what is available. Stock reserved for an SOF is not available to an MRIF without an SOF.' },
+          { a: 'sys', t: 'Record in the ledger', d: 'One complete transaction: stock is deducted, the movement is written to the stock ledger and SOF usage is updated. If anything fails, nothing is partially saved.' },
+          { a: 'wh',  t: 'Status and printing', d: 'Pending → Partial → Completed. The MRIF can be printed, and each print is logged by user.', pg: ['mrif-list'] }
         ] },
-        { title: 'Pagtanggap ng ibinalik (MRS)', steps: [
-          { a: 'wh',  t: 'Buksan ang MRS', d: 'Lalabas ito sa All Requests kasama ng mga MRIF.', pg: ['all-requests', 'mrs-list'] },
-          { a: 'wh',  t: 'I-verify ang aktwal na bumalik', d: 'Tingnan ang pisikal na items at ilagay ang actual returned qty. Hindi ito pwedeng lumampas sa hiniling na ibalik.', pg: ['Process MRS'] },
-          { a: 'sys', t: 'Kusang status', d: 'Kinukuwenta ang status ayon sa na-verify na qty, at makikita agad ito ng production.' }
+        { title: 'Receiving returns (MRS)', steps: [
+          { a: 'wh',  t: 'Open the MRS', d: 'It appears in All Requests alongside MRIFs.', pg: ['all-requests', 'mrs-list'] },
+          { a: 'wh',  t: 'Verify what came back', d: 'Check the physical items and enter the actual returned quantity, which cannot exceed the quantity requested.', pg: ['Process MRS'] },
+          { a: 'sys', t: 'Automatic status', d: 'The status is calculated from the verified quantity and is visible to production immediately.' }
         ] }
       ]
     },
     {
-      id: 'proc', icon: 'bi-cart-check', label: 'Procurement', sub: 'Mula reorder hanggang pagtanggap',
-      intro: 'Mula sa items na paubos na, hanggang sa pagdating ng delivery at pagpasok nito sa stock.',
+      id: 'proc', icon: 'bi-cart-check', label: 'Procurement', sub: 'From reorder to receiving',
+      intro: 'From items running low to the delivery arriving and entering stock.',
       lanes: [
         { title: 'Reorder → PRF → MRR', steps: [
-          { a: 'sys',  t: 'Lalabas sa Needs', d: 'Items na bumaba sa buffer, bawas na ang nasa order. Ang net needed lang ang ipapa-PRF.', pg: ['replenishment'] },
-          { a: 'wh',   t: 'Gumawa ng PRF', d: 'Pumili ng items. Hanggang 30 items bawat PRF, at kusang hinahati ayon sa category. Kusa ring may PRF number.', pg: ['replenishment'] },
-          { a: 'wh',   t: 'Noted by at Approved by', d: 'May default na pangalan na nakalagay; pwedeng palitan bago i-print.' },
-          { a: 'proc', t: 'Subaybayan sa PRF Monitor', d: 'Read-only para sa procurement: status ng PRF, PO data, at kung aling items ang bukas pa.', pg: ['prf-monitor', 'replenishment'] },
-          { a: 'wh',   t: 'Tanggapin sa MRR', d: 'Ilagay ang PO, SOF, PRF, vendor, DR number at petsa ng pagtanggap.', pg: ['New MRR', 'mrr-list'] },
-          { a: 'proc', t: 'Makita ang resulta', d: 'Tumataas ang on-hand sa ledger, at kita agad ng procurement ang tinanggap sa MRR Monitoring.', pg: ['mrr-monitoring', 'sof-tracker'] }
+          { a: 'sys',  t: 'Appears under Needs', d: 'Items below their buffer level, net of what is already on order. Only the net requirement goes onto a PRF.', pg: ['replenishment'] },
+          { a: 'wh',   t: 'Create a PRF', d: 'Select the items. Each PRF holds up to 30 items and is split by category automatically, with its own PRF number.', pg: ['replenishment'] },
+          { a: 'wh',   t: 'Noted by and Approved by', d: 'Default names are prefilled and can be changed before printing.' },
+          { a: 'proc', t: 'Track in PRF Monitor', d: 'Read-only for procurement: PRF status, PO data and which items are still open.', pg: ['prf-monitor', 'replenishment'] },
+          { a: 'wh',   t: 'Receive on an MRR', d: 'Enter the PO, SOF, PRF, vendor, DR number and receiving date.', pg: ['New MRR', 'mrr-list'] },
+          { a: 'proc', t: 'See the result', d: 'On-hand rises in the ledger, and procurement can see the receipt in MRR Monitoring.', pg: ['mrr-monitoring', 'sof-tracker'] }
         ] }
       ]
     },
     {
-      id: 'fin', icon: 'bi-cash-coin', label: 'Finance', sub: 'Gastos at presyo',
-      intro: 'Bawat galaw ng stock ay may halaga, kaya malinaw ang gastos ng bawat project.',
+      id: 'fin', icon: 'bi-cash-coin', label: 'Finance', sub: 'Costing and pricing',
+      intro: 'Every stock movement carries a value, so the cost of each project is clear.',
       lanes: [
-        { title: 'Gastos ng project at pagbabago ng presyo', steps: [
-          { a: 'sys', t: 'Bawat galaw, may halaga', d: 'Ang labas at pasok ng stock ay naka-tala sa ledger kasama ang unit cost.' },
-          { a: 'fin', t: 'Project Costing', d: 'Makikita ang gastos ng bawat project, ang items na bumuo nito, at ang mga galaw. View-only ito.', pg: ['project-costing'] },
-          { a: 'fin', t: 'MRIF Monitoring', d: 'Bantayan ang mga issuance ng materyales ayon sa petsa, project at department.', pg: ['mrif-monitoring'] },
-          { a: 'wh',  t: 'Bulk Price Update', d: 'Mag-upload ng bagong presyo sa Stock Monitor. May preview, dahilan, at Undo pagkatapos.', pg: ['stock-monitor'] },
-          { a: 'sys', t: 'Ledger Cost Freeze', d: 'Kapag nagbago ang presyo, mananatili sa lumang presyo ang mga lumang transaksyon at project. Ang bagong presyo ay para sa susunod na galaw.' }
+        { title: 'Project costing and price changes', steps: [
+          { a: 'sys', t: 'Every movement has a value', d: 'Stock in and out is recorded in the ledger together with the unit cost.' },
+          { a: 'fin', t: 'Project Costing', d: 'View the cost of each project, the items behind it and the movements. View-only.', pg: ['project-costing'] },
+          { a: 'fin', t: 'MRIF Monitoring', d: 'Monitor material issuances by date, project and department.', pg: ['mrif-monitoring'] },
+          { a: 'wh',  t: 'Bulk Price Update', d: 'Upload new prices in Stock Monitor, with a preview, a reason and an Undo afterwards.', pg: ['stock-monitor'] },
+          { a: 'sys', t: 'Ledger Cost Freeze', d: 'When a price changes, past transactions and projects keep the old price. The new price applies only to later movements.' }
         ] }
       ]
     }
   ];
 
-  var STATUS_NOTE = 'Mga status ng MRIF:';
+  var STATUS_NOTE = 'MRIF statuses:';
   var flowTabs = $('#abFlowTabs');
   var flowPanel = $('#abFlowPanel');
   var flowIdx = 0;
@@ -219,7 +219,7 @@
         '<span class="ab-status-pill" style="--k:0">PENDING</span><i class="bi bi-arrow-right"></i>' +
         '<span class="ab-status-pill" style="--k:1">PARTIAL</span><i class="bi bi-arrow-right"></i>' +
         '<span class="ab-status-pill" style="--k:2">COMPLETED</span>' +
-        '<span style="margin-left:6px">o</span><span class="ab-status-pill cx">CANCELLED</span></div>';
+        '<span style="margin-left:6px">or</span><span class="ab-status-pill cx">CANCELLED</span></div>';
     }
     flowPanel.setAttribute('aria-labelledby', 'abTab' + flowIdx);
     flowPanel.innerHTML = html;
@@ -227,7 +227,7 @@
 
   renderTabs();
   onceVisible($('#flow'), function () { flowStarted = true; renderFlow(); }, 0.2);
-  // nav may finish a moment after this script — refresh links once it is ready
+  // the sidebar may finish a moment after this script, so refresh links once it is ready
   window.addEventListener('load', function () { if (flowStarted) { /* keep animation state; only re-link */ relinkFlow(); } });
   function relinkFlow() {
     var reg = navRegistry();
@@ -247,56 +247,56 @@
   // FAQS
   // ═══════════════════════════════════════════════════════════
   var FAQ_CATS = [
-    { id: 'all',    l: 'Lahat' },
+    { id: 'all',    l: 'All' },
     { id: 'req',    l: 'Requests' },
-    { id: 'edit',   l: 'Edit at correction' },
-    { id: 'stock',  l: 'Stock at gastos' },
-    { id: 'access', l: 'Access at tools' }
+    { id: 'edit',   l: 'Edits and corrections' },
+    { id: 'stock',  l: 'Stock and costing' },
+    { id: 'access', l: 'Access and tools' }
   ];
   var FAQS = [
-    { c: 'req', q: 'Paano gumawa ng MRIF kung walang JO number?',
-      a: '<p>Sa sidebar, buksan ang <b>New MRIF</b> at piliin ang <b>Manual (No JO)</b>. Ilagay mo mismo ang client, project at items.</p><p>Ganito rin sa MRS: piliin ang <b>Manual (No JO)</b> sa ilalim ng New MRS.</p>' },
-    { c: 'req', q: 'Ano ang ibig sabihin ng Pending, Partial, Completed at Cancelled?',
-      a: '<ul><li><b>Pending</b>: wala pang naibibigay ang warehouse.</li><li><b>Partial</b>: may naibigay na, pero kulang pa ang ibang items.</li><li><b>Completed</b>: kumpleto na ang naibigay.</li><li><b>Cancelled</b>: kinansela dahil mali o duplicate. Hindi binubura ang record.</li></ul>' },
-    { c: 'req', q: 'Paano magbalik ng sobrang materyales?',
-      a: '<ol><li>Buksan ang <b>New MRS</b> (With JO o Manual).</li><li>Piliin ang items at ilagay ang <b>Qty Returned</b>.</li><li>I-submit. Ang warehouse ang magve-verify ng aktwal na bumalik.</li></ol><p class="ab-tip">Hindi pwedeng lumampas ang na-verify na qty sa hiniling mong ibalik.</p>' },
-    { c: 'req', q: 'May nakalagay na “in process by…” at hindi ko mabuksan ang request. Bakit?',
-      a: '<p>May ibang warehouse staff na nagpoproseso ng request na iyon. Ito ay para hindi magkasabay ang dalawang tao at hindi madoble ang labas ng stock.</p><p>Kusang nawawala ang lock kapag natapos o umalis ang staff, o kapag 5 minuto na siyang walang signal. Subukan ulit pagkatapos.</p>' },
-    { c: 'req', q: 'Bakit sinasabing kulang ang stock kahit may on-hand sa Stock Monitor?',
-      a: '<p>Posibleng naka-reserve ang stock para sa isang SOF (sales order). Ang MRIF na walang SOF ay makakagamit lang ng <b>on-hand na bawas ang naka-reserve</b>.</p><p>Gumamit ng MRIF na may SOF number kung para sa SOF na iyon ang kukunin.</p>' },
-    { c: 'req', q: 'Paano gumawa ng PRF?',
-      a: '<ol><li>Buksan ang <b>Replenishment &amp; PRFs</b>, tab na <b>Needs</b>.</li><li>Makikita ang items na bumaba sa buffer, bawas na ang nasa order.</li><li>Piliin ang items at i-click ang Create PRF.</li><li>Hanggang 30 items bawat PRF. Kusa itong hahatiin ayon sa category at may sariling PRF number.</li></ol><p>Subaybayan ang status sa tab na <b>PRFs</b>.</p>' },
+    { c: 'req', q: 'How do I create an MRIF without a JO number?',
+      a: '<p>In the sidebar, open <b>New MRIF</b> and choose <b>Manual (No JO)</b>. Enter the client, project and items yourself.</p><p>The same applies to returns: choose <b>Manual (No JO)</b> under New MRS.</p>' },
+    { c: 'req', q: 'What do Pending, Partial, Completed and Cancelled mean?',
+      a: '<ul><li><b>Pending</b>: the warehouse has not issued anything yet.</li><li><b>Partial</b>: some items have been issued, but others are still outstanding.</li><li><b>Completed</b>: everything requested has been issued.</li><li><b>Cancelled</b>: cancelled because it was created in error or duplicated. The record is kept.</li></ul>' },
+    { c: 'req', q: 'How do I return surplus materials?',
+      a: '<ol><li>Open <b>New MRS</b> (With JO or Manual).</li><li>Select the items and enter the <b>Qty Returned</b>.</li><li>Submit. The warehouse verifies what was actually returned.</li></ol><p class="ab-tip">The verified quantity cannot exceed the quantity you asked to return.</p>' },
+    { c: 'req', q: 'A request shows “in process by…” and I cannot open it. Why?',
+      a: '<p>Another warehouse staff member is processing that request. This prevents two people from working on it at once and issuing stock twice.</p><p>The lock releases automatically when they finish or leave, or after 5 minutes without activity. Please try again shortly.</p>' },
+    { c: 'req', q: 'Why is stock reported as insufficient when Stock Monitor shows on-hand quantity?',
+      a: '<p>The stock may be reserved for an SOF (sales order). An MRIF without an SOF can only use <b>on-hand minus reserved stock</b>.</p><p>Use an MRIF that carries the SOF number if the material is intended for that SOF.</p>' },
+    { c: 'req', q: 'How do I create a PRF?',
+      a: '<ol><li>Open <b>Replenishment &amp; PRFs</b> and go to the <b>Needs</b> tab.</li><li>Review the items that fell below their buffer, net of what is already on order.</li><li>Select the items and click Create PRF.</li><li>Each PRF holds up to 30 items. It is split by category automatically and receives its own PRF number.</li></ol><p>Track its progress in the <b>PRFs</b> tab.</p>' },
 
-    { c: 'edit', q: 'Paano mag-edit ng request na naipasa ko na? (Production)',
-      a: '<ol><li>Sa <b>My Requests</b>, hanapin ang request na <b>Pending</b> at i-click ang <b>Request Edit</b>.</li><li>Isulat ang dahilan at i-confirm.</li><li>Hintayin ang approval ng warehouse. Lalabas ang <b>Edit Pending Approval</b>.</li><li>Kapag na-approve, lalabas ang <b>Edit Now</b>. Baguhin ang items o qty at i-save.</li></ol><p class="ab-tip">Walang pag-edit habang Partial o Completed na ang request. Tingnan ang susunod na tanong.</p>' },
-    { c: 'edit', q: 'Na-reject ang edit request ko. Ano ang gagawin?',
-      a: '<p>Ilapit ang cursor sa button na <b>Rejected — Request Again</b> para makita ang dahilan ng warehouse. Ayusin ang paliwanag at i-click ito para magpasa ulit.</p>' },
-    { c: 'edit', q: 'Partial o Completed na ang request pero may mali. May paraan pa ba?',
-      a: '<p>Hindi na pwedeng i-edit ng production ang Partial at Completed. Mag-message sa warehouse (Messages) at sabihin ang mali.</p><ul><li><b>Pending o Partial</b>: pwedeng i-edit nang direkta ng warehouse. Kailangan ng dahilan at may audit trail.</li><li><b>Completed na MRIF</b>: may Correction mode. Item code, description at unit lang ang pwedeng ituwid; hindi pwedeng baguhin ang qty o magdagdag o magtanggal ng item.</li></ul><p>Kung sobra ang naibigay, gumawa ng <b>MRS</b> para maibalik ito.</p>' },
-    { c: 'edit', q: 'Nagawa ang MRIF nang mali o na-duplicate. Paano burahin?',
-      a: '<p>Hindi binubura ang MRIF. Ang warehouse staff o admin ay mag-c-<b>Cancel MRIF</b> na may dahilan, at magiging <b>CANCELLED</b> ito.</p><p class="ab-tip">Pwede lang mag-cancel kung wala pang naibibigay sa request.</p>' },
-    { c: 'edit', q: 'May mali sa MRR (maling qty, vendor o DR number). Paano ayusin?',
-      a: '<p>Sa <b>MRR List</b>, ang warehouse ay may dalawang pagpipilian:</p><ul><li><b>Edit</b> para itama ang detalye o qty.</li><li><b>Void</b> kung dapat tanggalin ang buong MRR. Magiging CANCELLED ito.</li></ul><p>Ang database ang nag-aayos ng stock at SOF nang buo, kaya walang kalahating nasave kapag pumalya.</p>' },
-    { c: 'edit', q: 'Mali ang unit na inilagay ng production. Paano ituwid?',
-      a: '<p>Habang nagpoproseso ng MRIF o MRS, sa popup ng pag-verify ng qty ay may <b>Unit</b> dropdown. Piliin ang tamang unit at i-save. Nakatala ang pagbabago.</p>' },
+    { c: 'edit', q: 'How do I edit a request I have already submitted? (Production)',
+      a: '<ol><li>In <b>My Requests</b>, find the <b>Pending</b> request and click <b>Request Edit</b>.</li><li>Enter the reason and confirm.</li><li>Wait for warehouse approval. The button reads <b>Edit Pending Approval</b>.</li><li>Once approved, <b>Edit Now</b> appears. Change the items or quantities and save.</li></ol><p class="ab-tip">A request cannot be edited once it is Partial or Completed. See the next questions for those cases.</p>' },
+    { c: 'edit', q: 'My edit request was rejected. What should I do?',
+      a: '<p>Hover over the <b>Rejected — Request Again</b> button to see the warehouse’s reason. Clarify your explanation and click the button to submit a new request.</p>' },
+    { c: 'edit', q: 'The request is Partial or Completed but contains a mistake. Can it still be corrected?',
+      a: '<p>Production can no longer edit Partial or Completed requests. Message the warehouse (Messages) and describe the error.</p><ul><li><b>Pending or Partial</b>: the warehouse can edit the request directly. A reason is required and an audit record is kept.</li><li><b>Completed MRIF</b>: Correction mode is available. Only the item code, description and unit can be corrected. Quantities cannot be changed and items cannot be added or removed.</li></ul><p>If too much was issued, create an <b>MRS</b> to return the excess.</p>' },
+    { c: 'edit', q: 'An MRIF was created by mistake or duplicated. How do I remove it?',
+      a: '<p>An MRIF is never deleted. Warehouse staff or an admin uses <b>Cancel MRIF</b> with a reason, and the document becomes <b>CANCELLED</b>.</p><p class="ab-tip">Cancelling is only possible while nothing has been issued against the request.</p>' },
+    { c: 'edit', q: 'There is an error on an MRR (wrong quantity, vendor or DR number). How do I fix it?',
+      a: '<p>In the <b>MRR List</b>, the warehouse has two options:</p><ul><li><b>Edit</b> to correct the details or quantities.</li><li><b>Void</b> to remove the whole MRR. It becomes CANCELLED.</li></ul><p>The database adjusts stock and SOF as a single unit, so a failure never leaves a partial change.</p>' },
+    { c: 'edit', q: 'Production entered the wrong unit. How do I correct it?',
+      a: '<p>While processing an MRIF or MRS, the quantity verification pop-up includes a <b>Unit</b> dropdown. Select the correct unit and save. The change is recorded.</p>' },
 
-    { c: 'stock', q: 'Nagbago ang presyo ng item. Magbabago ba ang gastos ng mga lumang project?',
-      a: '<p>Hindi. Sa <b>Ledger Cost Freeze</b>, kapag nagbago ang unit cost, naitatala muna ang lumang presyo sa mga lumang transaksyon. Mananatili ang gastos ng lumang project, at ang bagong presyo ay para na lang sa susunod na galaw.</p><p class="ab-tip">Ang item na walang presyo dati ay lalapat ang unang presyo sa mga lumang transaksyon nito.</p>' },
-    { c: 'stock', q: 'Nagkamali ako sa Bulk Price Update. Paano ibalik?',
-      a: '<p>Sa <b>Stock Monitor</b>, buksan ang Bulk Price Update at hanapin ang batch sa <b>Mga nakaraang batch</b>. I-click ang <b>Undo</b> sa batch na iyon.</p><p class="ab-tip">Ang item na na-edit ulit pagkatapos ng batch ay hindi na ginagalaw ng Undo.</p>' },
-    { c: 'stock', q: 'Paano gawin ang Inventory Count?',
-      a: '<ol><li>Sa <b>Inventory Count</b>, gumawa ng bagong session (buong bilang o SPOT count).</li><li>Bilangin ang items gamit ang scan o manual input.</li><li>I-submit para sa review. Makikita ang variance, kasama ang mga galaw pagkatapos ng bilang.</li><li>Ang approver ang mag-aapprove o magre-reject. Pwedeng i-reopen o i-cancel ang session.</li></ol>' },
+    { c: 'stock', q: 'An item’s price changed. Will the cost of past projects change?',
+      a: '<p>No. With <b>Ledger Cost Freeze</b>, when a unit cost changes, the previous price is first recorded on the item’s past transactions. Past project costs stay the same, and the new price applies only to later movements.</p><p class="ab-tip">If an item previously had no price, its first price also applies to its earlier transactions.</p>' },
+    { c: 'stock', q: 'I made a mistake in a Bulk Price Update. How do I reverse it?',
+      a: '<p>In <b>Stock Monitor</b>, open Bulk Price Update and find the batch under <b>Previous batches</b>. Click <b>Undo</b> on that batch.</p><p class="ab-tip">Undo does not touch an item that was edited again after the batch was applied.</p>' },
+    { c: 'stock', q: 'How do I run an Inventory Count?',
+      a: '<ol><li>In <b>Inventory Count</b>, create a new session (full count or SPOT count).</li><li>Count the items by scanning or manual entry.</li><li>Submit for review. The variance is shown, taking movements after the count into account.</li><li>The approver approves or rejects the count. A session can be reopened or cancelled.</li></ol>' },
 
-    { c: 'access', q: 'Bakit hindi ko makita ang ibang pages?',
-      a: '<p>Ayon sa role ang menu at access:</p><ul><li><b>Production</b>: My Requests, New MRIF at MRS, Messages, Project Costing, Break Room.</li><li><b>Warehouse</b>: halos lahat ng operations pages.</li><li><b>Procurement</b>: PRF Monitor, Replenishment (PRFs), MRR Monitoring, SOF Tracker. View-only.</li><li><b>Finance</b>: MRIF Monitoring at Project Costing. View-only.</li><li><b>Admin</b>: dagdag ang User Management, Supabase Admin, Warehouse KPI at System Health.</li></ul>' },
-    { c: 'access', q: 'Paano palitan ang profile photo o password?',
-      a: '<p>I-click ang pangalan mo sa kanang itaas, tapos <b>Settings</b>. Doon mo mapapalitan ang litrato, password at preferences.</p>' },
-    { c: 'access', q: 'Paano i-install ang system sa phone o desktop?',
-      a: '<p>Gumagana ang GEMCOR ERP bilang app. Kapag may lumabas na install prompt, i-click ito. Kung wala, gamitin ang menu ng browser: <b>Install app</b> o <b>Add to Home screen</b>.</p>' },
-    { c: 'access', q: 'Mabagal o walang internet. Ano ang mangyayari?',
-      a: '<p>Makikita sa taas kung <b>Connected</b> o <b>Offline</b> ang system. Kapag mabagal o offline, lalabas ang “Maglaro muna” para sa Break Room.</p><p class="ab-tip">Kailangan ng internet para mag-save dahil nasa Supabase ang data. Hintayin ang success message bago isara ang page.</p>' },
-    { c: 'access', q: 'Ano ang mga keyboard shortcut?',
-      a: '<ul><li><kbd>Ctrl</kbd>+<kbd>K</kbd> (o <kbd>⌘</kbd>+<kbd>K</kbd>): global search</li><li><kbd>Alt</kbd>+<kbd>A</kbd>: magdagdag ng item row</li><li><kbd>Enter</kbd>: susunod na field, at bagong row pagkatapos ng huli</li><li><kbd>Ctrl</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd>: parehong column, naunang o susunod na row</li><li><kbd>Alt</kbd>+<kbd>Delete</kbd>: alisin ang kasalukuyang row</li><li><kbd>Ctrl</kbd>+<kbd>S</kbd>: submit</li><li><kbd>Ctrl</kbd>+<kbd>/</kbd>: ipakita ang listahan ng shortcuts</li></ul>' }
+    { c: 'access', q: 'Why can’t I see some pages?',
+      a: '<p>Menus and access depend on your role:</p><ul><li><b>Production</b>: My Requests, New MRIF and MRS, Messages, Project Costing, Break Room.</li><li><b>Warehouse</b>: all operational pages.</li><li><b>Procurement</b>: PRF Monitor, Replenishment (PRFs), MRR Monitoring, SOF Tracker. View-only.</li><li><b>Finance</b>: MRIF Monitoring and Project Costing. View-only.</li><li><b>Admin</b>: additionally User Management, Supabase Admin, Warehouse KPI and System Health.</li></ul>' },
+    { c: 'access', q: 'How do I change my profile photo or password?',
+      a: '<p>Click your name at the top right, then <b>Settings</b>. You can change your photo, password and preferences there.</p>' },
+    { c: 'access', q: 'How do I install the system on my phone or desktop?',
+      a: '<p>GEMCOR ERP works as an installable app. If an install prompt appears, click it. Otherwise use the browser menu: <b>Install app</b> or <b>Add to Home screen</b>.</p>' },
+    { c: 'access', q: 'What happens when the internet is slow or offline?',
+      a: '<p>The top bar shows whether the system is <b>Connected</b> or <b>Offline</b>. When the connection is slow or lost, a prompt to open the Break Room game appears.</p><p class="ab-tip">An internet connection is required to save, because the data lives in Supabase. Wait for the success message before closing the page.</p>' },
+    { c: 'access', q: 'What keyboard shortcuts are available?',
+      a: '<ul><li><kbd>Ctrl</kbd>+<kbd>K</kbd> (or <kbd>⌘</kbd>+<kbd>K</kbd>): global search</li><li><kbd>Alt</kbd>+<kbd>A</kbd>: add an item row</li><li><kbd>Enter</kbd>: next field, and a new row after the last field</li><li><kbd>Ctrl</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd>: same column, previous or next row</li><li><kbd>Alt</kbd>+<kbd>Delete</kbd>: remove the current row</li><li><kbd>Ctrl</kbd>+<kbd>S</kbd>: submit</li><li><kbd>Ctrl</kbd>+<kbd>/</kbd>: show the shortcut list</li></ul>' }
   ];
 
   var faqList = $('#abFaqList');
@@ -357,7 +357,7 @@
         shown++;
       }
     });
-    faqCount.textContent = shown + (shown === 1 ? ' tanong' : ' tanong') + (term || faqCat !== 'all' ? ' ang tugma' : '');
+    faqCount.textContent = shown + (shown === 1 ? ' question' : ' questions') + (term || faqCat !== 'all' ? ' found' : '');
     faqEmpty.hidden = shown !== 0;
   }
   if (faqSearch) {
@@ -372,59 +372,59 @@
   // ═══════════════════════════════════════════════════════════
   var ROLE_LABEL = { P: 'Production', W: 'Warehouse', R: 'Procurement', F: 'Finance', A: 'Admin' };
   var TIERS = [
-    { id: 'basic', title: 'Pang-araw-araw', sub: 'Para sa lahat ng gumagamit ng system', items: [
-      ['bi-shield-lock', 'Login at role-based access', 'Bawat user ay may role. Ang menu at pages ay ayon sa role.', 'PWRFA'],
-      ['bi-list-check', 'My Requests', 'Lahat ng MRIF at MRS mo na may status na Pending, Partial, Completed o Cancelled.', 'P'],
-      ['bi-box-arrow-up-right', 'New MRIF (With JO)', 'Ilagay ang JO number at kusang lalabas ang client at project.', 'P'],
-      ['bi-pencil-square', 'Manual MRIF at MRS', 'Para sa request na walang JO. Mano-mano ang detalye.', 'P'],
-      ['bi-arrow-counterclockwise', 'New MRS (Returns)', 'Magbalik ng sobrang materyales. Ang Qty Returned lang ang ilalagay.', 'P'],
-      ['bi-search', 'Item auto-suggest', 'Hanapin ang item sa pangalan o code habang nagta-type.', 'PWR'],
-      ['bi-chat-dots', 'Messages', 'Chat ng warehouse at production, may usapan kada dokumento, read ticks, emoji at profile photo.', 'PW'],
-      ['bi-bell', 'Notifications at alerts', 'Bell sa taas, popup at tunog ng bagong mensahe, at badge sa sidebar.', 'PWRFA'],
-      ['bi-command', 'Global search (Ctrl+K)', 'Maghanap ng item, dokumento o page mula sa kahit anong screen.', 'PWRFA'],
-      ['bi-person-gear', 'Settings at profile photo', 'Palitan ang litrato, password at preferences.', 'PWRFA'],
-      ['bi-signpost-split', 'Quick Guide', 'Maikling tour para sa production sa unang gamit. Pwedeng ulitin sa user menu.', 'P'],
-      ['bi-download', 'Install as app', 'I-install sa phone o desktop para parang regular na app.', 'PWRFA'],
-      ['bi-wifi', 'Connection indicator', 'Makikita sa taas kung Connected o Offline ang system.', 'PWRFA'],
-      ['bi-controller', 'Break Room: Crate Blast', 'Maliit na laro para sa pahinga o kapag mabagal ang internet.', 'PW']
+    { id: 'basic', title: 'Everyday use', sub: 'For everyone who uses the system', items: [
+      ['bi-shield-lock', 'Login and role-based access', 'Each user has a role, and the menu and pages follow it.', 'PWRFA'],
+      ['bi-list-check', 'My Requests', 'All of your MRIFs and MRSs with their status: Pending, Partial, Completed or Cancelled.', 'P'],
+      ['bi-box-arrow-up-right', 'New MRIF (With JO)', 'Enter the JO number and the client and project fill in automatically.', 'P'],
+      ['bi-pencil-square', 'Manual MRIF and MRS', 'For requests without a JO, with details entered manually.', 'P'],
+      ['bi-arrow-counterclockwise', 'New MRS (Returns)', 'Return surplus materials by entering only the Qty Returned.', 'P'],
+      ['bi-search', 'Item auto-suggest', 'Find an item by name or code as you type.', 'PWR'],
+      ['bi-chat-dots', 'Messages', 'Direct and per-document chat between warehouse and production, with read receipts, emoji and profile photos.', 'PW'],
+      ['bi-bell', 'Notifications and alerts', 'Bell icon, pop-ups and sound for new messages, and a sidebar badge.', 'PWRFA'],
+      ['bi-command', 'Global search (Ctrl+K)', 'Find items, documents or pages from any screen.', 'PWRFA'],
+      ['bi-person-gear', 'Settings and profile photo', 'Change your photo, password and preferences.', 'PWRFA'],
+      ['bi-signpost-split', 'Quick Guide', 'A short first-use tour for production, replayable from the user menu.', 'P'],
+      ['bi-download', 'Install as an app', 'Install on a phone or desktop to use it like a regular app.', 'PWRFA'],
+      ['bi-wifi', 'Connection indicator', 'Shows at the top whether the system is Connected or Offline.', 'PWRFA'],
+      ['bi-controller', 'Break Room: Crate Blast', 'A small game for breaks or for when the connection is slow.', 'PW']
     ] },
-    { id: 'ops', title: 'Operations ng warehouse', sub: 'Pang-araw-araw na trabaho ng warehouse, procurement at finance', items: [
-      ['bi-box-seam', 'Stock Monitor', 'On-hand, buffer at halaga ng bawat item. May filter, inline edit at CSV import.', 'W'],
-      ['bi-inbox', 'All Requests', 'Lahat ng bukas na MRIF at MRS, may badge sa sidebar at kategorya ng may hawak.', 'W'],
-      ['bi-upc-scan', 'Process MRIF', 'Barcode scan, pag-verify ng qty, partial release at pag-ayos ng unit.', 'W'],
-      ['bi-clipboard-check', 'Process MRS', 'I-verify ang aktwal na bumalik. Hindi lalampas sa hiniling.', 'W'],
-      ['bi-lock', 'Request lock', 'Ang “in process by…” ay pumipigil na dalawang staff ang magproseso nang sabay.', 'W'],
-      ['bi-card-list', 'MRIF, MRR at MRS lists', 'Hanapin, tingnan at i-print ang bawat dokumento.', 'W'],
-      ['bi-box-arrow-in-down', 'New MRR (Receiving)', 'Itala ang dumating na items kasama ang PO, SOF, PRF, vendor at DR number.', 'W'],
-      ['bi-pencil', 'Edit Requests', 'Aprubahan o i-reject ang hiling ng production na mag-edit.', 'W'],
-      ['bi-tools', 'Edit, Void at Cancel', 'Direct edit, MRR void at MRIF cancel. Laging may dahilan at audit.', 'W'],
-      ['bi-qr-code', 'Barcode / QR generator', 'Mag-print ng QR labels nang batch. Adjustable ang laki at layout.', 'W'],
-      ['bi-printer', 'Print preview at print log', 'Nakatala kung sino at kailan nag-print ng dokumento.', 'W'],
-      ['bi-clipboard-data', 'Inventory Count', 'Buong o SPOT count, scan o manual, review at approve.', 'W'],
-      ['bi-cart-plus-fill', 'Replenishment at PRF', 'Items sa ilalim ng buffer, bawas ang nasa order, at paggawa ng PRF.', 'W'],
-      ['bi-file-earmark-text', 'PRF Monitor', 'Status ng PRF at PO. View-only para sa procurement.', 'RW'],
-      ['bi-file-earmark-ruled', 'SOF Tracker', 'Stock na naka-reserve para sa sales order at kung gaano na ang nagamit.', 'WR'],
-      ['bi-cash-coin', 'Project Costing', 'Gastos ng bawat project at ang mga galaw na bumuo nito.', 'PWF'],
-      ['bi-calendar-week', 'Weekly at document monitoring', 'Weekly Monitoring at MRIF, MRR at MRS Monitoring.', 'WRF'],
-      ['bi-arrow-left-right', 'Item In & Out', 'Beginning balance, total in, total out at ending balance ng item.', 'W'],
-      ['bi-graph-up-arrow', 'Usage Trend at Monthly Usage', 'Konsumo kada buwan at trend para sa reorder.', 'W'],
-      ['bi-clock-history', 'Process History', 'Gawain ng bawat warehouse staff sa MRIF, MRR, MRS at PRF.', 'W']
+    { id: 'ops', title: 'Warehouse operations', sub: 'Daily work for warehouse, procurement and finance', items: [
+      ['bi-box-seam', 'Stock Monitor', 'On-hand, buffer and value per item, with filters, inline edit and CSV import.', 'W'],
+      ['bi-inbox', 'All Requests', 'Every open MRIF and MRS, with a sidebar badge and the staff member responsible for each category.', 'W'],
+      ['bi-upc-scan', 'Process MRIF', 'Barcode scanning, quantity verification, partial release and unit correction.', 'W'],
+      ['bi-clipboard-check', 'Process MRS', 'Verify the actual returned quantity, capped at the quantity requested.', 'W'],
+      ['bi-lock', 'Request lock', 'The “in process by…” lock stops two staff from processing the same request.', 'W'],
+      ['bi-card-list', 'MRIF, MRR and MRS lists', 'Search, view and print each document.', 'W'],
+      ['bi-box-arrow-in-down', 'New MRR (Receiving)', 'Record received items with the PO, SOF, PRF, vendor and DR number.', 'W'],
+      ['bi-pencil', 'Edit Requests', 'Approve or reject production’s requests to edit a submitted document.', 'W'],
+      ['bi-tools', 'Edit, Void and Cancel', 'Direct edit, MRR void and MRIF cancel, always with a reason and audit record.', 'W'],
+      ['bi-qr-code', 'Barcode / QR generator', 'Print QR labels in batches with adjustable size and layout.', 'W'],
+      ['bi-printer', 'Print preview and print log', 'Records who printed a document and when.', 'W'],
+      ['bi-clipboard-data', 'Inventory Count', 'Full or spot counts, by scan or manual entry, with review and approval.', 'W'],
+      ['bi-cart-plus-fill', 'Replenishment and PRF', 'Items below buffer, net of open orders, and PRF creation.', 'W'],
+      ['bi-file-earmark-text', 'PRF Monitor', 'PRF and PO status, view-only for procurement.', 'RW'],
+      ['bi-file-earmark-ruled', 'SOF Tracker', 'Stock reserved for sales orders and how much has been used.', 'WR'],
+      ['bi-cash-coin', 'Project Costing', 'The cost of each project and the movements behind it.', 'PWF'],
+      ['bi-calendar-week', 'Weekly and document monitoring', 'Weekly Monitoring plus MRIF, MRR and MRS Monitoring.', 'WRF'],
+      ['bi-arrow-left-right', 'Item In & Out', 'Beginning balance, total in, total out and ending balance per item.', 'W'],
+      ['bi-graph-up-arrow', 'Usage Trend and Monthly Usage', 'Monthly consumption and trends to support reordering.', 'W'],
+      ['bi-clock-history', 'Process History', 'Each warehouse staff member’s activity across MRIF, MRR, MRS and PRF.', 'W']
     ] },
-    { id: 'adv', title: 'Advanced at admin', sub: 'Mga kontrol, proteksyon at monitoring', items: [
-      ['bi-grid-1x2', 'Management Dashboard', 'Mga KPI at charts na may as-of date para sa mabilis na pagtingin.', 'W'],
-      ['bi-speedometer2', 'Warehouse KPI', 'Turnaround, performance ng staff at aging ng backlog.', 'A'],
-      ['bi-people-fill', 'User Management', 'Pamahalaan ang users, roles at pag-assign ng kategorya.', 'A'],
-      ['bi-database-fill-gear', 'Supabase Admin Console', 'Tingnan at ayusin ang tables ng database. Protektado ng PIN.', 'A'],
-      ['bi-activity', 'System Health', 'Ping at error log para makita ang kalagayan ng system.', 'A'],
-      ['bi-currency-exchange', 'Bulk Price Update', 'Maramihang presyo na may preview, dahilan at Undo.', 'W'],
-      ['bi-snow2', 'Ledger Cost Freeze', 'Hindi nagbabago ang gastos ng lumang transaksyon kapag nagbago ang presyo.', 'WF'],
-      ['bi-bookmark-check', 'SOF priority reservation', 'Protektado ang stock na naka-reserve para sa sales order.', 'W'],
-      ['bi-shield-check', 'All-or-nothing transactions', 'Ang mahahalagang galaw ay buo ang pagkaka-save sa database o walang nagbago.', 'WA'],
-      ['bi-journal-text', 'Audit trail', 'May dahilan, pangalan at oras ang bawat edit at correction.', 'WA'],
-      ['bi-eye', 'Read-only guard', 'View-only ang procurement at finance, at hinaharang ang anumang pagsulat.', 'RF'],
-      ['bi-keyboard', 'Keyboard shortcuts', 'Mabilis na pag-encode sa MRIF, MRR, MRS at PRF.', 'PW'],
-      ['bi-cloud-arrow-down', 'Auto-update banner', 'Lalabas ang “Update Available” kapag may bagong bersyon.', 'PWRFA'],
-      ['bi-cloud-slash', 'Offline page at net watch', 'May fallback page at Break Room kapag mabagal o offline ang koneksyon.', 'PWRFA']
+    { id: 'adv', title: 'Advanced and admin', sub: 'Controls, safeguards and monitoring', items: [
+      ['bi-grid-1x2', 'Management Dashboard', 'KPIs and charts with an as-of date for a quick overview.', 'W'],
+      ['bi-speedometer2', 'Warehouse KPI', 'Turnaround time, staff performance and backlog aging.', 'A'],
+      ['bi-people-fill', 'User Management', 'Manage users, roles and category assignments.', 'A'],
+      ['bi-database-fill-gear', 'Supabase Admin Console', 'Browse and maintain database tables, protected by a PIN.', 'A'],
+      ['bi-activity', 'System Health', 'Ping and error log to monitor the state of the system.', 'A'],
+      ['bi-currency-exchange', 'Bulk Price Update', 'Update many prices at once with a preview, a reason and Undo.', 'W'],
+      ['bi-snow2', 'Ledger Cost Freeze', 'Past transactions keep their original cost when a price changes.', 'WF'],
+      ['bi-bookmark-check', 'SOF priority reservation', 'Stock reserved for a sales order is protected from other requests.', 'W'],
+      ['bi-shield-check', 'All-or-nothing transactions', 'Critical movements are saved completely in the database or not at all.', 'WA'],
+      ['bi-journal-text', 'Audit trail', 'Every edit and correction records a reason, the user and a timestamp.', 'WA'],
+      ['bi-eye', 'Read-only guard', 'Procurement and finance are view-only, and any write attempt is blocked.', 'RF'],
+      ['bi-keyboard', 'Keyboard shortcuts', 'Faster data entry on the MRIF, MRR, MRS and PRF screens.', 'PW'],
+      ['bi-cloud-arrow-down', 'Auto-update banner', 'An “Update Available” banner appears when a new version is released.', 'PWRFA'],
+      ['bi-cloud-slash', 'Offline page and net watch', 'A fallback page and the Break Room appear when the connection is slow or lost.', 'PWRFA']
     ] }
   ];
 
@@ -438,7 +438,7 @@
 
   function buildFeatures() {
     if (!featTiers) return;
-    var chips = [{ id: 'all', l: 'Lahat' }].concat(Object.keys(ROLE_LABEL).map(function (k) { return { id: k, l: ROLE_LABEL[k] }; }));
+    var chips = [{ id: 'all', l: 'All roles' }].concat(Object.keys(ROLE_LABEL).map(function (k) { return { id: k, l: ROLE_LABEL[k] }; }));
     featChips.innerHTML = chips.map(function (c) {
       return '<button type="button" class="ab-chip' + (c.id === featRole ? ' on' : '') + '" data-r="' + c.id + '" aria-pressed="' + (c.id === featRole) + '">' + esc(c.l) + '</button>';
     }).join('');
