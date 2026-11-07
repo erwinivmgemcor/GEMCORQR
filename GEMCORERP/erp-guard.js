@@ -20,7 +20,8 @@
     'new-mrs-manual.html',
     'project-costing.html',
     'block-blast.html',  // Break Room (laro)
-    'about.html'         // About / FAQs / Process flow
+    'about.html',        // About / FAQs / Process flow
+    'sof-tracker.html'   // SOF Tracker (view-only for production)
   ];
   
   // Procurement / Finance: read-only, specific pages only
@@ -43,6 +44,7 @@
         return '[onclick*="' + f + '"]';
       }).join(',') + ',.item-select-cb,#selectAllItems,#bulkActionsBar,.bulk-status-btn,.erp-readonly-hide{display:none!important}' +
         '.erp-readonly-badge{position:fixed;right:14px;bottom:14px;z-index:9999;background:#1e3a5f;color:#fff;font:600 12px/1 system-ui,sans-serif;padding:7px 12px;border-radius:20px;opacity:.9;pointer-events:none}';
+      if (_getCurrentPage() === 'sof-tracker.html') css += 'a[href="stock-monitor.html"]{display:none!important}';
       // Procurement only needs the PRFs tab of Replenishment (Needs tab = create PRFs → hidden)
       if (_getCurrentPage() === 'replenishment.html') {
         css += '.rp-tabs,#rpTabNeeds,#rpBtnExport{display:none!important}';
@@ -149,6 +151,8 @@
       // Production: only whitelisted pages
   if (role === 'production') {
     if (PRODUCTION_ALLOWED.indexOf(currentPage) !== -1) {
+      // SOF Tracker is view-only for production: hides Manual Allocate / Release and blocks writes on this page
+      if (currentPage === 'sof-tracker.html') _applyReadOnly('production');
       console.log('[ERP Guard] ✓ Production access: ' + currentPage);
       return;
     }
