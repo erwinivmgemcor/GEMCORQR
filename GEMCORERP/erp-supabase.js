@@ -599,82 +599,171 @@ async function erpHealthCheck() {
 // ═══════════════════════════════════════════════════════════
 var _inventoryListCache = null;
 var _inventoryListPromise = null;
+var _inventoryLastSync = 0;        // huling matagumpay na sync (ms)
+var _inventoryRefreshPromise = null;
+var _inventoryAutoSyncStarted = false;
+
+var ERP_INV_FILTER = '&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false';
+
+// Kunin ang BUONG listahan (paginated) at i-map sa frontend format
+async function _erpFetchInventoryMapped() {
+  var allItems = [];
+  var pageSize = 1000;
+  var offset = 0;
+  var maxPages = 20;  // Safety cap: 20,000 items
+  for (var pageNum = 1; pageNum <= maxPages; pageNum++) {
+    var rows = await erpFetch('erp_items',
+      'select=item_code,description,base_unit,category,location' + ERP_INV_FILTER +
+      '&order=item_code.asc&limit=' + pageSize + '&offset=' + offset);
+    if (!rows || rows.length === 0) break;
+    allItems = allItems.concat(rows);
+    offset += rows.length;
+    if (rows.length < pageSize) break;
+  }
+  return allItems.map(function(r) {
+    return {
+      code: r.item_code,
+      description: r.description || '',
+      unit: r.base_unit || 'PIECE',
+      category: r.category || '',
+      location: r.location || ''
+    };
+  });
+}
 
 async function erpGetInventoryListForDropdown(forceRefresh) {
   // Return cache if available (unless force refresh)
   if (!forceRefresh && _inventoryListCache) {
     return _inventoryListCache;
   }
-  
+
   // Prevent concurrent calls (return same promise)
   if (_inventoryListPromise) {
     return _inventoryListPromise;
   }
-  
+
   _inventoryListPromise = (async function() {
-    var allItems = [];
-    var pageSize = 1000;
-    var offset = 0;
-    var hasMore = true;
-    var maxPages = 20;  // Safety cap: 20,000 items
-    var pageNum = 0;
-    
-    console.log('[Inventory List] Starting paginated fetch...');
-    
-    while (hasMore && pageNum < maxPages) {
-      pageNum++;
-      
-      var query = 'select=item_code,description,base_unit,category,location' +
-                  '&is_active=eq.true' +
-                  '&is_deleted=eq.false' +
-                  '&is_deprecated_2026=eq.false' +
-                  '&order=item_code.asc' +
-                  '&limit=' + pageSize +
-                  '&offset=' + offset;
-      
-      var rows = await erpFetch('erp_items', query);
-      
-      if (!rows || rows.length === 0) {
-        hasMore = false;
-        break;
-      }
-      
-      allItems = allItems.concat(rows);
-      offset += rows.length;
-      
-      console.log('[Inventory List] Page ' + pageNum + ': fetched ' + 
-                  rows.length + ' items (total: ' + allItems.length + ')');
-      
-      if (rows.length < pageSize) {
-        hasMore = false;
-      }
+    try {
+      console.log('[Inventory List] Starting paginated fetch...');
+      var mapped = await _erpFetchInventoryMapped();
+      _inventoryListCache = mapped;
+      _inventoryLastSync = Date.now();
+      console.log('[Inventory List] ✅ COMPLETE — Total: ' + mapped.length + ' items');
+      _erpStartInventoryAutoSync();
+      return mapped;
+    } finally {
+      // ✅ Dati: kapag pumalya ang fetch, nakaipit na ang promise at hindi na makakapag-load ulit
+      _inventoryListPromise = null;
     }
-    
-    // ═══ Map to frontend format ═══
-    var mapped = allItems.map(function(r) {
-      return { 
-        code: r.item_code, 
-        description: r.description || '', 
-        unit: r.base_unit || 'PIECE',
-        category: r.category || '',
-        location: r.location || ''
-      };
-    });
-    
-    _inventoryListCache = mapped;
-    _inventoryListPromise = null;
-    
-    console.log('[Inventory List] ✅ COMPLETE — Total: ' + mapped.length + ' items');
-    return mapped;
   })();
-  
+
   return _inventoryListPromise;
 }
+
+// ═══════════════════════════════════════════════════════════
+// LIVE SYNC — para lumabas agad sa mga nag-eencode ang bagong dagdag na item
+// nang hindi nire-refresh ang browser (hindi mawawala ang naka-encode na).
+// Ina-update ang PAREHONG array (in place), kaya kahit sinong page na may hawak
+// ng listahan ay nakikita ang bago.
+// ═══════════════════════════════════════════════════════════
+async function erpRefreshInventoryList(opts) {
+  opts = opts || {};
+  var minGap = Number(opts.minGapMs || 0);
+
+  if (!_inventoryListCache) {
+    await erpGetInventoryListForDropdown();
+    return { added: 0, removed: 0, total: (_inventoryListCache || []).length, initial: true };
+  }
+  if (_inventoryRefreshPromise) return _inventoryRefreshPromise;
+  if (minGap && (Date.now() - _inventoryLastSync) < minGap) {
+    return { added: 0, removed: 0, total: _inventoryListCache.length, skipped: true };
+  }
+
+  _inventoryRefreshPromise = (async function() {
+    try {
+      var fresh = await _erpFetchInventoryMapped();
+      var oldCodes = {};
+      _inventoryListCache.forEach(function(it) { oldCodes[it.code] = true; });
+      var newCodes = {};
+      var added = 0;
+      fresh.forEach(function(it) {
+        newCodes[it.code] = true;
+        if (!oldCodes[it.code]) added++;
+      });
+      var removed = 0;
+      Object.keys(oldCodes).forEach(function(c) { if (!newCodes[c]) removed++; });
+
+      // in-place swap — hindi nagbabago ang reference ng array
+      _inventoryListCache.length = 0;
+      for (var i = 0; i < fresh.length; i++) _inventoryListCache.push(fresh[i]);
+      _inventoryLastSync = Date.now();
+
+      var result = { added: added, removed: removed, total: fresh.length };
+      if (added > 0 || removed > 0) {
+        console.log('[Inventory List] 🔄 Synced — +' + added + ' / -' + removed + ' (total ' + fresh.length + ')');
+        try { window.dispatchEvent(new CustomEvent('erp-inventory-refreshed', { detail: result })); } catch (e) {}
+        if (added > 0 && typeof window.erpShowToast === 'function') {
+          window.erpShowToast('🔄 ' + added + ' bagong item' + (added > 1 ? 's' : '') + ' ang naidagdag sa listahan', 'info');
+        }
+      }
+      return result;
+    } catch (e) {
+      console.warn('[Inventory List] refresh failed:', e.message);
+      return { added: 0, removed: 0, total: _inventoryListCache.length, error: e.message };
+    } finally {
+      _inventoryRefreshPromise = null;
+    }
+  })();
+  return _inventoryRefreshPromise;
+}
+window.erpRefreshInventoryList = erpRefreshInventoryList;
+
+// Magaan na probe: bilang lang ng items ang kinukuha (1 row). Kung iba sa cache → full refresh.
+async function _erpInventoryProbe() {
+  try {
+    var res = await fetch(erpUrl('erp_items') + '?select=item_code' + ERP_INV_FILTER + '&limit=1', {
+      headers: erpHeaders({ 'Prefer': 'count=exact' }),
+      cache: 'no-store'
+    });
+    if (!res.ok) return null;
+    var cr = res.headers.get('content-range') || '';
+    var m = cr.match(/\/(\d+)$/);
+    return m ? Number(m[1]) : null;
+  } catch (e) { return null; }
+}
+
+function _erpStartInventoryAutoSync() {
+  if (_inventoryAutoSyncStarted) return;
+  _inventoryAutoSyncStarted = true;
+
+  async function tick(force) {
+    if (document.hidden || !_inventoryListCache) return;
+    var sinceSync = Date.now() - _inventoryLastSync;
+    // buong refresh kahit pareho ang bilang (para sa pinalitang description/unit) kada 10 minuto
+    if (sinceSync > 10 * 60 * 1000) { erpRefreshInventoryList(); return; }
+    if (!force && sinceSync < 20 * 1000) return;
+    var count = await _erpInventoryProbe();
+    if (count !== null && count !== _inventoryListCache.length) erpRefreshInventoryList();
+  }
+
+  setInterval(function() { tick(false); }, 60 * 1000);                       // kada 1 minuto (kung bukas ang tab)
+  document.addEventListener('visibilitychange', function() { if (!document.hidden) tick(true); });
+  window.addEventListener('focus', function() { tick(true); });
+}
+
+// Tawagin sa "No matches" na bahagi ng search: sinusubukang kunin ang bagong items bago sumuko.
+// cb(addedCount) — kung > 0, ulitin ang search.
+function erpInventoryMissRefresh(cb) {
+  if (typeof erpRefreshInventoryList !== 'function') { cb(0); return; }
+  erpRefreshInventoryList({ minGapMs: 8000 }).then(function(r) { cb((r && r.added) || 0); }, function() { cb(0); });
+}
+window.erpInventoryMissRefresh = erpInventoryMissRefresh;
 
 // ═══ Clear cache (utility) ═══
 function erpClearInventoryCache() {
   _inventoryListCache = null;
   _inventoryListPromise = null;
+  _inventoryLastSync = 0;
   console.log('[Inventory List] Cache cleared');
 }
 
