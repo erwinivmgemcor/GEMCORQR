@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEMCOR ERP — About</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1e3a5f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="erp-design-system.css">
+<link rel="stylesheet" href="erp-styles.css">
+<link rel="stylesheet" href="erp-nav.css">
+<link rel="stylesheet" href="erp-notif.css">
+<link rel="stylesheet" href="about.css">
+
+<script src="erp-theme.js"></script>
+<script src="erp-guard.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script defer src="erp-config.js"></script>
+<script defer src="erp-supabase.js"></script>
+<script defer src="erp-nav.js"></script>
+<script defer src="notif-alerts.js"></script>
+<script defer src="notifications.js"></script>
+<script defer src="js/update.js"></script>
+<script defer src="about.js"></script>
+</head>
+<body>
+
+<div class="erp-container ab" id="top">
+<div class="ab-wrap">
+
+  <!-- ═════════════ HERO ═════════════ -->
+  <header class="ab-hero">
+    <div class="ab-hero-badges">
+      <span class="ab-pill ab-pill-supa"><i class="ab-ping"></i>Powered by Supabase</span>
+      <span class="ab-pill"><i class="bi bi-box-seam"></i>Greenmetal Electric Manufacturing Corp.</span>
+      <span class="ab-pill" id="abVersion"><i class="bi bi-tag"></i>GEMCOR ERP</span>
+    </div>
+    <h1>Bawat galaw ng stock, nakatala.</h1>
+    <p class="ab-hero-sub">Ang inventory system ng GEMCOR: mula procurement hanggang production, mula warehouse hanggang finance. Iisang lugar para sa requests, receiving, stock at gastos.</p>
+
+    <div class="ab-belt" aria-hidden="true">
+      <div class="ab-belt-line"></div>
+      <span class="ab-crate" style="--k:0">PRF</span>
+      <span class="ab-crate" style="--k:1">MRR</span>
+      <span class="ab-crate" style="--k:2">MRIF</span>
+      <span class="ab-crate" style="--k:3">MRS</span>
+      <div class="ab-st" style="left:12.5%"><i class="bi bi-cart-check"></i><span>Procurement</span></div>
+      <div class="ab-st" style="left:37.5%"><i class="bi bi-box-seam"></i><span>Warehouse</span></div>
+      <div class="ab-st" style="left:62.5%"><i class="bi bi-tools"></i><span>Production</span></div>
+      <div class="ab-st" style="left:87.5%"><i class="bi bi-cash-coin"></i><span>Finance</span></div>
+    </div>
+  </header>
+
+  <nav class="ab-jump" aria-label="Sections">
+    <div class="ab-jump-in">
+      <a href="#supabase">Supabase</a>
+      <a href="#team">Our team</a>
+      <a href="#flow">Process flow</a>
+      <a href="#faq">FAQs</a>
+      <a href="#features">Features</a>
+      <a href="#credits">Credits</a>
+    </div>
+  </nav>
+
+  <!-- ═════════════ SUPABASE (NEWLY UPDATED) ═════════════ -->
+  <section class="ab-supa" id="supabase">
+    <div class="ab-supa-main">
+      <span class="ab-new"><i class="bi bi-stars"></i>Newly updated</span>
+      <h2>Lahat ng data, nasa Supabase na.</h2>
+      <p>Ang GEMCOR ERP ay gumagana na sa Supabase, isang PostgreSQL database na iisa ang pinagkukunan ng stock, requests at ledger sa lahat ng device.</p>
+      <div class="ab-db-art" aria-hidden="true">
+        <span class="ab-db-ring" style="--r:0"></span>
+        <span class="ab-db-ring" style="--r:1"></span>
+        <span class="ab-db-ring" style="--r:2"></span>
+        <div class="ab-db"><i class="bi bi-database-fill-check"></i></div>
+      </div>
+    </div>
+    <ul class="ab-supa-list">
+      <li><i class="bi bi-check2"></i><div><b>Iisang source of truth</b><span>Pareho ang nakikita ng warehouse, production, procurement at finance.</span></div></li>
+      <li><i class="bi bi-check2"></i><div><b>All-or-nothing na transaksyon</b><span>Edit o void ng MRR, cancel ng MRIF at paggawa ng PRF: buo ang pagkaka-save o walang nagbago.</span></div></li>
+      <li><i class="bi bi-check2"></i><div><b>Stock ledger na hindi nadodoble</b><span>Bawat labas at pasok ay may sariling tala, at insert-only ang ledger.</span></div></li>
+      <li><i class="bi bi-check2"></i><div><b>Audit trail</b><span>May dahilan, pangalan at oras ang bawat edit at correction.</span></div></li>
+      <li><i class="bi bi-check2"></i><div><b>Ledger Cost Freeze</b><span>Hindi nagbabago ang gastos ng lumang transaksyon kahit magbago ang presyo ng item.</span></div></li>
+      <li><i class="bi bi-check2"></i><div><b>Admin Console at System Health</b><span>Makikita ang tables at kalagayan ng koneksyon nang hindi umaalis sa system.</span></div></li>
+    </ul>
+  </section>
+
+  <!-- ═════════════ TEAM ═════════════ -->
+  <section class="ab-sec" id="team">
+    <div class="ab-sec-h">
+      <h2>Ang team sa likod ng warehouse</h2>
+      <p>Sila ang humahawak ng inventory at ng mga request na dumadaan sa system.</p>
+    </div>
+
+    <div class="ab-org" id="abOrg">
+      <div class="ab-org-row">
+        <article class="ab-person ab-person-lg" style="--t:.1s">
+          <div class="ab-photo" data-photo="cynthia-cerezo" data-initials="CC"><div class="ab-photo-in"><span class="ab-initials">CC</span></div></div>
+          <h3>Cynthia Cerezo</h3>
+          <p class="ab-role">GEMCOR Inventory Management Head</p>
+        </article>
+      </div>
+      <div class="ab-org-stem"></div>
+      <div class="ab-org-row">
+        <article class="ab-person" style="--t:.8s">
+          <div class="ab-photo" data-photo="erwin-sister" data-initials="ES"><div class="ab-photo-in"><span class="ab-initials">ES</span></div></div>
+          <h3>Erwin Sister</h3>
+          <p class="ab-role">Inventory Management Team Leader</p>
+          <ul class="ab-resp"><li>Components</li></ul>
+        </article>
+      </div>
+      <div class="ab-org-stem"></div>
+      <div class="ab-org-kids">
+        <div class="ab-org-kid">
+          <article class="ab-person" style="--t:2.2s">
+            <div class="ab-photo" data-photo="richel-laya" data-initials="RL"><div class="ab-photo-in"><span class="ab-initials">RL</span></div></div>
+            <h3>Richel Laya</h3>
+            <p class="ab-role">Inventory Management Associate</p>
+            <ul class="ab-resp"><li>Consumables</li><li>Office supplies</li><li>MRIF</li><li>MRR</li></ul>
+          </article>
+        </div>
+        <div class="ab-org-kid">
+          <article class="ab-person" style="--t:2.4s">
+            <div class="ab-photo" data-photo="jomar-banda" data-initials="JB"><div class="ab-photo-in"><span class="ab-initials">JB</span></div></div>
+            <h3>Jomar Banda</h3>
+            <p class="ab-role">Inventory Management Associate</p>
+            <ul class="ab-resp"><li>Fabmat</li><li>MRIF</li><li>MRR</li></ul>
+          </article>
+        </div>
+        <div class="ab-org-kid">
+          <article class="ab-person" style="--t:2.6s">
+            <div class="ab-photo" data-photo="angel-bayle" data-initials="AB"><div class="ab-photo-in"><span class="ab-initials">AB</span></div></div>
+            <h3>Angel Bayle</h3>
+            <p class="ab-role">Inventory Management Associate</p>
+            <ul class="ab-resp"><li>Enclosure</li><li>Dispatching</li><li>Transfer of finished goods (warehouse)</li></ul>
+          </article>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═════════════ PROCESS FLOW ═════════════ -->
+  <section class="ab-sec" id="flow">
+    <div class="ab-sec-h">
+      <h2>Paano dumadaloy ang trabaho</h2>
+      <p>Pumili ng daloy para makita ang bawat hakbang, kung sino ang kumikilos, at kung saang page ito ginagawa.</p>
+    </div>
+    <div class="ab-tabs" id="abFlowTabs" role="tablist" aria-label="Process flows"></div>
+    <div class="ab-flow-panel" id="abFlowPanel" role="tabpanel" aria-live="polite"></div>
+  </section>
+
+  <!-- ═════════════ FAQ ═════════════ -->
+  <section class="ab-sec" id="faq">
+    <div class="ab-sec-h">
+      <h2>Mga madalas itanong</h2>
+      <p>Kasama ang mga sitwasyon tulad ng pag-edit ng request, pagkansela, at pagwawasto ng maling entry.</p>
+    </div>
+    <div class="ab-faq-bar">
+      <label class="ab-search">
+        <i class="bi bi-search"></i>
+        <input type="search" id="abFaqSearch" placeholder="Hanapin ang tanong…" aria-label="Search FAQs" autocomplete="off">
+      </label>
+      <div class="ab-chips" id="abFaqChips" role="group" aria-label="FAQ categories"></div>
+    </div>
+    <div class="ab-faq-count" id="abFaqCount" aria-live="polite"></div>
+    <div id="abFaqList"></div>
+    <div class="ab-empty" id="abFaqEmpty" hidden>
+      <i class="bi bi-search"></i>
+      <p>Walang tugma sa hinahanap mo. Subukan ang ibang salita o piliin ang “Lahat”.</p>
+    </div>
+  </section>
+
+  <!-- ═════════════ FEATURES ═════════════ -->
+  <section class="ab-sec" id="features">
+    <div class="ab-sec-h">
+      <h2>Lahat ng features ng system</h2>
+      <p>May <b class="ab-count" id="abFeatCount" data-count="0">0</b> features, mula sa pang-araw-araw na gamit hanggang sa advanced at admin tools. Piliin ang role para makita kung alin ang para sa iyo.</p>
+    </div>
+    <div class="ab-chips ab-feat-filter" id="abFeatChips" role="group" aria-label="Filter by role"></div>
+    <div id="abFeatTiers"></div>
+  </section>
+
+  <!-- ═════════════ CREDITS ═════════════ -->
+  <footer class="ab-credit" id="credits">
+    <div>
+      <b>Engineered by Erwin Sister</b>
+      <p>GEMCOR ERP · Supabase-powered inventory system</p>
+    </div>
+    <a class="ab-btn" href="https://tinyurl.com/negosyowebph" target="_blank" rel="noopener noreferrer">
+      <i class="bi bi-box-arrow-up-right"></i>Business portfolio
+    </a>
+  </footer>
+
+</div>
+</div>
+
+</body>
+</html>
