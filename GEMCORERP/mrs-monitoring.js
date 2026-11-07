@@ -74,7 +74,8 @@ async function mrsMonLoad() {
     var rows = await erpFetch('v_mrs_monitoring',
       'select=*&order=needs_attention.desc,request_date.desc,line_no.asc&limit=10000');
 
-    _mrsMon.allItems = rows || [];
+    // CANCELLED na MRS ay hindi na bahagi ng monitoring
+    _mrsMon.allItems = (rows || []).filter(function(r) { return String(r.doc_status || '').toUpperCase() !== 'CANCELLED'; });
 
     var elapsed = Date.now() - t0;
     console.log('[MRS Monitoring] Loaded ' + _mrsMon.allItems.length + ' items in ' + elapsed + 'ms');
