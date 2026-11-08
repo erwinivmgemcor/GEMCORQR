@@ -158,6 +158,8 @@ async function mdashLoad() {
     // Fetch dashboard data
     var data = await erpGetManagementDashboard({
       monthFilter: _mdash.filters.month,
+      fromDate: _getDefaultFromDate(_mdash.filters.month),
+      toDate: _getDefaultToDate(_mdash.filters.month),
       category: _mdash.filters.category || null,
       stockClass: _mdash.filters.stockClass || null,
       location: _mdash.filters.location || null
@@ -188,7 +190,7 @@ async function mdashLoad() {
 // ═══════════════════════════════════════════════════════════
 async function mdashLoadItems() {
   try {
-    var query = 'select=item_code,description,category,location,base_unit,unit_cost,on_hand,on_hand_cost,abc_classification,inventory_movement,stock_classification,is_active' +
+    var query = 'select=item_code,description,category,location,base_unit,unit_cost,on_hand,on_hand_cost,abc_classification,inventory_movement,stock_classification,buffer_stock,ave_monthly_consumption,is_active' +
                 '&is_active=eq.true&is_deleted=eq.false&order=on_hand_cost.desc,item_code.asc';
 
     if (_mdash.filters.category) {
@@ -292,6 +294,7 @@ function mdashRenderCharts(data) {
   mdashRenderABCChart(data.abc || []);
   mdashRenderMovementChart(data.movement || []);
   mdashRenderTopValueChart();
+  if (window.mdashExecRender) mdashExecRender();
 }
 
 // ─── Chart 1: Category Value (Doughnut) ───
@@ -590,6 +593,7 @@ function mdashRefresh() {
 
   // Clear cache
   _dashboardCache = { data: null, timestamp: 0, ttl: 0 };
+  if (window._xd) { _xd.ledger = null; }
 
   mdashLoad().then(function() {
     mdashCheckHealth();
