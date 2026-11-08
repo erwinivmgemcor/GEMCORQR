@@ -643,7 +643,7 @@ function showSuccessModal(docNo) {
   document.getElementById('successDocNo').textContent = docNo;
   
   var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
-  var qrData = base + '../?doc=' + encodeURIComponent(docNo) + '&view=print';
+  var qrData = base + 'form.html?doc=' + encodeURIComponent(docNo);
   var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(qrData);
   document.getElementById('successQrImg').src = qrUrl;
   
