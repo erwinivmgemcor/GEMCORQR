@@ -46,7 +46,36 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   
   preloadInventory();
-  
+
+  // ═══ SAVE AS DRAFT ═══
+  if (window.ErpDrafts) ErpDrafts.init({
+    type: 'mrif-jo',
+    label: 'MRIF (With JO)',
+    getHeader: function() {
+      var v = function(id) { var e = document.getElementById(id); return e ? e.value.trim() : ''; };
+      return { joNo: _mrifState.joNo, gemSoNo: _mrifState.gemSoNo, sofNo: v('mrifSofNo') || _mrifState.sofNo,
+               clientName: _mrifState.clientName, project: _mrifState.project, department: v('mrifDepartment') };
+    },
+    makeTitle: function(h) { return 'JO ' + (h.joNo || '—') + (h.project ? ' · ' + h.project : '') + (h.clientName && !h.project ? ' · ' + h.clientName : ''); },
+    clear: function() { resetFormSilent(); },
+    addRow: function(o) { addItemRow(o); },
+    setHeader: function(h) {
+      _mrifState.joNo = h.joNo || ''; _mrifState.gemSoNo = h.gemSoNo || ''; _mrifState.sofNo = h.sofNo || '';
+      _mrifState.clientName = h.clientName || ''; _mrifState.project = h.project || '';
+      var set = function(id, val) { var e = document.getElementById(id); if (e) e.value = val || ''; };
+      set('mrifJoNo', h.joNo); set('mrifGemSoNo', h.gemSoNo); set('mrifSofNo', h.sofNo);
+      set('mrifClientName', h.clientName); set('mrifProject', h.project);
+      set('mrifRequestor', _mrifState.requestor);
+      if (h.department) set('mrifDepartment', h.department);
+      ['step2Card', 'step3Card', 'step4Card'].forEach(function(id) { var e = document.getElementById(id); if (e) e.style.display = 'block'; });
+      var st = document.getElementById('joStatus');
+      if (st) st.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> JO No. restored from draft</span>';
+      var rs = document.getElementById('joLookupResult');
+      if (rs) { rs.className = 'alert alert-success mb-0 py-2';
+        rs.innerHTML = '<span class="small"><i class="bi bi-journal-text me-1"></i>Draft: <strong>SOF# ' + erpEsc(h.sofNo || '—') + '</strong> — ' + erpEsc(h.clientName || '') + '</span>'; }
+    }
+  });
+
   console.log('[New MRIF] Ready. Requestor:', userFullname);
 });
 
@@ -266,7 +295,7 @@ async function preloadInventory() {
   }
 }
 
-function addItemRow() {
+function addItemRow(opts) {
   document.getElementById('step3Card').style.display = 'block';
   document.getElementById('step4Card').style.display = 'block';
   
@@ -295,6 +324,7 @@ function addItemRow() {
     code: '', description: '', qty: 1, unit: 'PIECE', remarks: ''
   });
   
+  if (opts && opts.noFocus) return;   // pag nire-restore ang draft: huwag mag-focus / mag-popup ng dropdown
   setTimeout(function() {
     var newRow = document.querySelector('.erp-item-row[data-item-idx="' + idx + '"]');
     if (newRow) newRow.querySelector('.item-code-input').focus();
@@ -609,6 +639,7 @@ async function submitMrif() {
 // SUCCESS MODAL
 // ═══════════════════════════════════════════════════════════
 function showSuccessModal(docNo) {
+  if (window.ErpDrafts) ErpDrafts.onSubmitted();      // burahin ang draft na pinagmulan
   document.getElementById('successDocNo').textContent = docNo;
   
   var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
@@ -663,6 +694,7 @@ function resetFormSilent() {
   container.querySelectorAll('.erp-item-row').forEach(function(r) { r.remove(); });
   document.getElementById('itemsEmptyState').style.display = 'block';
   
+  if (window.ErpDrafts) ErpDrafts.onFormCleared();
   console.log('[Reset] Form cleared. Ready for next MRIF.');
 }
 
