@@ -20,7 +20,7 @@ function _printEsc(s) {
 function _printQrData(docNo) {
   if (!docNo) return '';
   var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
-  return base + '?doc=' + encodeURIComponent(docNo) + '&view=print';
+  return base + 'form.html?doc=' + encodeURIComponent(docNo);
 }
 
 function _printQrUrl(data, size) {
