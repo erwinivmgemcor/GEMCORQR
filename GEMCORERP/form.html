@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Form</title>
+<link rel="stylesheet" href="erp-styles.css">
+<style>
+  html, body { margin: 0; padding: 0; background: #e5e5e5; }
+  body { font-family: Arial, sans-serif; }
+  .fv-bar { position: sticky; top: 0; z-index: 10; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 16px; background: #fff; border-bottom: 1px solid #d4d4d4; }
+  .fv-title { font-weight: 700; font-size: 15px; color: #111; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fv-btn { border: 0; border-radius: 8px; padding: 9px 16px; font: 600 14px Arial, sans-serif; background: #1e3a5f; color: #fff; cursor: pointer; white-space: nowrap; }
+  .fv-btn:disabled { opacity: .45; cursor: default; }
+  .fv-page { padding: 16px 8px 32px; display: flex; justify-content: center; }
+  .fv-sheet { background: #fff; width: 8.5in; max-width: 100%; box-shadow: 0 2px 12px rgba(0,0,0,.18); transform-origin: top center; }
+  .fv-msg { text-align: center; color: #555; padding: 80px 20px; font-size: 15px; }
+  @page { size: letter portrait; margin: 0.25in; }
+  @media print {
+    html, body { background: #fff !important; }
+    .fv-bar { display: none !important; }
+    .fv-page { padding: 0; display: block; }
+    .fv-sheet { box-shadow: none; width: 100%; zoom: 1 !important; }
+  }
+</style>
+</head>
+<body>
+<div class="fv-bar">
+  <div class="fv-title" id="fvTitle">Loading…</div>
+  <button class="fv-btn" id="fvPrint" disabled onclick="window.print()">Print / Save PDF</button>
+</div>
+<div class="fv-page"><div class="fv-sheet" id="fvSheet"><div class="fv-msg">Loading form…</div></div></div>
+
+<script src="erp-config.js"></script>
+<script src="prints-erp.js"></script>
+<script src="form.js"></script>
+</body>
+</html>
