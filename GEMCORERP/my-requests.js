@@ -326,7 +326,7 @@ async function viewRequestDetails(docNo, docType) {
     if (typeof mrdStepperHtml === 'function') html += mrdStepperHtml(doc);
     
     // QR Code
-    var qrData = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '') + '../?doc=' + encodeURIComponent(docNo) + '&view=print';
+    var qrData = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '') + 'form.html?doc=' + encodeURIComponent(docNo);
     var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(qrData);
     
     html += '<div class="text-center mb-3">';
