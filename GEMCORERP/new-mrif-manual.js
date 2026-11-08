@@ -413,7 +413,7 @@ function showSuccessModal(docNo) {
   if (window.ErpDrafts) ErpDrafts.onSubmitted();      // burahin ang draft na pinagmulan
   document.getElementById('successDocNo').textContent = docNo;
   var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
-  var qrData = base + '../?doc=' + encodeURIComponent(docNo) + '&view=print';
+  var qrData = base + 'form.html?doc=' + encodeURIComponent(docNo);
   document.getElementById('successQrImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(qrData);
   
   var modalEl = document.getElementById('successModal');
