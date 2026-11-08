@@ -37,6 +37,25 @@ document.addEventListener('DOMContentLoaded', function() {
   
   loadUserDepartment();
   preloadInventory();
+
+  // ═══ SAVE AS DRAFT ═══
+  if (window.ErpDrafts) ErpDrafts.init({
+    type: 'mrif-manual',
+    label: 'MRIF (Manual / No JO)',
+    getHeader: function() {
+      var v = function(id) { var e = document.getElementById(id); return e ? e.value : ''; };
+      return { department: v('mrifDepartment').trim(), joNo: v('mrifJoNo').trim(), sofNo: v('mrifSofNo').trim(),
+               clientName: v('mrifClientName').trim(), project: v('mrifProject').trim() };
+    },
+    makeTitle: function(h) { return 'Manual' + (h.joNo ? ' · JO ' + h.joNo : '') + (h.project ? ' · ' + h.project : (h.clientName ? ' · ' + h.clientName : '')); },
+    clear: function() { resetFormSilent(); },
+    addRow: function(o) { addItemRow(o); },
+    setHeader: function(h) {
+      var set = function(id, val) { var e = document.getElementById(id); if (e) e.value = val || ''; };
+      if (h.department) set('mrifDepartment', h.department);
+      set('mrifJoNo', h.joNo); set('mrifSofNo', h.sofNo); set('mrifClientName', h.clientName); set('mrifProject', h.project);
+    }
+  });
   
   console.log('[Manual MRIF] Ready. Requestor:', userFullname);
 });
@@ -115,7 +134,7 @@ async function preloadInventory() {
 // ═══════════════════════════════════════════════════════════
 // ITEMS MANAGEMENT
 // ═══════════════════════════════════════════════════════════
-function addItemRow() {
+function addItemRow(opts) {
   var emptyState = document.getElementById('itemsEmptyState');
   if (emptyState) emptyState.style.display = 'none';
   
@@ -137,6 +156,7 @@ function addItemRow() {
   
   document.getElementById('itemsContainer').appendChild(clone);
   _mrifState.items.push({ code: '', description: '', qty: 1, atlQty: 1, unit: 'PIECE', remarks: '' });
+  if (opts && opts.noFocus) return;   // pag nire-restore ang draft: huwag mag-focus / mag-popup ng dropdown
   
   setTimeout(function() {
     var newRow = document.querySelector('.erp-item-row[data-item-idx="' + idx + '"]');
@@ -390,6 +410,7 @@ async function submitMrif() {
 }
 
 function showSuccessModal(docNo) {
+  if (window.ErpDrafts) ErpDrafts.onSubmitted();      // burahin ang draft na pinagmulan
   document.getElementById('successDocNo').textContent = docNo;
   var base = window.location.origin + window.location.pathname.replace(/[^\/]*$/, '');
   var qrData = base + '../?doc=' + encodeURIComponent(docNo) + '&view=print';
@@ -423,6 +444,7 @@ function resetFormSilent() {
   var container = document.getElementById('itemsContainer');
   container.querySelectorAll('.erp-item-row').forEach(function(r) { r.remove(); });
   document.getElementById('itemsEmptyState').style.display = 'block';
+  if (window.ErpDrafts) ErpDrafts.onFormCleared();
 }
 
 function resetForm() {
