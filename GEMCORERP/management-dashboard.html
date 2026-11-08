@@ -18,6 +18,7 @@
 <link rel="stylesheet" href="erp-styles.css">
 <link rel="stylesheet" href="erp-nav.css">
 <link rel="stylesheet" href="erp-notif.css">
+<link rel="stylesheet" href="management-dashboard-exec.css">
 
 <style>
 /* ═══════════════════════════════════════════════════════════
@@ -645,6 +646,7 @@
 <script defer src="erp-dashboard-api.js"></script>
 <script defer src="erp-nav.js"></script>
 <script defer src="management-dashboard.js"></script>
+<script defer src="management-dashboard-exec.js"></script>
 <script defer src="notif-alerts.js"></script>
 <script defer src="notifications.js"></script>
    <script defer src="js/update.js"></script>
@@ -680,10 +682,10 @@
     <div class="mdash-hero-left">
       <img src="../gemcor-logo.png" alt="GEMCOR" class="mdash-hero-logo" onerror="this.style.display='none'">
       <div>
-        <h1 class="mdash-hero-title">INVENTORY DASHBOARD</h1>
+        <h1 class="mdash-hero-title">MANAGEMENT DASHBOARD</h1>
         <div class="mdash-hero-sub">
           <i class="bi bi-graph-up-arrow me-1"></i>
-          Real-time inventory analytics & KPIs
+          Where the company’s money sits, and what to do about it
         </div>
       </div>
     </div>
@@ -862,52 +864,7 @@
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════ -->
-  <!-- CHARTS (4) -->
-  <!-- ═══════════════════════════════════════════════════════════ -->
-  <div class="mdash-charts-grid">
-
-    <!-- Chart 1: Category Value -->
-    <div class="mdash-chart-card">
-      <div class="mdash-chart-header">
-        <div><i class="bi bi-pie-chart-fill"></i> Stock Value by Category</div>
-      </div>
-      <div class="mdash-chart-body">
-        <canvas id="mdashChartCategory"></canvas>
-      </div>
-    </div>
-
-    <!-- Chart 2: ABC Classification -->
-    <div class="mdash-chart-card">
-      <div class="mdash-chart-header">
-        <div><i class="bi bi-bar-chart-fill"></i> ABC Classification</div>
-      </div>
-      <div class="mdash-chart-body">
-        <canvas id="mdashChartABC"></canvas>
-      </div>
-    </div>
-
-    <!-- Chart 3: Movement Classification -->
-    <div class="mdash-chart-card">
-      <div class="mdash-chart-header">
-        <div><i class="bi bi-activity"></i> Movement Classification</div>
-      </div>
-      <div class="mdash-chart-body">
-        <canvas id="mdashChartMovement"></canvas>
-      </div>
-    </div>
-
-    <!-- Chart 4: Top 10 Items by Value -->
-    <div class="mdash-chart-card">
-      <div class="mdash-chart-header">
-        <div><i class="bi bi-trophy-fill"></i> Top 10 Items by Value</div>
-      </div>
-      <div class="mdash-chart-body">
-        <canvas id="mdashChartTopValue"></canvas>
-      </div>
-    </div>
-
-  </div>
+  <div class="xd" id="xdRoot"><div class="xd-card"><div class="mdash-spinner"></div></div></div>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <!-- DETAILED TABLE -->
