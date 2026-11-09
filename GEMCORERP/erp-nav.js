@@ -63,6 +63,13 @@
       label: 'Inventory',
       items: [
         {
+          id: 'item-catalog',
+          label: 'Item Catalog',
+          icon: 'bi-journal-text',
+          href: 'item-catalog.html',
+          roles: ['procurement']
+        },
+        {
           id: 'inventory-count',
           label: 'Inventory Count',
           icon: 'bi-clipboard-check',
