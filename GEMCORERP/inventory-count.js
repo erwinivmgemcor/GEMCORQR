@@ -469,7 +469,7 @@ function icShowReviewView() {
   } else if (status === 'REJECTED') {
     showButtons(false, false, 'Reject');
     setMsg('<i class="bi bi-x-circle-fill text-danger me-1"></i> <strong>REJECTED:</strong> ' + icEsc(_ic.currentSession.rejected_reason || '—') +
-           (isAdmin ? '<br>Gamitin ang <i class="bi bi-arrow-counterclockwise"></i> Reopen sa listahan para sa recount.' : ''));
+           (isAdmin ? '<br><button class="btn btn-sm btn-warning mt-2" onclick="icReopenSession(' + _ic.currentSession.id + ')"><i class="bi bi-arrow-counterclockwise me-1"></i>Reopen to edit</button>' : '<br>Humingi sa admin na i-reopen para ma-edit ang bilang.'));
   } else {
     showButtons(false, false, 'Reject');
     setMsg('<i class="bi bi-slash-circle me-1 text-muted"></i> This count is ' + icEsc(status) + '.');
@@ -1012,45 +1012,122 @@ function icUpdateProgress() {
   document.getElementById('icTotalScans').textContent = totalScans;
 }
 
+function icFmtWhen(ts) {
+  if (!ts) return '—';
+  try { return new Date(ts).toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+  catch (e) { return String(ts); }
+}
+
+// Detalyadong listahan ng mga nabilang (pumalit sa "Recent Scans")
 function icUpdateRecentScans() {
-  var container = document.getElementById('icScanHistory');
-  if (!container) return;
+  var body = document.getElementById('icCountedBody');
+  if (!body) return;
+  var editable = _ic.currentSession && _ic.currentSession.status === 'IN_PROGRESS';
+  var isSpot = _ic.currentSession && _ic.currentSession.count_type === 'SPOT';
+  var q = ((document.getElementById('icCountedSearch') || {}).value || '').toLowerCase().trim();
+  var f = (document.getElementById('icCountedFilter') || {}).value || 'all';
 
-  var scanned = _ic.currentItems.filter(icIsCounted).sort(function(a, b) {
-    var ta = a.counted_at ? new Date(a.counted_at).getTime() : 0;
-    var tb = b.counted_at ? new Date(b.counted_at).getTime() : 0;
-    return tb - ta;
-  }).slice(0, 20);
+  var all = _ic.currentItems.filter(icIsCounted);
+  var rows = all.filter(function(it) {
+    var v = icEffectiveVariance(it), has = Math.abs(v) > 0.0001;
+    if (f === 'variance' && !has) return false;
+    if (f === 'matched' && has) return false;
+    if (!q) return true;
+    return (String(it.item_code) + ' ' + (it.description || '') + ' ' + (it.counted_by || '') + ' ' + (it.remarks || '')).toLowerCase().indexOf(q) !== -1;
+  }).sort(function(a, b) { return (new Date(b.counted_at).getTime() || 0) - (new Date(a.counted_at).getTime() || 0); });
 
-  if (scanned.length === 0) {
-    container.innerHTML = '<div class="text-center text-muted py-4 small">' +
-      '<i class="bi bi-inbox fs-3 d-block mb-2 opacity-50"></i>No scans yet</div>';
+  var badge = document.getElementById('icCountedBadge'); if (badge) badge.textContent = all.length;
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-4">' + (all.length ? 'No items match.' : 'No counted items yet') + '</td></tr>';
     return;
   }
-
-  var html = '';
-  scanned.forEach(function(it) {
-    var variance = Number(it.variance || 0);
-    var varClass = 'variance-ok';
-    var varText = 'OK';
-    if (Math.abs(variance) > 0.0001) {
-      if (variance > 0) { varClass = 'variance-pos'; varText = '+' + icNum(variance); }
-      else { varClass = 'variance-neg'; varText = icNum(variance); }
-    }
-
-    html += '<div class="scan-history-item">' +
-      '<div>' +
-        '<div class="item-code">' + icEsc(it.item_code) + '</div>' +
-        '<div class="small text-muted">' + icEsc((it.remarks || '').substring(0, 30)) + '</div>' +
-      '</div>' +
-      '<div class="text-end">' +
-        '<div class="qty">' + icNum(it.counted_qty) + '</div>' +
-        '<span class="variance ' + varClass + '">' + varText + '</span>' +
-      '</div>' +
-    '</div>';
-  });
-  container.innerHTML = html;
+  body.innerHTML = rows.map(function(it, i) {
+    var v = icEffectiveVariance(it), has = Math.abs(v) > 0.0001;
+    var vtxt = !has ? '<span class="variance variance-ok">OK</span>' : '<span class="variance ' + (v > 0 ? 'variance-pos' : 'variance-neg') + '">' + (v > 0 ? '+' : '') + icNum(v) + '</span>';
+    var act = editable
+      ? '<button class="btn btn-sm btn-outline-primary py-0 px-1 me-1" title="Edit qty" onclick="icEditCounted(' + it.id + ')"><i class="bi bi-pencil"></i></button>' +
+        '<button class="btn btn-sm btn-outline-danger py-0 px-1" title="' + (isSpot ? 'Delete item' : 'Reset count') + '" onclick="icRemoveCounted(' + it.id + ')"><i class="bi bi-trash"></i></button>'
+      : '<span class="text-muted small"><i class="bi bi-lock"></i></span>';
+    return '<tr' + (has ? ' class="has-variance"' : '') + '>' +
+      '<td>' + (i + 1) + '</td>' +
+      '<td><code>' + icEsc(it.item_code) + '</code></td>' +
+      '<td>' + icEsc((it.description || '—').substring(0, 60)) + '</td>' +
+      '<td class="text-center">' + icEsc(it.unit || 'PCS') + '</td>' +
+      '<td class="text-end">' + icNum(icExpectedQty(it)) + '</td>' +
+      '<td class="text-end fw-bold">' + icNum(it.counted_qty) + '</td>' +
+      '<td class="text-end">' + vtxt + '</td>' +
+      '<td class="text-center">' + (it.scan_count || 0) + '</td>' +
+      '<td>' + icEsc(it.counted_by || '—') + '</td>' +
+      '<td class="text-nowrap">' + icEsc(icFmtWhen(it.counted_at)) + '</td>' +
+      '<td><small>' + icEsc(it.remarks || '') + '</small></td>' +
+      '<td class="text-center text-nowrap">' + act + '</td></tr>';
+  }).join('');
 }
+
+// ── Edit / Delete ng nabilang (IN_PROGRESS lang) ──
+function icEditCounted(itemId) {
+  var it = _ic.currentItems.find(function(x) { return x.id === itemId; });
+  if (!it) return;
+  if (!_ic.currentSession || _ic.currentSession.status !== 'IN_PROGRESS') { icShowToast('Hindi na pwedeng i-edit. I-reject muna ng admin.', 'warning'); return; }
+  var old = document.getElementById('icEditModal'); if (old) old.remove();
+  var w = document.createElement('div');
+  w.innerHTML = '<div class="modal fade" id="icEditModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">' +
+    '<div class="modal-header"><h5 class="modal-title"><i class="bi bi-pencil me-2"></i>Edit Count</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>' +
+    '<div class="modal-body">' +
+      '<div class="mb-2"><code>' + icEsc(it.item_code) + '</code><div class="small text-muted">' + icEsc(it.description || '') + '</div></div>' +
+      '<div class="row g-2"><div class="col-6"><label class="form-label small fw-bold">System qty</label><input class="form-control" disabled value="' + icEsc(icNum(it.system_qty) + ' ' + (it.unit || '')) + '"></div>' +
+      '<div class="col-6"><label class="form-label small fw-bold">Counted qty *</label><input id="icEditQty" type="number" min="0" step="any" class="form-control" value="' + icEsc(it.counted_qty) + '"></div></div>' +
+      '<label class="form-label small fw-bold mt-2">Remarks</label><input id="icEditRemarks" class="form-control" maxlength="100" value="' + icEsc(it.remarks || '') + '">' +
+      '<div class="small text-muted mt-2">Ang ilalagay mo ay ang <b>kabuuang</b> bilang (hindi dagdag).</div>' +
+    '</div>' +
+    '<div class="modal-footer"><button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="icSaveEditCounted(' + it.id + ')">Save</button></div>' +
+  '</div></div></div>';
+  document.body.appendChild(w.firstChild);
+  var el = document.getElementById('icEditModal');
+  el.addEventListener('shown.bs.modal', function() { var q = document.getElementById('icEditQty'); q.focus(); q.select(); });
+  el.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); icSaveEditCounted(itemId); } });
+  bootstrap.Modal.getOrCreateInstance(el).show();
+}
+window.icEditCounted = icEditCounted;
+
+async function icSaveEditCounted(itemId) {
+  var it = _ic.currentItems.find(function(x) { return x.id === itemId; });
+  if (!it || _ic.isSaving) return;
+  var qty = parseFloat(document.getElementById('icEditQty').value);
+  var remarks = document.getElementById('icEditRemarks').value.trim();
+  if (isNaN(qty) || qty < 0) { icShowToast('Ang qty ay dapat 0 o higit pa', 'warning'); return; }
+  _ic.isSaving = true;
+  try {
+    var r = await icRpc('erp_ic_save_manual', { p_count_id: _ic.currentSession.id, p_rows: [{ id: itemId, counted_qty: qty, remarks: remarks }], p_user: icCurrentUser() });
+    (r.items || []).forEach(icApplyItem);
+    icApplyStats(r.stats);
+    bootstrap.Modal.getInstance(document.getElementById('icEditModal')).hide();
+    icUpdateProgress(); icUpdateRecentScans(); icUpdateVarianceSummary();
+    icShowToast('✓ ' + it.item_code + ' updated → ' + icNum(qty), 'success');
+  } catch (err) { icShowToast('Failed: ' + err.message, 'danger'); }
+  finally { _ic.isSaving = false; }
+}
+window.icSaveEditCounted = icSaveEditCounted;
+
+async function icRemoveCounted(itemId) {
+  var it = _ic.currentItems.find(function(x) { return x.id === itemId; });
+  if (!it || !_ic.currentSession || _ic.currentSession.status !== 'IN_PROGRESS') return;
+  var isSpot = _ic.currentSession.count_type === 'SPOT';
+  if (!confirm((isSpot ? 'I-delete ang ' : 'I-reset ang bilang ng ') + it.item_code + '?\n\nCounted: ' + icNum(it.counted_qty) + ' ' + (it.unit || '') +
+    (isSpot ? '\nMawawala ito sa Spot count na ito.' : '\nMagiging "Not counted" ulit (hindi aalisin sa session).') + '\n\nWalang magbabago sa stock.')) return;
+  try {
+    var r = await icRpc('erp_ic_remove_item', { p_count_id: _ic.currentSession.id, p_item_id: itemId, p_user: icCurrentUser() });
+    if (r.removed) {
+      _ic.currentItems = _ic.currentItems.filter(function(x) { return x.id !== itemId; });
+    } else {
+      it.counted_qty = 0; it.variance = 0; it.scan_count = 0; it.counted_at = null; it.counted_by = null; it.remarks = '';
+    }
+    icApplyStats(r.stats);
+    icUpdateProgress(); icUpdateRecentScans(); icUpdateVarianceSummary();
+    icShowToast(it.item_code + (r.removed ? ' deleted' : ' count reset'), 'info');
+  } catch (err) { icShowToast('Failed: ' + err.message + ' (na-run mo na ba ang ic-remove-item.sql?)', 'danger'); }
+}
+window.icRemoveCounted = icRemoveCounted;
 
 function icUpdateVarianceSummary() {
   var matched = 0;
@@ -1426,22 +1503,47 @@ function icPrintCountSheet() {
 
   document.getElementById('printCountNo').textContent = _ic.currentSession.count_no;
   document.getElementById('printDate').textContent = new Date().toLocaleDateString();
-  document.getElementById('printScope').textContent = _ic.currentSession.scope_category || 'All Items';
+  document.getElementById('printScope').textContent = _ic.currentSession.scope_category || (_ic.currentSession.count_type === 'SPOT' ? 'Spot Count' : 'All Items');
   document.getElementById('printCountedBy').textContent = _ic.currentSession.counted_by || '—';
 
-  var tbody = document.getElementById('printBody');
+  var th = 'border:1px solid #000;padding:3px;background:#f0f0f0;';
+  var td = 'border:1px solid #000;padding:2px;';
+  var counted = _ic.currentItems.filter(icIsCounted).sort(function(a, b) { return String(a.item_code).localeCompare(String(b.item_code)); });
+  var blank = _ic.currentItems.filter(function(it) { return !icIsCounted(it); });
   var html = '';
 
-  _ic.currentItems.forEach(function(it, idx) {
-    html += '<tr>' +
-      '<td style="border:1px solid #000;padding:2px;text-align:center;">' + (idx + 1) + '</td>' +
-      '<td style="border:1px solid #000;padding:2px;font-family:Courier New,monospace;font-size:7.5pt;">' + icEsc(it.item_code) + '</td>' +
-      '<td style="border:1px solid #000;padding:2px;font-size:7.5pt;">' + icEsc(it.description || '') + '</td>' +
-      '<td style="border:1px solid #000;padding:2px;text-align:center;">' + icEsc(it.unit || 'PCS') + '</td>' +
-      '<td style="border:1px solid #000;padding:2px;height:20px;"></td>' +
-    '</tr>';
-  });
-  tbody.innerHTML = html;
+  if (counted.length) {
+    html += '<div style="font-weight:bold;font-size:10pt;margin:10px 0 4px;">A. NABILANG NA (' + counted.length + ')</div>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:8pt;"><thead><tr>' +
+      '<th style="' + th + '">#</th><th style="' + th + 'text-align:left;">ITEM CODE</th><th style="' + th + 'text-align:left;">DESCRIPTION</th><th style="' + th + '">UNIT</th>' +
+      '<th style="' + th + 'width:60px;">COUNTED</th><th style="' + th + '">COUNTED BY</th><th style="' + th + '">DATE / TIME</th><th style="' + th + 'text-align:left;">REMARKS</th></tr></thead><tbody>' +
+      counted.map(function(it, i) {
+        return '<tr><td style="' + td + 'text-align:center;">' + (i + 1) + '</td>' +
+          '<td style="' + td + 'font-family:Courier New,monospace;font-size:7.5pt;">' + icEsc(it.item_code) + '</td>' +
+          '<td style="' + td + 'font-size:7.5pt;">' + icEsc(it.description || '') + '</td>' +
+          '<td style="' + td + 'text-align:center;">' + icEsc(it.unit || 'PCS') + '</td>' +
+          '<td style="' + td + 'text-align:center;font-weight:bold;">' + icNum(it.counted_qty) + '</td>' +
+          '<td style="' + td + 'font-size:7pt;">' + icEsc(it.counted_by || '') + '</td>' +
+          '<td style="' + td + 'font-size:7pt;white-space:nowrap;">' + icEsc(icFmtWhen(it.counted_at)) + '</td>' +
+          '<td style="' + td + 'font-size:7pt;">' + icEsc(it.remarks || '') + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+
+  if (blank.length) {
+    html += '<div style="font-weight:bold;font-size:10pt;margin:12px 0 4px;' + (counted.length ? 'page-break-before:always;' : '') + '">' +
+      (counted.length ? 'B. HINDI PA NABIBILANG — BLANGKO (' : 'MGA ITEM NA BIBILANGIN (') + blank.length + ')</div>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:8pt;"><thead><tr>' +
+      '<th style="' + th + '">#</th><th style="' + th + 'text-align:left;">ITEM CODE</th><th style="' + th + 'text-align:left;">DESCRIPTION</th><th style="' + th + '">UNIT</th><th style="' + th + 'width:80px;">COUNT</th></tr></thead><tbody>' +
+      blank.map(function(it, i) {
+        return '<tr><td style="' + td + 'text-align:center;">' + (i + 1) + '</td>' +
+          '<td style="' + td + 'font-family:Courier New,monospace;font-size:7.5pt;">' + icEsc(it.item_code) + '</td>' +
+          '<td style="' + td + 'font-size:7.5pt;">' + icEsc(it.description || '') + '</td>' +
+          '<td style="' + td + 'text-align:center;">' + icEsc(it.unit || 'PCS') + '</td>' +
+          '<td style="' + td + 'height:20px;"></td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+  if (!html) html = '<div style="text-align:center;padding:30px;">Walang item sa count na ito.</div>';
+  document.getElementById('printSections').innerHTML = html;
 
   var printArea = document.getElementById('countPrintArea');
   printArea.style.display = 'block';
