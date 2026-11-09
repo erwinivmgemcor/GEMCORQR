@@ -594,7 +594,7 @@ async function icAddSpotItem(itemCode) {
     icOpenQtyInputModal(exists || row);
   } catch (err) {
     console.error('[icAddSpotItem]', err);
-    icUpdateScanStatus('Not found: ' + itemCode, 'warning');
+    icUpdateScanStatus('Hindi madagdag: ' + itemCode + ' — ' + err.message, 'warning');
     icPlayErrorBuzz();
     icShowToast('Hindi madagdag: ' + err.message, 'warning');
   } finally {
@@ -674,7 +674,7 @@ async function icBuildSpotSuggestions(term, dropdown, input) {
   try {
     var t = encodeURIComponent(term.replace(/[*,()]/g, ' ').trim());
     rows = await erpFetch('erp_items',
-      'select=item_code,description,unit,on_hand&is_deleted=eq.false' +
+      'select=item_code,description,unit:base_unit,on_hand&is_deleted=not.is.true' +
       '&or=(item_code.ilike.*' + t + '*,description.ilike.*' + t + '*)&order=item_code.asc&limit=30') || [];
   } catch (e) {
     console.warn('[IC] spot search failed', e);
