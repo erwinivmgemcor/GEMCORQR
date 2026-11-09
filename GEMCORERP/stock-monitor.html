@@ -31,6 +31,7 @@
 <script defer src="prints-erp.js"></script>
 <script defer src="stock-monitor.js"></script>
 <script defer src="stock-allocate.js"></script>
+<script defer src="stock-allocate-import.js"></script>
 <script defer src="stock-colfilters.js"></script>
 <script defer src="js/bulk-price-update.js"></script>
   <script defer src="notif-alerts.js"></script>
@@ -250,6 +251,9 @@
     </button>
     <button class="erp-btn-primary" onclick="saOpen()" title="Mag-allocate ng stock (scan) — hindi na kailangan ng MRR">
       <i class="bi bi-bookmark-check me-1"></i>Allocate Stock
+    </button>
+    <button class="erp-btn-outline-dark" onclick="saiOpen()" title="Import ng allocated galing sa lumang sheet (CSV)">
+      <i class="bi bi-file-earmark-arrow-up me-1"></i>Import Allocated
     </button>
     <button class="erp-btn-primary" onclick="erpOpenAddItemModal()" title="Add a new item to inventory">
       <i class="bi bi-plus-lg"></i> Add New Item
