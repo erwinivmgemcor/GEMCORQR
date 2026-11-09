@@ -120,25 +120,33 @@ async function sofTrackerEnrich(list) {
 // ═══════════════════════════════════════════════════════════
 // KPIs
 // ═══════════════════════════════════════════════════════════
+// Na-release na = walang natirang naka-allocate (0 / 0) at hindi cancelled.
+function sofIsReleased(a) {
+  return String(a.status || '').toUpperCase() !== 'CANCELLED' && Number(a.total_allocated_qty || 0) <= 0;
+}
+
 function sofTrackerComputeKPIs() {
-  var total = _sofTracker.allAllocations.length;
+  var total = 0, released = 0;
   var active = 0, cancelled = 0;
   var totalRemaining = 0;
 
   _sofTracker.allAllocations.forEach(function(a) {
     var status = String(a.status || '').toUpperCase();
+    if (sofIsReleased(a)) { released++; return; }
+    total++;
     if (status === 'ACTIVE') active++;
     else if (status === 'CANCELLED') cancelled++;
     totalRemaining += Number(a.total_remaining_qty || 0);
   });
 
   var completed = 0;
-  _sofTracker.allAllocations.forEach(function(a) { if (String(a.status || '').toUpperCase() === 'COMPLETED') completed++; });
+  _sofTracker.allAllocations.forEach(function(a) { if (!sofIsReleased(a) && String(a.status || '').toUpperCase() === 'COMPLETED') completed++; });
   var pe;
   pe = document.getElementById('sofPillAll'); if (pe) pe.textContent = total;
   pe = document.getElementById('sofPillActive'); if (pe) pe.textContent = active;
   pe = document.getElementById('sofPillCompleted'); if (pe) pe.textContent = completed;
   pe = document.getElementById('sofPillCancelled'); if (pe) pe.textContent = cancelled;
+  pe = document.getElementById('sofPillReleased'); if (pe) pe.textContent = released;
 
   var el;
   el = document.getElementById('sofKpiTotal'); if (el) el.textContent = sofTrackerNum(total);
@@ -155,7 +163,13 @@ function sofTrackerApplyFilters() {
   var statusFilter = (document.getElementById('sofStatusFilter').value || '').toUpperCase();
 
   _sofTracker.filteredAllocations = _sofTracker.allAllocations.filter(function(a) {
-    if (statusFilter && String(a.status || '').toUpperCase() !== statusFilter) return false;
+    // Released tab = mga na-release na (0/0). Sa ibang tab, nakatago sila — maliban kung may hinahanap.
+    var rel = sofIsReleased(a);
+    if (statusFilter === 'RELEASED') { if (!rel) return false; }
+    else {
+      if (rel && !search) return false;
+      if (statusFilter && String(a.status || '').toUpperCase() !== statusFilter) return false;
+    }
 
     if (search) {
       var sofNo = String(a.sof_no || '').toLowerCase();
@@ -195,7 +209,7 @@ function sofTrackerRender() {
 
   var html = '';
   _sofTracker.filteredAllocations.forEach(function(a) {
-    var status = String(a.status || 'ACTIVE').toUpperCase();
+    var status = sofIsReleased(a) ? 'RELEASED' : String(a.status || 'ACTIVE').toUpperCase();
     var dateStr = a.sof_date ? new Date(a.sof_date).toLocaleDateString('en-US', {
       month: 'short', day: 'numeric', year: 'numeric'
     }) : '—';
