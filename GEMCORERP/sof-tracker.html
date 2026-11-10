@@ -124,6 +124,7 @@
         <option value="COMPLETED">Completed</option>
         <option value="CANCELLED">Cancelled</option>
         <option value="RELEASED">Released</option>
+        <option value="PENDINGMRIF">May pending MRIF</option>
       </select>
       <button class="erp-btn-clear" onclick="sofTrackerClearFilters()">
         <i class="bi bi-x-lg"></i> Clear
@@ -135,6 +136,7 @@
       <span class="sof-pill" data-status="COMPLETED" onclick="sofSetStatus('COMPLETED')"><span class="sof-dot"></span>Completed <span class="sof-pill-n" id="sofPillCompleted">0</span></span>
       <span class="sof-pill" data-status="CANCELLED" onclick="sofSetStatus('CANCELLED')"><span class="sof-dot"></span>Cancelled <span class="sof-pill-n" id="sofPillCancelled">0</span></span>
       <span class="sof-pill" data-status="RELEASED" onclick="sofSetStatus('RELEASED')" title="Mga SOF na na-release na ang lahat ng item (0 / 0)"><span class="sof-dot"></span>Released <span class="sof-pill-n" id="sofPillReleased">0</span></span>
+      <span class="sof-pill" data-status="PENDINGMRIF" onclick="sofSetStatus('PENDINGMRIF')" title="SOF na may natirang allocation at may MRIF na naghihintay"><span class="sof-dot" style="background:#ea580c"></span>May pending MRIF <span class="sof-pill-n" id="sofPillPending">0</span></span>
     </div>
   </div>
 
