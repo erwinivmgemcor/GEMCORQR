@@ -19,7 +19,8 @@ var _whEditState = {
   currentItems: [],
   modal: null,
   isSaving: false,
-  correctionMode: false   // COMPLETED MRIF: item code / description / UOM lang
+  correctionMode: false,  // (luma) item code / description / UOM lang — hindi na ginagamit ng COMPLETED MRIF
+  completedFull: false    // COMPLETED MRIF: full edit (items, qty, header) via erp_mrif_edit_full
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -37,6 +38,7 @@ async function openWarehouseEdit(docNo, docType) {
   _whEditState.docType = String(docType || 'MRIF').toUpperCase();
   _whEditState.isSaving = false;
   _whEditState.correctionMode = false;
+  _whEditState.completedFull = false;
 
   var modalEl = _ensureEditModal();
   _showEditModal(modalEl);
@@ -56,9 +58,9 @@ async function openWarehouseEdit(docNo, docType) {
 
     var status = String(doc.status || '').toUpperCase();
     if (status === 'COMPLETED' && _whEditState.docType === 'MRIF') {
-      // Correction mode: puwede pa ring i-edit ang COMPLETED na MRIF,
-      // pero item code, description at UOM lang (walang dagdag/bawas, walang qty change)
-      _whEditState.correctionMode = true;
+      // COMPLETED na MRIF: full edit na rin (dagdag/bawas ng item, qty, header) —
+      // ginagawa ng DB function erp_mrif_edit_full sa iisang transaction, kasama ang stock.
+      _whEditState.completedFull = true;
     } else if (status !== 'PENDING' && status !== 'PARTIAL') {
       _setModalLoading(false);
       _closeEditModal();
@@ -86,7 +88,7 @@ async function openWarehouseEdit(docNo, docType) {
     _whEditState.currentItems = JSON.parse(JSON.stringify(_whEditState.originalItems));
 
     if (window.ErpUom) { try { await ErpUom.load(); } catch (e) {} }   // UOM suggestions
-    if (_whEditState.correctionMode) await _whAcLoad(); // para kumpleto agad ang UOM list at item suggestions
+    if (_whEditState.correctionMode || _whEditState.completedFull) await _whAcLoad(); // item suggestions + UOM list
 
     _renderEditForm(doc);
     _setModalLoading(false);
@@ -182,6 +184,16 @@ function _renderEditForm(doc) {
   if (titleEl) titleEl.textContent = 'Edit: ' + doc.doc_no;
 
   var html = '';
+
+  if (_whEditState.completedFull) {
+    html += '<div class="alert alert-warning small py-2 mb-3">'
+         +    '<i class="bi bi-exclamation-triangle me-1"></i>'
+         +    'This MRIF is <strong>COMPLETED</strong>. You can still change anything — add or remove items, quantities, item codes and details. '
+         +    '<br><span class="text-dark">Stock follows automatically: issued qty that is reduced, removed or moved to another item code is '
+         +    '<strong>returned to stock</strong>; added or increased issued qty is <strong>deducted</strong>. '
+         +    'The status is recomputed (it becomes PARTIAL if something is no longer fully issued).</span>'
+         +  '</div>';
+  }
 
   html += '<div class="alert alert-info small py-2 mb-3">'
        +    '<i class="bi bi-info-circle me-1"></i>'
@@ -448,6 +460,7 @@ window._whSyncInputsToState = _whSyncInputsToState;
 async function _saveWarehouseEdit() {
   if (_whEditState.isSaving) return;
   if (_whEditState.correctionMode) return _saveWhCorrection();
+  if (_whEditState.completedFull) return _saveWhFullEdit();
 
   // ═══ v1.2: Force sync inputs to state BAGO mag-validate ═══
   _whSyncInputsToState();
@@ -758,6 +771,122 @@ async function _saveWarehouseEdit() {
 }
 
 window._saveWarehouseEdit = _saveWarehouseEdit;
+
+// ═══════════════════════════════════════════════════════════
+// FULL EDIT — COMPLETED MRIF (atomic: header + items + stock + audit)
+// Requestor / Department / Doc No. stay locked (Production ownership).
+// ═══════════════════════════════════════════════════════════
+async function _saveWhFullEdit() {
+  if (_whEditState.isSaving) return;
+  _whSyncInputsToState();
+
+  var reason = (document.getElementById('whEditReason').value || '').trim();
+  if (!reason) {
+    erpShowToast('Reason for change is required', 'warning');
+    document.getElementById('whEditReason').focus();
+    return;
+  }
+
+  var orgById = {};
+  _whEditState.originalItems.forEach(function(o) { if (o.id) orgById[o.id] = o; });
+
+  var payload = [];
+  for (var i = 0; i < _whEditState.currentItems.length; i++) {
+    var it = _whEditState.currentItems[i];
+    var code = String(it.itemCode || '').trim();
+    var unit = String(it.unit || '').trim();
+    var req = Number(it.qty || 0), iss = Number(it.issuedQty || 0);
+    if (!code) { erpShowToast('Item #' + (i + 1) + ' has no item code', 'warning'); return; }
+    if (!unit) { erpShowToast('Item #' + (i + 1) + ' has no unit', 'warning'); return; }
+    if (!(req > 0)) { erpShowToast('Item #' + (i + 1) + ' needs a requested qty greater than 0', 'warning'); return; }
+    if (iss < 0) { erpShowToast('Item #' + (i + 1) + ': issued qty cannot be negative', 'warning'); return; }
+    if (iss > req) { erpShowToast('Item #' + (i + 1) + ': issued qty is more than requested', 'warning'); return; }
+
+    var org = it.id ? orgById[it.id] : null;
+    if ((!org || code !== String(org.itemCode || '').trim()) && _whAc.list && _whAc.list.length) {
+      var hit = _whAc.list.filter(function(r) { return String(r.code).toLowerCase() === code.toLowerCase(); })[0];
+      if (!hit) { erpShowToast('Item #' + (i + 1) + ': "' + code + '" is not in inventory', 'warning'); return; }
+      code = String(hit.code);
+    }
+    payload.push({ id: it.id || null, item_code: code, description: String(it.description || '').trim(),
+                   unit: unit, requested_qty: req, issued_qty: iss, remarks: String(it.remarks || '').trim() });
+  }
+  if (!payload.length) { erpShowToast('Add at least one item', 'warning'); return; }
+
+  // ─── Buod ng galaw ng stock para sa confirm ───
+  var back = [], take = [], keptIds = {};
+  payload.forEach(function(p) {
+    var o = p.id ? orgById[p.id] : null;
+    if (!o) { if (p.issued_qty > 0) take.push('−' + p.issued_qty + ' ' + p.item_code + ' (new line)'); return; }
+    keptIds[p.id] = true;
+    if (p.item_code !== o.itemCode) {
+      if (o.issuedQty > 0) back.push('+' + o.issuedQty + ' ' + o.itemCode);
+      if (p.issued_qty > 0) take.push('−' + p.issued_qty + ' ' + p.item_code);
+    } else if (p.issued_qty > o.issuedQty) take.push('−' + (p.issued_qty - o.issuedQty) + ' ' + p.item_code);
+    else if (p.issued_qty < o.issuedQty) back.push('+' + (o.issuedQty - p.issued_qty) + ' ' + p.item_code);
+  });
+  var removed = _whEditState.originalItems.filter(function(o) { return o.id && !keptIds[o.id]; });
+  removed.forEach(function(o) { if (o.issuedQty > 0) back.push('+' + o.issuedQty + ' ' + o.itemCode + ' (line removed)'); });
+
+  var msg = 'Save changes to ' + _whEditState.docNo + '?\n\n' + payload.length + ' item(s) on the form'
+          + (removed.length ? ', ' + removed.length + ' removed' : '') + '.';
+  if (back.length) msg += '\n\nRETURNED TO STOCK:\n' + back.join('\n');
+  if (take.length) msg += '\n\nDEDUCTED FROM STOCK:\n' + take.join('\n');
+  if (!back.length && !take.length) msg += '\n\nNo stock movement.';
+  if (!confirm(msg)) return;
+
+  _whEditState.isSaving = true;
+  var btn = document.getElementById('whEditSaveBtn');
+  var origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+
+  var user = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE';
+  var header = {
+    jo_no: (document.getElementById('whEditJoNo').value || '').trim(),
+    gem_so_no: (document.getElementById('whEditGemSoNo').value || '').trim(),
+    client_name: (document.getElementById('whEditClient').value || '').trim(),
+    project: (document.getElementById('whEditProject').value || '').trim()
+  };
+  var dv = (document.getElementById('whEditDate').value || '').trim();
+  if (dv) header.date_prepared = dv;
+
+  try {
+    var res = await fetch(erpUrl('rpc/erp_mrif_edit_full'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({ p_doc_no: _whEditState.docNo, p_header: header, p_items: payload, p_edited_by: user, p_reason: reason })
+    });
+
+    if (res.status === 404) {
+      throw new Error('The database function is missing. Run erp-mrif-edit-full.sql in Supabase first, then try again.');
+    }
+    if (!res.ok) {
+      var errText = await res.text();
+      var pg = ''; try { pg = (JSON.parse(errText).message) || ''; } catch (e) {}
+      if (pg.indexOf('Insufficient stock') !== -1) {
+        var item = (pg.match(/item (\S+?)\./) || [])[1] || 'an item';
+        var curStock = (pg.match(/Current: ([\d.]+)/) || [])[1] || '0';
+        throw new Error('Not enough stock for ' + item + ' (on-hand: ' + curStock + '). Add stock first, then try again. Nothing was changed.');
+      }
+      throw new Error(pg || ('HTTP ' + res.status + ' ' + errText.substring(0, 150)));
+    }
+    var data = await res.json();
+    if (!data || !data.success) throw new Error((data && data.error) || 'Save failed');
+
+    _closeEditModal();
+    erpShowToast('✅ Saved: ' + _whEditState.docNo + ' (' + data.status + ')', 'success');
+    if (typeof mrifListRefresh === 'function') setTimeout(mrifListRefresh, 500);
+    else if (typeof allRequestsLoad === 'function') setTimeout(allRequestsLoad, 500);
+  } catch (err) {
+    console.error('[WarehouseEdit] Full edit failed:', err);
+    erpShowToast('Save failed: ' + err.message, 'danger');
+  } finally {
+    _whEditState.isSaving = false;
+    if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
+  }
+}
+window._saveWhFullEdit = _saveWhFullEdit;
 
 // ═══════════════════════════════════════════════════════════
 // CORRECTION MODE — COMPLETED MRIF
