@@ -202,6 +202,9 @@ tr.row-stale { border-left-color:#dc2626; background:#fff7f7; color:#475569; }
       <button class="erp-btn-primary" onclick="rpCreatePrfFromSelection()" title="Create a PRF — from the selected items and/or other items you add">
         <i class="bi bi-file-earmark-plus"></i> Create PRF
       </button>
+      <button class="erp-btn-outline-dark" onclick="rpOpenDrafts()" title="Mga PRF na naka-save pa bilang draft">
+        <i class="bi bi-journal-text"></i> My Drafts <span class="badge bg-primary" id="rpDraftCount">0</span>
+      </button>
       <button class="erp-btn-outline-dark" id="rpBtnExport" onclick="rpExport()">
         <i class="bi bi-file-earmark-excel"></i> Export
       </button>
@@ -464,6 +467,9 @@ tr.row-stale { border-left-color:#dc2626; background:#fff7f7; color:#475569; }
         </div>
       </div>
       <div class="modal-footer">
+        <button type="button" class="btn btn-outline-primary me-auto" id="rpBtnSaveDraft" onclick="rpSaveDraft()" title="I-save muna — hindi pa ito ipapasok bilang PRF">
+          <i class="bi bi-journal-plus me-1"></i><span id="rpBtnSaveDraftLabel">Save Draft</span>
+        </button>
         <button type="button" class="btn btn-outline-secondary" onclick="rpClosePrfModal()">Cancel</button>
         <button type="button" class="btn btn-primary" id="rpBtnCreatePrf" onclick="rpSubmitPrf()">
           <i class="bi bi-check-circle me-1"></i>Create PRF
