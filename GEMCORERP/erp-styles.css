@@ -921,6 +921,13 @@ body {
   border-bottom: 1px solid #000;
 }
 
+/* Fixed 4-column header grid: labels and values always line up, blank values still show their underline */
+.mrif-meta-grid { table-layout: fixed; }
+.mrif-meta-grid td { height: 18px; padding: 2px 4px; vertical-align: bottom; word-wrap: break-word; }
+.mrif-meta-grid td.meta-label { width: 19%; padding-right: 6px; white-space: nowrap; }
+.mrif-meta-grid td.meta-value { width: 31%; border-bottom: 1px solid #999; }
+.mrif-meta-grid td.meta-strong { font-weight: bold; }
+
 .mrif-items {
   width: 100%;
   border-collapse: collapse;
