@@ -58,7 +58,7 @@ mark { background: #fef08a; padding: 0 1px; }
   <div class="erp-page-header">
     <div>
       <div class="erp-page-title"><i class="bi bi-journal-text"></i><span>Item Catalog</span></div>
-      <div class="erp-breadcrumb"><span>Existing items: code, description, category and unit</span></div>
+      <div class="erp-breadcrumb"><span>Existing items: code, description, category and unit (unit cost for Finance)</span></div>
     </div>
     <div>
       <button class="erp-btn-outline" onclick="icatExport()"><i class="bi bi-download"></i> <span>Export CSV</span></button>
@@ -90,6 +90,7 @@ mark { background: #fef08a; padding: 0 1px; }
             <th onclick="icatSort('description')">Description <i class="bi bi-arrow-down-up"></i></th>
             <th onclick="icatSort('category')">Category <i class="bi bi-arrow-down-up"></i></th>
             <th onclick="icatSort('unit')">Unit <i class="bi bi-arrow-down-up"></i></th>
+            <th id="icatCostTh" class="text-end" style="display:none" onclick="icatSort('unit_cost')">Unit Cost <i class="bi bi-arrow-down-up"></i></th>
           </tr>
         </thead>
         <tbody id="icatBody"><tr><td colspan="4" class="text-center py-5 text-muted">Loading items…</td></tr></tbody>
