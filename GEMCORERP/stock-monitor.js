@@ -1505,8 +1505,8 @@ async function erpShowItemDetails(itemCode) {
         var typeCell = isAdj
           ? '<span class="badge bg-warning text-dark">ADJ</span>'
           : erpEsc(m.transaction_type || '—');
-        var refCell = erpEsc(m.reference_doc || '') +
-          (m._synthetic && m.reason ? ' <span class="text-muted small">— ' + erpEsc(m.reason) + '</span>' : '') +
+        var refCell = erpEsc(erpDisplayText(m.reference_doc)) +
+          (m._synthetic && m.reason ? ' <span class="text-muted small">— ' + erpEsc(erpDisplayText(m.reason)) + '</span>' : '') +
           (m._synthetic && m.performed_by ? ' <span class="text-muted small">(' + erpEsc(m.performed_by) + ')</span>' : '');
         html += '<tr' + (isAdj ? ' style="background:#fffbeb;"' : '') + '><td>' + erpEsc(ds) + '</td><td>' + typeCell + '</td>' +
           '<td class="text-end text-success">' + (qin ? '+' + erpNum(qin) : '') + '</td>' +
