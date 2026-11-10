@@ -65,8 +65,8 @@ function initUserInfo() {
   initDateNeeded();
 }
 
-// Date Needed: default = ngayon + 7 araw (lead time ng warehouse sa PRF)
-var PRF_LEAD_DAYS_NEW = 7;
+// Date Needed: default = ngayon + 13 araw (lead time ng warehouse sa PRF)
+var PRF_LEAD_DAYS_NEW = 13;
 function defaultDateNeededIso() {
   var d = new Date();
   d.setDate(d.getDate() + PRF_LEAD_DAYS_NEW);
@@ -1241,7 +1241,7 @@ async function submitPrf() {
   var approvedBy = document.getElementById('prfApprovedBy').value.trim();
   var notes = document.getElementById('prfNotes').value.trim();
   var dateNeededEl = document.getElementById('prfDateNeeded');
-  var dateNeeded = (dateNeededEl && dateNeededEl.value) ? dateNeededEl.value : defaultDateNeededIso();   // blangko → +7 araw
+  var dateNeeded = (dateNeededEl && dateNeededEl.value) ? dateNeededEl.value : defaultDateNeededIso();   // blangko → +13 araw
 
   if (!prfNo) { erpShowToast('PRF No. required', 'warning'); return; }
   if (!category) { erpShowToast('Category required', 'warning'); return; }
