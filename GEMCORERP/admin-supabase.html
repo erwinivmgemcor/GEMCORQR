@@ -120,7 +120,7 @@
     </button>
     <button class="asc-tab" data-tab="cutover" onclick="ascSwitchTab('cutover')">
       <i class="bi bi-arrow-repeat"></i>
-      <span>Full Cutover</span>
+      <span>Beginning Balance</span>
       <span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem;">NEW</span>
     </button>
     <button class="asc-tab" data-tab="guide" onclick="ascSwitchTab('guide')">
@@ -546,7 +546,7 @@
       <div class="d-flex align-items-start gap-3">
         <i class="bi bi-exclamation-triangle-fill" style="font-size:2rem;color:#d97706;flex-shrink:0;"></i>
         <div>
-          <strong style="font-size:1.05rem;">Full Cutover — Month-End Inventory Replace</strong>
+          <strong style="font-size:1.05rem;">Beginning Balance — Month-End Inventory Replace</strong>
           <div class="small mt-1">
             Ito ay <strong>mag-replace ng buong inventory</strong>. Auto-snapshot bago mag-execute para pwede i-rollback.
             <br><strong>Steps:</strong> 1) Upload CSV → 2) Review diff → 3) Execute → 4) Verify
@@ -587,7 +587,7 @@
         <div class="mb-3">
           <label class="form-label fw-bold">Notes / Reason <span class="text-danger">*</span></label>
           <input type="text" id="cutoverNotes" class="form-control" 
-            placeholder="e.g., November 2026 starting inventory (Month-End Cutover)" maxlength="300">
+            placeholder="e.g., November 2026 starting inventory (Month-End Beg. Bal.)" maxlength="300">
         </div>
         
         <div class="row g-3 mb-3">
@@ -703,7 +703,7 @@
             <div class="flex-grow-1">
               <div class="fw-bold" style="color:#991b1b;">⚠️ FINAL CONFIRMATION REQUIRED</div>
               <div class="small" style="color:#7f1d1d;">
-                Ang cutover ay <strong>irreversible</strong> maliban sa rollback within 24 hours.
+                Ang beg. bal. ay <strong>irreversible</strong> maliban sa rollback within 24 hours.
                 Auto-snapshot ang gagawin bago mag-execute.
               </div>
             </div>
@@ -712,7 +712,7 @@
                 <i class="bi bi-x-lg me-1"></i>Cancel
               </button>
               <button class="btn btn-danger btn-lg" onclick="ascCutoverConfirm()">
-                <i class="bi bi-shield-check me-1"></i>Execute Cutover
+                <i class="bi bi-shield-check me-1"></i>Execute Beg. Bal.
               </button>
             </div>
           </div>
@@ -725,7 +725,7 @@
       <div class="asc-card-header" style="background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff;">
         <div class="asc-card-title" style="color:#fff;">
           <i class="bi bi-check-circle-fill"></i>
-          <span>Cutover Complete!</span>
+          <span>Beg. Bal. Complete!</span>
         </div>
       </div>
       <div class="asc-card-body">
@@ -765,12 +765,12 @@
         <div class="alert alert-info small">
           <i class="bi bi-info-circle me-1"></i>
           <strong>Snapshot ID:</strong> <code id="cutoverResultSnapshotId">—</code>
-          <br><strong>Tip:</strong> Kung may issue, pwede i-rollback via "Cutover History" sa ibaba.
+          <br><strong>Tip:</strong> Kung may issue, pwede i-rollback via "Beg. Bal. History" sa ibaba.
         </div>
         
         <div class="text-center">
           <button class="btn btn-primary" onclick="ascCutoverReset()">
-            <i class="bi bi-arrow-clockwise me-1"></i>Start New Cutover
+            <i class="bi bi-arrow-clockwise me-1"></i>Start New Beg. Bal.
           </button>
         </div>
       </div>
@@ -781,7 +781,7 @@
       <div class="asc-card-header">
         <div class="asc-card-title">
           <i class="bi bi-clock-history"></i>
-          <span>Cutover History & Rollback</span>
+          <span>Beg. Bal. History & Rollback</span>
         </div>
         <button class="btn btn-sm btn-outline-secondary" onclick="ascCutoverLoadSnapshots()">
           <i class="bi bi-arrow-clockwise me-1"></i>Refresh
@@ -959,11 +959,11 @@
 
           <div class="guide-item">
             <h6>Restore Unit Cost from Snapshot</h6>
-            <p>Gamitin ito kung <strong>nawala o naging zero</strong> ang unit costs ng items — kadalasan nangyayari pagkatapos ng cutover na may blank CSV.</p>
+            <p>Gamitin ito kung <strong>nawala o naging zero</strong> ang unit costs ng items — kadalasan nangyayari pagkatapos ng beg. bal. na may blank CSV.</p>
             <ol class="guide-steps">
               <li>Pumunta sa <strong>Supabase SQL Editor</strong></li>
               <li>I-run ang SQL sa ibaba</li>
-              <li>Palitan ang <code>4</code> ng tamang snapshot ID (i-check sa Cutover History)</li>
+              <li>Palitan ang <code>4</code> ng tamang snapshot ID (i-check sa Beg. Bal. History)</li>
             </ol>
             <div class="guide-sql-box">
               <pre><code>WITH snapshot_data AS (
@@ -1035,7 +1035,7 @@ LIMIT 20;</code></pre>
             <p><strong>Cause:</strong> Lahat ng <code>unit_cost</code> ay zero.</p>
             <p><strong>Fix:</strong></p>
             <ol class="guide-steps">
-              <li>Pumunta sa <strong>Cutover History</strong> — hanapin ang snapshot na may valid cost</li>
+              <li>Pumunta sa <strong>Beg. Bal. History</strong> — hanapin ang snapshot na may valid cost</li>
               <li>I-restore via SQL (tingnan ang Data Management section)</li>
               <li>I-refresh ang Stock Monitor</li>
             </ol>
@@ -1062,9 +1062,9 @@ LIMIT 20;</code></pre>
           </div>
 
           <div class="guide-item">
-            <h6>❌ Cutover Failed: "column does not exist"</h6>
+            <h6>❌ Beg. Bal. Failed: "column does not exist"</h6>
             <p><strong>Cause:</strong> Luma ang SQL function sa Supabase.</p>
-            <p><strong>Fix:</strong> I-re-run ang latest SQL function — tingnan ang Full Cutover tab.</p>
+            <p><strong>Fix:</strong> I-re-run ang latest SQL function — tingnan ang Beginning Balance tab.</p>
           </div>
 
           <div class="guide-item">
@@ -1123,10 +1123,10 @@ LIMIT 20;</code></pre>
           </div>
 
           <div class="guide-item">
-            <h6>🔙 Rollback Last Cutover</h6>
-            <p>I-undo ang last cutover kung may issue.</p>
+            <h6>🔙 Rollback Last Beg. Bal.</h6>
+            <p>I-undo ang last beg. bal. kung may issue.</p>
             <button class="guide-btn warning" onclick="ascSwitchTab('cutover')">
-              <i class="bi bi-arrow-counterclockwise me-1"></i>Go to Cutover History
+              <i class="bi bi-arrow-counterclockwise me-1"></i>Go to Beg. Bal. History
             </button>
           </div>
 
@@ -1188,7 +1188,7 @@ LIMIT 20;</code></pre>
                 <tr><td><code>user_audit_log</code></td><td>User actions</td></tr>
                 <tr><td><code>admin_audit_log</code></td><td>Admin actions</td></tr>
                 <tr><td><code>erp_manual_edits_audit</code></td><td>Manual edits</td></tr>
-                <tr><td><code>erp_cutover_log</code></td><td>Cutover log</td></tr>
+                <tr><td><code>erp_cutover_log</code></td><td>Beg. Bal. log</td></tr>
               </tbody>
             </table>
           </div>
@@ -1229,23 +1229,23 @@ LIMIT 20;</code></pre>
           </div>
 
           <div class="guide-item">
-            <h6>📊 Paano Mag-Run Ng Cutover</h6>
+            <h6>📊 Paano Mag-Run Ng Beg. Bal.</h6>
             <ol class="guide-steps">
-              <li>Pumunta sa <strong>Full Cutover</strong> tab</li>
+              <li>Pumunta sa <strong>Beginning Balance</strong> tab</li>
               <li>Click <strong>"Download Current as Template"</strong></li>
               <li>I-edit ang data (i-keep ang Unit Cost column!)</li>
               <li>Upload ang CSV</li>
               <li>Review ang diff (Add/Update/Remove)</li>
-              <li>Type <strong>"CUTOVER"</strong> para mag-execute</li>
+              <li>Type <strong>"BEG BAL"</strong> para mag-execute</li>
               <li>Auto-snapshot gagawin</li>
             </ol>
           </div>
 
           <div class="guide-item">
-            <h6>🔙 Paano Mag-Rollback Ng Cutover</h6>
+            <h6>🔙 Paano Mag-Rollback Ng Beg. Bal.</h6>
             <ol class="guide-steps">
-              <li>Pumunta sa <strong>Full Cutover</strong> tab</li>
-              <li>Scroll down sa <strong>Cutover History</strong></li>
+              <li>Pumunta sa <strong>Beginning Balance</strong> tab</li>
+              <li>Scroll down sa <strong>Beg. Bal. History</strong></li>
               <li>Hanapin ang snapshot na gusto mong balikan</li>
               <li>Click ang <strong>🔄 Rollback</strong> icon</li>
               <li>Type <strong>"ROLLBACK"</strong> para mag-confirm</li>
@@ -1308,7 +1308,7 @@ LIMIT 20;</code></pre>
             <ul class="guide-list">
               <li>INSERT, UPDATE, DELETE actions</li>
               <li>Raw SQL executions</li>
-              <li>Cutover executions</li>
+              <li>Beg. Bal. executions</li>
               <li>Rollback operations</li>
             </ul>
             <button class="guide-btn-outline" onclick="ascSwitchTab('audit')">
@@ -1333,12 +1333,12 @@ LIMIT 20;</code></pre>
           <div class="guide-item">
             <h6>✅ DO's</h6>
             <ul class="guide-list">
-              <li>✅ <strong>Backup bago mag-major operation</strong> (cutover, reset)</li>
-              <li>✅ <strong>I-check ang diff</strong> bago mag-execute ng cutover</li>
+              <li>✅ <strong>Backup bago mag-major operation</strong> (beg. bal., reset)</li>
+              <li>✅ <strong>I-check ang diff</strong> bago mag-execute ng beg. bal.</li>
               <li>✅ <strong>I-keep ang Unit Cost column</strong> sa CSV</li>
               <li>✅ <strong>Regular backup</strong> — every Friday</li>
               <li>✅ <strong>Use Read + Write mode</strong> for daily work</li>
-              <li>✅ <strong>Test sa ilang items muna</strong> bago mag-full cutover</li>
+              <li>✅ <strong>Test sa ilang items muna</strong> bago mag-full beg. bal.</li>
             </ul>
           </div>
 
@@ -1347,7 +1347,7 @@ LIMIT 20;</code></pre>
             <ul class="guide-list">
               <li>❌ <strong>Huwag mag-delete ng items</strong> without backup</li>
               <li>❌ <strong>Huwag i-blank ang Unit Cost</strong> sa CSV — maging 0</li>
-              <li>❌ <strong>Huwag mag-execute ng cutover</strong> kung may unresolved issue</li>
+              <li>❌ <strong>Huwag mag-execute ng beg. bal.</strong> kung may unresolved issue</li>
               <li>❌ <strong>Huwag i-share ang admin PIN</strong></li>
               <li>❌ <strong>Huwag mag-run ng Raw SQL</strong> kung hindi 100% sure</li>
               <li>❌ <strong>Huwag mag-reset ng transactions</strong> without double-checking</li>
@@ -1363,7 +1363,7 @@ LIMIT 20;</code></pre>
               <tbody>
                 <tr><td>Daily</td><td>Check notifications, process requests</td></tr>
                 <tr><td>Weekly</td><td>Backup database</td></tr>
-                <tr><td>Monthly</td><td>Month-end cutover, usage entry</td></tr>
+                <tr><td>Monthly</td><td>Month-end beg. bal., usage entry</td></tr>
                 <tr><td>Quarterly</td><td>Audit log review, user access review</td></tr>
                 <tr><td>Yearly</td><td>Full data audit, cleanup old snapshots</td></tr>
               </tbody>
