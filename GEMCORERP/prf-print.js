@@ -5,7 +5,7 @@
 // ============================================================
 
 // Ilang araw ang hinihintay ng warehouse bago dapat matanggap ang PRF (default ng "Date needed")
-var PRF_LEAD_DAYS = 7;
+var PRF_LEAD_DAYS = 13;
 
 var PRF_PRINT_CONFIG = {
   company: 'Greenmetal Electric Manufacturing Corporation',
@@ -32,7 +32,7 @@ function prfDefaultDateNeeded(createdAt) {
   d.setDate(d.getDate() + PRF_LEAD_DAYS);
   return d;
 }
-// Ang inilagay ng user kung meron; kung wala, PRF date + 1 linggo
+// Ang inilagay ng user kung meron; kung wala, PRF date + PRF_LEAD_DAYS (13 araw)
 function prfEffectiveDateNeeded(prf) {
   return prfParseDate(prf && prf.date_needed) || prfDefaultDateNeeded(prf && prf.created_at);
 }
