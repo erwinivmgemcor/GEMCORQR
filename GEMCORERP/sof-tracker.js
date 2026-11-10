@@ -82,14 +82,14 @@ async function sofTrackerLoad() {
 window.sofTrackerLoad = sofTrackerLoad;
 
 // ═══════════════════════════════════════════════════════════
-// ENRICH — punan ang Project / JO No. / Client na blangko
-// Source order: allocation mismo → erp_sof_cache → MRIF documents
+// ENRICH — Client / Project / JO No.
+// CLIENT: erp_sof_cache → MRIF documents → blangko. HINDI na ginagamit ang client_name ng allocation,
+//         dahil supplier ang laman nito (hal. Yu Eng Kao, Greenlight), hindi ang tunay na client.
+// PROJECT / JO: erp_sof_cache → MRIF documents → (kung wala) ang nasa allocation.
 // ═══════════════════════════════════════════════════════════
 async function sofTrackerEnrich(list) {
   try {
-    var missing = list.filter(function(a) {
-      return a.sof_no && (!a.project_name || !a.jo_no || !a.client_name);
-    }).map(function(a) { return String(a.sof_no); });
+    var missing = list.filter(function(a) { return a.sof_no; }).map(function(a) { return String(a.sof_no); });
     if (missing.length === 0) return;
 
     var cacheBySof = {}, mrifBySof = {};
@@ -109,9 +109,10 @@ async function sofTrackerEnrich(list) {
     list.forEach(function(a) {
       var c = cacheBySof[a.sof_no] || {};
       var m = mrifBySof[a.sof_no] || {};
-      if (!a.client_name)  a.client_name  = c.client_name  || m.client_name || '';
-      if (!a.project_name) a.project_name = c.project_name || m.project     || '';
-      if (!a.jo_no)        a.jo_no        = c.jo_no        || m.jo_no       || '';
+      a.supplier_name = a.client_name || '';                                   // (luma) hindi ipinapakita
+      a.client_name   = c.client_name  || m.client_name || '';                 // tunay na client, o blangko
+      a.project_name  = c.project_name || m.project     || a.project_name || '';
+      a.jo_no         = a.jo_no        || c.jo_no       || m.jo_no        || '';
     });
   } catch(err) {
     console.warn('[sofTrackerEnrich]', err);
@@ -304,9 +305,9 @@ function sofTrackerRender() {
         (remaining > 0 && sofPendingDocs(a.sof_no) > 0 ? '<div><span class="sof-pend-chip" title="May MRIF na naghihintay ng item na naka-allocate sa SOF na ito"><i class="bi bi-hourglass-split"></i>' + sofPendingDocs(a.sof_no) + ' MRIF pending</span></div>' : '') +
       '</td>' +
       '<td><div class="sof-client">' +
-        '<div class="sof-avatar" style="background:' + sofAvatarColor(client || a.sof_no) + '">' + sofInitials(client) + '</div>' +
-        '<div style="min-width:0"><div class="sof-client-name">' + sofTrackerEsc(client || '—') + '</div>' +
-        '<div class="sof-client-sub"><i class="bi bi-folder2-open"></i>' + sofTrackerEsc(project || 'No project') + '</div></div>' +
+        (client ? '<div class="sof-avatar" style="background:' + sofAvatarColor(client) + '">' + sofInitials(client) + '</div>' : '') +
+        '<div style="min-width:0"><div class="sof-client-name">' + sofTrackerEsc(client) + '</div>' +
+        (project ? '<div class="sof-client-sub"><i class="bi bi-folder2-open"></i>' + sofTrackerEsc(project) + '</div>' : '') + '</div>' +
       '</div></td>' +
       '<td><span class="sof-jo">' + sofTrackerEsc(a.jo_no || '—') + '</span></td>' +
       '<td class="sof-date">' + sofTrackerEsc(dateStr) + '</td>' +
