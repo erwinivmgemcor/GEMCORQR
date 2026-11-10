@@ -193,6 +193,7 @@ function mrifListRender() {
     
     var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
     var canCancel = canEdit && statusUpper === 'PENDING';
+    var canCancelIssued = (statusUpper === 'PARTIAL' || statusUpper === 'COMPLETED') && typeof window.mrifCanCancelIssued === 'function' && window.mrifCanCancelIssued();
     var editable = canEdit && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL' || statusUpper === 'COMPLETED');
     var editTitle = statusUpper === 'COMPLETED' ? 'Correct item code / description / UOM' : 'Edit (Warehouse)';
     
@@ -222,6 +223,11 @@ function mrifListRender() {
         (canCancel ?
           '<button class="erp-action-btn" style="color:#b91c1c" onclick="mrifCancel(\'' + safeDoc + '\')" title="Cancel MRIF (nagawa nang mali / duplicate)">' +
             '<i class="bi bi-x-circle"></i>' +
+          '</button>'
+          : '') +
+        (canCancelIssued ?
+          '<button class="erp-action-btn" style="color:#b91c1c" onclick="mrifCancel(\'' + safeDoc + '\', \'' + statusUpper + '\')" title="Cancel MRIF at ibalik ang stock (Admin)">' +
+            '<i class="bi bi-arrow-counterclockwise"></i>' +
           '</button>'
           : '') +
       '</td>' +
