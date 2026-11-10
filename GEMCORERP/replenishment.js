@@ -34,6 +34,7 @@ var _rp = {
   extraItems: [],       // items added by hand in the modal (not on the reorder list)
   modalVals: {},        // typed qty/remarks, kept across re-renders
   catalog: null,        // erp_items search list (loaded on first use)
+  draftId: null,        // id ng draft na binuksan (Resume) — buburahin kapag na-create na ang PRF
   openMap: null         // {item_code: {qty, prfs:[{prf_no,status,open_qty}]}} — fresh each time the modal opens
 };
 
@@ -826,6 +827,7 @@ function rpSuggested(it) {
 }
 
 function rpCreatePrfFromSelection() {
+  _rp.draftId = null; _rp.draftStamp = null;      // bagong PRF, hindi galing sa draft
   var short = rpSelectedRows().filter(function(it) { var a = rpActive(it); return a !== null && a < RP_MIN_ACTIVE_MONTHS; });
   if (short.length) {
     var list = short.slice(0, 8).map(function(it) { return '  • ' + it.item_code + '  (' + rpActive(it) + ' mo)'; }).join('\n');
@@ -844,12 +846,17 @@ function rpCreatePrfFromSelection() {
   document.getElementById('rpAddItemInput').value = '';
   document.getElementById('rpAddItemResults').style.display = 'none';
 
+  rpShowPrfModal();
+}
+
+function rpShowPrfModal() {
   rpRefreshModal();
 
   if (!_rp.prfModal) {
     _rp.prfModal = new bootstrap.Modal(document.getElementById('rpConfirmPrfModal'), { backdrop: 'static' });
   }
   _rp.prfModal.show();
+  rpDraftsRefreshUi();
   rpLoadCatalog(); // warm up the "add other item" search
   rpLoadOpenMap().then(function() { rpStashModalVals(); rpRefreshModal(); }); // fresh open-PRF info → re-draw
 }
@@ -1134,6 +1141,7 @@ async function rpSubmitPrf() {
     } catch(e) {}
 
     _rp.prfsChanged = true;
+    if (_rp.draftId) { rpDraftDelete(_rp.draftId); _rp.draftId = null; }   // na-create na ang PRF → wala na ang draft
     rpClosePrfModal();
     rpShowSuccessModal(res.prfs || []);
     _rp.selectedItems = {};
@@ -1177,6 +1185,259 @@ function rpViewCreatedPrfs() {
   if (_rp.successModal) _rp.successModal.hide();
   rpSwitchTab('prfs');
 }
+
+// ═══════════════════════════════════════════════════════════
+// DRAFTS — shared sa lahat ng warehouse staff (nasa database: erp_prf_drafts)
+// Hindi pa ito PRF: walang PRF number, walang epekto sa on-order o sa PRF Monitor.
+// Ang draft ay nag-iimbak lang ng pinili (item, qty, remarks, noted/approved by, notes);
+// ang stock at "on order" ay kinukuha ulit nang bago kapag binuksan ito.
+// Setup: run erp-prf-drafts.sql in Supabase once.
+// ═══════════════════════════════════════════════════════════
+var RP_DRAFT_TABLE = 'erp_prf_drafts';
+var RP_MAX_DRAFTS = 100;
+_rp.drafts = [];          // latest list from the database
+_rp.draftStamp = null;    // updated_at of the open draft when we loaded/saved it (para malaman kung may nag-edit na iba)
+_rp.draftsReady = true;   // false kung wala pa ang table
+
+function rpDraftUser() {
+  try { return localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE'; } catch(e) { return 'WAREHOUSE'; }
+}
+function rpDraftAgo(ts) {
+  var m = Math.round((Date.now() - new Date(ts).getTime()) / 60000);
+  if (m < 1) return 'ngayon lang';
+  if (m < 60) return m + ' min ang nakaraan';
+  var h = Math.round(m / 60);
+  if (h < 24) return h + ' oras ang nakaraan';
+  return Math.round(h / 24) + ' araw ang nakaraan';
+}
+function rpDraftErr(e) {
+  var msg = String((e && e.message) || e || '');
+  if ((e && e.status === 404) || msg.indexOf('PGRST205') !== -1 || msg.indexOf('does not exist') !== -1) {
+    _rp.draftsReady = false;
+    return 'Wala pa ang drafts table. I-run muna ang erp-prf-drafts.sql sa Supabase.';
+  }
+  return msg;
+}
+
+async function rpDraftFetch() {
+  try {
+    var rows = await erpFetch(RP_DRAFT_TABLE, 'select=*&order=updated_at.desc&limit=' + RP_MAX_DRAFTS);
+    _rp.drafts = rows || [];
+    _rp.draftsReady = true;
+  } catch(e) {
+    console.warn('[rpDraftFetch]', e);
+    rpDraftErr(e);
+    _rp.drafts = [];
+  }
+  return _rp.drafts;
+}
+
+async function rpDraftsRefreshUi() {
+  await rpDraftFetch();
+  var c = document.getElementById('rpDraftCount');
+  if (c) c.textContent = _rp.drafts.length;
+  var lbl = document.getElementById('rpBtnSaveDraftLabel');
+  if (lbl) lbl.textContent = _rp.draftId ? 'Update Draft' : 'Save Draft';
+}
+function rpDraftsLabelOnly() {
+  var lbl = document.getElementById('rpBtnSaveDraftLabel');
+  if (lbl) lbl.textContent = _rp.draftId ? 'Update Draft' : 'Save Draft';
+}
+
+async function rpSaveDraft() {
+  rpStashModalVals();
+  var rows = rpModalRows();
+  if (rows.length === 0) { erpShowToast('Magdagdag muna ng kahit isang item bago i-save bilang draft', 'warning'); return; }
+
+  var cats = {};
+  var items = rows.map(function(it) {
+    var v = _rp.modalVals[it.item_code] || {};
+    cats[it.category || 'UNCATEGORIZED'] = true;
+    return {
+      code: it.item_code,
+      qty: (v.qty !== undefined && v.qty !== '') ? v.qty : Math.max(1, rpSuggested(it)),
+      remarks: v.remarks || ''
+    };
+  });
+  var user = rpDraftUser();
+  var now = new Date().toISOString();
+  var body = {
+    title: 'PRF draft — ' + Object.keys(cats).sort().join(', '),
+    items: items,
+    item_count: items.length,
+    noted_by: document.getElementById('rpPrfNotedBy').value.trim(),
+    approved_by: document.getElementById('rpPrfApprovedBy').value.trim(),
+    notes: document.getElementById('rpPrfNotes').value.trim(),
+    updated_by: user,
+    updated_at: now
+  };
+
+  var btn = document.getElementById('rpBtnSaveDraft');
+  if (btn) btn.disabled = true;
+  try {
+    var saved = null;
+    var hdr = { 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+
+    if (_rp.draftId) {
+      // i-update lang kung walang ibang nag-edit mula nang buksan natin (updated_at ang bantay)
+      var upd = await erpFetch(RP_DRAFT_TABLE,
+        'id=eq.' + encodeURIComponent(_rp.draftId) + '&updated_at=eq.' + encodeURIComponent(_rp.draftStamp),
+        { method: 'PATCH', headers: hdr, body: body });
+      if (upd && upd.length) saved = upd[0];
+      else {
+        if (!confirm('Binago o binura na ng ibang tao ang draft na ito habang bukas mo.\n\nI-save ang bersyon mo bilang BAGONG draft? (Hindi mawawala ang gawa ng iba.)')) return;
+        _rp.draftId = null;
+      }
+    }
+    if (!saved) {
+      if (_rp.drafts.length >= RP_MAX_DRAFTS) { erpShowToast('Puno na ang drafts (max ' + RP_MAX_DRAFTS + '). Burahin muna ang mga luma.', 'warning'); return; }
+      body.created_by = user;
+      var ins = await erpFetch(RP_DRAFT_TABLE, '', { method: 'POST', headers: hdr, body: body });
+      saved = ins && ins[0];
+    }
+    if (!saved) throw new Error('Hindi na-save ang draft');
+
+    _rp.draftId = saved.id;
+    _rp.draftStamp = saved.updated_at;
+    await rpDraftsRefreshUi();
+    erpShowToast('📝 Draft saved — ' + items.length + ' item' + (items.length === 1 ? '' : 's') + '. Makikita ito ng buong warehouse sa My Drafts.', 'success');
+  } catch(e) {
+    console.error('[rpSaveDraft]', e);
+    erpShowToast('Hindi na-save ang draft: ' + rpDraftErr(e), 'danger');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function rpDraftDelete(id) {
+  try { await erpFetch(RP_DRAFT_TABLE, 'id=eq.' + encodeURIComponent(id), { method: 'DELETE' }); }
+  catch(e) { console.warn('[rpDraftDelete]', e); }
+  await rpDraftsRefreshUi();
+}
+
+async function rpResumeDraft(id) {
+  var d = null;
+  try {
+    var r = await erpFetch(RP_DRAFT_TABLE, 'select=*&id=eq.' + encodeURIComponent(id));
+    d = r && r[0];
+  } catch(e) { erpShowToast('Hindi mabuksan ang draft: ' + rpDraftErr(e), 'danger'); return; }
+  if (!d) { erpShowToast('Wala na ang draft na ito (binura ng iba).', 'warning'); await rpRenderDraftsList(); return; }
+
+  if ((Object.keys(_rp.selectedItems).length || _rp.extraItems.length) && !confirm('Papalitan ng draft na ito ang mga item na naka-select ngayon. Tuloy?')) return;
+  if (_rp.draftsModal) _rp.draftsModal.hide();
+
+  var cat = await rpLoadCatalog();
+  _rp.selectedItems = {}; _rp.extraItems = []; _rp.modalVals = {}; _rp.openMap = null;
+  var missing = [];
+  (d.items || []).forEach(function(x) {
+    _rp.modalVals[x.code] = { qty: x.qty, remarks: x.remarks || '' };
+    if (_rp.allItems.some(function(it) { return it.item_code === x.code; })) { _rp.selectedItems[x.code] = true; return; }
+    var c = (cat || []).filter(function(r) { return r.item_code === x.code; })[0];
+    if (c) {
+      _rp.extraItems.push({
+        item_code: c.item_code, description: c.description || '', category: c.category || 'UNCATEGORIZED',
+        base_unit: c.base_unit || 'PIECE', on_hand: Number(c.on_hand || 0), buffer_stock: Number(c.buffer_stock || 0), _extra: true
+      });
+    } else missing.push(x.code);
+  });
+
+  rpRender(); updateRpBulkBar(); updateRpSelectAllChk();
+  document.getElementById('rpPrfNotedBy').value = d.noted_by || rpSavedSignatory('rp_noted_by', RP_DEFAULT_NOTED_BY);
+  document.getElementById('rpPrfApprovedBy').value = d.approved_by || rpSavedSignatory('rp_approved_by', RP_DEFAULT_APPROVED_BY);
+  document.getElementById('rpPrfNotes').value = d.notes || '';
+  document.getElementById('rpAddItemInput').value = '';
+  document.getElementById('rpAddItemResults').style.display = 'none';
+  _rp.draftId = d.id;
+  _rp.draftStamp = d.updated_at;
+  rpShowPrfModal();
+  erpShowToast('📂 Naibalik ang draft — ' + (d.items || []).length + ' item(s). Bagong stock at on-order ang ipinapakita.', 'success');
+  if (missing.length) erpShowToast('Hindi na mahanap sa inventory: ' + missing.join(', '), 'warning');
+}
+
+async function rpDeleteDraftClick(id) {
+  var d = _rp.drafts.filter(function(x) { return x.id === id; })[0];
+  var who = d && d.created_by ? ' (ginawa ni ' + d.created_by + ')' : '';
+  if (!confirm('Burahin ang draft na ito' + who + '? Makikita ito ng lahat ng warehouse — mawawala na rin sa kanila.')) return;
+  if (_rp.draftId === id) { _rp.draftId = null; _rp.draftStamp = null; rpDraftsLabelOnly(); }
+  await rpDraftDelete(id);
+  await rpRenderDraftsList();
+}
+
+async function rpRenderDraftsList() {
+  var el = document.getElementById('rpDraftsList');
+  if (!el) return;
+  el.innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-2"></span>Loading...</div>';
+  var ds = await rpDraftFetch();
+  if (!_rp.draftsReady) {
+    el.innerHTML = '<div class="alert alert-danger mb-0">Wala pa ang drafts table. I-run muna ang <b>erp-prf-drafts.sql</b> sa Supabase.</div>';
+    return;
+  }
+  if (!ds.length) {
+    el.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-inbox fs-2 d-block mb-2"></i>Wala pang draft. Sa <b>Create PRF</b>, gamitin ang <b>Save Draft</b>.</div>';
+    return;
+  }
+  el.innerHTML = ds.map(function(d) {
+    var on = d.id === _rp.draftId;
+    var cnt = Number(d.item_count || (d.items || []).length);
+    var by = d.updated_by || d.created_by || '—';
+    return '<div class="d-flex align-items-center justify-content-between border rounded p-2 mb-2' + (on ? ' border-primary' : '') + '">' +
+      '<div><div class="fw-semibold">' + rpEsc(d.title || 'PRF draft') + (on ? ' <span class="badge bg-primary">nakabukas</span>' : '') + '</div>' +
+      '<div class="small text-muted">' + cnt + ' item' + (cnt === 1 ? '' : 's') + ' · huling in-save ni <b>' + rpEsc(by) + '</b> · ' + rpEsc(rpDraftAgo(d.updated_at)) + '</div></div>' +
+      '<div class="d-flex gap-1"><button class="btn btn-sm btn-primary" onclick="rpResumeDraft(\'' + rpEsc(d.id) + '\')"><i class="bi bi-box-arrow-in-right me-1"></i>Resume</button>' +
+      '<button class="btn btn-sm btn-outline-danger" onclick="rpDeleteDraftClick(\'' + rpEsc(d.id) + '\')" title="Burahin"><i class="bi bi-trash"></i></button></div></div>';
+  }).join('');
+  var c = document.getElementById('rpDraftCount');
+  if (c) c.textContent = ds.length;
+}
+
+function rpOpenDrafts() {
+  if (!document.getElementById('rpDraftsModal')) {
+    var m = document.createElement('div');
+    m.className = 'modal fade'; m.id = 'rpDraftsModal'; m.tabIndex = -1;
+    m.innerHTML =
+      '<div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable"><div class="modal-content">' +
+      '<div class="modal-header"><h6 class="modal-title"><i class="bi bi-journal-text me-2"></i>PRF Drafts — shared sa warehouse</h6>' +
+      '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>' +
+      '<div class="modal-body" id="rpDraftsList"></div>' +
+      '<div class="modal-footer"><small class="text-muted me-auto">Nakikita ng lahat ng warehouse staff ang mga draft. Hindi pa ito PRF hangga\'t hindi na-create.</small>' +
+      '<button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button></div></div></div>';
+    document.body.appendChild(m);
+  }
+  _rp.draftsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('rpDraftsModal'));
+  _rp.draftsModal.show();
+  rpRenderDraftsList();
+}
+
+// Dating drafts na nasa browser lang (v1) → ilipat sa shared table nang isang beses
+async function rpDraftsMigrateLocal() {
+  var key = null, local = [];
+  try {
+    var u = localStorage.getItem('ivm_username') || localStorage.getItem('ivm_userFullname') || 'anon';
+    key = 'erp_prf_drafts_v1:' + u;
+    var v = JSON.parse(localStorage.getItem(key));
+    local = Array.isArray(v) ? v : [];
+  } catch(e) { return; }
+  if (!local.length || !_rp.draftsReady) return;
+  var user = rpDraftUser(), moved = 0;
+  for (var i = 0; i < local.length; i++) {
+    var d = local[i];
+    try {
+      await erpFetch(RP_DRAFT_TABLE, '', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Prefer': 'return=representation' }, body: {
+        title: d.title || 'PRF draft', items: d.items || [], item_count: (d.items || []).length,
+        noted_by: d.notedBy || '', approved_by: d.approvedBy || '', notes: d.notes || '',
+        created_by: user, updated_by: user, updated_at: new Date(d.savedAt || Date.now()).toISOString()
+      }});
+      moved++;
+    } catch(e) { console.warn('[rpDraftsMigrateLocal]', e); return; }   // huwag burahin ang local kung pumalya
+  }
+  try { localStorage.removeItem(key); } catch(e) {}
+  if (moved) { erpShowToast('Nailipat ang ' + moved + ' draft mula sa browser na ito papunta sa shared drafts.', 'success'); await rpDraftsRefreshUi(); }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() { rpDraftsRefreshUi().then(rpDraftsMigrateLocal); }, 600);
+});
+document.addEventListener('visibilitychange', function() { if (!document.hidden) rpDraftsRefreshUi(); });
 
 // ═══════════════════════════════════════════════════════════
 // FILTERS / PAGING
