@@ -194,10 +194,12 @@ function buildErpMrifHtml(docNo, info, items) {
       '</div>' +
     '</div>' +
     '<div class="mrif-title">' + titleText + '</div>' +
-    '<table class="mrif-meta">' +
-      '<tr><td class="meta-label">REQUESTOR:</td><td class="meta-value" colspan="2">' + requestor + '</td><td class="meta-label-right">GEM SO No.:</td><td class="meta-blue">' + gemSo + '</td><td class="meta-label-right">JO No.:</td><td class="meta-blue">' + joNo + '</td></tr>' +
-      '<tr><td class="meta-label">DEPARTMENT/SECTION:</td><td class="meta-value" colspan="4">' + department + '</td><td class="meta-label-right">CLIENT NAME:</td><td class="meta-value">' + client + '</td></tr>' +
-      '<tr><td class="meta-label">DATE:</td><td class="meta-blue" colspan="2">' + dateStr + '</td><td class="meta-label-right">PROJECT:</td><td class="meta-value" colspan="3">' + project + '</td></tr>' +
+    '<table class="mrif-meta mrif-meta-grid">' +
+      '<colgroup><col style="width:19%"><col style="width:31%"><col style="width:19%"><col style="width:31%"></colgroup>' +
+      '<tr><td class="meta-label">REQUESTOR:</td><td class="meta-value">' + (requestor || '&nbsp;') + '</td><td class="meta-label">DEPARTMENT/SECTION:</td><td class="meta-value">' + (department || '&nbsp;') + '</td></tr>' +
+      '<tr><td class="meta-label">GEM SO No.:</td><td class="meta-value meta-strong">' + (gemSo || '&nbsp;') + '</td><td class="meta-label">JO No.:</td><td class="meta-value meta-strong">' + (joNo || '&nbsp;') + '</td></tr>' +
+      '<tr><td class="meta-label">CLIENT NAME:</td><td class="meta-value">' + (client || '&nbsp;') + '</td><td class="meta-label">PROJECT:</td><td class="meta-value">' + (project || '&nbsp;') + '</td></tr>' +
+      '<tr><td class="meta-label">DATE:</td><td class="meta-value meta-strong">' + (dateStr || '&nbsp;') + '</td><td class="meta-label"></td><td></td></tr>' +
     '</table>' +
     '<table class="mrif-items">' +
       '<thead><tr>' +
@@ -426,10 +428,12 @@ function buildErpMrsHtml(docNo, info, items) {
       '</div>' +
     '</div>' +
     '<div class="mrif-title">MATERIALS RETURN SLIP</div>' +
-    '<table class="mrif-meta">' +
-      '<tr><td class="meta-label">REQUESTOR:</td><td class="meta-value" colspan="2">' + requestor + '</td><td class="meta-label-right">GEM SO No.:</td><td class="meta-blue">' + gemSo + '</td><td class="meta-label-right">JO No.:</td><td class="meta-blue">' + joNo + '</td></tr>' +
-      '<tr><td class="meta-label">DEPARTMENT/SECTION:</td><td class="meta-value" colspan="4">' + department + '</td><td class="meta-label-right">CLIENT NAME:</td><td class="meta-value">' + client + '</td></tr>' +
-      '<tr><td class="meta-label">DATE:</td><td class="meta-blue" colspan="2">' + dateStr + '</td><td class="meta-label-right">PROJECT:</td><td class="meta-value" colspan="3">' + project + '</td></tr>' +
+    '<table class="mrif-meta mrif-meta-grid">' +
+      '<colgroup><col style="width:19%"><col style="width:31%"><col style="width:19%"><col style="width:31%"></colgroup>' +
+      '<tr><td class="meta-label">REQUESTOR:</td><td class="meta-value">' + (requestor || '&nbsp;') + '</td><td class="meta-label">DEPARTMENT/SECTION:</td><td class="meta-value">' + (department || '&nbsp;') + '</td></tr>' +
+      '<tr><td class="meta-label">GEM SO No.:</td><td class="meta-value meta-strong">' + (gemSo || '&nbsp;') + '</td><td class="meta-label">JO No.:</td><td class="meta-value meta-strong">' + (joNo || '&nbsp;') + '</td></tr>' +
+      '<tr><td class="meta-label">CLIENT NAME:</td><td class="meta-value">' + (client || '&nbsp;') + '</td><td class="meta-label">PROJECT:</td><td class="meta-value">' + (project || '&nbsp;') + '</td></tr>' +
+      '<tr><td class="meta-label">DATE:</td><td class="meta-value meta-strong">' + (dateStr || '&nbsp;') + '</td><td class="meta-label"></td><td></td></tr>' +
     '</table>' +
     '<table class="mrif-items">' +
       '<thead><tr>' +
@@ -639,6 +643,11 @@ function erpPrintNow() {
     '.meta-label, .meta-label-right, .mrr-meta-label, .mrr-meta-label-right { font-weight: bold; font-size: 8pt; }' +
     '.meta-value, .meta-value-right, .mrr-meta-value, .mrr-meta-value-right { border-bottom: 1px solid #000; }' +
     '.meta-blue { background: #cfe2f3; padding: 1px 5px; font-weight: bold; }' +
+    '.mrif-meta-grid { table-layout: fixed; }' +
+    '.mrif-meta-grid td { height: 16px; padding: 2px 4px; vertical-align: bottom; word-wrap: break-word; }' +
+    '.mrif-meta-grid td.meta-value { border-bottom: 1px solid #999; }' +
+    '.mrif-meta-grid td.meta-strong { font-weight: bold; }' +
+    '.mrif-meta-grid td.meta-label { padding-right: 6px; white-space: nowrap; }' +
     '.mrif-items, .mrr-items { width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 8pt; }' +
     '.mrif-items th, .mrif-items td, .mrr-items th, .mrr-items td { border: 1px solid #000; padding: 1px 3px; }' +
     '.mrif-items th, .mrr-items th { background: #fff; font-weight: bold; text-align: center; font-size: 7.5pt; }' +
