@@ -137,6 +137,11 @@ async function sofTrackerLoadPending() {
       'select=doc_no,sof_no,status,requestor,department,jo_no,created_at&doc_type=eq.MRIF&status=in.(PENDING,PARTIAL)&sof_no=not.is.null&order=created_at.asc') || [];
     docs = docs.filter(function(d) { return sofKey(d.sof_no) !== ''; });
     var byDoc = {}; docs.forEach(function(d) { byDoc[d.doc_no] = d; });
+    // Natitirang allocation kada SOF + item (wala nang remaining = wala nang ibibigay)
+    var rem = {};
+    (await erpFetchAll('erp_sof_allocation_items', 'select=sof_no,item_code,allocated_qty,used_qty&order=sof_no.asc') || []).forEach(function(r) {
+      rem[sofKey(r.sof_no) + '|' + sofKey(r.item_code)] = Number(r.allocated_qty || 0) - Number(r.used_qty || 0);
+    });
     var nos = Object.keys(byDoc);
     for (var i = 0; i < nos.length; i += 80) {
       var inList = '(' + nos.slice(i, i + 80).map(function(x) { return '"' + String(x).replace(/"/g, '') + '"'; }).join(',') + ')';
@@ -144,14 +149,25 @@ async function sofTrackerLoadPending() {
       lines.forEach(function(l) {
         var need = Number(l.requested_qty || 0) - Number(l.issued_qty || 0);
         var d = byDoc[l.doc_no];
-        if (!d || need <= 0.0001) return;
+        if (!d || need <= 0.0001) return;                       // served na ang line → hindi ipapakita
         var sk = sofKey(d.sof_no), ik = sofKey(l.item_code);
+        if (!(rem[sk + '|' + ik] > 0.0001)) return;             // walang natirang allocation para sa item na ito
         var P = _sofTracker.pending[sk] = _sofTracker.pending[sk] || { docs: {}, lines: {} };
         P.docs[d.doc_no] = d;
         (P.lines[ik] = P.lines[ik] || []).push({ doc_no: d.doc_no, requestor: d.requestor, department: d.department, jo_no: d.jo_no, created_at: d.created_at, status: d.status, need: need });
       });
     }
   } catch (e) { console.warn('[SOF Tracker] pending MRIF', e.message); }
+}
+
+// Warehouse / admin lang ang puwedeng mag-process
+function sofCanProcess() {
+  try { return localStorage.getItem('ivm_userRole') === 'warehouse' || localStorage.getItem('ivm_isAdmin') === 'true'; } catch (e) { return false; }
+}
+function sofMrifLink(docNo) {
+  var esc = sofTrackerEsc(docNo);
+  if (!sofCanProcess()) return '<code>' + esc + '</code>';
+  return '<a class="sof-mrif-link" href="process-mrif.html?doc=' + encodeURIComponent(docNo) + '" onclick="event.stopPropagation()" title="I-process ang ' + esc + '"><code>' + esc + '</code> <i class="bi bi-box-arrow-up-right"></i></a>';
 }
 
 function sofPendingDocs(sofNo) {
@@ -168,6 +184,7 @@ function sofUpdatePendingPill() {
 (function() {
   var st = document.createElement('style');
   st.textContent = '.sof-pend-chip{display:inline-flex;align-items:center;gap:4px;margin-top:4px;padding:2px 8px;border-radius:999px;font-size:.7rem;font-weight:700;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;white-space:nowrap}' +
+    '.sof-mrif-link{text-decoration:none;font-weight:700}.sof-mrif-link:hover code{background:#fed7aa}.sof-mrif-link i{font-size:.7rem}' +
     '.sof-pend-line{font-size:.78rem;line-height:1.35;padding:2px 0}.sof-pend-line code{font-size:.74rem}' +
     '.sof-pend-banner{background:#fff7ed;border-bottom:1px solid #fed7aa;color:#9a3412;padding:10px 16px;font-size:.85rem}';
   document.head.appendChild(st);
@@ -417,7 +434,7 @@ window.sofViewItems = async function(sofNo) {
 
     var pdocs = Object.keys((_sofTracker.pending[sofKey(sofNo)] || { docs: {} }).docs);
     var html = (pdocs.length ? '<div class="sof-pend-banner"><i class="bi bi-hourglass-split me-1"></i><b>' + pdocs.length + ' MRIF pending</b> para sa SOF na ito: ' +
-        pdocs.map(function(n) { var d = _sofTracker.pending[sofKey(sofNo)].docs[n]; return '<code>' + sofTrackerEsc(n) + '</code> ' + sofTrackerEsc(d.requestor || ''); }).join(' · ') + '</div>' : '') +
+        pdocs.map(function(n) { var d = _sofTracker.pending[sofKey(sofNo)].docs[n]; return sofMrifLink(n) + ' ' + sofTrackerEsc(d.requestor || ''); }).join(' · ') + '</div>' : '') +
       '<div class="table-responsive">' +
       '<table class="erp-table" style="font-size:0.85rem;">' +
         '<thead>' +
@@ -444,7 +461,7 @@ window.sofViewItems = async function(sofNo) {
       var pl = (PEND.lines[sofKey(it.item_code)] || []);
       var pendHtml = pl.length ? pl.map(function(x, i) {
         return '<div class="sof-pend-line">' + (i === 0 && remaining > 0 ? '<span class="badge bg-warning text-dark me-1">UNA</span>' : '') +
-          '<code>' + sofTrackerEsc(x.doc_no) + '</code> <b>' + sofTrackerEsc(x.requestor || '—') + '</b>' +
+          sofMrifLink(x.doc_no) + ' <b>' + sofTrackerEsc(x.requestor || '—') + '</b>' +
           (x.department ? ' <span class="text-muted">(' + sofTrackerEsc(x.department) + ')</span>' : '') +
           ' · kailangan <b>' + sofTrackerNum(x.need) + '</b>' + (x.status === 'PARTIAL' ? ' <span class="text-muted">(partial)</span>' : '') + '</div>';
       }).join('') : '<span class="text-muted">—</span>';
