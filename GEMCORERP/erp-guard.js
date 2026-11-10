@@ -1,910 +1,171 @@
 // ============================================================
-// GEMCOR ERP — Navigation & Layout System v8.6
+// GEMCOR ERP — Access Guard (v3 — role-based)
+// Warehouse: full access
+// Production: restricted to specific pages
 // ============================================================
 
 (function() {
   'use strict';
 
-  var NAV_GROUPS = [
-    {
-      id: 'main',
-      label: '',
-      items: [
-        {
-          id: 'management-dashboard',
-          label: 'Dashboard',
-          icon: 'bi-grid-1x2',
-          href: 'management-dashboard.html',
-          roles: ['warehouse']
-        },
-        {
-          id: 'stock-monitor',
-          label: 'Stock Monitor',
-          icon: 'bi-box-seam',
-          href: 'stock-monitor.html',
-          roles: ['warehouse']
-        },
-        {
-          id: 'admin-users',
-          label: 'User Management',
-          icon: 'bi-people-fill',
-          href: 'admin-users.html',
-          roles: ['warehouse'],
-          adminOnly: true
-        },
-        {
-          id: 'admin-supabase',
-          label: 'Supabase Admin',
-          icon: 'bi-database-fill-gear',
-          href: 'admin-supabase.html',
-          roles: ['warehouse'],
-          adminOnly: true
-        },
-        {
-          id: 'warehouse-kpi',
-          label: 'Warehouse KPI',
-          icon: 'bi-speedometer2',
-          href: 'warehouse-kpi.html',
-          roles: ['warehouse'],
-          adminOnly: true
-        },
-        {
-          id: 'system-health',
-          label: 'System Health',
-          icon: 'bi-activity',
-          href: 'system-health.html',
-          roles: ['warehouse'],
-          adminOnly: true
-        }
-      ]
-    },
-    {
-      id: 'inventory',
-      label: 'Inventory',
-      items: [
-        {
-          id: 'item-catalog',
-          label: 'Item Catalog',
-          icon: 'bi-journal-text',
-          href: 'item-catalog.html',
-          roles: ['procurement', 'production']
-        },
-        {
-          id: 'inventory-count',
-          label: 'Inventory Count',
-          icon: 'bi-clipboard-check',
-          href: 'inventory-count.html',
-          roles: ['warehouse']
-        },
-        {
-          id: 'replenishment',
-          label: 'Replenishment & PRFs',
-          icon: 'bi-cart-plus-fill',
-          href: 'replenishment.html',
-          roles: ['warehouse']
-        },
-        {
-          id: 'barcode-generator',
-          label: 'Barcode Generator',
-          icon: 'bi-upc-scan',
-          href: 'barcode-generator.html',
-          roles: ['warehouse']
-        }
-      ]
-    },
-    {
-      id: 'documents',
-      label: 'Documents',
-      items: [
-        {
-          id: 'all-requests',
-          label: 'All Requests',
-          icon: 'bi-inbox',
-          href: 'all-requests.html',
-          roles: ['warehouse'],
-          badgeId: 'allReqBadgeSidebar'
-        },
-        {
-          id: 'mrif-list',
-          label: 'MRIF — Issuance',
-          icon: 'bi-box-arrow-up-right',
-          href: 'mrif-list.html',
-          roles: ['warehouse']
-        },
-        {
-          id: 'mrr-list',
-          label: 'MRR — Receiving',
-          icon: 'bi-box-arrow-in-down',
-          href: 'mrr-list.html',
-          roles: ['warehouse']
-        },
-        {
-          id: 'mrs-list',
-          label: 'MRS — Returns',
-          icon: 'bi-arrow-counterclockwise',
-          href: 'mrs-list.html',
-          roles: ['warehouse']
-        },
-        {
-          id: 'edit-requests',
-          label: 'Edit Requests',
-          icon: 'bi-pencil-square',
-          href: 'edit-requests.html',
-          roles: ['warehouse']
-        },   
-        {
-          id: 'sof-tracker',
-          label: 'SOF Tracker',
-          icon: 'bi-file-earmark-ruled',
-          href: 'sof-tracker.html',
-          roles: ['warehouse', 'procurement']
-        },
-        {
-          id: 'project-costing',
-          label: 'Project Costing',
-          icon: 'bi-cash-coin',
-          href: 'project-costing.html',
-          roles: ['warehouse', 'finance']
-        }
-      ]
-    },
-    {
-      id: 'reports',
-      label: 'Reports',
-      items: [
-        {
-          id: 'weekly-monitor',
-          label: 'Weekly Monitoring',
-          icon: 'bi-calendar-week',
-          href: 'weekly-monitor.html',
-          roles: ['warehouse']
-        },
-        {
-          id: 'mrif-monitoring',
-          label: 'MRIF Monitoring',
-          icon: 'bi-clipboard-data',
-          href: 'mrif-monitoring.html',
-          roles: ['warehouse', 'finance']
-        },
-        {
-          id: 'prf-monitor',
-          label: 'PRF Monitor',
-          icon: 'bi-file-earmark-text',
-          href: 'replenishment.html#prfs',
-          roles: ['procurement']
-        },
-        {
-          id: 'mrr-monitoring',
-          label: 'MRR Monitoring',
-          icon: 'bi-clipboard-check',
-          href: 'mrr-monitoring.html',
-          roles: ['warehouse', 'procurement']
-        },
-        {
-          id: 'mrs-monitoring',
-          label: 'MRS Monitoring',
-          icon: 'bi-arrow-counterclockwise',
-          href: 'mrs-monitoring.html',
-          roles: ['warehouse']
-        },
-        {
-          id: 'item-in-out',
-          label: 'Item In & Out',
-          icon: 'bi-arrow-left-right',
-          href: 'item-in-out.html',
-          roles: ['warehouse', 'production', 'procurement', 'finance']
-        },
-        {
-          id: 'usage-trend',
-          label: 'Usage Trend',
-          icon: 'bi-graph-up-arrow',
-          href: 'usage-trend.html',
-          roles: ['warehouse']
-        },
-        {
-          id: 'process-history',
-          label: 'Process History',
-          icon: 'bi-clock-history',
-          href: 'process-history.html',
-          roles: ['warehouse']
-        }
-      ]
-    },
-    {
-      id: 'communication',
-      label: 'Communication',
-      items: [
-        {
-          id: 'chat',
-          label: 'Messages',
-          icon: 'bi-chat-dots',
-          href: 'chat.html',
-          roles: ['warehouse', 'production', 'procurement', 'finance'],
-          badgeId: 'chatBadgeSidebar'
-        }
-      ]
-    },
-    {
-      id: 'production',
-      label: 'Production',
-      items: [
-        {
-          id: 'my-requests',
-          label: 'My Requests',
-          icon: 'bi-list-check',
-          href: 'my-requests.html',
-          roles: ['production']
-        },
-        {
-          id: 'sof-tracker',
-          label: 'SOF Tracker',
-          icon: 'bi-file-earmark-ruled',
-          href: 'sof-tracker.html',
-          roles: ['production']
-        },
-        {
-          id: 'project-costing',
-          label: 'Project Costing',
-          icon: 'bi-cash-coin',
-          href: 'project-costing.html',
-          roles: ['production']
-        },
-        {
-          id: 'new-mrif-group',
-          label: 'New MRIF — Request',
-          icon: 'bi-box-arrow-up-right',
-          roles: ['production'],
-          type: 'submenu',
-          items: [
-            {
-              id: 'new-mrif',
-              label: 'With JO',
-              icon: 'bi-hash',
-              href: 'new-mrif.html',
-              roles: ['production']
-            },
-            {
-              id: 'new-mrif-manual',
-              label: 'Manual (No JO)',
-              icon: 'bi-pencil-square',
-              href: 'new-mrif-manual.html',
-              roles: ['production']
-            }
-          ]
-        },
-        {
-          id: 'new-mrs-group',
-          label: 'New MRS — Return',
-          icon: 'bi-arrow-counterclockwise',
-          roles: ['production'],
-          type: 'submenu',
-          items: [
-            {
-              id: 'new-mrs',
-              label: 'With JO',
-              icon: 'bi-hash',
-              href: 'new-mrs.html',
-              roles: ['production']
-            },
-            {
-              id: 'new-mrs-manual',
-              label: 'Manual (No JO)',
-              icon: 'bi-pencil-square',
-              href: 'new-mrs-manual.html',
-              roles: ['production']
-            }
-          ]
-        }
-      ]
-    },
-    {
-      id: 'breakroom',
-      label: 'Break Room',
-      items: [
-        {
-          id: 'block-blast',
-          label: 'Crate Blast',
-          icon: 'bi-controller',
-          href: 'block-blast.html',
-          roles: ['warehouse', 'production', 'procurement', 'finance']
-        }
-      ]
-    },
-    {
-      id: 'help',
-      label: 'Help',
-      items: [
-        {
-          id: 'about',
-          label: 'About GEMCOR ERP',
-          icon: 'bi-info-circle',
-          href: 'about.html',
-          roles: ['warehouse', 'production', 'procurement', 'finance']
-        }
-      ]
-    }
+  var RETURN_KEY = 'ivm_erpReturnUrl';
+  var MAIN_LOGIN = '../index.html';
+
+  // Pages na pwedeng i-access ng production users
+  var PRODUCTION_ALLOWED = [
+    'my-requests.html',
+    'new-mrif.html',
+    'new-mrs.html',
+    'new-mrif-manual.html',
+    'chat.html',
+    'new-mrs-manual.html',
+    'project-costing.html',
+    'block-blast.html',  // Break Room (laro)
+    'item-in-out.html',  // Item In & Out (view-only movement history)
+    'about.html',        // About / FAQs / Process flow
+    'sof-tracker.html',  // SOF Tracker (view-only for production)
+    'item-catalog.html'  // Item Catalog (read-only: code, description, category, unit)
+  ];
+  
+  // Procurement / Finance: read-only, specific pages only
+  var VIEWER_PAGES = {
+    procurement: ['mrr-monitoring.html', 'prf-monitor.html', 'replenishment.html', 'sof-tracker.html', 'item-catalog.html', 'chat.html', 'about.html', 'item-in-out.html', 'block-blast.html'],
+    finance: ['mrif-monitoring.html', 'project-costing.html', 'chat.html', 'about.html', 'item-in-out.html', 'block-blast.html']
+  };
+  var VIEWER_HOME = { procurement: 'mrr-monitoring.html', finance: 'mrif-monitoring.html' };
+
+  // Write-actions hidden for read-only roles (matched by onclick text)
+  var READONLY_WRITE_FNS = [
+    'openTransmittalModal', 'openEditPrfItems', 'openEditPrfNo', 'bulkUpdateStatus',
+    'prfSyncAndRecompute', 'savePoEdit', 'openPoEditModal', 'saveEditPrfItems', 'saveEditedPrfNo',
+    'prfCancel', 'addEditPrfItem', 'editPrfRemoveItem', 'sofOpenManual', 'sofReleaseItem', 'sofManualSubmit'
   ];
 
-  var PAGE_TITLES = {
-    'management-dashboard': 'Management Dashboard',
-    'stock-monitor': 'Stock Monitor',
-    'admin-users': 'User Management',
-    'admin-supabase': 'Supabase Admin Console',
-    'system-health': 'System Health',
-    'inventory-count': 'Inventory Count',
-    'replenishment': 'Replenishment & PRFs',
-    'barcode-generator': 'Barcode Generator',
-    'all-requests': 'All Requests',
-    'mrif-list': 'MRIF List',
-    'new-mrr-manual': 'New MRR', // ✅ Idinagdag para lumabas sa Topbar
-    'mrr-list': 'MRR List',
-    'mrs-list': 'MRS List',
-    'prf-monitor': 'PRF Monitor',
-    'edit-requests': 'Edit Requests',
-    'sof-tracker': 'SOF Tracker',
-    'project-costing': 'Project Costing',
-    'mrif-monitoring': 'MRIF Monitoring',
-    'mrr-monitoring': 'MRR Monitoring',
-    'mrs-monitoring': 'MRS Monitoring',
-    'item-in-out': 'Item In & Out',
-    'weekly-monitor': 'Weekly Monitoring',
-    'usage-trend': 'Usage Trend',
-    'usage-entry': 'Usage Entry',
-    'process-history': 'Process History',
-    'warehouse-kpi': 'Warehouse KPI',
-    'chat': 'Messages',
-    'my-requests': 'My Requests',
-    'new-mrif': 'New MRIF',
-    'new-mrr': 'New MRR',
-    'new-mrs': 'New MRS',
-    'block-blast': 'Break Room',
-    'about': 'About GEMCOR ERP'
-  };
+  function _applyReadOnly(role) {
+    try {
+      var css = READONLY_WRITE_FNS.map(function(f) {
+        return '[onclick*="' + f + '"]';
+      }).join(',') + ',.item-select-cb,#selectAllItems,#bulkActionsBar,.bulk-status-btn,.erp-readonly-hide{display:none!important}' +
+        '.erp-readonly-badge{position:fixed;right:14px;bottom:14px;z-index:9999;background:#1e3a5f;color:#fff;font:600 12px/1 system-ui,sans-serif;padding:7px 12px;border-radius:20px;opacity:.9;pointer-events:none}';
+      if (_getCurrentPage() === 'sof-tracker.html') css += 'a[href="stock-monitor.html"]{display:none!important}';
+      // Procurement only needs the PRFs tab of Replenishment (Needs tab = create PRFs → hidden)
+      if (_getCurrentPage() === 'replenishment.html') {
+        css += '.rp-tabs,#rpTabNeeds,#rpBtnExport{display:none!important}';
+        if (location.hash !== '#prfs') { try { history.replaceState(null, '', location.pathname + location.search + '#prfs'); } catch (e) {} }
+      }
+      var st = document.createElement('style');
+      st.id = 'erp-readonly-css';
+      st.textContent = css;
+      (document.head || document.documentElement).appendChild(st);
 
-  var STORAGE_KEYS = {
-    sidebarCollapsed: 'erp_sidebar_collapsed',
-    theme: 'erp_theme'
-  };
+      // Block any write request (defense in depth). Read RPCs (POST /rpc/...) and
+      // housekeeping tables (notifications / chat / presence / locks) stay allowed.
+      var _fetch = window.fetch;
+      var SAFE = /\/rest\/v1\/rpc\/(get_|erp_get_|erp_sof_get_|list_|search_|verify_|erp_search)|notif|alert|chat|presence|heartbeat|avatar|profile|password|setting|log_|erp_doc_open/i;
+      window.fetch = function(input, init) {
+        try {
+          var url = (typeof input === 'string') ? input : (input && input.url) || '';
+          var m = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+          if (m !== 'GET' && m !== 'HEAD' && m !== 'OPTIONS' && url.indexOf('/rest/v1/') !== -1 && !SAFE.test(url)) {
+            console.warn('[ERP Guard] Read-only role blocked ' + m + ' ' + url);
+            return Promise.resolve(new Response(JSON.stringify({ error: 'Read-only access' }), { status: 403, headers: { 'Content-Type': 'application/json' } }));
+          }
+        } catch (e) {}
+        return _fetch.apply(this, arguments);
+      };
 
-  function _getUserRole() {
-    try { return localStorage.getItem('ivm_userRole') || ''; } catch(e) { return ''; }
+      document.addEventListener('DOMContentLoaded', function() {
+        var b = document.createElement('div');
+        b.className = 'erp-readonly-badge';
+        b.textContent = 'READ-ONLY · ' + role.toUpperCase();
+        document.body.appendChild(b);
+      });
+    } catch (e) {}
+  }
+
+  // ✅ NEW: Admin-only pages
+  var ADMIN_ONLY_PAGES = [
+    'admin-users.html',
+    'warehouse-kpi.html'
+  ];
+
+  function _redirectToLogin(reason) {
+    try {
+      sessionStorage.setItem(RETURN_KEY, window.location.href);
+    } catch(e) {}
+    console.warn('[ERP Guard] Access denied:', reason);
+    window.location.replace(MAIN_LOGIN);
   }
 
   function _getCurrentPage() {
     var path = window.location.pathname;
-    var pages = Object.keys(PAGE_TITLES);
-    for (var i = 0; i < pages.length; i++) {
-      if (path.indexOf(pages[i]) !== -1) return pages[i];
-    }
-    return '';
+    return path.substring(path.lastIndexOf('/') + 1);
   }
 
-  function _isAllowed(item, userRole) {
-    if (item.adminOnly) {
+  function _checkAccess() {
+    var role = '';
+    var username = '';
+
+    try {
+      role = localStorage.getItem('ivm_userRole') || '';
+      username = localStorage.getItem('ivm_username') || '';
+    } catch(e) {
+      _redirectToLogin('localStorage unavailable');
+      return;
+    }
+
+       if (!username || !role) {
+      _redirectToLogin('No session');
+      return;
+    }
+
+    var currentPage = _getCurrentPage();
+
+    // ✅ NEW: Check admin-only pages
+    if (ADMIN_ONLY_PAGES.indexOf(currentPage) !== -1) {
       var isAdmin = localStorage.getItem('ivm_isAdmin') === 'true';
-      if (!isAdmin) return false;
-    }
-    if (!item.roles) return true;
-    return item.roles.indexOf(userRole) !== -1;
-  }
-
-  function _getUserInfo() {
-    var info = { username: '', fullname: '', role: '', department: '', initials: '', avatar: '' };
-    try {
-      info.username = localStorage.getItem('ivm_username') || '';
-      info.fullname = localStorage.getItem('ivm_userFullname') || info.username;
-      info.role = localStorage.getItem('ivm_userRole') || '';
-      info.department = localStorage.getItem('ivm_userDepartment') || '';
-      info.avatar = localStorage.getItem('ivm_avatar') || '';
-      if (info.fullname) {
-        var parts = info.fullname.trim().split(/\s+/);
-        if (parts.length >= 2) {
-          info.initials = (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-        } else if (parts[0]) {
-          info.initials = parts[0].substring(0, 2).toUpperCase();
-        }
+      if (!isAdmin) {
+        console.warn('[ERP Guard] Admin-only page blocked for non-admin: ' + username);
+        window.location.replace('management-dashboard.html');
+        return;
       }
-    } catch(e) {}
-    return info;
-  }
+      console.log('[ERP Guard] ✓ Admin access granted for ' + username);
+      return;
+    }
 
-  function _isCollapsed() {
-    try { return localStorage.getItem(STORAGE_KEYS.sidebarCollapsed) === 'true'; } catch(e) { return false; }
-  }
-
-  function _setCollapsed(collapsed) {
-    try { localStorage.setItem(STORAGE_KEYS.sidebarCollapsed, String(collapsed)); } catch(e) {}
-  }
-
-  function _escapeHtml(str) {
-    if (str === null || str === undefined) return '';
-    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
-
-  function _removeOldNav() {
-    var selectors = ['nav.erp-topbar', '.erp-topbar', '#erpNavBar', '#erpSidebar', '#erpThinTopbar', '#erpSidebarBackdrop', '.erp-mobile-menu-btn'];
-    selectors.forEach(function(sel) {
-      document.querySelectorAll(sel).forEach(function(el) { el.remove(); });
-    });
-    var oldNotif = document.getElementById('erpNotifContainer');
-    if (oldNotif) oldNotif.remove();
-  }
-
-  function _buildSidebar(userRole, currentPage) {
-    var sidebar = document.createElement('aside');
-    sidebar.id = 'erpSidebar';
-    sidebar.className = 'erp-sidebar' + (_isCollapsed() ? ' collapsed' : '');
-
-    var brand = document.createElement('div');
-    brand.className = 'erp-sidebar-brand';
-    var toggleIcon = _isCollapsed() ? 'bi bi-chevron-right' : 'bi bi-chevron-left';
-
-    brand.innerHTML =
-      '<img src="../gemcor-logo.png" alt="GEMCOR" class="erp-sidebar-logo" onerror="this.style.display=\'none\'">' +
-      '<div class="erp-sidebar-brand-text">' +
-        '<div class="erp-sidebar-brand-main">GEMCOR ERP</div>' +
-        '<div class="erp-sidebar-brand-sub">Inventory System</div>' +
-      '</div>' +
-      '<button class="erp-sidebar-toggle" type="button" title="Toggle sidebar" aria-label="Toggle sidebar">' +
-        '<i class="' + toggleIcon + '"></i>' +
-      '</button>';
-
-    var toggleBtn = brand.querySelector('.erp-sidebar-toggle');
-    toggleBtn.addEventListener('click', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      var willCollapse = !sidebar.classList.contains('collapsed');
-      if (willCollapse) {
-        sidebar.classList.add('collapsed');
-        document.body.classList.add('erp-sidebar-collapsed');
-      } else {
-        sidebar.classList.remove('collapsed');
-        document.body.classList.remove('erp-sidebar-collapsed');
+    // Procurement / Finance: read-only, whitelisted pages
+    if (VIEWER_PAGES[role]) {
+      if (VIEWER_PAGES[role].indexOf(currentPage) !== -1) {
+        _applyReadOnly(role);
+        console.log('[ERP Guard] ✓ Read-only ' + role + ': ' + currentPage);
+        return;
       }
-      _setCollapsed(willCollapse);
-      var icon = toggleBtn.querySelector('i');
-      if (icon) icon.className = willCollapse ? 'bi bi-chevron-right' : 'bi bi-chevron-left';
-    });
+      window.location.replace(VIEWER_HOME[role]);
+      return;
+    }
 
-    sidebar.appendChild(brand);
+    // Warehouse: full access
+    if (role === 'warehouse') {
+      console.log('[ERP Guard] ✓ Warehouse access for ' + username);
+      return;
+    }
 
-    var nav = document.createElement('nav');
-    nav.className = 'erp-sidebar-nav';
-
-    NAV_GROUPS.forEach(function(group) {
-      var allowedItems = group.items.filter(function(item) { return _isAllowed(item, userRole); });
-      if (allowedItems.length === 0) return;
-
-      if (group.label) {
-        var label = document.createElement('div');
-        label.className = 'erp-sidebar-group-label';
-        label.textContent = group.label;
-        nav.appendChild(label);
-      }
-
-      allowedItems.forEach(function(item) {
-        if (item.type === 'submenu' && item.items && item.items.length > 0) {
-          var allowedSubItems = item.items.filter(function(sub) { return _isAllowed(sub, userRole); });
-          if (allowedSubItems.length === 0) return;
-
-          var subActive = allowedSubItems.some(function(sub) { return sub.id === currentPage; });
-          var subContainer = document.createElement('div');
-          subContainer.className = 'erp-sidebar-submenu' + (subActive ? ' has-active' : '');
-
-          var parent = document.createElement('div');
-          parent.className = 'erp-sidebar-item erp-sidebar-submenu-parent' + (subActive ? ' active' : '');
-          parent.title = item.label;
-          parent.setAttribute('data-nav-id', item.id);
-          parent.innerHTML =
-            '<i class="bi ' + item.icon + '"></i>' +
-            '<span class="erp-sidebar-item-label">' + _escapeHtml(item.label) + '</span>' +
-            '<i class="bi bi-chevron-down erp-sidebar-submenu-caret"></i>';
-
-          var subList = document.createElement('div');
-          subList.className = 'erp-sidebar-submenu-list';
-
-          allowedSubItems.forEach(function(sub) {
-            var subIsActive = (sub.id === currentPage);
-            var subLink = document.createElement('a');
-            subLink.href = sub.href;
-            subLink.className = 'erp-sidebar-subitem' + (subIsActive ? ' active' : '');
-            subLink.title = sub.label;
-            subLink.setAttribute('data-nav-id', sub.id);
-            subLink.innerHTML = '<i class="bi ' + sub.icon + '"></i><span>' + _escapeHtml(sub.label) + '</span>';
-            subList.appendChild(subLink);
-          });
-
-          parent.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            subContainer.classList.toggle('open');
-          });
-
-          subContainer.appendChild(parent);
-          subContainer.appendChild(subList);
-          nav.appendChild(subContainer);
-
-        } else {
-          var isActive = (item.id === currentPage);
-          var link = document.createElement('a');
-          link.href = item.href;
-          link.className = 'erp-sidebar-item' + (isActive ? ' active' : '');
-          link.title = item.label;
-          link.setAttribute('data-nav-id', item.id);
-
-          var badgeHtml = item.badgeId ? '<span class="badge bg-danger d-none" id="' + item.badgeId + '">0</span>' : '';
-          link.innerHTML = '<i class="bi ' + item.icon + '"></i><span class="erp-sidebar-item-label">' + _escapeHtml(item.label) + '</span>' + badgeHtml;
-          nav.appendChild(link);
-        }
-      });
-    });
-
-    sidebar.appendChild(nav);
-
-    var footer = document.createElement('div');
-    footer.className = 'erp-sidebar-footer';
-    var version = 'v1.0.0';
-    try { version = 'v' + (window.ERP_APP_VERSION || '1.0.0'); } catch(e) {}
-    footer.innerHTML = '<span class="erp-sidebar-version">' + version + '</span>' +
-      '<a class="erp-sidebar-credit" href="https://tinyurl.com/negosyowebph" target="_blank" rel="noopener noreferrer" title="Business portfolio">Engineered by Erwin Sister</a>';
-    sidebar.appendChild(footer);
-
-    return sidebar;
+       // Production: only whitelisted pages
+      // Production: only whitelisted pages
+  if (role === 'production') {
+    if (PRODUCTION_ALLOWED.indexOf(currentPage) !== -1) {
+      // SOF Tracker is view-only for production: hides Manual Allocate / Release and blocks writes on this page
+      if (currentPage === 'sof-tracker.html') _applyReadOnly('production');
+      console.log('[ERP Guard] ✓ Production access: ' + currentPage);
+      return;
+    }
+    // Redirect production to their home page
+    console.warn('[ERP Guard] Production not allowed on ' + currentPage + ' — redirecting to My Requests');
+    window.location.replace('my-requests.html');
+    return;
   }
 
-  function _avatarInner(userInfo) {
-    if (userInfo.avatar && /^data:image\//.test(userInfo.avatar)) {
-      return '<img src="' + userInfo.avatar.replace(/"/g, '') + '" alt="">';
-    }
-    return _escapeHtml(userInfo.initials || '?');
-  }
+  _redirectToLogin('Unknown role: ' + role);
+}  // ✅ IDINAGDAG — closing brace para sa _checkAccess() function
 
-  // Re-draw every avatar on the page from localStorage (called after upload / sync)
-  window.erpApplyAvatar = function() {
-    var info = _getUserInfo();
-    document.querySelectorAll('.erp-user-avatar').forEach(function(el) {
-      el.innerHTML = _avatarInner(info);
-    });
-  };
-
-  // Pull photo + preferences from the server once per login session
-  function _syncProfileOnce() {
-    try {
-      if (sessionStorage.getItem('ivm_profileSynced') === '1') return;
-      if (!_getUserInfo().username) return;
-      sessionStorage.setItem('ivm_profileSynced', '1');
-    } catch(e) { return; }
-    _loadProfileScript(function() {
-      if (window.erpProfile && window.erpProfile.sync) window.erpProfile.sync();
-    });
-  }
-
-  // Sidebar badge on "All Requests": number of open MRIF/MRS (PENDING + PARTIAL). Warehouse only.
-  function _startRequestsBadge(userRole) {
-    if (userRole !== 'warehouse' || window._erpReqBadgeStarted) return;
-    window._erpReqBadgeStarted = true;
-
-    function paint(n) {
-      var b = document.getElementById('allReqBadgeSidebar');
-      if (!b) return;
-      b.textContent = n > 99 ? '99+' : n;
-      b.classList.toggle('d-none', n <= 0);
-    }
-
-    async function refresh() {
-      if (document.hidden || typeof window.erpUrl !== 'function') return;
-      try {
-        var res = await fetch(window.erpUrl('documents') +
-          '?select=doc_no&or=(doc_type.eq.MRIF,doc_type.eq.MRS)&status=in.(PENDING,PARTIAL)',
-          { method: 'HEAD', cache: 'no-store',
-            headers: Object.assign({}, window.erpHeaders(), { 'Prefer': 'count=exact', 'Range': '0-0' }) });
-        var range = res.headers.get('content-range') || '';
-        var n = parseInt(range.split('/')[1], 10);
-        if (!isNaN(n)) paint(n);
-      } catch (e) { /* keep the last badge value */ }
-    }
-
-    refresh();
-    setInterval(refresh, 60000);
-    document.addEventListener('visibilitychange', function() { if (!document.hidden) refresh(); });
-    // Pages can call: window.dispatchEvent(new Event('erp-requests-changed')) after processing a request
-    window.addEventListener('erp-requests-changed', refresh);
-  }
-
-  // New-message popups + sound + sidebar badge — runs on every page
-  function _startChatAlerts() {
-    try { if (!localStorage.getItem('ivm_username')) return; } catch(e) { return; }
-    if (window.erpChatAlerts || document.getElementById('erpChatAlertsScript')) return;
-    var sc = document.createElement('script');
-    sc.id = 'erpChatAlertsScript';
-    sc.src = 'erp-chat-alerts.js';
-    document.head.appendChild(sc);
-  }
-
-  // First-time guide (production users). Auto-starts once; replay from user menu → Quick Guide.
-  function _loadTourScript(cb) {
-    if (window.erpTour) { cb(); return; }
-    var existing = document.getElementById('erpTourScript');
-    if (existing) { existing.addEventListener('load', cb); return; }
-    var sc = document.createElement('script');
-    sc.id = 'erpTourScript';
-    sc.src = 'erp-tour.js';
-    sc.onload = cb;
-    document.head.appendChild(sc);
-  }
-
-  window.erpStartTour = function(force) {
-    document.querySelectorAll('.erp-user-menu.open').forEach(function(m) { m.classList.remove('open'); });
-    _loadTourScript(function() { if (window.erpTour) window.erpTour.start(!!force); });
-  };
-
-  function _loadProfileScript(cb) {
-    if (window.erpProfile) { cb(); return; }
-    var existing = document.getElementById('erpProfileScript');
-    if (existing) { existing.addEventListener('load', cb); return; }
-    var sc = document.createElement('script');
-    sc.id = 'erpProfileScript';
-    sc.src = 'erp-profile.js';
-    sc.onload = cb;
-    sc.onerror = function() {
-      if (typeof erpShowToast === 'function') erpShowToast('Could not load Settings', 'warning');
-    };
-    document.head.appendChild(sc);
-  }
-
-  function _buildTopbar(userInfo, currentPage) {
-    var topbar = document.createElement('div');
-    topbar.id = 'erpThinTopbar';
-    topbar.className = 'erp-thin-topbar';
-    var pageTitle = PAGE_TITLES[currentPage] || 'GEMCOR ERP';
-    var customButtons = '';
-
-    if (currentPage === 'prf-monitor') {
-      customButtons +=
-        '<button class="erp-btn-outline-dark" onclick="prfSyncAndRecompute()" title="Sync PO data" style="margin-right:6px;font-size:0.8rem;padding:6px 12px;">' +
-          '<i class="bi bi-arrow-repeat"></i> Sync & Recompute' +
-        '</button>';
-    }
-
-    topbar.innerHTML =
-      '<div class="erp-thin-topbar-left">' +
-        '<h1 class="erp-thin-page-title">' + _escapeHtml(pageTitle) + '</h1>' +
-        '<div class="erp-search-bar" onclick="if(window.erpOpenSearch)erpOpenSearch()">' +
-          '<i class="bi bi-search"></i><span>Search...</span><kbd class="erp-search-kbd">⌘K</kbd>' +
-        '</div>' +
-      '</div>' +
-      '<div class="erp-thin-topbar-right">' +
-        customButtons +
-        '<div class="erp-health-dot" id="erpHealthDot" title="Checking...">' +
-          '<span class="erp-health-text" id="erpHealthText">Checking...</span>' +
-        '</div>' +
-        '<div id="erpBellContainer"></div>' +
-        '<div class="erp-user-menu" id="erpUserMenu">' +
-          '<button class="erp-user-toggle" type="button" aria-label="User menu">' +
-            '<div class="erp-user-avatar">' + _avatarInner(userInfo) + '</div>' +
-            '<div class="erp-user-info">' +
-              '<div class="erp-user-name">' + _escapeHtml(userInfo.fullname || 'User') + '</div>' +
-              '<div class="erp-user-role">' + _escapeHtml(userInfo.role || 'user') + '</div>' +
-            '</div>' +
-            '<i class="bi bi-chevron-down erp-user-caret"></i>' +
-          '</button>' +
-          '<div class="erp-user-dropdown">' +
-            '<div class="erp-user-dropdown-header">' +
-              '<div class="erp-user-avatar erp-user-avatar-lg">' + _avatarInner(userInfo) + '</div>' +
-              '<div class="erp-user-dropdown-id">' +
-              '<div class="fullname">' + _escapeHtml(userInfo.fullname || 'User') + '</div>' +
-              '<div class="meta"><i class="bi bi-person-badge"></i> ' + _escapeHtml(userInfo.username || '') + (userInfo.department ? ' · ' + _escapeHtml(userInfo.department) : '') + '</div>' +
-              '</div>' +
-            '</div>' +
-            '<button class="erp-user-dropdown-item" type="button" onclick="erpUserRefresh()"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>' +
-            '<button class="erp-user-dropdown-item" type="button" onclick="erpUserSettings()"><i class="bi bi-gear"></i> Settings</button>' +
-            '<button class="erp-user-dropdown-item" type="button" onclick="erpStartTour(true)"><i class="bi bi-signpost-split"></i> Quick Guide</button>' +
-            '<div class="erp-user-dropdown-divider"></div>' +
-            '<button class="erp-user-dropdown-item danger" type="button" onclick="erpUserLogout()"><i class="bi bi-box-arrow-right"></i> Logout</button>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
-
-    var userMenu = topbar.querySelector('#erpUserMenu');
-    if (userMenu) {
-      var userToggle = userMenu.querySelector('.erp-user-toggle');
-      userToggle.addEventListener('click', function(e) {
-        e.stopPropagation();
-        var isOpen = userMenu.classList.contains('open');
-        document.querySelectorAll('.erp-user-menu.open').forEach(function(m) { m.classList.remove('open'); });
-        document.querySelectorAll('#erpNotifContainer.open').forEach(function(c) { c.classList.remove('open'); });
-        if (!isOpen) userMenu.classList.add('open');
-      });
-    }
-
-    return topbar;
-  }
-
-  function _ensureNotifContainer() {
-    var existing = document.getElementById('erpNotifContainer');
-    if (existing) return existing;
-    var container = document.createElement('div');
-    container.id = 'erpNotifContainer';
-    document.body.appendChild(container);
-    return container;
-  }
-
-  async function _checkHealth() {
-    var dot = document.getElementById('erpHealthDot');
-    var text = document.getElementById('erpHealthText');
-    if (!dot) return;
-    try {
-      if (typeof erpHealthCheck === 'function') {
-        var result = await erpHealthCheck();
-        if (result.success) {
-          dot.className = 'erp-health-dot';
-          dot.title = 'Connected (' + result.latency + 'ms)';
-          if (text) text.textContent = 'Connected';
-        } else {
-          dot.className = 'erp-health-dot offline';
-          dot.title = 'Offline';
-          if (text) text.textContent = 'Offline';
-        }
-      } else {
-        dot.className = 'erp-health-dot pending';
-      }
-    } catch (err) {
-      dot.className = 'erp-health-dot offline';
-    }
-  }
-
-  function _buildBackdrop() {
-    var backdrop = document.createElement('div');
-    backdrop.id = 'erpSidebarBackdrop';
-    backdrop.className = 'erp-sidebar-backdrop';
-    backdrop.addEventListener('click', function() {
-      var sidebar = document.getElementById('erpSidebar');
-      if (sidebar) sidebar.classList.remove('mobile-open');
-      backdrop.classList.remove('show');
-    });
-    return backdrop;
-  }
-
-  function _buildMobileBtn() {
-    var btn = document.createElement('button');
-    btn.className = 'erp-mobile-menu-btn';
-    btn.type = 'button';
-    btn.innerHTML = '<i class="bi bi-list"></i>';
-    btn.addEventListener('click', function() {
-      var sidebar = document.getElementById('erpSidebar');
-      var backdrop = document.getElementById('erpSidebarBackdrop');
-      if (sidebar) sidebar.classList.add('mobile-open');
-      if (backdrop) backdrop.classList.add('show');
-    });
-    return btn;
-  }
-
-  function renderNav() {
-    var current = _getCurrentPage();
-    var userRole = _getUserRole();
-    var userInfo = _getUserInfo();
-
-    _removeOldNav();
-
-    if (!document.querySelector('link[href*="erp-theme.css"]')) {
-      var themeCss = document.createElement('link');
-      themeCss.rel = 'stylesheet';
-      themeCss.href = 'erp-theme.css';
-      document.head.insertBefore(themeCss, document.head.firstChild);
-    }
-
-    if (typeof window.erpToggleTheme !== 'function') {
-      var themeJs = document.createElement('script');
-      themeJs.src = 'erp-theme.js';
-      themeJs.async = false;
-      document.head.appendChild(themeJs);
-    }
-
-    if (!document.getElementById('globalSearchScript') && typeof window.erpOpenSearch !== 'function') {
-      var gsScript = document.createElement('script');
-      gsScript.id = 'globalSearchScript';
-      gsScript.src = 'global-search.js';
-      gsScript.defer = true;
-      document.head.appendChild(gsScript);
-    }
-
-    // Net watch: nagbibigay ng "Maglaro muna" chip kapag offline/mabagal ang internet
-    if (!window.erpNet && !document.getElementById('erpNetWatchScript')) {
-      var nwScript = document.createElement('script');
-      nwScript.id = 'erpNetWatchScript';
-      nwScript.src = 'erp-netwatch.js';
-      nwScript.defer = true;
-      document.head.appendChild(nwScript);
-    }
-
-    var sidebar = _buildSidebar(userRole, current);
-    var topbar = _buildTopbar(userInfo, current);
-    var backdrop = _buildBackdrop();
-    var mobileBtn = _buildMobileBtn();
-
-    document.body.insertBefore(backdrop, document.body.firstChild);
-    document.body.insertBefore(mobileBtn, document.body.firstChild);
-    document.body.insertBefore(topbar, document.body.firstChild);
-    document.body.insertBefore(sidebar, document.body.firstChild);
-
-    _ensureNotifContainer();
-
-    document.body.classList.add('erp-has-sidebar');
-    if (_isCollapsed()) document.body.classList.add('erp-sidebar-collapsed');
-
-    if (typeof initNotifications === 'function') {
-      setTimeout(function() { try { initNotifications(); } catch(e) {} }, 100);
-    }
-
-    setTimeout(_checkHealth, 500);
-    setTimeout(_syncProfileOnce, 800);
-    setTimeout(_startChatAlerts, 1200);
-    setTimeout(function() { _startRequestsBadge(userRole); }, 1500);
-    if (userRole === 'production') setTimeout(function() { window.erpStartTour(false); }, 1600);
-  }
-
-  document.addEventListener('click', function(e) {
-    if (!e.target.closest('.erp-user-menu')) {
-      document.querySelectorAll('.erp-user-menu.open').forEach(function(m) { m.classList.remove('open'); });
-    }
-    if (!e.target.closest('#erpNotifContainer') && !e.target.closest('#erpBellContainer')) {
-      document.querySelectorAll('#erpNotifContainer.open').forEach(function(c) { c.classList.remove('open'); });
-    }
-  });
-
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-      document.querySelectorAll('.erp-user-menu.open').forEach(function(m) { m.classList.remove('open'); });
-      document.querySelectorAll('#erpNotifContainer.open').forEach(function(c) { c.classList.remove('open'); });
-      var sidebar = document.getElementById('erpSidebar');
-      var backdrop = document.getElementById('erpSidebarBackdrop');
-      if (sidebar) sidebar.classList.remove('mobile-open');
-      if (backdrop) backdrop.classList.remove('show');
-    }
-    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
-      e.preventDefault();
-      if (typeof window.erpOpenSearch === 'function') window.erpOpenSearch();
-    }
-  });
-
-  window.erpUserLogout = function() {
-    if (!confirm('Logout ' + _getUserInfo().fullname + '?')) return;
-    try {
-      var keysToRemove = ['ivm_username', 'ivm_userFullname', 'ivm_userRole', 'ivm_allowedRoles', 'ivm_requestorName', 'ivm_userDepartment', 'ivm_chatUnread', 'ivm_editReqCount', 'ivm_isAdmin', 'ivm_avatar'];
-      keysToRemove.forEach(function(k) { localStorage.removeItem(k); });
-      sessionStorage.clear();
-    } catch(e) {}
-    window.location.href = 'login.html';
-  };
-
-  window.erpUserRefresh = function() {
-    if (typeof erpClearCache === 'function') erpClearCache();
-    if (typeof erpClearInventoryCache === 'function') erpClearInventoryCache();
-    location.reload();
-  };
-
-  window.erpUserSettings = function() {
-    document.querySelectorAll('.erp-user-menu.open').forEach(function(m) { m.classList.remove('open'); });
-    _loadProfileScript(function() {
-      if (window.erpProfile) window.erpProfile.open();
-    });
-  };
-
-  window.erpRenderNav = renderNav;
-  window.erpNavState = {
-    isCollapsed: _isCollapsed,
-    setCollapsed: _setCollapsed,
-    getCurrentPage: _getCurrentPage,
-    getUserInfo: _getUserInfo,
-    getNavGroups: function() { return NAV_GROUPS; },
-    getPageTitles: function() { return PAGE_TITLES; }
-  };
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', renderNav);
-  } else {
-    renderNav();
-  }
-
-  console.log('✅ erp-nav.js v8.6 loaded (Settings + profile photo)');
+  _checkAccess();
 })();
