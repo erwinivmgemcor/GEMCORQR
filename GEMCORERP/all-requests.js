@@ -500,6 +500,7 @@ function allRequestsRenderNow() {
     var canCancelDoc = statusUpper === 'PENDING' && (
       (typeUpper === 'MRIF' && typeof window.mrifCanCancel === 'function' && window.mrifCanCancel()) ||
       (typeUpper === 'MRS'  && typeof window.mrsCanCancel  === 'function' && window.mrsCanCancel()));
+    var canCancelIssuedDoc = typeUpper === 'MRIF' && (statusUpper === 'PARTIAL' || statusUpper === 'COMPLETED') && typeof window.mrifCanCancelIssued === 'function' && window.mrifCanCancelIssued();
     var canEditDoc = (localStorage.getItem('ivm_userRole') === 'warehouse') && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL' || (statusUpper === 'COMPLETED' && typeUpper === 'MRIF'));
     
     html += '<tr' + (arIsMine(d.doc_no) ? ' class="ar-mine"' : '') + '>' +
@@ -524,6 +525,9 @@ function allRequestsRenderNow() {
         '</button>' : '') +
         (canCancelDoc ? ' <button class="erp-action-btn" style="color:#b91c1c" onclick="' + (typeUpper === 'MRS' ? 'mrsCancel' : 'mrifCancel') + '(\'' + safeDoc + '\')" title="Cancel ' + typeUpper + ' (nagawa nang mali / duplicate)">' +
           '<i class="bi bi-x-circle"></i>' +
+        '</button>' : '') +
+        (canCancelIssuedDoc ? ' <button class="erp-action-btn" style="color:#b91c1c" onclick="mrifCancel(\'' + safeDoc + '\', \'' + statusUpper + '\')" title="Cancel MRIF at ibalik ang stock (Admin)">' +
+          '<i class="bi bi-arrow-counterclockwise"></i>' +
         '</button>' : '') +
       '</td>' +
       '</tr>';
