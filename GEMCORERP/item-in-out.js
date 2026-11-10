@@ -396,7 +396,7 @@ function ioRenderMovements() {
     var outDisplay = qtyOut > 0 ? '<span class="text-danger fw-bold">−' + ioNum(qtyOut) + '</span>' : '—';
     var typeLabel = String(m.transaction_type || '—').replace(/_/g, ' ');
 
-    var reasonText = m.reason || '';
+    var reasonText = erpDisplayText(m.reason || '');
     if (m.adj_variance && Number(m.adj_variance) !== 0) {
       var varStr = (Number(m.adj_variance) > 0 ? '+' : '') + ioNum(m.adj_variance);
       reasonText = reasonText ? reasonText + ' (' + varStr + ')' : varStr;
@@ -407,7 +407,7 @@ function ioRenderMovements() {
       '<td style="font-size:0.78rem;">' + ioEsc(dateStr) + '</td>' +
       '<td class="text-center">' + dirBadge + '</td>' +
       '<td><span class="badge bg-secondary">' + ioEsc(typeLabel) + '</span></td>' +
-      '<td><code style="font-size:0.75rem;">' + ioEsc(m.reference_doc || '—') + '</code></td>' +
+      '<td><code style="font-size:0.75rem;">' + ioEsc(erpDisplayText(m.reference_doc) || '—') + '</code></td>' +
       '<td class="text-end">' + inDisplay + '</td>' +
       '<td class="text-end">' + outDisplay + '</td>' +
       '<td class="text-end fw-bold">' + ioNum(runningBal) + '</td>' +
@@ -458,8 +458,8 @@ function ioRenderEdits() {
       '<td class="text-end text-success fw-bold">' + ioNum(newVal) + '</td>' +
       '<td class="text-end ' + (change >= 0 ? 'text-success' : 'text-danger') + '">' + changeStr + '</td>' +
       '<td>' + ioEsc(e.edited_by || '—') + '</td>' +
-      '<td><span class="badge bg-secondary">' + ioEsc(e.source || '—') + '</span></td>' +
-      '<td title="' + ioEsc(e.reason || '') + '">' + ioEsc(ioTruncate(e.reason || '—', 40)) + '</td>' +
+      '<td><span class="badge bg-secondary">' + ioEsc(erpDisplayText(e.source) || '—') + '</span></td>' +
+      '<td title="' + ioEsc(erpDisplayText(e.reason)) + '">' + ioEsc(ioTruncate(erpDisplayText(e.reason) || '—', 40)) + '</td>' +
     '</tr>';
   });
   tbody.innerHTML = html;
@@ -495,13 +495,13 @@ function ioExportMovements() {
       txDate ? txDate.toLocaleString() : '',
       m.direction || '',
       m.transaction_type || '',
-      m.reference_doc || '',
+      erpDisplayText(m.reference_doc),
       Number(m.qty_in || 0),
       Number(m.qty_out || 0),
       Number(m.balance_before || 0),
       Number(m.balance_after || 0),
       m.performed_by || '',
-      m.reason || ''
+      erpDisplayText(m.reason || '')
     ];
   });
 
