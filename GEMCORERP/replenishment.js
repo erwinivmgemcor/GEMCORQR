@@ -274,7 +274,7 @@ function rpCoverCell(it) {
   return '<span class="' + cls + '" title="Available ÷ arawang konsumo">' + (d <= 0 ? '0' : rpNum(d)) + ' d</span>';
 }
 
-// Warn when almost everything is at zero — usually means the Stock Cutover is not uploaded yet
+// Warn when almost everything is at zero — usually means the Beginning Balance is not uploaded yet
 function rpRenderReadyBanner() {
   var el = document.getElementById('rpReadyBanner');
   if (!el) return;
@@ -282,7 +282,7 @@ function rpRenderReadyBanner() {
   var zero = _rp.allItems.filter(function(it) { return Number(it.on_hand || 0) <= 0; }).length;
   if (n >= 200 && zero / n >= 0.9) {
     el.innerHTML = '<i class="bi bi-exclamation-octagon-fill me-2"></i><strong>Mukhang hindi pa kumpleto ang stock data.</strong> ' +
-      rpNum(zero) + ' sa ' + rpNum(n) + ' item ang zero ang on-hand. Siguraduhing na-upload na ang Stock Cutover bago gumawa ng PRF — hindi pa tunay ang mga numerong ito.';
+      rpNum(zero) + ' sa ' + rpNum(n) + ' item ang zero ang on-hand. Siguraduhing na-upload na ang Beginning Balance bago gumawa ng PRF — hindi pa tunay ang mga numerong ito.';
     el.style.display = 'block';
   } else el.style.display = 'none';
 }
