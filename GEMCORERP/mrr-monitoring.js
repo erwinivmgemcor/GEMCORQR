@@ -73,8 +73,9 @@ async function mrrMonLoad() {
     var t0 = Date.now();
 
     // ═══ Query the view v_mrr_monitoring ═══
-    var rows = await erpFetch('v_mrr_monitoring',
-      'select=*&order=mrr_date.desc,line_no.asc&limit=10000');
+    // Supabase caps one request at 1,000 rows, so limit=10000 silently dropped the rest. erpFetchAll pages through all rows.
+    var rows = await erpFetchAll('v_mrr_monitoring',
+      'select=*&order=mrr_date.desc,mrr_no.asc,line_no.asc');
 
     _mrrMon.allItems = rows || [];
     mrrMonNormalizeStatuses(_mrrMon.allItems);   // staggered delivery: pinagsama-samang dating na ang basehan
@@ -312,7 +313,7 @@ function mrrMonClearFilters() {
 async function mrrMonPopulateFilters() {
   // Populate vendors
   try {
-    var rows = await erpFetch('v_mrr_monitoring', 'select=vendor&vendor=not.is.null&limit=1000');
+    var rows = await erpFetchAll('v_mrr_monitoring', 'select=vendor&vendor=not.is.null&order=vendor.asc,mrr_no.asc,line_no.asc');
     var seen = {};
     var vendors = [];
     (rows || []).forEach(function(r) {
@@ -330,7 +331,7 @@ async function mrrMonPopulateFilters() {
 
   // Populate creators
   try {
-    var rows2 = await erpFetch('v_mrr_monitoring', 'select=prepared_by&prepared_by=not.is.null&limit=1000');
+    var rows2 = await erpFetchAll('v_mrr_monitoring', 'select=prepared_by&prepared_by=not.is.null&order=prepared_by.asc,mrr_no.asc,line_no.asc');
     var seen2 = {};
     var creators = [];
     (rows2 || []).forEach(function(r) {
