@@ -195,7 +195,7 @@ function mrifListRender() {
     var canCancel = canEdit && statusUpper === 'PENDING';
     var canCancelIssued = (statusUpper === 'PARTIAL' || statusUpper === 'COMPLETED') && typeof window.mrifCanCancelIssued === 'function' && window.mrifCanCancelIssued();
     var editable = canEdit && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL' || statusUpper === 'COMPLETED');
-    var editTitle = statusUpper === 'COMPLETED' ? 'Correct item code / description / UOM' : 'Edit (Warehouse)';
+    var editTitle = statusUpper === 'COMPLETED' ? 'Edit (items, qty, details) — Warehouse' : 'Edit (Warehouse)';
     
     html += '<tr>' +
       '<td><code>' + erpEsc(d.doc_no) + '</code></td>' +
