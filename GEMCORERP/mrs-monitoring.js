@@ -71,8 +71,9 @@ async function mrsMonLoad() {
   try {
     var t0 = Date.now();
 
-    var rows = await erpFetch('v_mrs_monitoring',
-      'select=*&order=needs_attention.desc,request_date.desc,line_no.asc&limit=10000');
+    // Supabase caps one request at 1,000 rows, so limit=10000 silently dropped the rest. erpFetchAll pages through all rows.
+    var rows = await erpFetchAll('v_mrs_monitoring',
+      'select=*&order=needs_attention.desc,request_date.desc,mrs_no.asc,line_no.asc');
 
     // CANCELLED na MRS ay hindi na bahagi ng monitoring
     _mrsMon.allItems = (rows || []).filter(function(r) { return String(r.doc_status || '').toUpperCase() !== 'CANCELLED'; });
@@ -259,7 +260,7 @@ function mrsMonClearFilters() {
 async function mrsMonPopulateFilters() {
   // Populate requestors
   try {
-    var rows = await erpFetch('v_mrs_monitoring', 'select=requestor&requestor=not.is.null&limit=1000');
+    var rows = await erpFetchAll('v_mrs_monitoring', 'select=requestor&requestor=not.is.null&order=requestor.asc,mrs_no.asc,line_no.asc');
     var seen = {};
     var reqs = [];
     (rows || []).forEach(function(r) {
@@ -277,7 +278,7 @@ async function mrsMonPopulateFilters() {
 
   // Populate clients
   try {
-    var rows2 = await erpFetch('v_mrs_monitoring', 'select=client_name&client_name=not.is.null&limit=1000');
+    var rows2 = await erpFetchAll('v_mrs_monitoring', 'select=client_name&client_name=not.is.null&order=client_name.asc,mrs_no.asc,line_no.asc');
     var seen2 = {};
     var clients = [];
     (rows2 || []).forEach(function(r) {
