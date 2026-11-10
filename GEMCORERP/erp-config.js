@@ -75,6 +75,17 @@ function erpClearCache(key) {
   }
 }
 
+// ─── Display-only wording: "CUTOVER" → "BEGBAL" / "Beg. Bal." ───
+// Ang data sa database (hal. reference "CUTOVER-20261031-1157") ay HINDI binabago — ang ipinapakita lang.
+// May mga report na gumagamit ng salitang iyon para makilala ang beginning-balance rows.
+function erpDisplayText(v) {
+  if (v === null || v === undefined) return '';
+  return String(v)
+    .replace(/CUTOVER/g, 'BEGBAL')
+    .replace(/(^|[^A-Za-z0-9_])cut-?over(?![A-Za-z0-9_])/gi, '$1Beg. Bal.');
+}
+window.erpDisplayText = erpDisplayText;
+
 // ─── Utility: escape HTML ───
 function erpEsc(s) {
   if (s === null || s === undefined) return '';
