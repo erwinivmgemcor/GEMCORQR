@@ -74,8 +74,11 @@ async function mrifMonLoad() {
 
     // ═══ Query the view v_mrif_monitoring ═══
     // Order by needs_attention DESC (unserved first), then created_at DESC
-    var rows = await erpFetch('v_mrif_monitoring',
-      'select=*&order=needs_attention.desc,request_date.desc,line_no.asc&limit=10000');
+    // NOTE: Supabase/PostgREST silently caps a single request at 1,000 rows (max_rows), so
+    // limit=10000 does NOT work — rows beyond #1000 were dropped. erpFetchAll pages through
+    // everything. mrif_no is added to the order so paging is stable (no skipped / repeated rows).
+    var rows = await erpFetchAll('v_mrif_monitoring',
+      'select=*&order=needs_attention.desc,request_date.desc,mrif_no.asc,line_no.asc');
 
     _mrifMon.allItems = rows || [];
 
@@ -268,7 +271,7 @@ function mrifMonClearFilters() {
 async function mrifMonPopulateFilters() {
   // Populate requestors
   try {
-    var rows = await erpFetch('v_mrif_monitoring', 'select=requestor&requestor=not.is.null&limit=1000');
+    var rows = await erpFetchAll('v_mrif_monitoring', 'select=requestor&requestor=not.is.null&order=requestor.asc,mrif_no.asc,line_no.asc');
     var seen = {};
     var reqs = [];
     (rows || []).forEach(function(r) {
@@ -286,7 +289,7 @@ async function mrifMonPopulateFilters() {
 
   // Populate clients
   try {
-    var rows2 = await erpFetch('v_mrif_monitoring', 'select=client_name&client_name=not.is.null&limit=1000');
+    var rows2 = await erpFetchAll('v_mrif_monitoring', 'select=client_name&client_name=not.is.null&order=client_name.asc,mrif_no.asc,line_no.asc');
     var seen2 = {};
     var clients = [];
     (rows2 || []).forEach(function(r) {
