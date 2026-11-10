@@ -29,7 +29,7 @@
   // Procurement / Finance: read-only, specific pages only
   var VIEWER_PAGES = {
     procurement: ['mrr-monitoring.html', 'prf-monitor.html', 'replenishment.html', 'sof-tracker.html', 'item-catalog.html', 'chat.html', 'about.html', 'item-in-out.html', 'block-blast.html'],
-    finance: ['mrif-monitoring.html', 'project-costing.html', 'chat.html', 'about.html', 'item-in-out.html', 'block-blast.html']
+    finance: ['mrif-monitoring.html', 'project-costing.html', 'item-catalog.html', 'chat.html', 'about.html', 'item-in-out.html', 'block-blast.html']
   };
   var VIEWER_HOME = { procurement: 'mrr-monitoring.html', finance: 'mrif-monitoring.html' };
 
