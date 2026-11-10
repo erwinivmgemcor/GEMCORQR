@@ -67,7 +67,7 @@
           label: 'Item Catalog',
           icon: 'bi-journal-text',
           href: 'item-catalog.html',
-          roles: ['procurement', 'production']
+          roles: ['procurement', 'production', 'finance']
         },
         {
           id: 'inventory-count',
