@@ -760,8 +760,11 @@ async function _mrrPreflight() {
     var row = master[code.toUpperCase()];
     if (!row) { problems.push(n + '"' + code + '" is not in the inventory. Pick the item from the search list.'); return; }
     if (row.is_active === false || row.is_deprecated_2026 === true) { problems.push(n + row.item_code + ' is deactivated.'); return; }
-    if (seen[row.item_code]) { problems.push(n + row.item_code + ' is entered twice (also line #' + seen[row.item_code] + '). Combine the quantities into one line.'); return; }
-    seen[row.item_code] = i + 1;
+    // Same item code may be entered on several lines (e.g. general-use items) as long as the
+    // Remarks differ. Only an exact repeat (same code AND same remarks) is blocked as a likely double entry.
+    var dupKey = row.item_code + '||' + String(it.remarks || '').trim().toUpperCase();
+    if (seen[dupKey]) { problems.push(n + row.item_code + ' has the same Remarks as line #' + seen[dupKey] + '. Change the Remarks to tell them apart, or combine the quantities into one line.'); return; }
+    seen[dupKey] = i + 1;
 
     // Use the master data so code / description / unit always match the inventory
     it.itemCode = row.item_code;
