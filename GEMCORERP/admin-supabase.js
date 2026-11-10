@@ -2456,7 +2456,7 @@ console.log('✅ admin-supabase.js v1.1 loaded (Phase 1 + 2 + Backup Filter)');
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════
 
-console.log('📌 Loading Full Cutover module...');
+console.log('📌 Loading Beginning Balance module...');
 
 // ═══════════════════════════════════════════════════════════
 // CUTOVER STATE
@@ -2480,7 +2480,7 @@ async function ascCutoverParseFile(event) {
   if (!file) return;
   
   if (_asc.accessMode === 'readonly') {
-    erpShowToast('Read-Only mode — hindi pwedeng mag-cutover', 'warning');
+    erpShowToast('Read-Only mode — hindi pwedeng mag-execute ng Beg. Bal.', 'warning');
     event.target.value = '';
     return;
   }
@@ -2503,7 +2503,7 @@ async function ascCutoverParseFile(event) {
 
     // Parse header (BOM, extra spaces, "Ave / Mo" vs "Ave/Mo" — lahat tinatanggap)
     var headers = rows[0];
-    console.log('[Cutover] Headers:', headers);
+    console.log('[Beg. Bal.] Headers:', headers);
 
     var headerMap = {};
     headers.forEach(function(h, idx) {
@@ -2533,7 +2533,7 @@ async function ascCutoverParseFile(event) {
       throw new Error('Missing required column: "Item Code" (nakita: ' + headers.join(' | ') + ')');
     }
 
-    console.log('[Cutover] Column mapping:', colIdx);
+    console.log('[Beg. Bal.] Column mapping:', colIdx);
 
     // Helper: text at number cells. Ang BLANK ay null (hindi 0) — hindi binubura ng blank ang existing.
     var cellText = function(vals, idx) {
@@ -2589,7 +2589,7 @@ async function ascCutoverParseFile(event) {
 
     _ascCutover.parsedItems = parsedItems;
     
-    console.log('[Cutover] Parsed', parsedItems.length, 'items');
+    console.log('[Beg. Bal.] Parsed', parsedItems.length, 'items');
     
     if (statusEl) {
       var warnHtml = '';
@@ -2612,7 +2612,7 @@ async function ascCutoverParseFile(event) {
     await ascCutoverComputeDiff();
     
   } catch (err) {
-    console.error('[Cutover] Parse error:', err);
+    console.error('[Beg. Bal.] Parse error:', err);
     if (statusEl) {
       statusEl.innerHTML = '<div class="alert alert-danger small py-2">' +
         '<i class="bi bi-x-circle-fill me-1"></i>' +
@@ -2734,20 +2734,20 @@ while (cpHasMore && cpPageNum < cpMaxPages) {
   currentItems = currentItems.concat(cpRows);
   cpOffset += cpRows.length;
   
-  console.log('[Cutover Diff] Page ' + cpPageNum + ': fetched ' + 
+  console.log('[Beg. Bal. Diff] Page ' + cpPageNum + ': fetched ' + 
               cpRows.length + ' (total: ' + currentItems.length + ')');
   
   if (cpRows.length < cpPageSize) cpHasMore = false;
 }
 
-console.log('[Cutover Diff] ✅ Total current items: ' + currentItems.length);
+console.log('[Beg. Bal. Diff] ✅ Total current items: ' + currentItems.length);
     
     var currentMap = {};
     (currentItems || []).forEach(function(it) {
       currentMap[it.item_code] = it;
     });
     
-    console.log('[Cutover] Current items:', Object.keys(currentMap).length);
+    console.log('[Beg. Bal.] Current items:', Object.keys(currentMap).length);
     
     // Compute diff
     var added = [];
@@ -2790,14 +2790,14 @@ console.log('[Cutover Diff] ✅ Total current items: ' + currentItems.length);
     // Render diff default tab
     ascCutoverShowDiff('added');
     
-    console.log('[Cutover] Diff computed:', {
+    console.log('[Beg. Bal.] Diff computed:', {
       added: added.length,
       updated: updated.length,
       removed: removed.length
     });
     
   } catch (err) {
-    console.error('[Cutover] Diff error:', err);
+    console.error('[Beg. Bal.] Diff error:', err);
     erpShowToast('Failed to compute diff: ' + err.message, 'danger');
   }
 }
@@ -2912,7 +2912,7 @@ window.ascCutoverShowDiff = ascCutoverShowDiff;
 // STEP 3: EXECUTE CUTOVER
 // ═══════════════════════════════════════════════════════════
 // Unang buwan ng TOTOONG usage (YYYYMM). Ang usage bago nito ay nasa baseline na (Ave/Mo ng CSV).
-// Default: kung ika-20 na o lampas na ng buwan, susunod na buwan (month-end cutover); kung hindi, kasalukuyang buwan.
+// Default: kung ika-20 na o lampas na ng buwan, susunod na buwan (month-end beg. bal.); kung hindi, kasalukuyang buwan.
 function ascCutoverDefaultStartMonth() {
   var now = new Date();
   var y = now.getFullYear(), m = now.getMonth() + 1;
@@ -2948,7 +2948,7 @@ async function ascCutoverConfirm() {
   var lockBuffer = !!((document.getElementById('cutoverLockBuffer') || {}).checked);
 
   // Final confirmation
-  var confirmMsg = '⚠️ EXECUTE FULL CUTOVER?\n\n' +
+  var confirmMsg = '⚠️ EXECUTE BEGINNING BALANCE (BEG. BAL.)?\n\n' +
     '═══════════════════════════════════\n' +
     '📊 Summary:\n' +
     '  ✅ Will ADD:     ' + _ascCutover.addedItems.length + ' items\n' +
@@ -2960,16 +2960,16 @@ async function ascCutoverConfirm() {
     '  🔒 Lock imported Buffer: ' + (lockBuffer ? 'YES' : 'NO') + '\n' +
     '═══════════════════════════════════\n\n' +
     '📸 Auto-snapshot will be created.\n' +
-    '🔙 Rollback available sa Cutover History.\n\n' +
+    '🔙 Rollback available sa Beg. Bal. History.\n\n' +
     '⚠️ This action is REVERSIBLE via rollback.\n' +
     '⚠️ Removed items will be SOFT-DELETED.\n\n' +
     'Notes: ' + notes + '\n\n' +
-    'Type "CUTOVER" to confirm:';
+    'Type "BEG BAL" to confirm:';
   
   var confirmInput = prompt(confirmMsg);
   
-  if (confirmInput !== 'CUTOVER') {
-    erpShowToast('Cutover cancelled — confirmation text did not match', 'info');
+  if (confirmInput !== 'BEG BAL') {
+    erpShowToast('Beg. Bal. cancelled — confirmation text did not match', 'info');
     return;
   }
   
@@ -2980,7 +2980,7 @@ async function ascCutoverConfirm() {
   if (content) {
     content.innerHTML = '<div class="text-center py-5">' +
       '<div class="erp-spinner" style="margin:0 auto;"></div>' +
-      '<div class="mt-3"><strong>Executing Cutover...</strong></div>' +
+      '<div class="mt-3"><strong>Executing Beg. Bal....</strong></div>' +
       '<div class="small text-muted mt-1">Creating snapshot + updating items</div>' +
       '</div>';
   }
@@ -3012,7 +3012,7 @@ async function ascCutoverConfirm() {
     var data = await res.json();
     var elapsed = Date.now() - t0;
     
-    console.log('[Cutover] Executed in ' + elapsed + 'ms:', data);
+    console.log('[Beg. Bal.] Executed in ' + elapsed + 'ms:', data);
     
     if (!data || !data.success) {
       throw new Error((data && data.error) || 'Unknown error');
@@ -3033,25 +3033,25 @@ async function ascCutoverConfirm() {
       var det = (data.error_details || []).slice(0, 10).map(function(e) {
         return '• ' + e.item_code + ': ' + e.error;
       }).join('\n');
-      console.warn('[Cutover] Items with errors:', data.error_details);
+      console.warn('[Beg. Bal.] Items with errors:', data.error_details);
       setTimeout(function() {
-        alert('⚠️ Cutover tapos, pero ' + data.errors + ' item(s) ang hindi na-import:\n\n' + det +
+        alert('⚠️ Beg. Bal. tapos, pero ' + data.errors + ' item(s) ang hindi na-import:\n\n' + det +
               (data.errors > 10 ? '\n…at iba pa (tingnan ang console)' : ''));
       }, 300);
     }
-    erpShowToast('✅ Full cutover complete!', 'success');
+    erpShowToast('✅ Beginning Balance complete!', 'success');
     
     // Reload snapshots
     ascCutoverLoadSnapshots();
     
   } catch (err) {
-    console.error('[Cutover] Execute failed:', err);
-    erpShowToast('Cutover failed: ' + err.message, 'danger');
+    console.error('[Beg. Bal.] Execute failed:', err);
+    erpShowToast('Beg. Bal. failed: ' + err.message, 'danger');
     
     if (content) {
       content.innerHTML = '<div class="alert alert-danger">' +
         '<i class="bi bi-exclamation-triangle-fill me-1"></i>' +
-        '<strong>Cutover Failed</strong><br>' +
+        '<strong>Beg. Bal. Failed</strong><br>' +
         '<small>' + ascEsc(err.message) + '</small>' +
         '</div>';
     }
@@ -3097,7 +3097,7 @@ function ascCutoverShowResult(data) {
 // CANCEL / RESET
 // ═══════════════════════════════════════════════════════════
 function ascCutoverCancel() {
-  if (!confirm('Cancel cutover? Walang mababago sa database.')) return;
+  if (!confirm('Cancel beg. bal.? Walang mababago sa database.')) return;
   ascCutoverReset();
 }
 
@@ -3166,7 +3166,7 @@ async function ascCutoverDownloadTemplate() {
       allRows = allRows.concat(pageRows);
       offset += pageRows.length;
       
-      console.log('[Cutover Template] Page ' + pageNum + ': fetched ' + 
+      console.log('[Beg. Bal. Template] Page ' + pageNum + ': fetched ' + 
                   pageRows.length + ' (total: ' + allRows.length + ')');
       
       if (pageRows.length < pageSize) {
@@ -3175,7 +3175,7 @@ async function ascCutoverDownloadTemplate() {
     }
     
     var rows = allRows;
-    console.log('[Cutover Template] ✅ Total fetched: ' + rows.length + ' items');
+    console.log('[Beg. Bal. Template] ✅ Total fetched: ' + rows.length + ' items');
     
     if (!rows || rows.length === 0) {
       erpShowToast('Walang items to export', 'warning');
@@ -3220,7 +3220,7 @@ async function ascCutoverDownloadTemplate() {
     erpShowToast('✅ Template downloaded (' + rows.length + ' items)', 'success');
     
   } catch (err) {
-    console.error('[Cutover Template]', err);
+    console.error('[Beg. Bal. Template]', err);
     erpShowToast('Failed: ' + err.message, 'danger');
   }
 }
@@ -3260,7 +3260,7 @@ async function ascCutoverLoadSnapshots() {
     if (!data || data.length === 0) {
       tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">' +
         '<i class="bi bi-inbox" style="font-size:2rem;opacity:0.3;"></i>' +
-        '<div class="mt-2">Wala pang cutover snapshots</div></td></tr>';
+        '<div class="mt-2">Wala pang beg. bal. snapshots</div></td></tr>';
       return;
     }
     
@@ -3647,12 +3647,12 @@ window.ascGuideBackupNow = ascGuideBackupNow;
 // ─── 2. RESTORE SNAPSHOT ───
 async function ascGuideRestoreSnapshot() {
   var confirmMsg = '🔙 RESTORE SNAPSHOT?\n\n' +
-    'Pumunta sa Full Cutover → Cutover History para pumili ng snapshot.\n\n' +
+    'Pumunta sa Beginning Balance → Beg. Bal. History para pumili ng snapshot.\n\n' +
     'Continue?';
 
   if (!confirm(confirmMsg)) return;
 
-  // Switch to cutover tab
+  // Switch to beg. bal. tab
   ascSwitchTab('cutover');
 
   setTimeout(function() {
@@ -3887,7 +3887,7 @@ async function ascGuideEmergencyStop() {
     '🚨 EMERGENCY STOP?\n\n' +
     'Ito ay mag-set ng system sa READ-ONLY mode.\n\n' +
     'Lahat ng write operations ay ma-disable.\n' +
-    'Ito ay hindi mag-e-execute ng cutover, edit, o delete.\n\n' +
+    'Ito ay hindi mag-e-execute ng beg. bal., edit, o delete.\n\n' +
     'Continue?'
   );
   if (!confirm1) return;
@@ -3955,4 +3955,4 @@ ascSwitchTab = function(tabName) {
 };
 
 console.log('✅ Admin Guide module loaded');
-console.log('✅ Full Cutover module loaded');
+console.log('✅ Beginning Balance module loaded');
