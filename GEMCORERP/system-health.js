@@ -1587,7 +1587,7 @@ var SH_EXPORT_TABLES = [
   { name: 'prf_items', label: 'PRF Items', icon: 'bi-list-ul' },
   { name: 'messages', label: 'Messages', icon: 'bi-chat-dots' },
   { name: 'erp_stock_ledger', label: 'Stock Ledger', icon: 'bi-journal-text' },
-  { name: 'erp_cutover_snapshots', label: 'Cutover Snapshots', icon: 'bi-camera' }
+  { name: 'erp_cutover_snapshots', label: 'Beg. Bal. Snapshots', icon: 'bi-camera' }
 ];
 
 async function shLoadExportButtons() {
@@ -1764,4 +1764,4 @@ window.shExportTable = shExportTable;
 window.shLoadExportButtons = shLoadExportButtons;
 window.shExecuteSql = shExecuteSql;
 
-console.log('✅ System Health — All functions exposed to window');  
+console.log('✅ System Health — All functions exposed to window');
