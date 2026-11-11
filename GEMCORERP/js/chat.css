@@ -118,3 +118,15 @@
   .chat-emoji-pop{grid-template-columns:repeat(6,1fr)}
 }
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto !important}}
+
+/* ── Presence (online / last seen) ───────────────────────── */
+.chat-av-wrap{position:relative;flex-shrink:0;display:flex}
+.chat-presence-dot{display:none;position:absolute;right:0;bottom:0;width:13px;height:13px;border-radius:50%;background:#22c55e;border:2.5px solid #fff;box-sizing:border-box}
+.chat-presence-dot.on{display:block}
+.chat-conv-item.active .chat-presence-dot{border-color:#e8eefb}
+.chat-conv-item:hover .chat-presence-dot{border-color:#f4f6fa}
+.chat-conv-item.active:hover .chat-presence-dot{border-color:#e8eefb}
+.chat-panel-status{font-size:.74rem;color:#94a3b8;margin-top:1px;display:flex;align-items:center;gap:5px}
+.chat-panel-status.on{color:#16a34a;font-weight:600}
+.chat-panel-status.on::before{content:"";width:7px;height:7px;border-radius:50%;background:#22c55e;display:inline-block}
+.chat-panel-status:empty{display:none}
