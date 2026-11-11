@@ -621,6 +621,16 @@
     document.head.appendChild(sc);
   }
 
+  // Online / last-seen heartbeat — runs on every page
+  function _startPresence() {
+    try { if (!localStorage.getItem('ivm_username')) return; } catch(e) { return; }
+    if (window.erpPresence || document.getElementById('erpPresenceScript')) return;
+    var sc = document.createElement('script');
+    sc.id = 'erpPresenceScript';
+    sc.src = 'erp-presence.js';
+    document.head.appendChild(sc);
+  }
+
   // First-time guide (production users). Auto-starts once; replay from user menu → Quick Guide.
   function _loadTourScript(cb) {
     if (window.erpTour) { cb(); return; }
@@ -839,6 +849,7 @@
     setTimeout(_checkHealth, 500);
     setTimeout(_syncProfileOnce, 800);
     setTimeout(_startChatAlerts, 1200);
+    setTimeout(_startPresence, 1500);
     setTimeout(function() { _startRequestsBadge(userRole); }, 1500);
     if (userRole === 'production') setTimeout(function() { window.erpStartTour(false); }, 1600);
   }
@@ -869,6 +880,7 @@
 
   window.erpUserLogout = function() {
     if (!confirm('Logout ' + _getUserInfo().fullname + '?')) return;
+    try { if (window.erpPresence) window.erpPresence.goOffline(); } catch(e) {}
     try {
       var keysToRemove = ['ivm_username', 'ivm_userFullname', 'ivm_userRole', 'ivm_allowedRoles', 'ivm_requestorName', 'ivm_userDepartment', 'ivm_chatUnread', 'ivm_editReqCount', 'ivm_isAdmin', 'ivm_avatar'];
       keysToRemove.forEach(function(k) { localStorage.removeItem(k); });
