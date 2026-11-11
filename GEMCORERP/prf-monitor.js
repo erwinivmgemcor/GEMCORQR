@@ -111,7 +111,15 @@ function _resolvePoData(item, prfNo) {
 // ═══════════════════════════════════════════════════════════
 // ✅ v3.4: VERSION BADGE with LATEST/OLD indicator
 // ═══════════════════════════════════════════════════════════
+// DRAFT = hindi pa finalized: walang revision number hanggang sa i-Finalize.
+// (is_finalized === false lang ang draft; kung wala pang column / null -> itinuturing na finalized)
+function _prfIsDraft(prf) { return !!prf && prf.is_finalized === false; }
+window._prfIsDraft = _prfIsDraft;
+
 function _versionBadge(prf, latestPrfId) {
+  if (_prfIsDraft(prf)) {
+    return ' <span class="badge bg-warning text-dark" style="font-size:0.62rem;" title="Draft - wala pang revision hanggang i-Finalize">DRAFT</span>';
+  }
   var v = parseInt(prf.version_number, 10) || 1;
   
   // ✅ Kung version 1 lang, wag nang lagyan ng badge.
@@ -505,8 +513,13 @@ html += '<tr>' +
           '<i class="bi bi-tag"></i>' +
         '</button>' +
         (status === 'CANCELED' ? '' :
+        (_prfIsDraft(p) ?
+          '<button class="erp-action-btn" style="background:#16a34a;color:#fff;" ' +
+            'onclick="prfFinalize(' + safeId + ')" title="Finalize PRF (pagkatapos nito, bagong revision na ang bawat edit)">' +
+            '<i class="bi bi-patch-check"></i>' +
+          '</button>' : '') +
         '<button class="erp-action-btn" style="background:#f59e0b;color:#fff;" ' +
-          'onclick="openEditPrfItems(' + safeId + ')" title="Edit Items (New Version)">' +
+          'onclick="openEditPrfItems(' + safeId + ')" title="' + (_prfIsDraft(p) ? 'Edit Items (Draft - walang revision)' : 'Edit Items (New Version)') + '">' +
           '<i class="bi bi-pencil-square"></i>' +
         '</button>' +
         '<button class="erp-action-btn" style="background:#ef4444;color:#fff;" ' +
@@ -1507,6 +1520,7 @@ var _editPrfState = {
   originalItems: [],
   currentItems: [],
   newVersionNumber: 2,
+  isDraft: false,
   isSaving: false,
   stockMap: null          // live erp_items snapshot source (on_hand, buffer, ave consumption)
 };
@@ -1624,9 +1638,20 @@ window.openEditPrfItems = async function(prfId) {
     _editPrfState.newVersionNumber = currentVersion + 1;
   }
   
+  _editPrfState.isDraft = _prfIsDraft(prf);
+
   document.getElementById('editPrfItemsTitle').textContent = basePrfNo;
-  document.getElementById('editPrfVersionBadge').textContent = 
-    'v' + currentVersion + ' → v' + _editPrfState.newVersionNumber;
+  document.getElementById('editPrfVersionBadge').textContent = _editPrfState.isDraft
+    ? 'DRAFT - walang revision'
+    : 'v' + currentVersion + ' → v' + _editPrfState.newVersionNumber;
+  var _note = document.querySelector('#editPrfItemsModal .modal-footer .me-auto');
+  if (_note) _note.innerHTML = '<i class="bi bi-info-circle me-1"></i>' + (_editPrfState.isDraft
+    ? 'Draft pa ito: ang edits ay direktang ina-update, <b>walang revision number</b>. I-Finalize kapag final na.'
+    : 'Original PRF ay hindi mababago. Ang edits ay bagong version.');
+  var _sb = document.getElementById('btnSaveEditPrfItems');
+  if (_sb) _sb.innerHTML = _editPrfState.isDraft
+    ? '<i class="bi bi-check-circle me-1"></i>Save Draft Changes'
+    : '<i class="bi bi-check-circle me-1"></i>Save as New Version';
   
   document.getElementById('editPrfItemsBody').innerHTML = 
     '<div class="text-center py-5">' +
@@ -1782,7 +1807,7 @@ function renderEditPrfItems() {
   
   html += '<div class="mt-3 p-3" style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:8px;">' +
     '<label class="form-label fw-bold" style="color:#92400e;">' +
-      '<i class="bi bi-chat-left-text me-1"></i>Reason for Revision <span class="text-danger">*</span>' +
+      '<i class="bi bi-chat-left-text me-1"></i>' + (_editPrfState.isDraft ? 'Note <span class="text-muted fw-normal">(optional - draft pa, walang revision)</span>' : 'Reason for Revision <span class="text-danger">*</span>') +
     '</label>' +
     '<input type="text" class="form-control" id="editPrfRevisionReason" ' +
       'placeholder="e.g., Manager requested removal of item X" maxlength="300">' +
@@ -1854,6 +1879,29 @@ function computePrfItemsDiff(oldItems, newItems) {
   return diff;
 }
 
+// FINALIZE - mula dito, bawat edit ay bagong revision (v2, v3...)
+window.prfFinalize = async function(prfId) {
+  var prf = (_prfMonitor.allPrfs || []).find(function(p) { return p.id === prfId; });
+  if (!prf) { erpShowToast('PRF not found', 'warning'); return; }
+  if (!_prfIsDraft(prf)) { erpShowToast('Finalized na ang PRF na ito', 'info'); return; }
+  if (!confirm('I-Finalize ang ' + prf.prf_no + '?\n\nPagkatapos nito, bawat pagbabago sa PRF ay magkakaroon na ng bagong revision (v2, v3...).')) return;
+
+  var user = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || '';
+  try {
+    var res = await fetch(erpUrl('prf_documents?id=eq.' + encodeURIComponent(prfId)), {
+      method: 'PATCH',
+      headers: erpHeaders({ 'Prefer': 'return=minimal' }),
+      body: JSON.stringify({ is_finalized: true, finalized_at: new Date().toISOString(), finalized_by: user })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + (await res.text()).substring(0, 120));
+    erpShowToast('✅ ' + prf.prf_no + ' finalized. Mula ngayon, revision na ang bawat edit.', 'success');
+    await prfMonitorLoad();
+  } catch (err) {
+    console.error('[prfFinalize]', err);
+    erpShowToast('Finalize failed: ' + err.message + ' - na-run mo na ba ang erp-prf-finalize.sql?', 'danger');
+  }
+};
+
 window.saveEditPrfItems = async function() {
   if (_editPrfState.isSaving) return;
 
@@ -1863,8 +1911,9 @@ window.saveEditPrfItems = async function() {
   var prf = _editPrfState.originalPrf;
   if (!prf) { erpShowToast('No PRF loaded', 'warning'); return; }
 
+  var isDraft = _prfIsDraft(prf);
   var reason = (document.getElementById('editPrfRevisionReason').value || '').trim();
-  if (!reason) {
+  if (!reason && !isDraft) {
     erpShowToast('Reason for revision is required', 'warning');
     document.getElementById('editPrfRevisionReason').focus();
     return;
@@ -1913,8 +1962,10 @@ window.saveEditPrfItems = async function() {
     }
   });
 
-  if (!confirm('Save changes to ' + prf.prf_no + ' as v' + _editPrfState.newVersionNumber + '?\n\n' +
-    validItems.length + ' item(s) will be saved. Same PRF number, updated version.')) return;
+  if (!confirm(isDraft
+    ? 'Save changes to DRAFT ' + prf.prf_no + '?\n\n' + validItems.length + ' item(s) will be saved. Walang bagong revision - i-Finalize kapag final na.'
+    : 'Save changes to ' + prf.prf_no + ' as v' + _editPrfState.newVersionNumber + '?\n\n' +
+      validItems.length + ' item(s) will be saved. Same PRF number, updated version.')) return;
 
   _editPrfState.isSaving = true;
   var btn = document.getElementById('btnSaveEditPrfItems');
@@ -1932,7 +1983,12 @@ window.saveEditPrfItems = async function() {
     var totalQty = validItems.reduce(function(s, it) { return s + (it.qty_for_order || 0); }, 0);
 
     // STEP 1: Update PRF document
-    var updateDocPayload = {
+    var updateDocPayload = isDraft ? {
+      // DRAFT: in-place lang - hindi gagalaw ang version_number at walang revision fields
+      total_items: validItems.length,
+      total_qty: totalQty,
+      updated_at: new Date().toISOString()
+    } : {
       version_number: newVersion,
       total_items: validItems.length,
       total_qty: totalQty,
@@ -1986,8 +2042,8 @@ window.saveEditPrfItems = async function() {
 
     if (!itemRes.ok) throw new Error('Insert new items failed: ' + itemRes.status);
 
-    // STEP 3: Log audit
-    try {
+    // STEP 3: Log audit (revision audit - hindi para sa draft)
+    if (!isDraft) try {
       await fetch(erpUrl('prf_revision_audit'), {
         method: 'POST',
         headers: erpHeaders({ 'Prefer': 'return=minimal' }),
@@ -2010,7 +2066,9 @@ window.saveEditPrfItems = async function() {
     closeEditPrfItems();
 
     var diffSummary = 'Added: ' + diff.added.length + ' | Removed: ' + diff.removed.length + ' | Modified: ' + diff.modified.length;
-    erpShowToast('✅ ' + prf.prf_no + ' updated to v' + newVersion + '! ' + diffSummary, 'success');
+    erpShowToast(isDraft
+      ? '📝 Draft ' + prf.prf_no + ' saved (walang revision). ' + diffSummary
+      : '✅ ' + prf.prf_no + ' updated to v' + newVersion + '! ' + diffSummary, 'success');
 
     await prfMonitorLoad();
 
