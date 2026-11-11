@@ -30,6 +30,7 @@
 <script defer src="js/update.js"></script>
 <script defer src="erp-avatars.js"></script>
 <script defer src="erp-chat-alerts.js"></script>
+<script defer src="erp-presence.js"></script>
 <script defer src="js/chat.js"></script>
 <script defer src="notif-alerts.js"></script>
 <script defer src="notifications.js"></script>
@@ -111,10 +112,14 @@
             <i class="bi bi-arrow-left"></i>
           </button>
           <div class="chat-panel-info">
-            <div class="chat-panel-avatar" id="chatPanelAvatar">?</div>
+            <div class="chat-av-wrap">
+              <div class="chat-panel-avatar" id="chatPanelAvatar">?</div>
+              <span class="chat-presence-dot" id="chatPanelDot"></span>
+            </div>
             <div class="chat-panel-meta">
               <div class="chat-panel-name" id="chatWithName">—</div>
               <div class="chat-panel-sub" id="chatWithSub">—</div>
+              <div class="chat-panel-status" id="chatWithStatus"></div>
             </div>
           </div>
         </div>
