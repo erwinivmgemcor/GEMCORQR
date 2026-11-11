@@ -246,6 +246,22 @@ async function allRequestsEnsureCats(docs) {
   }
 }
 
+// SOF number: MRIF/MRS keep it in sof_no, older docs only in gem_so_no
+function arSofOf(d) { return String((d && (d.sof_no || d.gem_so_no)) || '').trim(); }
+
+function arSofCellHtml(d) {
+  var s = arSofOf(d);
+  return s ? '<span class="ar-sofno" title="SOF No.">' + erpEsc(s) + '</span>' : '<span class="text-muted">—</span>';
+}
+
+// Project name: wraps to max 2 lines, full text (+ client) on hover
+function arProjectCellHtml(d) {
+  var p = String((d && d.project) || '').trim();
+  if (!p) return '<span class="text-muted">—</span>';
+  var tip = p + (d.client_name ? '  ·  Client: ' + d.client_name : '');
+  return '<span class="ar-projname" title="' + erpEsc(tip) + '">' + erpEsc(p) + '</span>';
+}
+
 function arCatCellHtml(docNo) {
   var c = _allRequests.catByDoc[docNo];
   if (!c) return '<span class="text-muted small">…</span>';
@@ -315,7 +331,7 @@ async function allRequestsLoad() {
   var tbody = document.getElementById('allTableBody');
   if (!tbody) return;
   
-  tbody.innerHTML = '<tr><td colspan="10" class="erp-empty">' +
+  tbody.innerHTML = '<tr><td colspan="12" class="erp-empty">' +
     '<div class="erp-spinner"></div>' +
     '<div class="mt-2">Loading requests...</div></td></tr>';
   
@@ -380,7 +396,7 @@ async function allRequestsLoad() {
     
   } catch(err) {
     console.error('[allRequestsLoad]', err);
-    tbody.innerHTML = '<tr><td colspan="10" class="erp-empty text-danger">' +
+    tbody.innerHTML = '<tr><td colspan="12" class="erp-empty text-danger">' +
       'Failed: ' + erpEsc(err.message) + '</td></tr>';
   }
 }
@@ -417,14 +433,14 @@ async function allRequestsRender() {
   if (f) {
     var tbody0 = document.getElementById('allTableBody');
     if (tbody0 && _allRequests.allDocs.some(function(d) { return !_allRequests.catByDoc[d.doc_no]; })) {
-      tbody0.innerHTML = '<tr><td colspan="10" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Checking categories...</div></td></tr>';
+      tbody0.innerHTML = '<tr><td colspan="12" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Checking categories...</div></td></tr>';
     }
     await allRequestsEnsureCats(_allRequests.allDocs);
     if (tok !== _allRequests.renderToken) return;
   }
   if (arAvailFilterValue() && !_allRequests.availAt) {
     var tb1 = document.getElementById('allTableBody');
-    if (tb1) tb1.innerHTML = '<tr><td colspan="10" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Checking stock availability...</div></td></tr>';
+    if (tb1) tb1.innerHTML = '<tr><td colspan="12" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Checking stock availability...</div></td></tr>';
     await arLoadAvailability();
     if (tok !== _allRequests.renderToken) return;
   }
@@ -464,7 +480,10 @@ function allRequestsRenderNow() {
     var docNo = String(d.doc_no || '').toLowerCase();
     var req = String(d.requestor || '').toLowerCase();
     var jo = String(d.jo_no || '').toLowerCase();
-    return docNo.indexOf(search) !== -1 || req.indexOf(search) !== -1 || jo.indexOf(search) !== -1;
+    var sofS = arSofOf(d).toLowerCase();
+    var projS = String(d.project || '').toLowerCase();
+    return docNo.indexOf(search) !== -1 || req.indexOf(search) !== -1 || jo.indexOf(search) !== -1 ||
+           sofS.indexOf(search) !== -1 || projS.indexOf(search) !== -1;
   });
   
   var total = _allRequests.filteredDocs.length;
@@ -482,7 +501,7 @@ function allRequestsRenderNow() {
   document.getElementById('allBtnNext').disabled = (end >= total);
   
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="12" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No requests found.</td></tr>';
     return;
@@ -518,6 +537,8 @@ function allRequestsRenderNow() {
       '<td class="text-center"><span class="badge ' + typeBadge + '">' + typeUpper + '</span></td>' +
       '<td class="text-center">' + arCatCellHtml(d.doc_no) + '</td>' +
       '<td>' + erpEsc(d.jo_no || '—') + '</td>' +
+      '<td class="ar-sof">' + arSofCellHtml(d) + '</td>' +
+      '<td class="ar-proj">' + arProjectCellHtml(d) + '</td>' +
       '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span>' + arLockBadge(d.doc_no) + arAvailChip(d) + '</td>' +
       '<td class="text-center">' + (d.item_count || 0) + '</td>' +
       '<td class="text-center" style="white-space:nowrap;">' +
@@ -879,7 +900,7 @@ function allRequestsExport() {
     return;
   }
   
-  var headers = ['Doc No.', 'Date', 'Requestor', 'Department', 'Type', 'JO No.', 'Status', 'Items'];
+  var headers = ['Doc No.', 'Date', 'Requestor', 'Department', 'Type', 'JO No.', 'SOF No.', 'Project', 'Status', 'Items'];
   var rows = _allRequests.filteredDocs.map(function(d) {
     return [
       d.doc_no || '',
@@ -888,6 +909,8 @@ function allRequestsExport() {
       d.department || '',
       d.doc_type || '',
       d.jo_no || '',
+      arSofOf(d),
+      d.project || '',
       d.status || '',
       d.item_count || 0
     ];
