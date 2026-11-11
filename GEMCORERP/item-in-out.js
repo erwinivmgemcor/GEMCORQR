@@ -10,7 +10,9 @@ var _io = {
   allEdits: [],
   inventoryCache: null,
   searchTimer: null,
-  activeTab: 'movements'
+  activeTab: 'movements',
+  recentItems: null,      // last 20 processed items (cached)
+  recentLoading: null
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -19,6 +21,7 @@ var _io = {
 document.addEventListener('DOMContentLoaded', function() {
   console.log('[Item In & Out v2.0] Initializing...');
   ioCheckHealth();
+  ioLoadRecent();
 
   var params = new URLSearchParams(window.location.search);
   var code = params.get('code');
@@ -63,7 +66,9 @@ function ioOnSearchInput(value) {
   if (_io.searchTimer) clearTimeout(_io.searchTimer);
 
   if (!term || term.length < 2) {
-    dropdown.classList.add('d-none');
+    // Walang tinype pa -> ipakita ang last 20 processed items para mabilis pumili
+    if (!term) { ioShowRecentDropdown(); }
+    else { dropdown.classList.add('d-none'); }
     return;
   }
 
@@ -82,24 +87,7 @@ async function ioSearchItems(term) {
   if (!dropdown) return;
 
   try {
-    if (!_io.inventoryCache) {
-      if (typeof erpGetInventoryListForDropdown === 'function') {
-        _io.inventoryCache = await erpGetInventoryListForDropdown();
-      } else {
-        var rows = await erpFetchAll('erp_items',
-          'select=item_code,description,base_unit,category,location,on_hand' +
-          '&is_active=eq.true&is_deleted=eq.false&order=item_code.asc');
-        _io.inventoryCache = (rows || []).map(function(r) {
-          return {
-            code: r.item_code,
-            description: r.description || '',
-            unit: r.base_unit || 'PCS',
-            category: r.category || '',
-            location: r.location || ''
-          };
-        });
-      }
-    }
+    await ioEnsureInventoryCache();
 
     var items = _io.inventoryCache || [];
 
@@ -151,6 +139,185 @@ async function ioSearchItems(term) {
     dropdown.innerHTML = '<div class="item-search-item" style="color:#dc2626;">' +
       '<i class="bi bi-exclamation-triangle me-1"></i>Search error</div>';
   }
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// INVENTORY CACHE (shared ng search at recent list)
+// ═══════════════════════════════════════════════════════════
+async function ioEnsureInventoryCache() {
+  if (_io.inventoryCache) return _io.inventoryCache;
+  if (typeof erpGetInventoryListForDropdown === 'function') {
+    _io.inventoryCache = await erpGetInventoryListForDropdown();
+  } else {
+    var rows = await erpFetchAll('erp_items',
+      'select=item_code,description,base_unit,category,location,on_hand' +
+      '&is_active=eq.true&is_deleted=eq.false&order=item_code.asc');
+    _io.inventoryCache = (rows || []).map(function(r) {
+      return {
+        code: r.item_code,
+        description: r.description || '',
+        unit: r.base_unit || 'PCS',
+        category: r.category || '',
+        location: r.location || ''
+      };
+    });
+  }
+  return _io.inventoryCache;
+}
+
+// ═══════════════════════════════════════════════════════════
+// RECENTLY PROCESSED ITEMS (last 20 na may takbo)
+// ═══════════════════════════════════════════════════════════
+var IO_RECENT_LIMIT = 20;
+
+function ioLoadRecent(force) {
+  if (!force && _io.recentLoading) return _io.recentLoading;
+
+  _io.recentLoading = (async function() {
+    try {
+      var results = await Promise.all([
+        erpFetch('v_item_movements',
+          'select=item_code,transaction_date,direction,transaction_type,reference_doc,qty_in,qty_out' +
+          '&order=transaction_date.desc&limit=500').catch(function() { return []; }),
+        // kasama ang manual On-Hand adjustments (ADJ)
+        erpFetch('v_item_manual_edits',
+          'select=item_code,edited_at,field_name' +
+          '&field_name=eq.on_hand&order=edited_at.desc&limit=100').catch(function() { return []; }),
+        ioEnsureInventoryCache().catch(function() { return []; })
+      ]);
+
+      var events = [];
+      (results[0] || []).forEach(function(m) {
+        if (!m.item_code || !m.transaction_date) return;
+        events.push({
+          code: m.item_code,
+          ts: new Date(m.transaction_date).getTime(),
+          dir: String(m.direction || '').toUpperCase(),
+          ref: m.reference_doc || '',
+          qty: Number(m.qty_in || 0) || Number(m.qty_out || 0) || 0
+        });
+      });
+      (results[1] || []).forEach(function(e) {
+        if (!e.item_code || !e.edited_at) return;
+        events.push({ code: e.item_code, ts: new Date(e.edited_at).getTime(), dir: 'ADJUSTMENT', ref: '', qty: 0 });
+      });
+
+      events.sort(function(a, b) { return b.ts - a.ts; });
+
+      var info = {};
+      (results[2] || []).forEach(function(it) { info[String(it.code)] = it; });
+
+      var seen = {}, list = [];
+      for (var i = 0; i < events.length && list.length < IO_RECENT_LIMIT; i++) {
+        var ev = events[i];
+        if (seen[ev.code]) continue;
+        seen[ev.code] = true;
+        var meta = info[String(ev.code)] || {};
+        list.push({
+          code: ev.code,
+          description: meta.description || '',
+          unit: meta.unit || '',
+          ts: ev.ts,
+          dir: ev.dir,
+          ref: erpDisplayText ? erpDisplayText(ev.ref) : ev.ref,
+          qty: ev.qty
+        });
+      }
+
+      _io.recentItems = list;
+      ioRenderRecentChips();
+      return list;
+    } catch (err) {
+      console.error('[ioLoadRecent]', err);
+      _io.recentItems = [];
+      ioRenderRecentChips();
+      return [];
+    }
+  })();
+
+  return _io.recentLoading;
+}
+
+function ioTimeAgo(ts) {
+  var diff = Math.max(0, Date.now() - ts);
+  var m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + 'm ago';
+  var h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  var d = Math.floor(h / 24);
+  if (d < 30) return d + 'd ago';
+  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function ioDirBadge(dir) {
+  if (dir === 'IN') return '<span class="dir-in">IN</span>';
+  if (dir === 'OUT') return '<span class="dir-out">OUT</span>';
+  if (dir === 'ADJUSTMENT') return '<span class="dir-adj">ADJ</span>';
+  if (dir === 'MIXED') return '<span class="dir-mixed">MIXED</span>';
+  return '';
+}
+
+// Chips sa ilalim ng search box — laging nakikita
+function ioRenderRecentChips() {
+  var wrap = document.getElementById('ioRecentWrap');
+  var box = document.getElementById('ioRecentChips');
+  if (!wrap || !box) return;
+
+  var list = _io.recentItems || [];
+  if (!list.length) { wrap.classList.add('d-none'); return; }
+
+  var html = '';
+  list.forEach(function(it) {
+    var dirCls = it.dir === 'IN' ? 'in' : it.dir === 'OUT' ? 'out' : it.dir === 'ADJUSTMENT' ? 'adj' : 'other';
+    var tip = (it.description || '') + ' • ' + ioTimeAgo(it.ts) + (it.ref ? ' • ' + it.ref : '');
+    html += '<button type="button" class="io-chip io-chip-' + dirCls + '" ' +
+      'data-code="' + ioEsc(it.code) + '" title="' + ioEsc(tip) + '" onclick="ioSelectItem(this.dataset.code)">' +
+      '<span class="io-chip-dot"></span>' +
+      '<span class="io-chip-code">' + ioEsc(it.code) + '</span>' +
+      '<span class="io-chip-time">' + ioEsc(ioTimeAgo(it.ts)) + '</span>' +
+    '</button>';
+  });
+  box.innerHTML = html;
+  wrap.classList.remove('d-none');
+}
+
+// Dropdown pag-focus sa walang laman na search box
+async function ioShowRecentDropdown() {
+  var dropdown = document.getElementById('ioSearchDropdown');
+  var input = document.getElementById('ioSearchInput');
+  if (!dropdown || !input) return;
+
+  if (!_io.recentItems) {
+    dropdown.innerHTML = '<div class="item-search-item" style="color:#9ca3af;text-align:center;">' +
+      '<i class="bi bi-hourglass-split me-1"></i>Loading recent items...</div>';
+    dropdown.classList.remove('d-none');
+    _ioPositionDropdown(dropdown, input);
+    await ioLoadRecent();
+    // kung may tinype na habang naglo-load, huwag nang i-override
+    if (String(input.value || '').trim()) return;
+  }
+
+  var list = _io.recentItems || [];
+  if (!list.length) { dropdown.classList.add('d-none'); return; }
+
+  var html = '<div class="io-recent-head"><i class="bi bi-clock-history me-1"></i>' +
+    'Recently processed (last ' + list.length + ')</div>';
+  list.forEach(function(it) {
+    html += '<div class="item-search-item" data-code="' + ioEsc(it.code) + '" onclick="ioSelectItem(this.dataset.code)">' +
+      '<div class="d-flex justify-content-between align-items-center gap-2">' +
+        '<div class="code">' + ioEsc(it.code) + '</div>' +
+        '<div class="d-flex align-items-center gap-2">' + ioDirBadge(it.dir) +
+          '<span style="font-size:0.72rem;color:#6b7280;">' + ioEsc(ioTimeAgo(it.ts)) + '</span></div>' +
+      '</div>' +
+      '<div class="desc">' + ioEsc(it.description || '—') + '</div>' +
+      (it.ref ? '<div class="meta"><span><i class="bi bi-file-earmark-text me-1"></i>' + ioEsc(it.ref) + '</span></div>' : '') +
+    '</div>';
+  });
+  dropdown.innerHTML = html;
+  dropdown.classList.remove('d-none');
+  _ioPositionDropdown(dropdown, input);
 }
 
 function ioSelectItem(itemCode) {
