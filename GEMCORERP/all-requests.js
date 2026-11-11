@@ -16,6 +16,13 @@ var AR_ASSIGNMENTS = {
 };
 var AR_CATEGORIES = ['COMPONENTS', 'CONSUMABLES', 'FABMAT', 'OTHER'];
 
+// Short labels for the compact chips in the table (the full name stays in the tooltip,
+// the filter dropdown, the summary cards and the assignment dialog).
+var AR_CAT_SHORT = { COMPONENTS: 'COMP', CONSUMABLES: 'CONS', FABMAT: 'FAB', OTHER: 'OTH' };
+var AR_CAT_FULL  = { COMPONENTS: 'Components', CONSUMABLES: 'Consumables', FABMAT: 'Fabmat', OTHER: 'Other' };
+function arCatShort(k) { return AR_CAT_SHORT[k] || k; }
+function arCatFull(k)  { return AR_CAT_FULL[k]  || k; }
+
 var _allRequests = {
   prints: {},        // doc_no -> {count, by, at}  (who printed it — see print-log.js)
   locks: {},          // doc_no -> {locked_by, locked_by_name, locked_at, idle_seconds}  (requests being processed)
@@ -246,11 +253,11 @@ function arCatCellHtml(docNo) {
   var mine = arMyCats();
   var keys = AR_CATEGORIES.filter(function(k) { return c[k] > 0; });
   if (!keys.length) return '<span class="text-muted small">—</span>';
-  return keys.map(function(k) {
+  return '<div class="ar-catrow">' + keys.map(function(k) {
     var isMine = mine.indexOf(k) !== -1;
-    return '<span class="ar-cat ' + k + (isMine ? ' mine' : '') + '" title="' + c[k] + ' item(s) ' + k + (isMine ? ' — yours' : '') + '">' +
-      (isMine ? '★ ' : '') + k + ' · ' + c[k] + '</span>';
-  }).join('');
+    return '<span class="ar-cat ' + k + (isMine ? ' mine' : '') + '" title="' + arCatFull(k) + ' — ' + c[k] + ' item(s)' + (isMine ? ' (yours)' : '') + '">' +
+      (isMine ? '★' : '') + arCatShort(k) + '<b>' + c[k] + '</b></span>';
+  }).join('') + '</div>';
 }
 
 async function allRequestsCheckHealth() {
@@ -699,7 +706,7 @@ async function viewRequestDetails(docNo, docType) {
             var k = _allRequests.itemCat[it.item_code];
             if (!k) return '<span class="text-muted">—</span>';
             var mn = myCats.indexOf(k) !== -1;
-            return '<span class="ar-cat ' + k + (mn ? ' mine' : '') + '">' + (mn ? '★ ' : '') + k + '</span>';
+            return '<span class="ar-cat ' + k + (mn ? ' mine' : '') + '" title="' + arCatFull(k) + (mn ? ' (yours)' : '') + '">' + (mn ? '★' : '') + arCatShort(k) + '</span>';
           })() + '</td>' +
           '<td class="text-center">' + (it.requested_qty || 0) + '</td>' +
           '<td class="text-center">' + (it.issued_qty || 0) + '</td>' +
