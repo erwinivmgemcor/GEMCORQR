@@ -57,6 +57,10 @@ document.addEventListener('DOMContentLoaded', function() {
   loadConversations(false);
   if (window.erpAvatars) window.erpAvatars.refresh();
 
+  // online / last-seen: heartbeat is started by erp-nav.js; here we only read everyone's status
+  if (window.erpPresence) window.erpPresence.watch();
+  window.addEventListener('erp-presence-updated', _paintPresence);
+
   setupInput();
   window.addEventListener('resize', function() {
     _chatState.isMobile = window.matchMedia('(max-width: 767.98px)').matches;
@@ -231,7 +235,7 @@ async function loadUserConversations(silent) {
     sig += c.other + ':' + c.lastMsg.id + ':' + c.unread + ':' + (window.erpAvatars ? (window.erpAvatars.get(c.other) || '').length : 0) + ';';
 
     html += '<div class="chat-conv-item' + active + (c.unread ? ' unread' : '') + '" data-username="' + erpEsc(c.other) + '" data-name="' + erpEsc(fullname) + '" onclick="openUserConversation(\'' + String(c.other).replace(/\\/g,'\\\\').replace(/'/g, "\\'") + '\')">' +
-      '<div class="chat-conv-avatar">' + av + '</div>' +
+      '<div class="chat-av-wrap"><div class="chat-conv-avatar">' + av + '</div>' + _presDot(c.other) + '</div>' +
       '<div class="chat-conv-content">' +
         '<div class="chat-conv-row"><div class="chat-conv-name">' + erpEsc(fullname) + _roleChip(user) + '</div>' +
         '<div class="chat-conv-time">' + erpEsc(formatTimeAgo(c.lastMsg.created_at)) + '</div></div>' +
@@ -248,7 +252,7 @@ async function loadUserConversations(silent) {
       var fullname = u.fullname || u.username;
       sig += 'n' + u.username + (window.erpAvatars ? (window.erpAvatars.get(u.username) || '').length : 0) + ';';
       html += '<div class="chat-conv-item" data-username="' + erpEsc(u.username) + '" data-name="' + erpEsc(fullname) + '" onclick="openUserConversation(\'' + String(u.username).replace(/\\/g,'\\\\').replace(/'/g, "\\'") + '\')">' +
-        '<div class="chat-conv-avatar">' + avHtml(u.username, fullname) + '</div>' +
+        '<div class="chat-av-wrap"><div class="chat-conv-avatar">' + avHtml(u.username, fullname) + '</div>' + _presDot(u.username) + '</div>' +
         '<div class="chat-conv-content">' +
           '<div class="chat-conv-name">' + erpEsc(fullname) + _roleChip(u) + '</div>' +
           '<div class="chat-conv-preview hint">Tap to start a chat</div>' +
@@ -331,11 +335,42 @@ function _fillHeader() {
     document.getElementById('chatWithSub').textContent = '@' + _chatState.openWith + (user && user.department ? ' · ' + user.department : '');
     avEl.className = 'chat-panel-avatar';
     avEl.innerHTML = avHtml(_chatState.openWith, fullname);
+    _paintPresence();
   } else {
     document.getElementById('chatWithName').textContent = _chatState.openWith;
     document.getElementById('chatWithSub').textContent = 'Document discussion';
     avEl.className = 'chat-panel-avatar chat-av-doc';
     avEl.innerHTML = '<i class="bi bi-file-earmark-text"></i>';
+    _paintPresence();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PRESENCE — green dot (list + header) and "Online / Last seen …"
+// ═══════════════════════════════════════════════════════════
+function _isOnline(username) {
+  return !!(window.erpPresence && window.erpPresence.get(username).online);
+}
+function _presDot(username) {
+  return '<span class="chat-presence-dot' + (_isOnline(username) ? ' on' : '') + '" data-pres="' + erpEsc(String(username).toUpperCase()) + '"></span>';
+}
+// Updates the DOM in place (no refetch, no list re-render) → cheap enough to run every few seconds
+function _paintPresence() {
+  document.querySelectorAll('.chat-presence-dot[data-pres]').forEach(function(d) {
+    d.classList.toggle('on', _isOnline(d.getAttribute('data-pres')));
+  });
+  var dot = document.getElementById('chatPanelDot');
+  var st = document.getElementById('chatWithStatus');
+  if (!dot || !st) return;
+  if (_chatState.openType === 'user' && _chatState.openWith && window.erpPresence) {
+    var on = _isOnline(_chatState.openWith);
+    dot.classList.toggle('on', on);
+    st.className = 'chat-panel-status' + (on ? ' on' : '');
+    st.textContent = window.erpPresence.label(_chatState.openWith);
+  } else {
+    dot.classList.remove('on');
+    st.className = 'chat-panel-status';
+    st.textContent = '';
   }
 }
 
