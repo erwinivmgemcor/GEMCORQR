@@ -196,7 +196,7 @@ function buildErpMrifHtml(docNo, info, items) {
     '<div class="mrif-title">' + titleText + '</div>' +
     '<table class="mrif-meta mrif-meta-grid">' +
       '<colgroup><col style="width:19%"><col style="width:31%"><col style="width:19%"><col style="width:31%"></colgroup>' +
-      '<tr><td class="meta-label">REQUESTOR:</td><td class="meta-value">' + (requestor || '&nbsp;') + '</td><td class="meta-label">DEPARTMENT/SECTION:</td><td class="meta-value">' + (department || '&nbsp;') + '</td></tr>' +
+      '<tr><td class="meta-label">REQUESTOR:</td><td class="meta-value">' + (requestor || '&nbsp;') + '</td><td class="meta-label">DEPT/SEC:</td><td class="meta-value">' + (department || '&nbsp;') + '</td></tr>' +
       '<tr><td class="meta-label">GEM SO No.:</td><td class="meta-value meta-strong">' + (gemSo || '&nbsp;') + '</td><td class="meta-label">JO No.:</td><td class="meta-value meta-strong">' + (joNo || '&nbsp;') + '</td></tr>' +
       '<tr><td class="meta-label">CLIENT NAME:</td><td class="meta-value">' + (client || '&nbsp;') + '</td><td class="meta-label">PROJECT:</td><td class="meta-value">' + (project || '&nbsp;') + '</td></tr>' +
       '<tr><td class="meta-label">DATE:</td><td class="meta-value meta-strong">' + (dateStr || '&nbsp;') + '</td><td class="meta-label"></td><td></td></tr>' +
@@ -430,7 +430,7 @@ function buildErpMrsHtml(docNo, info, items) {
     '<div class="mrif-title">MATERIALS RETURN SLIP</div>' +
     '<table class="mrif-meta mrif-meta-grid">' +
       '<colgroup><col style="width:19%"><col style="width:31%"><col style="width:19%"><col style="width:31%"></colgroup>' +
-      '<tr><td class="meta-label">REQUESTOR:</td><td class="meta-value">' + (requestor || '&nbsp;') + '</td><td class="meta-label">DEPARTMENT/SECTION:</td><td class="meta-value">' + (department || '&nbsp;') + '</td></tr>' +
+      '<tr><td class="meta-label">REQUESTOR:</td><td class="meta-value">' + (requestor || '&nbsp;') + '</td><td class="meta-label">DEPT/SEC:</td><td class="meta-value">' + (department || '&nbsp;') + '</td></tr>' +
       '<tr><td class="meta-label">GEM SO No.:</td><td class="meta-value meta-strong">' + (gemSo || '&nbsp;') + '</td><td class="meta-label">JO No.:</td><td class="meta-value meta-strong">' + (joNo || '&nbsp;') + '</td></tr>' +
       '<tr><td class="meta-label">CLIENT NAME:</td><td class="meta-value">' + (client || '&nbsp;') + '</td><td class="meta-label">PROJECT:</td><td class="meta-value">' + (project || '&nbsp;') + '</td></tr>' +
       '<tr><td class="meta-label">DATE:</td><td class="meta-value meta-strong">' + (dateStr || '&nbsp;') + '</td><td class="meta-label"></td><td></td></tr>' +
