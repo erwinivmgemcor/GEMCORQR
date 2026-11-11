@@ -19,6 +19,33 @@
 <link rel="stylesheet" href="erp-notif.css">
 
 <style>
+
+/* Recently processed */
+.io-recent-head {
+  position: sticky; top: 0; z-index: 1;
+  padding: 8px 16px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: #64748b;
+}
+.io-recent-label {
+  font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: #64748b; margin: 14px 0 8px;
+}
+.io-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.io-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px; background: #fff; border: 1.5px solid #e2e8f0;
+  border-radius: 999px; cursor: pointer; font-family: inherit;
+  transition: border-color .12s, background .12s, transform .12s;
+}
+.io-chip:hover { background: #eef4fb; border-color: #1e3a5f; transform: translateY(-1px); }
+.io-chip-code { font-family: 'Courier New', monospace; font-weight: 700; font-size: 0.8rem; color: #1e3a5f; }
+.io-chip-time { font-size: 0.68rem; color: #94a3b8; }
+.io-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; }
+.io-chip-in .io-chip-dot { background: #10b981; }
+.io-chip-out .io-chip-dot { background: #ef4444; }
+.io-chip-adj .io-chip-dot { background: #f59e0b; }
+
 .item-search-wrap { position: relative; }
 .item-search-dropdown {
   position: fixed;
@@ -192,6 +219,10 @@ tr.row-adj { border-left: 4px solid #f59e0b; }
     <div class="form-text mt-2">
       <i class="bi bi-info-circle me-1"></i>
       Type at least 2 characters para mag-search ng item
+    </div>
+    <div id="ioRecentWrap" class="d-none">
+      <div class="io-recent-label"><i class="bi bi-clock-history me-1"></i>Recently processed — click para i-open</div>
+      <div id="ioRecentChips" class="io-chips"></div>
     </div>
   </div>
 
