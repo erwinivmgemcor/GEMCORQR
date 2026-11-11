@@ -6,7 +6,7 @@
 //  - Auto-cleanup of old caches
 // ============================================================
 
-const CACHE_NAME = 'gemcor-erp-v1.0.34';
+const CACHE_NAME = 'gemcor-erp-v1.0.35';
 const RUNTIME_CACHE = 'gemcor-erp-runtime-v1.0.34';
 
 // ═══════════════════════════════════════════════════════════
@@ -27,6 +27,7 @@ const STATIC_ASSETS = [
   '/GEMCORQR/GEMCORERP/erp-profile.css',
   '/GEMCORQR/GEMCORERP/erp-avatars.js',
   '/GEMCORQR/GEMCORERP/erp-chat-alerts.js',
+  '/GEMCORQR/GEMCORERP/erp-presence.js',
   '/GEMCORQR/GEMCORERP/erp-notif.css',
   '/GEMCORQR/GEMCORERP/erp-styles.css',
   '/GEMCORQR/GEMCORERP/js/update.js',
