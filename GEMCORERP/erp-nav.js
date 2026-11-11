@@ -354,9 +354,11 @@
     'warehouse-kpi': 'Warehouse KPI',
     'chat': 'Messages',
     'my-requests': 'My Requests',
-    'new-mrif': 'New MRIF',
+    'new-mrif': 'New MRIF — With JO',
+    'new-mrif-manual': 'New MRIF — Manual (No JO)',
     'new-mrr': 'New MRR',
-    'new-mrs': 'New MRS',
+    'new-mrs': 'New MRS — With JO',
+    'new-mrs-manual': 'New MRS — Manual (No JO)',
     'block-blast': 'Break Room',
     'about': 'About GEMCOR ERP'
   };
@@ -373,10 +375,15 @@
   function _getCurrentPage() {
     var path = window.location.pathname;
     var pages = Object.keys(PAGE_TITLES);
+    // 1) exact file name match: /new-mrif-manual.html -> 'new-mrif-manual'
+    var file = path.substring(path.lastIndexOf('/') + 1).replace(/\.html?$/i, '');
+    if (file && PAGE_TITLES[file] !== undefined) return file;
+    // 2) fallback: the LONGEST key contained in the path (so 'new-mrif-manual' beats 'new-mrif')
+    var best = '';
     for (var i = 0; i < pages.length; i++) {
-      if (path.indexOf(pages[i]) !== -1) return pages[i];
+      if (path.indexOf(pages[i]) !== -1 && pages[i].length > best.length) best = pages[i];
     }
-    return '';
+    return best;
   }
 
   function _isAllowed(item, userRole) {
