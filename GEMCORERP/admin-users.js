@@ -497,13 +497,16 @@ async function umConfirmAction() {
     var newStatus = (action.type === 'deactivate') ? false : true;
     var actionType = (action.type === 'deactivate') ? 'DEACTIVATED' : 'REACTIVATED';
 
-    var res = await fetch(erpUrl('users?username=eq.' + encodeURIComponent(action.username)), {
-      method: 'PATCH',
-      headers: erpHeaders({ 'Prefer': 'return=minimal' }),
-      body: JSON.stringify({ is_active: newStatus })
+    // Hindi na direktang PATCH sa users table (nilock na ang table) — RPC na ang gamit
+    var res = await fetch(erpUrl('rpc/admin_set_user_active'), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify({ p_username: action.username, p_active: newStatus })
     });
 
     if (!res.ok) throw new Error('HTTP ' + res.status);
+    var rpcOut = await res.json();
+    if (!rpcOut || rpcOut.success !== true) throw new Error('User not found: ' + action.username);
 
     await umLogAction(action.username, actionType, null, { is_active: newStatus }, reason);
 
