@@ -334,6 +334,92 @@ function umGeneratePassword() {
 window.umGeneratePassword = umGeneratePassword;
 
 // ═══════════════════════════════════════════════════════════
+// ADMIN RE-VERIFICATION (kailangan ng admin password sa bawat user-management RPC)
+// ═══════════════════════════════════════════════════════════
+var _umAdminPw = { value: '', expires: 0 };   // memory lang, 3 minuto, hindi sine-save sa storage
+
+function umAskAdminPassword(message) {
+  return new Promise(function(resolve) {
+    var old = document.getElementById('umAdminAuthModal');
+    if (old) old.remove();
+
+    var el = document.createElement('div');
+    el.className = 'modal fade';
+    el.id = 'umAdminAuthModal';
+    el.tabIndex = -1;
+    el.innerHTML =
+      '<div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content">' +
+        '<div class="modal-header"><h6 class="modal-title"><i class="bi bi-shield-lock me-2"></i>Confirm Admin Password</h6>' +
+        '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>' +
+        '<div class="modal-body">' +
+          '<div class="small text-muted mb-2" id="umAdminAuthMsg"></div>' +
+          '<input type="password" class="form-control" id="umAdminAuthInput" autocomplete="current-password" placeholder="Your password">' +
+          '<div class="text-danger small mt-2 d-none" id="umAdminAuthErr">Password is required</div>' +
+        '</div>' +
+        '<div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>' +
+        '<button type="button" class="btn btn-primary" id="umAdminAuthOk">Confirm</button></div>' +
+      '</div></div>';
+    document.body.appendChild(el);
+    el.querySelector('#umAdminAuthMsg').textContent =
+      message || 'Ilagay ang password ng admin account mo para ituloy.';
+
+    var input = el.querySelector('#umAdminAuthInput');
+    var modal = new bootstrap.Modal(el, { backdrop: 'static' });
+    var done = false;
+
+    function finish(v) {
+      if (done) return;
+      done = true;
+      modal.hide();
+      resolve(v);
+    }
+    function submit() {
+      if (!input.value) { el.querySelector('#umAdminAuthErr').classList.remove('d-none'); return; }
+      finish(input.value);
+    }
+    el.querySelector('#umAdminAuthOk').addEventListener('click', submit);
+    input.addEventListener('keydown', function(e) { if (e.key === 'Enter') submit(); });
+    el.addEventListener('shown.bs.modal', function() { input.focus(); });
+    el.addEventListener('hidden.bs.modal', function() {
+      if (!done) { done = true; resolve(null); }
+      el.remove();
+    });
+    modal.show();
+  });
+}
+
+// Tumatawag ng admin RPC na may kasamang credentials ng current admin.
+async function umAdminRpc(rpcName, body, promptMsg) {
+  for (var attempt = 0; attempt < 2; attempt++) {
+    var pw = (_umAdminPw.value && Date.now() < _umAdminPw.expires) ? _umAdminPw.value : null;
+    if (!pw) {
+      pw = await umAskAdminPassword(attempt ? 'Mali ang password. Subukan ulit.' : promptMsg);
+      if (!pw) throw new Error('Cancelled — admin password required');
+    }
+
+    var payload = Object.assign({ p_admin_username: _um.currentUser, p_admin_password: pw }, body);
+    var res = await fetch(erpUrl('rpc/' + rpcName), {
+      method: 'POST',
+      headers: erpHeaders(),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      var t = await res.text();
+      throw new Error('HTTP ' + res.status + ' ' + t);
+    }
+
+    var data = await res.json();
+    if (data && data.error === 'ADMIN_AUTH_FAILED') {
+      _umAdminPw = { value: '', expires: 0 };
+      continue;
+    }
+    _umAdminPw = { value: pw, expires: Date.now() + 3 * 60 * 1000 };
+    return data;
+  }
+  throw new Error('Admin verification failed');
+}
+
+// ═══════════════════════════════════════════════════════════
 // SAVE USER (Create or Update)
 // ═══════════════════════════════════════════════════════════
 async function umSaveUser() {
@@ -381,27 +467,16 @@ async function umSaveUser() {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
 
   try {
-    var res = await fetch(erpUrl('rpc/admin_upsert_user'), {
-      method: 'POST',
-      headers: erpHeaders(),
-      body: JSON.stringify({
-        p_mode: mode,
-        p_username: username,
-        p_password: password || null,
-        p_fullname: fullname,
-        p_department: department || null,
-        p_roles: roles,
-        p_is_admin: isAdmin,
-        p_original_username: mode === 'edit' ? originalUsername : null
-      })
-    });
-
-    if (!res.ok) {
-      var errText = await res.text();
-      throw new Error('HTTP ' + res.status + ' ' + errText);
-    }
-
-    var data = await res.json();
+    var data = await umAdminRpc('admin_upsert_user', {
+      p_mode: mode,
+      p_username: username,
+      p_password: password || null,
+      p_fullname: fullname,
+      p_department: department || null,
+      p_roles: roles,
+      p_is_admin: isAdmin,
+      p_original_username: mode === 'edit' ? originalUsername : null
+    }, 'Kumpirmahin gamit ang admin password mo para i-save ang user.');
     if (!data || !data.success) throw new Error((data && data.error) || 'Unknown error');
 
     var actionType = mode === 'add' ? 'CREATED' 
@@ -497,15 +572,10 @@ async function umConfirmAction() {
     var newStatus = (action.type === 'deactivate') ? false : true;
     var actionType = (action.type === 'deactivate') ? 'DEACTIVATED' : 'REACTIVATED';
 
-    // Hindi na direktang PATCH sa users table (nilock na ang table) — RPC na ang gamit
-    var res = await fetch(erpUrl('rpc/admin_set_user_active'), {
-      method: 'POST',
-      headers: erpHeaders(),
-      body: JSON.stringify({ p_username: action.username, p_active: newStatus })
-    });
-
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    var rpcOut = await res.json();
+    var rpcOut = await umAdminRpc('admin_set_user_active', {
+      p_username: action.username,
+      p_active: newStatus
+    }, 'Kumpirmahin gamit ang admin password mo.');
     if (!rpcOut || rpcOut.success !== true) throw new Error('User not found: ' + action.username);
 
     await umLogAction(action.username, actionType, null, { is_active: newStatus }, reason);
