@@ -413,6 +413,12 @@ var _sofItemsView = { sofNo: '', items: [], PEND: { docs: {}, lines: {} }, statu
     '.sof-fchip.on .n{background:rgba(255,255,255,.22);color:#fff}' +
     '.sof-fchip.k-ACTIVE .dot{background:#0d6efd}.sof-fchip.k-PARTIAL .dot{background:#f59e0b}.sof-fchip.k-FULL .dot{background:#198754}' +
     '.sof-prog{height:6px;min-width:90px;background:#e2e8f0;border-radius:99px;overflow:hidden}.sof-prog>div{height:100%;background:#198754}' +
+    '.sof-info{display:grid;grid-template-columns:2fr 2fr 1fr 1fr;gap:12px 20px;padding:14px 16px;background:#fff;border-bottom:1px solid #e2e8f0}' +
+    '@media(max-width:768px){.sof-info{grid-template-columns:1fr 1fr}}' +
+    '.sof-info .lbl{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:3px}' +
+    '.sof-info .val{font-weight:600;color:#0f172a;word-break:break-word}' +
+    '.sof-info .val.empty{color:#94a3b8;font-weight:500}' +
+    '.sof-info .sof-avatar{flex:0 0 auto}' +
     '.sof-items-foot{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:center;width:100%;font-size:.85rem}' +
     '.sof-items-foot b{font-variant-numeric:tabular-nums}';
   document.head.appendChild(st);
@@ -461,7 +467,7 @@ function sofItemsRender() {
   });
 
   // chips
-  var defs = [['ALL', 'All'], ['ACTIVE', 'Active'], ['PARTIAL', 'Partial'], ['FULL', 'Fully Used']];
+  var defs = [['ALL', 'All'], ['ACTIVE', 'Available'], ['PARTIAL', 'Partial'], ['FULL', 'Fully Served']];
   var chipEl = document.getElementById('sofFChips');
   if (chipEl) {
     chipEl.innerHTML = defs.map(function(d) {
@@ -480,9 +486,9 @@ function sofItemsRender() {
     } else {
       tb.innerHTML = rows.map(function(r, idx) {
         var it = r.it;
-        var badge = r.key === 'FULL' ? '<span class="badge bg-success">FULLY USED</span>'
+        var badge = r.key === 'FULL' ? '<span class="badge bg-success">FULLY SERVED</span>'
                   : r.key === 'PARTIAL' ? '<span class="badge bg-warning text-dark">PARTIAL</span>'
-                  : '<span class="badge bg-primary">ACTIVE</span>';
+                  : '<span class="badge bg-primary">AVAILABLE</span>';
         var pendHtml = r.pl.length ? r.pl.map(function(x, i) {
           return '<div class="sof-pend-line">' + (i === 0 && r.rem > 0 ? '<span class="badge bg-warning text-dark me-1">UNA</span>' : '') +
             sofMrifLink(x.doc_no) + ' <b>' + sofTrackerEsc(x.requestor || '—') + '</b>' +
@@ -549,11 +555,12 @@ window.sofItemsExport = function() {
   var rows = window._sofItemsVisible || [];
   if (!rows.length) return erpShowToast('Walang i-e-export', 'warning');
   function q(x) { return '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"'; }
-  var lines = [['SOF No', 'Item Code', 'Description', 'Unit', 'Allocated', 'Used', 'Remaining', 'Status', 'Pending MRIF'].map(q).join(',')];
+  var inf = _sofItemsView.info || {};
+  var lines = [['SOF No', 'Client', 'Project', 'JO No', 'Item Code', 'Description', 'Unit', 'Allocated', 'Used', 'Remaining', 'Status', 'Pending MRIF'].map(q).join(',')];
   rows.forEach(function(r) {
     var pend = r.pl.map(function(x) { return x.doc_no + ' ' + (x.requestor || '') + ' (' + x.need + ')'; }).join(' | ');
-    lines.push([_sofItemsView.sofNo, r.it.item_code, r.it.description || '', r.it.unit || '', r.alloc, r.used, r.rem,
-      r.key === 'FULL' ? 'FULLY USED' : r.key, pend].map(q).join(','));
+    lines.push([_sofItemsView.sofNo, inf.client || '', inf.project || '', inf.jo || '', r.it.item_code, r.it.description || '', r.it.unit || '', r.alloc, r.used, r.rem,
+      r.key === 'FULL' ? 'FULLY SERVED' : (r.key === 'ACTIVE' ? 'AVAILABLE' : r.key), pend].map(q).join(','));
   });
   var blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
   var a = document.createElement('a');
@@ -562,6 +569,33 @@ window.sofItemsExport = function() {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(function() { URL.revokeObjectURL(a.href); }, 1000);
 };
+
+
+function sofItemsFillInfo(sofNo) {
+  var box = document.getElementById('sofItemsInfo');
+  if (!box) return;
+  var a = (_sofTracker.allAllocations || []).filter(function(x) { return String(x.sof_no) === String(sofNo); })[0] || {};
+  var v = _sofItemsView;
+  v.info = { client: a.client_name || '', project: a.project_name || '', jo: a.jo_no || '' };
+
+  function cell(label, value, extra) {
+    return '<div><div class="lbl">' + label + '</div><div class="val' + (value ? '' : ' empty') + '">' +
+      (value ? (extra || '') + sofTrackerEsc(value) : '—') + '</div></div>';
+  }
+  var client = a.client_name || '';
+  var clientHtml = '<div><div class="lbl">Client</div>' +
+    (client
+      ? '<div class="d-flex align-items-center gap-2"><div class="sof-avatar" style="background:' + sofAvatarColor(client) + '">' + sofInitials(client) + '</div>' +
+        '<div class="val">' + sofTrackerEsc(client) + '</div></div>'
+      : '<div class="val empty">—</div>') + '</div>';
+
+  var dateStr = a.sof_date ? new Date(a.sof_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  box.innerHTML = clientHtml +
+    cell('Project', a.project_name || '', '<i class="bi bi-folder2-open me-1 text-muted"></i>') +
+    '<div><div class="lbl">JO No.</div><div class="val' + (a.jo_no ? '' : ' empty') + '">' +
+      (a.jo_no ? '<span class="sof-jo">' + sofTrackerEsc(a.jo_no) + '</span>' : '—') + '</div></div>' +
+    cell('SOF Date', dateStr);
+}
 
 window.sofViewItems = async function(sofNo) {
   console.log('[SOF Tracker] Fetching items for SOF:', sofNo);
@@ -585,6 +619,7 @@ window.sofViewItems = async function(sofNo) {
           '<h5 class="modal-title"><i class="bi bi-list-check me-2"></i>SOF Allocation Details — ' + sofTrackerEsc(sofNo) + '</h5>' +
           '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>' +
         '</div>' +
+        '<div class="sof-info" id="sofItemsInfo"></div>' +
         '<div class="sof-ctl" id="sofItemsCtl" style="display:none;">' +
           '<div class="d-flex flex-wrap gap-2 align-items-center mb-2" id="sofFChips"></div>' +
           '<div class="d-flex flex-wrap gap-2 align-items-center">' +
@@ -619,6 +654,7 @@ window.sofViewItems = async function(sofNo) {
 
   var modal = new bootstrap.Modal(document.getElementById(modalId));
   modal.show();
+  sofItemsFillInfo(sofNo);
 
   try {
     var items = await erpFetch('erp_sof_allocation_items', 'select=*&sof_no=eq.' + encodeURIComponent(sofNo) + '&order=item_code.asc');
