@@ -12,7 +12,13 @@ var _mrifMon = {
   autoRefreshTimer: null,
   autoRefreshEnabled: true,
   REFRESH_INTERVAL: 30000,  // 30 seconds
-  activeStatusFilter: ''
+  activeStatusFilter: '',
+  // Process date ng bawat item (kung kelan lumabas sa warehouse papunta sa production)
+  procMap: {},          // 'MRIFNO|ITEMCODE' -> [{ts, qty}]
+  procRefIndex: {},     // 'ITEMCODE' -> [reference_doc, ...]
+  procDocMap: {},       // 'MRIFNO' -> processed_at ng document (fallback)
+  procLoadedAt: 0,
+  PROC_TTL: 120000      // i-refresh ang ledger lookup kada 2 minuto
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -64,7 +70,7 @@ async function mrifMonCheckHealth() {
 async function mrifMonLoad() {
   var tbody = document.getElementById('mrifMonTableBody');
   if (tbody && _mrifMon.allItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="14" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="15" class="erp-empty">' +
       '<div class="erp-spinner"></div>' +
       '<div class="mt-2">Loading MRIF items...</div></td></tr>';
   }
@@ -88,13 +94,111 @@ async function mrifMonLoad() {
     mrifMonComputeKPIs();
     mrifMonApplyFilters();
 
+    // Hiwalay na load para hindi maantala ang unang labas ng table
+    mrifMonLoadProcessDates(false).then(function(changed) {
+      if (changed) mrifMonRender();
+    });
+
   } catch(err) {
     console.error('[mrifMonLoad]', err);
     if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="14" class="erp-empty text-danger">' +
+      tbody.innerHTML = '<tr><td colspan="15" class="erp-empty text-danger">' +
         '<i class="bi bi-exclamation-triangle-fill me-2"></i>Failed: ' + erpEsc(err.message) + '</td></tr>';
     }
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PROCESS DATE — kung kelan binigay sa production ang item
+// Source: erp_stock_ledger (OUT entries na may reference na MRIF), per MRIF + item code.
+// Fallback: processed_at ng mismong document (kapag walang ledger match).
+// ═══════════════════════════════════════════════════════════
+function _procNorm(v) { return String(v == null ? '' : v).trim().toUpperCase(); }
+
+async function mrifMonLoadProcessDates(force) {
+  if (!force && _mrifMon.procLoadedAt && (Date.now() - _mrifMon.procLoadedAt) < _mrifMon.PROC_TTL) return false;
+  try {
+    var res = await Promise.all([
+      erpFetchAll('erp_stock_ledger',
+        'select=item_code,qty_out,reference_doc,transaction_date' +
+        '&reference_doc=ilike.*MRIF*&qty_out=gt.0' +
+        '&order=transaction_date.asc,item_code.asc,reference_doc.asc'),
+      erpFetchAll('erp_documents',
+        'select=doc_no,processed_at&doc_type=eq.MRIF&processed_at=not.is.null&order=doc_no.asc')
+        .catch(function() { return []; })
+    ]);
+
+    var map = {}, refIdx = {}, docMap = {};
+    (res[0] || []).forEach(function(r) {
+      if (!r.reference_doc || !r.item_code || !r.transaction_date) return;
+      var ref = _procNorm(r.reference_doc), code = _procNorm(r.item_code);
+      var k = ref + '|' + code;
+      if (!map[k]) {
+        map[k] = [];
+        (refIdx[code] = refIdx[code] || []).push(ref);
+      }
+      map[k].push({ ts: new Date(r.transaction_date).getTime(), qty: Number(r.qty_out || 0) });
+    });
+    (res[1] || []).forEach(function(d) {
+      if (d.doc_no && d.processed_at) docMap[_procNorm(d.doc_no)] = new Date(d.processed_at).getTime();
+    });
+
+    _mrifMon.procMap = map;
+    _mrifMon.procRefIndex = refIdx;
+    _mrifMon.procDocMap = docMap;
+    _mrifMon.procLoadedAt = Date.now();
+    console.log('[MRIF Monitoring] Process dates loaded:', Object.keys(map).length, 'item issuances,', Object.keys(docMap).length, 'docs');
+    return true;
+  } catch (err) {
+    console.warn('[mrifMonLoadProcessDates]', err);
+    return false;   // hindi kritikal — "—" ang lalabas
+  }
+}
+
+// Ibabalik: { ts, count, list:[{ts,qty}], source:'ledger'|'doc' } o null
+function mrifMonGetProcess(it) {
+  var no = _procNorm(it.mrif_no), code = _procNorm(it.item_code);
+  if (!no || !code) return null;
+
+  var list = _mrifMon.procMap[no + '|' + code];
+  if (!list) {
+    // fallback: baka may prefix/suffix ang reference_doc
+    var refs = _mrifMon.procRefIndex[code] || [];
+    for (var i = 0; i < refs.length; i++) {
+      if (refs[i].indexOf(no) !== -1) { list = _mrifMon.procMap[refs[i] + '|' + code]; break; }
+    }
+  }
+  if (list && list.length) {
+    var last = list.reduce(function(m, x) { return x.ts > m ? x.ts : m; }, 0);
+    return { ts: last, count: list.length, list: list, source: 'ledger' };
+  }
+  if (Number(it.issued_qty || 0) > 0 && _mrifMon.procDocMap[no]) {
+    return { ts: _mrifMon.procDocMap[no], count: 1, list: [], source: 'doc' };
+  }
+  return null;
+}
+
+function mrifMonProcessCell(it) {
+  var pr = mrifMonGetProcess(it);
+  if (!pr) return '<span class="text-muted">—</span>';
+
+  var fmtD = function(t) { return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }); };
+  var fmtFull = function(t) {
+    var d = new Date(t);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
+           d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+
+  var tip, extra = '';
+  if (pr.source === 'ledger') {
+    var sorted = pr.list.slice().sort(function(a, b) { return a.ts - b.ts; });
+    tip = 'Binigay sa production:\n' + sorted.map(function(x) { return fmtFull(x.ts) + ' — ' + erpNum(x.qty) + ' ' + (it.unit || ''); }).join('\n');
+    if (pr.count > 1) extra = ' <span class="badge bg-light text-dark border" style="font-size:0.65rem;">×' + pr.count + '</span>';
+  } else {
+    tip = 'Petsa ng pag-process ng document (walang per-item record)';
+    extra = ' <i class="bi bi-info-circle text-muted" style="font-size:0.7rem;"></i>';
+  }
+  return '<span title="' + erpEsc(tip) + '" style="white-space:nowrap;">' + erpEsc(fmtD(pr.ts)) + extra + '</span>';
 }
 
 function mrifMonComputeKPIs() {
@@ -329,7 +433,7 @@ function mrifMonRender() {
   el = document.getElementById('mrifMonBtnNext'); if (el) el.disabled = (end >= total);
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="14" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="15" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No items match your filters.</td></tr>';
     return;
@@ -372,6 +476,7 @@ function mrifMonRender() {
       '<td class="text-center">' + erpNum(requestedQty) + '</td>' +
       '<td class="text-center">' + (issuedQty > 0 ? '<strong>' + erpNum(issuedQty) + '</strong>' : '—') + '</td>' +
       '<td class="text-center ' + remainingClass + '">' + (remainingQty > 0 ? erpNum(remainingQty) : '—') + '</td>' +
+      '<td class="text-center">' + mrifMonProcessCell(it) + '</td>' +
       '<td class="text-center">' + erpEsc(it.unit || '—') + '</td>' +
       '<td class="text-center">' + statusBadge + '</td>' +
       '<td>' + erpEsc(truncate(it.requestor || '—', 20)) + '</td>' +
@@ -461,7 +566,7 @@ function mrifMonExport() {
 
   var headers = [
     'MRIF No.', 'Date', 'SO No.', 'Client Name', 'Item#', 'Item Code',
-    'Description', 'Req Qty', 'Issued Qty', 'Remaining', 'Unit',
+    'Description', 'Req Qty', 'Issued Qty', 'Remaining', 'Process Date (Given to Production)', 'Unit',
     'Item Status', 'Requestor', 'Department', 'JO No.', 'Project', 'Remarks'
   ];
 
@@ -477,6 +582,12 @@ function mrifMonExport() {
       it.requested_qty || 0,
       it.issued_qty || 0,
       it.remaining_qty || 0,
+      (function() {
+        var pr = mrifMonGetProcess(it);
+        if (!pr) return '';
+        var d = new Date(pr.ts).toLocaleDateString() + ' ' + new Date(pr.ts).toLocaleTimeString();
+        return pr.count > 1 ? d + ' (last of ' + pr.count + ' issuances)' : d;
+      })(),
       it.unit || '',
       it.item_status || '',
       it.requestor || '',
