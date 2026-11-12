@@ -31,7 +31,7 @@
           label: 'Dashboard',
           icon: 'bi-grid-1x2',
           href: 'management-dashboard.html',
-          roles: ['warehouse']
+          roles: ['warehouse', 'finance']
         },
         {
           id: 'stock-monitor',
