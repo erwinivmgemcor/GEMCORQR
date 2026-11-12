@@ -100,6 +100,8 @@
       if (b.textContent !== txt) b.textContent = txt;
       var hide = n <= 0;
       if (b.classList.contains('d-none') !== hide) b.classList.toggle('d-none', hide);
+      var navItem = b.closest ? b.closest('.erp-sidebar-item') : null;
+      if (navItem && navItem.classList.contains('has-unread') === hide) navItem.classList.toggle('has-unread', !hide);
     }
     var mb = document.querySelector('.erp-mobile-menu-btn');
     if (mb) {
