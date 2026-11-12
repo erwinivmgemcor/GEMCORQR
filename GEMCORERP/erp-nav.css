@@ -1626,3 +1626,25 @@ html, body {
 .erp-sidebar-submenu-parent[data-nav-id="new-mrs-group"]  > i:first-child { color: #7c3aed !important; }
 .erp-sidebar-submenu:has([data-nav-id="new-mrif-group"]) { border-left: 3px solid #d97706; }
 .erp-sidebar-submenu:has([data-nav-id="new-mrs-group"])  { border-left: 3px solid #7c3aed; }
+
+
+/* ── Messages sa itaas ng sidebar + highlight pag may unread ── */
+.erp-sidebar-divider { height: 1px; background: rgba(255,255,255,.08); margin: 6px 8px 8px; }
+.erp-sidebar-item .badge { margin-left: auto !important; }
+.erp-sidebar-item.has-unread {
+  background: rgba(239,68,68,.16) !important;
+  color: var(--side-fg-strong) !important;
+  font-weight: 700 !important;
+}
+.erp-sidebar-item.has-unread i { color: #fca5a5 !important; animation: erpMsgWiggle 1.8s ease-in-out infinite; transform-origin: 50% 20%; }
+.erp-sidebar-item.has-unread #chatBadgeSidebar { animation: erpMsgPulse 1.6s ease-in-out infinite; }
+@keyframes erpMsgPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+@keyframes erpMsgWiggle { 0%,80%,100% { transform: rotate(0); } 85% { transform: rotate(-12deg); } 90% { transform: rotate(10deg); } 95% { transform: rotate(-6deg); } }
+/* collapsed sidebar: ipakita ang bilang bilang maliit na bilog sa gilid ng icon */
+.erp-sidebar.collapsed .erp-sidebar-item .badge {
+  position: absolute !important; top: 1px !important; right: 3px !important;
+  margin: 0 !important; font-size: .58rem !important; padding: 2px 5px !important; line-height: 1 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .erp-sidebar-item.has-unread i, .erp-sidebar-item.has-unread #chatBadgeSidebar { animation: none !important; }
+}
