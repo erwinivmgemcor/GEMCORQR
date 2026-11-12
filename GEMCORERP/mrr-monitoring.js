@@ -78,6 +78,7 @@ async function mrrMonLoad() {
       'select=*&order=mrr_date.desc,mrr_no.asc,line_no.asc');
 
     _mrrMon.allItems = rows || [];
+    await mrrMonAttachSof(_mrrMon.allItems);     // SOF# para sa Ref No. kapag walang PRF#
     mrrMonNormalizeStatuses(_mrrMon.allItems);   // staggered delivery: pinagsama-samang dating na ang basehan
 
     var elapsed = Date.now() - t0;
@@ -93,6 +94,31 @@ async function mrrMonLoad() {
         '<i class="bi bi-exclamation-triangle-fill me-2"></i>Failed: ' + erpEsc(err.message) + '</td></tr>';
     }
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+// REF NO. — PRF# muna; kapag walang PRF#, SOF# ang ipapakita
+// Kung wala pang sof_no ang view (v_mrr_monitoring), kukunin sa documents table (by MRR no.)
+// ═══════════════════════════════════════════════════════════
+async function mrrMonAttachSof(rows) {
+  if (!rows || !rows.length) return;
+  if (rows.some(function(it) { return it.sof_no !== undefined; })) return;   // galing na sa view
+  try {
+    var docs = await erpFetchAll('documents', 'select=doc_no,sof_no&doc_no=like.MRR*&sof_no=not.is.null&order=doc_no.asc');
+    var map = {};
+    (docs || []).forEach(function(d) { if (d.sof_no && String(d.sof_no).trim()) map[d.doc_no] = d.sof_no; });
+    rows.forEach(function(it) { if (!it.sof_no && map[it.mrr_no]) it.sof_no = map[it.mrr_no]; });
+  } catch (e) {
+    console.warn('[MRR Monitoring] SOF# lookup failed — Ref No. will show PRF# only', e);
+  }
+}
+
+function mrrMonRefNo(it) {
+  var ref = String(it.ref_no || it.prf_no || '').trim();
+  if (ref) return ref;
+  var sof = String(it.sof_no || '').trim();
+  if (!sof) return '';
+  return /^SOF/i.test(sof) ? sof : 'SOF#' + sof;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -244,6 +270,7 @@ function mrrMonApplyFilters() {
       var vend = String(it.vendor || '').toLowerCase();
       var prepBy = String(it.prepared_by || '').toLowerCase();
       var drNo = String(it.dr_no || '').toLowerCase();
+      var refNo = String(mrrMonRefNo(it) || '').toLowerCase();
       
       if (mrrNo.indexOf(search) === -1 &&
           itemCode.indexOf(search) === -1 &&
@@ -251,7 +278,8 @@ function mrrMonApplyFilters() {
           poNo.indexOf(search) === -1 &&
           vend.indexOf(search) === -1 &&
           prepBy.indexOf(search) === -1 &&
-          drNo.indexOf(search) === -1) return false;
+          drNo.indexOf(search) === -1 &&
+          refNo.indexOf(search) === -1) return false;
     }
 
     return true;
@@ -410,7 +438,7 @@ function mrrMonRender() {
       '<td>' + erpEsc(dateStr) + '</td>' +
       '<td><code style="font-size:0.72rem;">' + erpEsc(it.po_no || '—') + '</code></td>' +
       '<td>' + erpEsc(truncate(it.vendor || '—', 25)) + '</td>' +
-      '<td><code style="font-size:0.72rem;">' + erpEsc(it.ref_no || '—') + '</code></td>' +
+      '<td><code style="font-size:0.72rem;">' + erpEsc(mrrMonRefNo(it) || '—') + '</code></td>' +
       '<td class="text-center">' + (it.line_no || '—') + '</td>' +
       '<td><code style="font-size:0.72rem;">' + erpEsc(it.item_code) + '</code></td>' +
       '<td title="' + erpEsc(it.description || '') + '">' + erpEsc(truncate(it.description || '—', 45)) + '</td>' +
@@ -518,7 +546,7 @@ function mrrMonExport() {
       it.mrr_date ? new Date(it.mrr_date).toLocaleDateString() : '',
       it.po_no || '',
       it.vendor || '',
-      it.ref_no || '',
+      mrrMonRefNo(it),
       it.line_no || '',
       it.item_code || '',
       it.description || '',
