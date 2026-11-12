@@ -44,6 +44,8 @@ var _mdash = {
     stockClass: '',
     location: ''
   },
+  page: 1,
+  pageSize: 200,        // 0 = lahat
   refreshTimer: null,
   searchTimer: null,
   REFRESH_INTERVAL: 5 * 60 * 1000  // 5 minutes
@@ -55,6 +57,8 @@ var _mdash = {
 document.addEventListener('DOMContentLoaded', function() {
   console.log('[Management Dashboard] Initializing...');
 
+  mdashInjectStyles();
+  mdashRenderActiveFilters();
   mdashCheckHealth();
   mdashSetAsOfDate();
   mdashPopulateFilterOptions().then(function() {
@@ -205,7 +209,7 @@ async function mdashLoadItems() {
 
     var rows = await erpFetchAll('erp_items', query);
     _mdash.allItems = rows || [];
-    _mdash.filteredItems = _mdash.allItems.slice();
+    mdashApplySearchFilter();
     mdashRenderTable();
   } catch(err) {
     console.error('[Dashboard] Items load error:', err);
@@ -224,11 +228,12 @@ function mdashRenderKPIs(data) {
   // 1. Total Items
   var elTotalItems = document.getElementById('mdashKpiTotalItems');
   animateValue(elTotalItems, 0, s.total_items || 0, 1000, false);
-  document.getElementById('mdashKpiTotalItemsSub').textContent = 'Active SKUs';
+  document.getElementById('mdashKpiTotalItemsSub').textContent = 'Active SKUs · as of now';
 
   // 2. Inventory Value
   var elValue = document.getElementById('mdashKpiValue');
   animateValue(elValue, 0, s.total_value || 0, 1500, true);
+  mdashSetSibSub(elValue, 'Total on-hand value · as of now');
 
   // 3. Accuracy
   var accEl = document.getElementById('mdashKpiAccuracy');
@@ -260,26 +265,27 @@ function mdashRenderKPIs(data) {
   var toSubEl = document.getElementById('mdashKpiTurnoverSub');
   var turnoverVal = Number(t.turnover_annualized || 0);
   animateValue(toEl, 0, turnoverVal, 1200, false);
-  toSubEl.textContent = 'Annualized · ' + (t.days_in_period || 30) + 'd basis';
+  toSubEl.textContent = 'Annualized · ' + (t.days_in_period || 30) + 'd basis · ' + mdashPeriodLabel();
 
   // 5. MRR
   var elMrr = document.getElementById('mdashKpiMrr');
   animateValue(elMrr, 0, act.mrr_value || 0, 1200, true);
-  document.getElementById('mdashKpiMrrSub').textContent = (act.mrr_count || 0) + ' docs received';
+  document.getElementById('mdashKpiMrrSub').textContent = (act.mrr_count || 0) + ' docs received · ' + mdashPeriodLabel();
 
   // 6. MRIF
   var elMrif = document.getElementById('mdashKpiMrif');
   animateValue(elMrif, 0, act.mrif_value || 0, 1200, true);
-  document.getElementById('mdashKpiMrifSub').textContent = (act.mrif_count || 0) + ' docs issued';
+  document.getElementById('mdashKpiMrifSub').textContent = (act.mrif_count || 0) + ' docs issued · ' + mdashPeriodLabel();
 
   // 7. Replenishment
   var elRep = document.getElementById('mdashKpiReplenish');
   animateValue(elRep, 0, s.replenishment_value || 0, 1200, true);
-  document.getElementById('mdashKpiReplenishSub').textContent = (s.replenishment_count || 0) + ' items below buffer';
+  document.getElementById('mdashKpiReplenishSub').textContent = (s.replenishment_count || 0) + ' items below buffer · as of now';
 
   // 8. Out of Stock
   var elOos = document.getElementById('mdashKpiOutOfStock');
   animateValue(elOos, 0, s.out_of_stock_count || 0, 1000, false);
+  mdashSetSibSub(elOos, 'Zero on-hand items · as of now');
   
   // Add pulse to out of stock if > 0
   if ((s.out_of_stock_count || 0) > 0) {
@@ -483,17 +489,28 @@ function mdashRenderTable() {
   var tbody = document.getElementById('mdashTableBody');
   if (!tbody) return;
 
-  var countEl = document.getElementById('mdashTableCount');
-  if (countEl) countEl.textContent = 'Showing ' + _mdash.filteredItems.length + ' items';
+  var total = _mdash.filteredItems.length;
+  var size = _mdash.pageSize > 0 ? _mdash.pageSize : (total || 1);
+  var pages = Math.max(1, Math.ceil(total / size));
+  if (_mdash.page > pages) _mdash.page = pages;
+  if (_mdash.page < 1) _mdash.page = 1;
+  var startIdx = (_mdash.page - 1) * size;
+  var endIdx = Math.min(startIdx + size, total);
 
-  if (_mdash.filteredItems.length === 0) {
+  var countEl = document.getElementById('mdashTableCount');
+  if (countEl) {
+    countEl.textContent = total === 0 ? 'No items' :
+      'Showing ' + erpNum(startIdx + 1) + '–' + erpNum(endIdx) + ' of ' + erpNum(total) + ' items';
+  }
+  mdashRenderPager(total, pages, startIdx, endIdx);
+
+  if (total === 0) {
     tbody.innerHTML = '<tr><td colspan="12" class="mdash-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>No items match your filters.</td></tr>';
     return;
   }
 
-  // Limit to first 500 for performance
-  var itemsToShow = _mdash.filteredItems.slice(0, 500);
+  var itemsToShow = _mdash.filteredItems.slice(startIdx, endIdx);
   var html = '';
 
   itemsToShow.forEach(function(it, idx) {
@@ -528,7 +545,7 @@ function mdashRenderTable() {
     }
 
     html += '<tr>' +
-      '<td>' + (idx + 1) + '</td>' +
+      '<td>' + (startIdx + idx + 1) + '</td>' +
       '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
       '<td title="' + erpEsc(it.description || '') + '">' + erpEsc(String(it.description || '—').substring(0, 60)) + '</td>' +
       '<td>' + erpEsc(it.category || '—') + '</td>' +
@@ -543,33 +560,156 @@ function mdashRenderTable() {
       '</tr>';
   });
 
-  if (_mdash.filteredItems.length > 500) {
-    html += '<tr><td colspan="12" style="text-align:center;padding:16px;color:#64748b;">' +
-      'Showing first 500 of ' + _mdash.filteredItems.length + ' items. Refine filters for more specific results.' +
-      '</td></tr>';
-  }
-
   tbody.innerHTML = html;
 }
+
+// ─── Pager (Inventory Master) ───
+function mdashRenderPager(total, pages, startIdx, endIdx) {
+  var host = document.getElementById('mdashPager');
+  if (!host) {
+    var wrap = document.querySelector('.mdash-table-wrap');
+    if (!wrap) return;
+    host = document.createElement('div');
+    host.id = 'mdashPager';
+    host.className = 'mdash-pager';
+    wrap.insertAdjacentElement('afterend', host);
+  }
+  var sizes = [100, 200, 500, 1000, 0];
+  var sel = '<label class="mdash-pager-size">Rows per page ' +
+    '<select onchange="mdashSetPageSize(this.value)">' +
+    sizes.map(function(n) { return '<option value="' + n + '"' + (n === _mdash.pageSize ? ' selected' : '') + '>' + (n === 0 ? 'All' : n) + '</option>'; }).join('') +
+    '</select></label>';
+  var p = _mdash.page;
+  var btn = function(label, target, disabled) {
+    return '<button type="button" ' + (disabled ? 'disabled' : 'onclick="mdashGoPage(' + target + ')"') + '>' + label + '</button>';
+  };
+  host.innerHTML = sel +
+    '<span class="mdash-pager-info">' + (total ? 'Page ' + p + ' of ' + pages : '') + '</span>' +
+    '<span class="mdash-pager-btns">' +
+      btn('« First', 1, p <= 1) + btn('‹ Prev', p - 1, p <= 1) +
+      btn('Next ›', p + 1, p >= pages) + btn('Last »', pages, p >= pages) +
+    '</span>';
+}
+
+window.mdashGoPage = function(n) {
+  _mdash.page = Math.max(1, n);
+  mdashRenderTable();
+  var wrap = document.querySelector('.mdash-table-wrap');
+  if (wrap) wrap.scrollTop = 0;
+};
+
+window.mdashSetPageSize = function(v) {
+  _mdash.pageSize = parseInt(v, 10) || 0;
+  _mdash.page = 1;
+  mdashRenderTable();
+};
 
 // ═══════════════════════════════════════════════════════════
 // SEARCH
 // ═══════════════════════════════════════════════════════════
+function mdashApplySearchFilter() {
+  var inp = document.getElementById('mdashTableSearch');
+  var term = ((inp && inp.value) || '').toLowerCase().trim();
+  if (!term) {
+    _mdash.filteredItems = _mdash.allItems.slice();
+  } else {
+    _mdash.filteredItems = _mdash.allItems.filter(function(it) {
+      var code = String(it.item_code || '').toLowerCase();
+      var desc = String(it.description || '').toLowerCase();
+      return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
+    });
+  }
+}
+
 function mdashOnSearchInput() {
   clearTimeout(_mdash.searchTimer);
   _mdash.searchTimer = setTimeout(function() {
-    var term = (document.getElementById('mdashTableSearch').value || '').toLowerCase().trim();
-    if (!term) {
-      _mdash.filteredItems = _mdash.allItems.slice();
-    } else {
-      _mdash.filteredItems = _mdash.allItems.filter(function(it) {
-        var code = String(it.item_code || '').toLowerCase();
-        var desc = String(it.description || '').toLowerCase();
-        return code.indexOf(term) !== -1 || desc.indexOf(term) !== -1;
-      });
-    }
+    mdashApplySearchFilter();
+    _mdash.page = 1;
     mdashRenderTable();
   }, 300);
+}
+
+// ═══════════════════════════════════════════════════════════
+// PERIOD LABEL + ACTIVE FILTER BAR (may "back" / clear)
+// ═══════════════════════════════════════════════════════════
+function mdashPeriodLabel() {
+  var m = _mdash.filters.month;
+  if (!m || m === 'all') return 'Last 30 days';
+  var p = m.split('-');
+  var names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return (names[parseInt(p[1], 10) - 1] || p[1]) + ' ' + p[0];
+}
+
+function mdashSetSibSub(el, text) {
+  if (!el) return;
+  var sub = el.nextElementSibling;
+  if (sub && sub.classList && sub.classList.contains('mdash-kpi-sub')) sub.textContent = text;
+}
+
+function mdashRenderActiveFilters() {
+  var host = document.getElementById('mdashActiveFilters');
+  if (!host) {
+    var bar = document.querySelector('.mdash-filters');
+    if (!bar) return;
+    host = document.createElement('div');
+    host.id = 'mdashActiveFilters';
+    host.className = 'mdash-af';
+    bar.insertAdjacentElement('afterend', host);
+  }
+  var f = _mdash.filters;
+  var chips = [];
+  function chip(label, value, key) {
+    return '<span class="mdash-af-chip">' + erpEsc(label) + ': <b>' + erpEsc(value) + '</b>' +
+      '<button type="button" title="Alisin ang filter na ito" onclick="mdashClearFilter(\'' + key + '\')">&times;</button></span>';
+  }
+  if (f.category)   chips.push(chip('Category', f.category, 'category'));
+  if (f.stockClass) chips.push(chip('Stock class', f.stockClass, 'stockClass'));
+  if (f.location)   chips.push(chip('Location', f.location, 'location'));
+  var monthOn = f.month && f.month !== 'all';
+  if (monthOn)      chips.push(chip('Period', mdashPeriodLabel(), 'month'));
+
+  if (!chips.length) { host.innerHTML = ''; host.style.display = 'none'; return; }
+
+  host.style.display = 'flex';
+  host.innerHTML =
+    '<span class="mdash-af-label"><i class="bi bi-funnel-fill"></i> Active filters</span>' + chips.join('') +
+    '<button type="button" class="mdash-af-clear" onclick="mdashClearFilter(\'all\')"><i class="bi bi-arrow-counterclockwise me-1"></i>Clear all</button>' +
+    (monthOn ? '<div class="mdash-af-note">MRR, MRIF at turnover ay para sa <b>' + erpEsc(mdashPeriodLabel()) + '</b>. ' +
+      'Ang stock value, replenishment at out-of-stock ay <b>live balances ngayon</b>, hindi month-end.</div>' : '');
+}
+
+window.mdashClearFilter = function(key) {
+  var map = { category: ['mdashFilterCategory', ''], stockClass: ['mdashFilterStockClass', ''],
+              location: ['mdashFilterLocation', ''], month: ['mdashFilterMonth', 'all'] };
+  var keys = key === 'all' ? Object.keys(map) : [key];
+  keys.forEach(function(k) {
+    var el = document.getElementById(map[k][0]);
+    if (el) el.value = map[k][1];
+  });
+  mdashOnFilterChange();
+};
+
+function mdashInjectStyles() {
+  if (document.getElementById('mdashExtraCss')) return;
+  var st = document.createElement('style');
+  st.id = 'mdashExtraCss';
+  st.textContent =
+    '.mdash-af{display:none;flex-wrap:wrap;align-items:center;gap:8px;margin:-4px 0 16px;padding:10px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px}' +
+    '.mdash-af-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#9a3412}' +
+    '.mdash-af-chip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #fdba74;border-radius:999px;padding:3px 5px 3px 12px;font-size:.8rem;color:#431407}' +
+    '.mdash-af-chip button{border:0;background:#fed7aa;color:#9a3412;width:20px;height:20px;border-radius:50%;line-height:1;cursor:pointer;font-size:14px;padding:0}' +
+    '.mdash-af-chip button:hover{background:#fb923c;color:#fff}' +
+    '.mdash-af-clear{margin-left:auto;border:1px solid #fb923c;background:#fff;color:#c2410c;border-radius:8px;padding:4px 12px;font-size:.8rem;font-weight:600;cursor:pointer}' +
+    '.mdash-af-clear:hover{background:#fb923c;color:#fff}' +
+    '.mdash-af-note{flex-basis:100%;font-size:.78rem;color:#7c2d12}' +
+    '.mdash-pager{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid #e2e8f0;font-size:.82rem;color:#475569}' +
+    '.mdash-pager select{margin-left:6px;border:1px solid #cbd5e1;border-radius:8px;padding:3px 8px;font-size:.82rem}' +
+    '.mdash-pager-btns{display:inline-flex;gap:6px}' +
+    '.mdash-pager button{border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:4px 12px;font-size:.8rem;font-weight:600;color:#1e3a5f;cursor:pointer}' +
+    '.mdash-pager button:hover:not(:disabled){background:#1e3a5f;color:#fff;border-color:#1e3a5f}' +
+    '.mdash-pager button:disabled{opacity:.4;cursor:not-allowed}';
+  document.head.appendChild(st);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -582,6 +722,8 @@ function mdashOnFilterChange() {
   _mdash.filters.location = document.getElementById('mdashFilterLocation').value;
 
   console.log('[Dashboard] Filters changed:', _mdash.filters);
+  _mdash.page = 1;
+  mdashRenderActiveFilters();
   mdashLoad();
 }
 
