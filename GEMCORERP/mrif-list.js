@@ -255,6 +255,7 @@ async function mrifListView(docNo) {
     
     var html = '<div style="padding:20px;font-family:Inter,sans-serif;">';
     html += '<h5>' + erpEsc(docNo) + '</h5>';
+    html += (typeof erpCancelBannerHtml === 'function' ? erpCancelBannerHtml(result.doc) : '');
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">';
     html += '<div><strong>Requestor:</strong> ' + erpEsc(info.Requestor || '—') + '</div>';
     html += '<div><strong>Department:</strong> ' + erpEsc(info.Department || '—') + '</div>';
