@@ -687,6 +687,7 @@ async function viewRequestDetails(docNo, docType) {
     
     // Build content
     var html = '';
+    html += (typeof erpCancelBannerHtml === 'function' ? erpCancelBannerHtml(doc) : '');
     html += '<div class="row g-2 mb-3" style="font-size:0.9rem;">';
     html += '<div class="col-md-6"><strong>Doc No:</strong> <code>' + erpEsc(doc.doc_no) + '</code></div>';
     html += '<div class="col-md-6"><strong>Type:</strong> <span class="badge bg-primary">' + erpEsc(doc.doc_type) + '</span></div>';
