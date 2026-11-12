@@ -508,7 +508,7 @@ function sofItemsRender() {
           '<td>' + pendHtml + '</td>' +
           '<td class="text-center">' + badge + '</td>' +
           '<td class="text-center">' + (r.rem > 0
-            ? '<button class="btn btn-sm btn-outline-danger" title="Ibalik sa free on-hand" data-code="' + sofTrackerEsc(it.item_code) + '" onclick="sofItemsRelease(this.dataset.code)"><i class="bi bi-unlock me-1"></i>Release</button>'
+            ? '<button class="btn btn-sm btn-outline-danger" title="Alisin ang allocation — ibalik sa free on-hand" data-code="' + sofTrackerEsc(it.item_code) + '" onclick="sofItemsRelease(this.dataset.code)"><i class="bi bi-x-circle me-1"></i>Remove Allocation</button>'
             : '') + '</td>' +
         '</tr>';
       }).join('');
@@ -821,16 +821,16 @@ window.sofManualSubmit = async function() {
 };
 
 window.sofReleaseItem = async function(sofNo, itemCode, remaining) {
-  var q = prompt('Release ilang qty ng ' + itemCode + ' mula sa ' + sofNo + '?\n(Remaining: ' + remaining + ')\n\nMababawasan ang reservation at babalik sa free on-hand.', remaining);
+  var q = prompt('Ilang qty ng ' + itemCode + ' ang aalisin sa allocation ng ' + sofNo + '?\n(Remaining: ' + remaining + ')\n\nMababawasan ang reservation at babalik sa free on-hand.', remaining);
   if (q === null) return;
   var qty = Number(q);
   if (!(qty > 0) || qty > remaining) return erpShowToast('Invalid qty (1 hanggang ' + remaining + ')', 'warning');
-  var reason = prompt('Reason sa pag-release? (required)');
+  var reason = prompt('Reason sa pag-alis ng allocation? (required)');
   if (!reason || !reason.trim()) return erpShowToast('Reason is required', 'warning');
   try {
     var r = await sofRpc('erp_sof_release', { p_sof_no: sofNo, p_item_code: itemCode, p_qty: qty, p_user: sofUser(), p_reason: reason.trim() });
     if (!r || !r.success) return erpShowToast((r && r.error) || 'Failed', 'danger');
-    erpShowToast('✅ Released ' + r.released + ' — pwede nang gamitin ng kahit anong MRIF', 'success');
+    erpShowToast('✅ Allocation removed: ' + r.released + ' — pwede nang gamitin ng kahit anong MRIF', 'success');
     var m = document.getElementById('sofItemsModal'); if (m) { bootstrap.Modal.getInstance(m).hide(); }
     sofTrackerLoad();
     setTimeout(function() { sofViewItems(sofNo); }, 400);
