@@ -7,6 +7,22 @@
 
   var NAV_GROUPS = [
     {
+      // Messages — nasa pinaka-itaas para agad makita kung may bagong message
+      id: 'messages-top',
+      label: '',
+      divider: true,
+      items: [
+        {
+          id: 'chat',
+          label: 'Messages',
+          icon: 'bi-chat-dots',
+          href: 'chat.html',
+          roles: ['warehouse', 'production', 'procurement', 'finance'],
+          badgeId: 'chatBadgeSidebar'
+        }
+      ]
+    },
+    {
       id: 'main',
       label: '',
       items: [
@@ -207,20 +223,6 @@
           icon: 'bi-clock-history',
           href: 'process-history.html',
           roles: ['warehouse']
-        }
-      ]
-    },
-    {
-      id: 'communication',
-      label: 'Communication',
-      items: [
-        {
-          id: 'chat',
-          label: 'Messages',
-          icon: 'bi-chat-dots',
-          href: 'chat.html',
-          roles: ['warehouse', 'production', 'procurement', 'finance'],
-          badgeId: 'chatBadgeSidebar'
         }
       ]
     },
@@ -544,6 +546,12 @@
           nav.appendChild(link);
         }
       });
+
+      if (group.divider) {
+        var divider = document.createElement('div');
+        divider.className = 'erp-sidebar-divider';
+        nav.appendChild(divider);
+      }
     });
 
     sidebar.appendChild(nav);
