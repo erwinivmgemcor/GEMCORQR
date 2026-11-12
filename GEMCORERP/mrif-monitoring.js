@@ -114,7 +114,32 @@ async function mrifMonLoad() {
 // na may CANCELLED status at ang reason ng pag-cancel (hover sa Remarks).
 // Source: documents (doc_type=MRIF, status=CANCELLED) + doc_items.
 // ═══════════════════════════════════════════════════════════
+function mrifMonCancelInfo(doc) {
+  doc = doc || {};
+  var out = { reason: '', by: '', at: '' };
+  Object.keys(doc).forEach(function(k) {
+    var v = doc[k];
+    if (v === null || v === undefined || String(v).trim() === '') return;
+    if (!/cancel|void/i.test(k)) return;
+    if (/reason|remark|note/i.test(k)) { if (!out.reason) out.reason = String(v).trim(); }
+    else if (/by$|user|login/i.test(k)) { if (!out.by) out.by = String(v).trim(); }
+    else if (/_at$|date|time/i.test(k)) { if (!out.at) out.at = String(v).trim(); }
+  });
+  if (!out.reason && /cancel|void/i.test(String(doc.remarks || ''))) out.reason = String(doc.remarks).trim();
+  return out;
+}
+
+// Hindi dapat masira ang buong page kung pumalya ang cancelled lookup — babalik lang sa dating listahan
 async function mrifMonMergeCancelled(rows) {
+  try {
+    return await mrifMonMergeCancelledInner(rows);
+  } catch (err) {
+    console.warn('[MRIF Monitoring] cancelled merge failed — ipinapakita ang listahan nang walang CANCELLED', err);
+    return rows;
+  }
+}
+
+async function mrifMonMergeCancelledInner(rows) {
   var docs = [];
   try {
     docs = await erpFetchAll('documents', 'select=*&doc_type=eq.MRIF&status=eq.CANCELLED&order=doc_no.asc') || [];
@@ -136,7 +161,7 @@ async function mrifMonMergeCancelled(rows) {
     it.item_status = 'CANCELLED';
     it.doc_status = 'CANCELLED';
     it.needs_attention = false;
-    it.cancel_info = erpDocCancelInfo(d);
+    it.cancel_info = mrifMonCancelInfo(d);
   });
 
   // 2) idagdag ang wala pa sa view (kunin ang items sa doc_items)
@@ -158,7 +183,7 @@ async function mrifMonMergeCancelled(rows) {
 
   var extra = [];
   missing.forEach(function(d) {
-    var info = erpDocCancelInfo(d);
+    var info = mrifMonCancelInfo(d);
     var base = {
       mrif_no: d.doc_no,
       request_date: d.date_prepared || d.created_at || null,
