@@ -393,16 +393,190 @@ window.sofTrackerRefresh = sofTrackerRefresh;
 console.log('✅ sof-tracker.js v2.0 loaded');
 
 // ═══════════════════════════════════════════════════════════
-// ✅ BAGONG FUNCTION: View Items ng isang SOF
+// v2.2 — SOF ITEMS MODAL: status filter, search, pending-MRIF filter,
+//         sort, totals footer, export CSV
 // ═══════════════════════════════════════════════════════════
+var _sofItemsView = { sofNo: '', items: [], PEND: { docs: {}, lines: {} }, status: 'ALL', q: '', pend: false, sort: 'code' };
+
+(function() {
+  if (document.getElementById('sofItemsCss')) return;
+  var st = document.createElement('style');
+  st.id = 'sofItemsCss';
+  st.textContent =
+    '#sofItemsModal .erp-table thead th{position:sticky;top:0;z-index:2;background:#f1f5f9;box-shadow:0 1px 0 #e2e8f0}' +
+    '.sof-ctl{padding:12px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0}' +
+    '.sof-fchip{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border:1.5px solid #e2e8f0;background:#fff;border-radius:999px;font-size:.8rem;font-weight:600;color:#334155;cursor:pointer;transition:all .12s}' +
+    '.sof-fchip:hover{border-color:#1e3a5f}' +
+    '.sof-fchip .dot{width:8px;height:8px;border-radius:50%;background:#94a3b8}' +
+    '.sof-fchip .n{background:#f1f5f9;border-radius:999px;padding:0 7px;font-size:.72rem;color:#475569}' +
+    '.sof-fchip.on{background:#1e3a5f;border-color:#1e3a5f;color:#fff}' +
+    '.sof-fchip.on .n{background:rgba(255,255,255,.22);color:#fff}' +
+    '.sof-fchip.k-ACTIVE .dot{background:#0d6efd}.sof-fchip.k-PARTIAL .dot{background:#f59e0b}.sof-fchip.k-FULL .dot{background:#198754}' +
+    '.sof-prog{height:6px;min-width:90px;background:#e2e8f0;border-radius:99px;overflow:hidden}.sof-prog>div{height:100%;background:#198754}' +
+    '.sof-items-foot{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:center;width:100%;font-size:.85rem}' +
+    '.sof-items-foot b{font-variant-numeric:tabular-nums}';
+  document.head.appendChild(st);
+})();
+
+function sofItemsCompute() {
+  var v = _sofItemsView;
+  return v.items.map(function(it) {
+    var alloc = Number(it.allocated_qty || 0);
+    var used = Number(it.used_qty || 0);
+    var rem = alloc - used;
+    return {
+      it: it, alloc: alloc, used: used, rem: rem,
+      key: rem <= 0 ? 'FULL' : (used > 0 ? 'PARTIAL' : 'ACTIVE'),
+      pl: (v.PEND.lines[sofKey(it.item_code)] || [])
+    };
+  });
+}
+
+// Search + pending filter lang (para tama ang bilang sa chips), tapos status filter
+function sofItemsBase() {
+  var v = _sofItemsView, q = v.q.trim().toLowerCase();
+  return sofItemsCompute().filter(function(r) {
+    if (v.pend && !r.pl.length) return false;
+    if (q) {
+      var hay = (String(r.it.item_code || '') + ' ' + String(r.it.description || '')).toLowerCase();
+      if (hay.indexOf(q) === -1) return false;
+    }
+    return true;
+  });
+}
+
+function sofItemsRender() {
+  var v = _sofItemsView;
+  var base = sofItemsBase();
+  var counts = { ALL: base.length, ACTIVE: 0, PARTIAL: 0, FULL: 0 };
+  base.forEach(function(r) { counts[r.key]++; });
+
+  var rows = base.filter(function(r) { return v.status === 'ALL' || r.key === v.status; });
+  var order = { ACTIVE: 0, PARTIAL: 1, FULL: 2 };
+  rows.sort(function(a, b) {
+    if (v.sort === 'rem') return b.rem - a.rem;
+    if (v.sort === 'used') return b.used - a.used;
+    if (v.sort === 'status') return (order[a.key] - order[b.key]) || String(a.it.item_code).localeCompare(String(b.it.item_code));
+    return String(a.it.item_code).localeCompare(String(b.it.item_code));
+  });
+
+  // chips
+  var defs = [['ALL', 'All'], ['ACTIVE', 'Active'], ['PARTIAL', 'Partial'], ['FULL', 'Fully Used']];
+  var chipEl = document.getElementById('sofFChips');
+  if (chipEl) {
+    chipEl.innerHTML = defs.map(function(d) {
+      return '<button type="button" class="sof-fchip k-' + d[0] + (v.status === d[0] ? ' on' : '') + '" onclick="sofItemsSetStatus(\'' + d[0] + '\')">' +
+        (d[0] === 'ALL' ? '' : '<span class="dot"></span>') + d[1] + '<span class="n">' + counts[d[0]] + '</span></button>';
+    }).join('');
+  }
+
+  // rows
+  var tb = document.getElementById('sofItemsTbody');
+  if (tb) {
+    if (!rows.length) {
+      tb.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-5">' +
+        '<i class="bi bi-funnel fs-3 d-block mb-2"></i>Walang item na tumutugma sa filter. ' +
+        '<a href="#" onclick="sofItemsReset();return false;">I-reset ang filters</a></td></tr>';
+    } else {
+      tb.innerHTML = rows.map(function(r, idx) {
+        var it = r.it;
+        var badge = r.key === 'FULL' ? '<span class="badge bg-success">FULLY USED</span>'
+                  : r.key === 'PARTIAL' ? '<span class="badge bg-warning text-dark">PARTIAL</span>'
+                  : '<span class="badge bg-primary">ACTIVE</span>';
+        var pendHtml = r.pl.length ? r.pl.map(function(x, i) {
+          return '<div class="sof-pend-line">' + (i === 0 && r.rem > 0 ? '<span class="badge bg-warning text-dark me-1">UNA</span>' : '') +
+            sofMrifLink(x.doc_no) + ' <b>' + sofTrackerEsc(x.requestor || '—') + '</b>' +
+            (x.department ? ' <span class="text-muted">(' + sofTrackerEsc(x.department) + ')</span>' : '') +
+            ' · kailangan <b>' + sofTrackerNum(x.need) + '</b>' + (x.status === 'PARTIAL' ? ' <span class="text-muted">(partial)</span>' : '') + '</div>';
+        }).join('') : '<span class="text-muted">—</span>';
+        var pct = r.alloc > 0 ? Math.min(100, Math.round(r.used / r.alloc * 100)) : 0;
+        return '<tr>' +
+          '<td>' + (idx + 1) + '</td>' +
+          '<td><code>' + sofTrackerEsc(it.item_code) + '</code></td>' +
+          '<td>' + sofTrackerEsc(it.description || '—') + '</td>' +
+          '<td class="text-center">' + sofTrackerEsc(it.unit || '—') + '</td>' +
+          '<td class="text-end fw-bold">' + sofTrackerNum(r.alloc) + '</td>' +
+          '<td class="text-end text-success fw-bold">' + sofTrackerNum(r.used) + '</td>' +
+          '<td class="text-end text-danger fw-bold">' + sofTrackerNum(r.rem) + '</td>' +
+          '<td style="min-width:110px"><div class="sof-prog" title="' + pct + '% used"><div style="width:' + pct + '%"></div></div><div class="small text-muted mt-1">' + pct + '%</div></td>' +
+          '<td>' + pendHtml + '</td>' +
+          '<td class="text-center">' + badge + '</td>' +
+          '<td class="text-center">' + (r.rem > 0
+            ? '<button class="btn btn-sm btn-outline-danger" title="Ibalik sa free on-hand" data-code="' + sofTrackerEsc(it.item_code) + '" onclick="sofItemsRelease(this.dataset.code)"><i class="bi bi-unlock me-1"></i>Release</button>'
+            : '') + '</td>' +
+        '</tr>';
+      }).join('');
+    }
+  }
+
+  // footer totals (ng nakikitang rows)
+  var tA = 0, tU = 0, tR = 0;
+  rows.forEach(function(r) { tA += r.alloc; tU += r.used; tR += Math.max(0, r.rem); });
+  var foot = document.getElementById('sofItemsFooter');
+  if (foot) {
+    var filtered = (v.status !== 'ALL' || v.q.trim() || v.pend);
+    foot.innerHTML = '<div class="sof-items-foot">' +
+      '<span>Showing <b>' + rows.length + '</b> of <b>' + v.items.length + '</b> item(s)' + (filtered ? ' <span class="text-muted">(filtered)</span>' : '') + '</span>' +
+      '<span>Allocated: <b>' + sofTrackerNum(tA) + '</b></span>' +
+      '<span class="text-success">Used: <b>' + sofTrackerNum(tU) + '</b></span>' +
+      '<span class="text-danger">Remaining: <b>' + sofTrackerNum(tR) + '</b></span>' +
+      '<span class="text-muted">' + (tA > 0 ? Math.round(tU / tA * 100) : 0) + '% used</span>' +
+    '</div>';
+  }
+  window._sofItemsVisible = rows;
+}
+
+window.sofItemsSetStatus = function(st) { _sofItemsView.status = st; sofItemsRender(); };
+window.sofItemsSearch    = function(val) { _sofItemsView.q = val || ''; sofItemsRender(); };
+window.sofItemsTogglePend = function(on) { _sofItemsView.pend = !!on; sofItemsRender(); };
+window.sofItemsSort      = function(val) { _sofItemsView.sort = val; sofItemsRender(); };
+window.sofItemsReset = function() {
+  var v = _sofItemsView;
+  v.status = 'ALL'; v.q = ''; v.pend = false; v.sort = 'code';
+  var i = document.getElementById('sofItemsSearch'); if (i) i.value = '';
+  var c = document.getElementById('sofItemsPend');   if (c) c.checked = false;
+  var o = document.getElementById('sofItemsSort');   if (o) o.value = 'code';
+  sofItemsRender();
+};
+
+window.sofItemsRelease = function(code) {
+  var r = sofItemsCompute().filter(function(x) { return String(x.it.item_code) === String(code); })[0];
+  if (!r || r.rem <= 0) return;
+  sofReleaseItem(_sofItemsView.sofNo, code, r.rem);
+};
+
+window.sofItemsExport = function() {
+  var rows = window._sofItemsVisible || [];
+  if (!rows.length) return erpShowToast('Walang i-e-export', 'warning');
+  function q(x) { return '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"'; }
+  var lines = [['SOF No', 'Item Code', 'Description', 'Unit', 'Allocated', 'Used', 'Remaining', 'Status', 'Pending MRIF'].map(q).join(',')];
+  rows.forEach(function(r) {
+    var pend = r.pl.map(function(x) { return x.doc_no + ' ' + (x.requestor || '') + ' (' + x.need + ')'; }).join(' | ');
+    lines.push([_sofItemsView.sofNo, r.it.item_code, r.it.description || '', r.it.unit || '', r.alloc, r.used, r.rem,
+      r.key === 'FULL' ? 'FULLY USED' : r.key, pend].map(q).join(','));
+  });
+  var blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'SOF-' + String(_sofItemsView.sofNo).replace(/[^\w-]+/g, '_') + '-items.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function() { URL.revokeObjectURL(a.href); }, 1000);
+};
+
 window.sofViewItems = async function(sofNo) {
   console.log('[SOF Tracker] Fetching items for SOF:', sofNo);
-  
-  // Gumawa tayo ng modal container kung wala pa
+
+  var v = _sofItemsView;
+  // Kung ibang SOF na, i-reset ang filters. Kung pareho (hal. pagkatapos mag-release), panatilihin.
+  if (String(v.sofNo) !== String(sofNo)) {
+    v.status = 'ALL'; v.q = ''; v.pend = false; v.sort = 'code';
+  }
+  v.sofNo = sofNo;
+
   var modalId = 'sofItemsModal';
   var existing = document.getElementById(modalId);
   if (existing) existing.remove();
-  
+
   var wrapper = document.createElement('div');
   wrapper.innerHTML = '<div class="modal fade" id="' + modalId + '" tabindex="-1">' +
     '<div class="modal-dialog modal-xl modal-dialog-scrollable">' +
@@ -411,9 +585,33 @@ window.sofViewItems = async function(sofNo) {
           '<h5 class="modal-title"><i class="bi bi-list-check me-2"></i>SOF Allocation Details — ' + sofTrackerEsc(sofNo) + '</h5>' +
           '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>' +
         '</div>' +
+        '<div class="sof-ctl" id="sofItemsCtl" style="display:none;">' +
+          '<div class="d-flex flex-wrap gap-2 align-items-center mb-2" id="sofFChips"></div>' +
+          '<div class="d-flex flex-wrap gap-2 align-items-center">' +
+            '<div class="input-group input-group-sm" style="max-width:300px;">' +
+              '<span class="input-group-text"><i class="bi bi-search"></i></span>' +
+              '<input type="text" id="sofItemsSearch" class="form-control" placeholder="Hanapin item code / description..." autocomplete="off" oninput="sofItemsSearch(this.value)">' +
+            '</div>' +
+            '<select id="sofItemsSort" class="form-select form-select-sm" style="width:auto;" onchange="sofItemsSort(this.value)">' +
+              '<option value="code">Sort: Item code</option>' +
+              '<option value="rem">Sort: Remaining (pinakamarami)</option>' +
+              '<option value="used">Sort: Used (pinakamarami)</option>' +
+              '<option value="status">Sort: Status</option>' +
+            '</select>' +
+            '<div class="form-check form-switch mb-0 ms-1">' +
+              '<input class="form-check-input" type="checkbox" id="sofItemsPend" onchange="sofItemsTogglePend(this.checked)">' +
+              '<label class="form-check-label small" for="sofItemsPend">May pending MRIF lang</label>' +
+            '</div>' +
+            '<div class="ms-auto d-flex gap-2">' +
+              '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="sofItemsReset()"><i class="bi bi-x-circle me-1"></i>Reset</button>' +
+              '<button type="button" class="btn btn-sm btn-outline-success" onclick="sofItemsExport()"><i class="bi bi-download me-1"></i>Export CSV</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
         '<div class="modal-body p-0" id="sofItemsModalBody">' +
           '<div class="text-center py-5"><div class="erp-spinner" style="margin:0 auto;"></div><div class="mt-2 text-muted">Loading items...</div></div>' +
         '</div>' +
+        '<div class="modal-footer justify-content-start py-2" id="sofItemsFooter" style="background:#f8fafc;"></div>' +
       '</div>' +
     '</div>' +
   '</div>';
@@ -423,77 +621,49 @@ window.sofViewItems = async function(sofNo) {
   modal.show();
 
   try {
-    // Fetch items from database
     var items = await erpFetch('erp_sof_allocation_items', 'select=*&sof_no=eq.' + encodeURIComponent(sofNo) + '&order=item_code.asc');
-    
     var bodyEl = document.getElementById('sofItemsModalBody');
-    
+
     if (!items || items.length === 0) {
       bodyEl.innerHTML = '<div class="text-center py-5 text-muted">Walang items na naka-allocate sa SOF na ito.</div>';
+      document.getElementById('sofItemsFooter').style.display = 'none';
       return;
     }
 
-    var pdocs = Object.keys((_sofTracker.pending[sofKey(sofNo)] || { docs: {} }).docs);
-    var html = (pdocs.length ? '<div class="sof-pend-banner"><i class="bi bi-hourglass-split me-1"></i><b>' + pdocs.length + ' MRIF pending</b> para sa SOF na ito: ' +
-        pdocs.map(function(n) { var d = _sofTracker.pending[sofKey(sofNo)].docs[n]; return sofMrifLink(n) + ' ' + sofTrackerEsc(d.requestor || ''); }).join(' · ') + '</div>' : '') +
+    v.items = items;
+    v.PEND = _sofTracker.pending[sofKey(sofNo)] || { docs: {}, lines: {} };
+
+    var pdocs = Object.keys(v.PEND.docs || {});
+    var banner = pdocs.length
+      ? '<div class="sof-pend-banner"><i class="bi bi-hourglass-split me-1"></i><b>' + pdocs.length + ' MRIF pending</b> para sa SOF na ito: ' +
+        pdocs.map(function(n) { var d = v.PEND.docs[n]; return sofMrifLink(n) + ' ' + sofTrackerEsc(d.requestor || ''); }).join(' · ') + '</div>'
+      : '';
+
+    bodyEl.innerHTML = banner +
       '<div class="table-responsive">' +
       '<table class="erp-table" style="font-size:0.85rem;">' +
-        '<thead>' +
-          '<tr>' +
-            '<th>#</th>' +
-            '<th>Item Code</th>' +
-            '<th>Description</th>' +
-            '<th class="text-center">Unit</th>' +
-            '<th class="text-end">Allocated Qty</th>' +
-            '<th class="text-end">Used Qty</th>' +
-            '<th class="text-end">Remaining Qty</th>' +
-            '<th>Pending MRIF (kanino ibibigay)</th>' +
-            '<th class="text-center">Status</th>' +
-            '<th class="text-center">Action</th>' +
-          '</tr>' +
-        '</thead>' +
-        '<tbody>';
+        '<thead><tr>' +
+          '<th>#</th><th>Item Code</th><th>Description</th>' +
+          '<th class="text-center">Unit</th>' +
+          '<th class="text-end">Allocated Qty</th><th class="text-end">Used Qty</th><th class="text-end">Remaining Qty</th>' +
+          '<th>Usage</th>' +
+          '<th>Pending MRIF (kanino ibibigay)</th>' +
+          '<th class="text-center">Status</th><th class="text-center">Action</th>' +
+        '</tr></thead>' +
+        '<tbody id="sofItemsTbody"></tbody>' +
+      '</table></div>';
 
-    var PEND = _sofTracker.pending[sofKey(sofNo)] || { docs: {}, lines: {} };
-    items.forEach(function(it, idx) {
-      var alloc = Number(it.allocated_qty || 0);
-      var used = Number(it.used_qty || 0);
-      var remaining = alloc - used;
-      var pl = (PEND.lines[sofKey(it.item_code)] || []);
-      var pendHtml = pl.length ? pl.map(function(x, i) {
-        return '<div class="sof-pend-line">' + (i === 0 && remaining > 0 ? '<span class="badge bg-warning text-dark me-1">UNA</span>' : '') +
-          sofMrifLink(x.doc_no) + ' <b>' + sofTrackerEsc(x.requestor || '—') + '</b>' +
-          (x.department ? ' <span class="text-muted">(' + sofTrackerEsc(x.department) + ')</span>' : '') +
-          ' · kailangan <b>' + sofTrackerNum(x.need) + '</b>' + (x.status === 'PARTIAL' ? ' <span class="text-muted">(partial)</span>' : '') + '</div>';
-      }).join('') : '<span class="text-muted">—</span>';
-      
-      var statusBadge = '';
-      if (remaining === 0) statusBadge = '<span class="badge bg-success">FULLY USED</span>';
-      else if (used > 0) statusBadge = '<span class="badge bg-warning text-dark">PARTIAL</span>';
-      else statusBadge = '<span class="badge bg-primary">ACTIVE</span>';
+    // ibalik ang naka-save na filter values sa controls
+    document.getElementById('sofItemsCtl').style.display = '';
+    document.getElementById('sofItemsSearch').value = v.q;
+    document.getElementById('sofItemsPend').checked = v.pend;
+    document.getElementById('sofItemsSort').value = v.sort;
 
-      html += '<tr>' +
-        '<td>' + (idx + 1) + '</td>' +
-        '<td><code>' + sofTrackerEsc(it.item_code) + '</code></td>' +
-        '<td>' + sofTrackerEsc(it.description || '—') + '</td>' +
-        '<td class="text-center">' + sofTrackerEsc(it.unit || '—') + '</td>' +
-        '<td class="text-end fw-bold">' + sofTrackerNum(alloc) + '</td>' +
-        '<td class="text-end text-success fw-bold">' + sofTrackerNum(used) + '</td>' +
-        '<td class="text-end text-danger fw-bold">' + sofTrackerNum(remaining) + '</td>' +
-        '<td>' + pendHtml + '</td>' +
-        '<td class="text-center">' + statusBadge + '</td>' +
-        '<td class="text-center">' + (remaining > 0
-          ? '<button class="btn btn-sm btn-outline-danger" title="Ibalik sa free on-hand" onclick="sofReleaseItem(\'' + sofTrackerEsc(sofNo).replace(/'/g, "\\'") + '\',\'' + sofTrackerEsc(it.item_code).replace(/'/g, "\\'") + '\',' + remaining + ')"><i class="bi bi-unlock me-1"></i>Release</button>'
-          : '') + '</td>' +
-      '</tr>';
-    });
+    sofItemsRender();
 
-    html += '</tbody></table></div>';
-    bodyEl.innerHTML = html;
-
-  } catch(err) {
+  } catch (err) {
     console.error('[sofViewItems]', err);
-    document.getElementById('sofItemsModalBody').innerHTML = 
+    document.getElementById('sofItemsModalBody').innerHTML =
       '<div class="alert alert-danger m-3">Failed to load items: ' + sofTrackerEsc(err.message) + '</div>';
   }
 };
