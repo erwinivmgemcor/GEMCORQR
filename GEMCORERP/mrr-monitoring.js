@@ -79,6 +79,7 @@ async function mrrMonLoad() {
 
     _mrrMon.allItems = rows || [];
     await mrrMonAttachSof(_mrrMon.allItems);     // SOF# para sa Ref No. kapag walang PRF#
+    _mrrMon.allItems = await mrrMonMergeCancelled(_mrrMon.allItems);   // kasama ang CANCELLED para sa series tracking
     mrrMonNormalizeStatuses(_mrrMon.allItems);   // staggered delivery: pinagsama-samang dating na ang basehan
 
     var elapsed = Date.now() - t0;
@@ -119,6 +120,115 @@ function mrrMonRefNo(it) {
   var sof = String(it.sof_no || '').trim();
   if (!sof) return '';
   return /^SOF/i.test(sof) ? sof : 'SOF#' + sof;
+}
+
+// ═══════════════════════════════════════════════════════════
+// CANCELLED MRR — kasama sa monitoring para tuloy-tuloy ang series number
+// Hindi nawawala ang numero ng na-cancel / void na MRR (hal. MRR0005354): lalabas ito
+// na may CANCELLED status at ang reason ng pag-cancel (hover sa Remarks).
+// Source: documents (doc_type=MRR, status=CANCELLED) + doc_items.
+// ═══════════════════════════════════════════════════════════
+function mrrMonCancelInfo(doc) {
+  doc = doc || {};
+  var out = { reason: '', by: '', at: '' };
+  Object.keys(doc).forEach(function(k) {
+    var v = doc[k];
+    if (v === null || v === undefined || String(v).trim() === '') return;
+    if (!/cancel|void/i.test(k)) return;
+    if (/reason|remark|note/i.test(k)) { if (!out.reason) out.reason = String(v).trim(); }
+    else if (/by$|user|login/i.test(k)) { if (!out.by) out.by = String(v).trim(); }
+    else if (/_at$|date|time/i.test(k)) { if (!out.at) out.at = String(v).trim(); }
+  });
+  if (!out.reason && /cancel|void/i.test(String(doc.remarks || ''))) out.reason = String(doc.remarks).trim();
+  return out;
+}
+
+// Hindi dapat masira ang buong page kung pumalya ang cancelled lookup — babalik lang sa dating listahan
+async function mrrMonMergeCancelled(rows) {
+  try {
+    return await mrrMonMergeCancelledInner(rows);
+  } catch (err) {
+    console.warn('[MRR Monitoring] cancelled merge failed — ipinapakita ang listahan nang walang CANCELLED', err);
+    return rows;
+  }
+}
+
+async function mrrMonMergeCancelledInner(rows) {
+  var docs = await erpFetchAll('documents',
+    'select=*&doc_type=eq.MRR&status=in.(CANCELLED,VOID,VOIDED)&order=doc_no.asc') || [];
+  if (!docs.length) return rows;
+
+  var docMap = {};
+  docs.forEach(function(d) { docMap[d.doc_no] = d; });
+
+  // 1) kung kasama na pala sa view ang cancelled, i-mark lang
+  var present = {};
+  rows.forEach(function(it) {
+    var d = docMap[it.mrr_no];
+    if (!d) return;
+    present[it.mrr_no] = true;
+    it.item_status = 'CANCELLED';
+    it.doc_status = 'CANCELLED';
+    it.cancel_info = mrrMonCancelInfo(d);
+  });
+
+  // 2) idagdag ang wala pa sa view (kunin ang items sa doc_items)
+  var missing = docs.filter(function(d) { return !present[d.doc_no]; });
+  if (!missing.length) return rows;
+
+  var itemsByDoc = {};
+  try {
+    var chunks = [];
+    for (var i = 0; i < missing.length; i += 60) chunks.push(missing.slice(i, i + 60));
+    var res = await Promise.all(chunks.map(function(ch) {
+      var list = ch.map(function(d) { return encodeURIComponent(d.doc_no); }).join(',');
+      return erpFetchAll('doc_items', 'select=*&doc_no=in.(' + list + ')&order=doc_no.asc,line_no.asc');
+    }));
+    res.forEach(function(arr) { (arr || []).forEach(function(r) { (itemsByDoc[r.doc_no] = itemsByDoc[r.doc_no] || []).push(r); }); });
+  } catch (err) {
+    console.warn('[MRR Monitoring] cancelled doc_items lookup failed', err);
+  }
+
+  var ts = function(v) { var t = v ? Date.parse(v) : NaN; return isNaN(t) ? 0 : t; };
+
+  // 3) isingit sa tamang pwesto (pareho ng view: pinakabago muna) — hindi ginagalaw ang order ng dati nang rows
+  var out = rows.slice();
+  missing.sort(function(a, b) { return ts(b.created_at || b.date_prepared) - ts(a.created_at || a.date_prepared); });
+  missing.forEach(function(d) {
+    var when = d.created_at || d.date_prepared || null;
+    var base = {
+      mrr_no: d.doc_no,
+      mrr_date: when,
+      po_no: d.po_no || '',
+      vendor: d.vendor || d.client_name || '',
+      ref_no: d.prf_no || '',
+      sof_no: d.sof_no || '',
+      dr_no: d.dr_no || '',
+      prepared_by: d.prepared_by || d.requestor || '',
+      processed_by: d.processed_by || '',
+      received_qty: 0,
+      item_status: 'CANCELLED', doc_status: 'CANCELLED',
+      cancel_info: mrrMonCancelInfo(d)
+    };
+    var its = itemsByDoc[d.doc_no] || [];
+    var newRows;
+    if (!its.length) {
+      newRows = [Object.assign({}, base, { line_no: null, item_code: '—', description: '(walang item)', requested_qty: 0, unit: '', remarks: d.remarks || '' })];
+    } else {
+      newRows = its.map(function(r) {
+        return Object.assign({}, base, {
+          line_no: r.line_no, item_code: r.item_code, description: r.description || '',
+          requested_qty: Number(r.requested_qty || 0), unit: r.unit || '', remarks: r.remarks || ''
+        });
+      });
+    }
+    var t = ts(when), pos = out.length;
+    for (var j = 0; j < out.length; j++) {
+      if (ts(out[j].mrr_date) < t) { pos = j; break; }
+    }
+    Array.prototype.splice.apply(out, [pos, 0].concat(newRows));
+  });
+  return out;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -177,10 +287,17 @@ function mrrMonComputeKPIs() {
   var totalDocs = {};
   var pending = 0, partial = 0, complete = 0;
 
+  var cancelledDocs = {}, cancelledRows = 0;
+
   items.forEach(function(it) {
+    var status = String(it.item_status || '').toUpperCase();
+    if (status === 'CANCELLED') {            // hindi bilang sa Total / Items KPI
+      cancelledRows++;
+      if (it.mrr_no) cancelledDocs[it.mrr_no] = true;
+      return;
+    }
     if (it.mrr_no) totalDocs[it.mrr_no] = true;
 
-    var status = String(it.item_status || '').toUpperCase();
     if (status === 'PENDING') pending++;
     else if (status === 'PARTIAL') partial++;
     else if (status === 'COMPLETE') complete++;
@@ -203,7 +320,11 @@ function mrrMonComputeKPIs() {
   if (el) el.textContent = erpNum(complete);
   
   el = document.getElementById('mrrMonKpiItems');
-  if (el) el.textContent = erpNum(items.length);
+  if (el) el.textContent = erpNum(items.length - cancelledRows);
+
+  var nCancelled = Object.keys(cancelledDocs).length;
+  el = document.getElementById('mrrMonKpiTotalSub');
+  if (el) el.textContent = nCancelled ? 'excl. ' + nCancelled + ' cancelled' : 'All receipts';
 
   // Update chip counts
   el = document.getElementById('mrrChipCountAll');
@@ -217,6 +338,9 @@ function mrrMonComputeKPIs() {
   
   el = document.getElementById('mrrChipCountComplete');
   if (el) el.textContent = complete;
+
+  el = document.getElementById('mrrChipCountCancelled');
+  if (el) el.textContent = cancelledRows;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -411,7 +535,11 @@ function mrrMonRender() {
     var rowClass = '';
     var statusBadge = '';
     
-    if (itemStatus === 'PENDING') {
+    var isCancelled = (itemStatus === 'CANCELLED');
+    if (isCancelled) {
+      rowClass = 'cancelled-row';
+      statusBadge = '<span class="badge bg-secondary"><i class="bi bi-x-octagon-fill me-1"></i>CANCELLED</span>';
+    } else if (itemStatus === 'PENDING') {
       rowClass = 'pending-attention';
       statusBadge = '<span class="badge bg-warning text-dark"><i class="bi bi-clock-history me-1"></i>PENDING</span>';
     } else if (itemStatus === 'PARTIAL') {
@@ -433,6 +561,18 @@ function mrrMonRender() {
     var creatorName = it.prepared_by || it.created_by || '—';
     var processedName = it.processed_by || '—';
 
+    // Remarks — para sa CANCELLED, ang reason ng pag-cancel ang ipapakita
+    var remarksCell;
+    if (isCancelled) {
+      var ci = it.cancel_info || {};
+      var cWhen = ci.at ? (isNaN(new Date(ci.at).getTime()) ? ci.at : new Date(ci.at).toLocaleString()) : '';
+      var cTip = 'CANCELLED' + (ci.by ? ' by ' + ci.by : '') + (cWhen ? ' · ' + cWhen : '') + '\nReason: ' + (ci.reason || '—');
+      remarksCell = '<td title="' + erpEsc(cTip) + '" style="color:#b91c1c;"><i class="bi bi-x-octagon-fill me-1"></i>' +
+        erpEsc(truncate(ci.reason || 'walang naka-save na reason', 24)) + '</td>';
+    } else {
+      remarksCell = '<td title="' + erpEsc(it.remarks || '') + '">' + erpEsc(truncate(it.remarks || '', 20)) + '</td>';
+    }
+
     html += '<tr class="' + rowClass + '">' +
       '<td><code>' + erpEsc(it.mrr_no) + '</code></td>' +
       '<td>' + erpEsc(dateStr) + '</td>' +
@@ -443,14 +583,14 @@ function mrrMonRender() {
       '<td><code style="font-size:0.72rem;">' + erpEsc(it.item_code) + '</code></td>' +
       '<td title="' + erpEsc(it.description || '') + '">' + erpEsc(truncate(it.description || '—', 45)) + '</td>' +
       '<td class="text-center">' + erpNum(qty) + '</td>' +
-      '<td class="text-center">' + (recv > 0 ? '<strong>' + erpNum(recv) + '</strong>' : '—') +
+      '<td class="text-center">' + (!isCancelled && recv > 0 ? '<strong>' + erpNum(recv) + '</strong>' : '—') +
         (it._cumDocs > 1 ? '<div class="text-muted" style="font-size:0.68rem;" title="Kabuuang dumating sa ' + it._cumDocs + ' MRR ng PO na ito">Σ ' + erpNum(it._cumRecv) + ' / ' + erpNum(it._cumQty) + '</div>' : '') +
       '</td>' +
       '<td class="text-center">' + erpEsc(it.unit || '—') + '</td>' +
       '<td class="text-center">' + statusBadge + '</td>' +
       '<td><span class="creator-badge"><i class="bi bi-person"></i> ' + erpEsc(truncate(creatorName, 18)) + '</span></td>' +
       '<td>' + erpEsc(truncate(processedName, 18)) + '</td>' +
-      '<td title="' + erpEsc(it.remarks || '') + '">' + erpEsc(truncate(it.remarks || '', 20)) + '</td>' +
+      remarksCell +
     '</tr>';
   });
   tbody.innerHTML = html;
@@ -557,7 +697,7 @@ function mrrMonExport() {
       it.prepared_by || '',
       it.processed_by || '',
       it.dr_no || '',
-      it.remarks || ''
+      (String(it.item_status || '').toUpperCase() === 'CANCELLED' ? 'CANCELLED: ' + ((it.cancel_info && it.cancel_info.reason) || '') : (it.remarks || ''))
     ];
   });
 
