@@ -509,9 +509,20 @@ async function erpOpenPrintPreview(docNo, docType) {
 // Binabasa kahit ano ang pangalan ng column (cancel_reason, cancelled_by, cancelled_at,
 // void_reason, voided_by, ...) para gumana sa MRIF / MRS / MRR / PRF.
 // ═══════════════════════════════════════════════════════════
-// Kinukuha ang cancel info gamit ang shared helper sa js/cancel-info.js
+// Cancel info — binabasa ang documents.cancel_reason / cancelled_by / cancelled_at
 function _printCancelInfo(doc) {
-  return (typeof window.erpDocCancelInfo === 'function') ? window.erpDocCancelInfo(doc) : { reason: '', by: '', at: '' };
+  doc = doc || {};
+  var out = { reason: '', by: '', at: '' };
+  Object.keys(doc).forEach(function(k) {
+    var v = doc[k];
+    if (v === null || v === undefined || String(v).trim() === '') return;
+    if (!/cancel|void/i.test(k)) return;
+    if (/reason|remark|note/i.test(k)) { if (!out.reason) out.reason = String(v).trim(); }
+    else if (/by$|user|login/i.test(k)) { if (!out.by) out.by = String(v).trim(); }
+    else if (/_at$|date|time/i.test(k)) { if (!out.at) out.at = String(v).trim(); }
+  });
+  if (!out.reason && /cancel|void/i.test(String(doc.remarks || ''))) out.reason = String(doc.remarks).trim();
+  return out;
 }
 
 // Pulang banner na ipapasok sa details modal. Walang ibabalik kung hindi CANCELLED ang doc.
