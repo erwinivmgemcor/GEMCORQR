@@ -505,6 +505,33 @@ async function erpOpenPrintPreview(docNo, docType) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// CANCEL / VOID INFO — reason, user at oras ng pag-cancel ng document
+// Binabasa kahit ano ang pangalan ng column (cancel_reason, cancelled_by, cancelled_at,
+// void_reason, voided_by, ...) para gumana sa MRIF / MRS / MRR / PRF.
+// ═══════════════════════════════════════════════════════════
+// Kinukuha ang cancel info gamit ang shared helper sa js/cancel-info.js
+function _printCancelInfo(doc) {
+  return (typeof window.erpDocCancelInfo === 'function') ? window.erpDocCancelInfo(doc) : { reason: '', by: '', at: '' };
+}
+
+// Pulang banner na ipapasok sa details modal. Walang ibabalik kung hindi CANCELLED ang doc.
+function erpCancelBannerHtml(doc) {
+  if (!doc || String(doc.status || '').toUpperCase() !== 'CANCELLED') return '';
+  var c = _printCancelInfo(doc), when = '';
+  if (c.at) { var d = new Date(c.at); when = isNaN(d.getTime()) ? c.at : d.toLocaleString(); }
+  var meta = [];
+  if (c.by) meta.push('by <strong>' + _printEsc(c.by) + '</strong>');
+  if (when) meta.push(_printEsc(when));
+  return '<div style="background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:8px;' +
+    'padding:10px 14px;margin:0 0 14px;color:#7f1d1d;">' +
+    '<div style="font-weight:700;"><i class="bi bi-x-octagon-fill me-1"></i>CANCELLED' +
+    (meta.length ? ' <span style="font-weight:400;font-size:.85em;">· ' + meta.join(' · ') + '</span>' : '') + '</div>' +
+    '<div style="margin-top:4px;"><strong>Reason:</strong> ' +
+    (c.reason ? _printEsc(c.reason) : '<em>walang naka-save na reason</em>') + '</div></div>';
+}
+window.erpCancelBannerHtml = erpCancelBannerHtml;
+
+// ═══════════════════════════════════════════════════════════
 // FETCH DOC + ITEMS (from Supabase)
 // ═══════════════════════════════════════════════════════════
 async function erpFetchDocWithItems(docNo, docType) {
@@ -545,6 +572,9 @@ async function erpFetchDocWithItems(docNo, docType) {
       'Date Prepared': doc.date_prepared || '',
       'Receiving Date': doc.receiving_date || '',
       'Prepared By': doc.prepared_by || '',
+      'Cancel Reason': _printCancelInfo(doc).reason,
+      'Cancelled By': _printCancelInfo(doc).by,
+      'Cancelled At': _printCancelInfo(doc).at,
       // ✅ NEW fallback fields:
       'date_prepared': doc.date_prepared || '',
       'created_at': doc.created_at || '',
@@ -570,7 +600,7 @@ async function erpFetchDocWithItems(docNo, docType) {
       };
     });
     
-    return { success: true, info: info, items: mappedItems };
+    return { success: true, info: info, items: mappedItems, doc: doc };
   } catch(err) {
     console.error('[erpFetchDocWithItems]', err);
     return { success: false, error: err.message };
