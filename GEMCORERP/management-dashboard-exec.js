@@ -1,6 +1,12 @@
 // GEMCOR ERP — Management Dashboard: executive layer (₱-first view for owner/admin)
 // Reads _mdash.allItems (already filtered) + 12-month stock ledger. Display only.
 var _xd = { charts: {}, ledger: null, ledgerAt: 0 };
+(function() {
+  if (document.getElementById('xdBackCss')) return;
+  var st = document.createElement('style'); st.id = 'xdBackCss';
+  st.textContent = '.xd-back{display:inline-flex;align-items:center;gap:6px;margin:4px 0 8px;padding:5px 12px;border:1.5px solid #1e3a5f;background:#fff;color:#1e3a5f;border-radius:8px;font-size:.8rem;font-weight:700;cursor:pointer}.xd-back:hover{background:#1e3a5f;color:#fff}';
+  document.head.appendChild(st);
+})();
 var XD_COLORS = ['#1e3a5f','#d9922e','#10b981','#8b5cf6','#06b6d4','#ec4899','#84cc16','#ef4444','#94a3b8'];
 
 function xdP(n) { n = Number(n) || 0; var a = Math.abs(n);
@@ -94,6 +100,9 @@ function mdashExecRender() {
     topC.map(function(c, i) { return '<div class="xd-row" style="--c:' + XD_COLORS[i] + ';--w:' + Math.max(2, c.v / maxC * 100) + '%" ' + (c.other ? '' : 'data-cat="' + xdEsc(c.k) + '"') + '><span>' + xdEsc(c.k) + (c.n ? ' · ' + c.n + ' items' : '') + '</span><em>' + xdP(c.v) + ' · ' + xdPct(c.v, total).toFixed(0) + '%</em><u></u></div>'; }).join('') + '</div></div></div>' +
     '<div class="xd-card"><p class="xd-h">Received vs issued, by month</p><p class="xd-s">Peso value of MRR in and MRIF out, last 12 months</p><div class="xd-ch"><canvas id="xdFlow"></canvas></div><div class="xd-note" id="xdFlowNote">Loading ledger…</div></div></div>' +
 
+    '<div class="xd-grid"><div class="xd-card"><p class="xd-h" id="xdPiT">Issued to production</p><p class="xd-s" id="xdPiS">Loading ledger…</p><div id="xdPiL"></div></div>' +
+    '<div class="xd-card"><p class="xd-h" id="xdPrT">Received</p><p class="xd-s" id="xdPrS">Loading ledger…</p><div id="xdPrL"></div></div></div>' +
+
     '<div class="xd-grid"><div class="xd-card"><p class="xd-h">ABC classes and top items</p><p class="xd-s">A items are the few that carry most of the value</p><div class="xd-abc">' +
     ['A', 'B', 'C'].map(function(k) { return '<div style="--c:' + abcCol[k] + '"><small>Class ' + k + ' · ' + abc[k].n + ' items</small><span class="xd-num">' + xdP(abc[k].v) + '</span><small>' + xdPct(abc[k].v, total).toFixed(0) + '% of value</small></div>'; }).join('') + '</div>' +
     '<p class="xd-h" style="font-size:.82rem">Top 8 items by value</p>' + list(topItems, 'No items.') + '</div>' +
@@ -102,9 +111,15 @@ function mdashExecRender() {
     '<div class="xd-grid"><div class="xd-card"><p class="xd-h">Idle capital</p><p class="xd-s">Items with stock but no movement: ' + xdP(idleSum) + ' in ' + idle.length + ' items</p>' + list(idle.slice(0, 8), 'Nothing idle.') + '</div>' +
     '<div class="xd-card"><p class="xd-h">Overstock</p><p class="xd-s">Value above 12 months of average usage: ' + xdP(overSum) + '</p>' + list(over.slice(0, 8), 'No overstock found.') + '</div></div>';
 
+  if (_mdash.filters && _mdash.filters.category) {
+    var catCard = host.querySelector('.xd-grid .xd-card'), catHd = catCard && catCard.querySelector('.xd-h');
+    if (catHd) catHd.insertAdjacentHTML('afterend',
+      '<button type="button" class="xd-back" onclick="mdashClearFilter(\'category\')"><i class="bi bi-arrow-left"></i> Back to all categories</button>');
+  }
+
   requestAnimationFrame(function() { host.querySelectorAll('.xd-bar i').forEach(function(b) { b.style.width = b.dataset.w + '%'; }); });
   host.querySelectorAll('[data-cat]').forEach(function(r) { r.addEventListener('click', function() {
-    var s = document.getElementById('mdashFilterCategory'); s.value = r.dataset.cat; s.dispatchEvent(new Event('change')); }); });
+    var s = document.getElementById('mdashFilterCategory'); s.value = (s.value === r.dataset.cat) ? '' : r.dataset.cat; s.dispatchEvent(new Event('change')); }); });
 
   if (_xd.charts.cat) _xd.charts.cat.destroy();
   _xd.charts.cat = new Chart(document.getElementById('xdCat'), { type: 'doughnut',
@@ -114,7 +129,48 @@ function mdashExecRender() {
       c.save(); c.textAlign = 'center'; c.fillStyle = '#0a1628'; c.font = '800 24px "Barlow Condensed", Inter, sans-serif'; c.fillText(xdP(total), x, y + 4);
       c.fillStyle = '#64748b'; c.font = '11px Inter, sans-serif'; c.fillText(catArr.length + ' categories', x, y + 20); c.restore(); } }] });
 
-  xdLoadLedger(false).then(xdRenderFlow);
+  xdLoadLedger(false).then(function(l) { xdRenderFlow(l); xdRenderPeriod(l); });
+}
+
+// ── Period range ayon sa Month filter ──
+function xdPeriodRange() {
+  var m = (_mdash.filters && _mdash.filters.month) || 'all', now = new Date();
+  if (m !== 'all') {
+    var p = m.split('-'), names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    return { from: new Date(+p[0], +p[1] - 1, 1), to: new Date(+p[0], +p[1], 1), label: names[+p[1] - 1] + ' ' + p[0] };
+  }
+  return { from: new Date(now.getTime() - 30 * 86400000), to: new Date(now.getTime() + 1), label: 'the last 30 days' };
+}
+
+// Top issued / received items sa napiling period (mula sa stock ledger)
+function xdRenderPeriod(ledger) {
+  var iL = document.getElementById('xdPiL'), rL = document.getElementById('xdPrL');
+  if (!iL || !rL) return;
+  var R = xdPeriodRange();
+  var set = function(id, t) { var e = document.getElementById(id); if (e) e.textContent = t; };
+  set('xdPiT', 'Issued to production · ' + R.label); set('xdPrT', 'Received · ' + R.label);
+  if (!ledger) { set('xdPiS', 'Could not load the stock ledger.'); set('xdPrS', 'Could not load the stock ledger.'); return; }
+
+  var meta = {}; (_mdash.allItems || []).forEach(function(it) { meta[it.item_code] = it; });
+  var iss = {}, rec = {};
+  ledger.forEach(function(t) {
+    var it = meta[t.item_code]; if (!it || !t.transaction_date) return;
+    var d = new Date(t.transaction_date); if (d < R.from || d >= R.to) return;
+    var tag = (String(t.transaction_type || '') + ' ' + String(t.reference_doc || '')).toUpperCase(), uc = Number(it.unit_cost || 0);
+    if (tag.indexOf('MRIF') > -1) { var q = Number(t.qty_out || 0) - Number(t.qty_in || 0); (iss[t.item_code] = iss[t.item_code] || { q: 0, v: 0 }); iss[t.item_code].q += q; iss[t.item_code].v += q * uc; }
+    else if (tag.indexOf('MRR') > -1) { var q2 = Number(t.qty_in || 0) - Number(t.qty_out || 0); (rec[t.item_code] = rec[t.item_code] || { q: 0, v: 0 }); rec[t.item_code].q += q2; rec[t.item_code].v += q2 * uc; }
+  });
+
+  function build(map, subId, listEl, emptyMsg) {
+    var arr = Object.keys(map).map(function(k) { return { it: meta[k], q: map[k].q, v: map[k].v }; }).filter(function(x) { return x.q > 0; }).sort(function(a, b) { return b.v - a.v || b.q - a.q; });
+    var tot = arr.reduce(function(s, x) { return s + x.v; }, 0);
+    set(subId, arr.length ? xdP(tot) + ' across ' + arr.length + ' items (top 8 below, valued at current unit cost)' : emptyMsg);
+    listEl.innerHTML = arr.length ? '<ul class="xd-list">' + arr.slice(0, 8).map(function(x) {
+      return '<li><code>' + xdEsc(x.it.item_code) + '</code><b>' + xdP(x.v) + '</b><span>' + xdEsc(String(x.it.description || '').substring(0, 42)) + '</span><small>' + erpNum(x.q) + ' ' + xdEsc(x.it.base_unit || '') + '</small></li>';
+    }).join('') + '</ul>' : '<div class="xd-empty">Nothing recorded in this period.</div>';
+  }
+  build(iss, 'xdPiS', iL, 'No MRIF issuance in this period for the current filters.');
+  build(rec, 'xdPrS', rL, 'No MRR receiving in this period for the current filters.');
 }
 
 function xdRenderFlow(ledger) {
@@ -132,12 +188,13 @@ function xdRenderFlow(ledger) {
     if (tag.indexOf('MRIF') > -1) iss[k] += (Number(t.qty_out || 0) - Number(t.qty_in || 0)) * uc;
     else if (tag.indexOf('MRR') > -1) rec[k] += (Number(t.qty_in || 0) - Number(t.qty_out || 0)) * uc;
   });
+  var selM = (_mdash.filters && _mdash.filters.month) || 'all';
   if (_xd.charts.flow) _xd.charts.flow.destroy();
   _xd.charts.flow = new Chart(cv, { type: 'bar',
     data: { labels: lab, datasets: [
-      { label: 'Received (MRR)', data: keys.map(function(k) { return Math.round(rec[k]); }), backgroundColor: '#10b981', borderRadius: 3 },
-      { label: 'Issued (MRIF)', data: keys.map(function(k) { return Math.round(iss[k]); }), backgroundColor: '#1e3a5f', borderRadius: 3 }] },
+      { label: 'Received (MRR)', data: keys.map(function(k) { return Math.round(rec[k]); }), backgroundColor: keys.map(function(k) { return selM === 'all' || selM === k ? '#10b981' : 'rgba(16,185,129,.25)'; }), borderRadius: 3 },
+      { label: 'Issued (MRIF)', data: keys.map(function(k) { return Math.round(iss[k]); }), backgroundColor: keys.map(function(k) { return selM === 'all' || selM === k ? '#1e3a5f' : 'rgba(30,58,95,.25)'; }), borderRadius: 3 }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, font: { size: 11 } } }, tooltip: { callbacks: { label: function(c) { return c.dataset.label + ': ' + xdP(c.parsed.y); } } } },
       scales: { y: { beginAtZero: true, ticks: { callback: function(v) { return xdP(v); }, font: { size: 10 } } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } } });
-  if (note) note.textContent = 'Valued at each item’s current unit cost, so older months are approximate. Respects the category, class and location filters.';
+  if (note) note.textContent = 'Valued at each item’s current unit cost, so older months are approximate. Respects the category, class and location filters.' + (selM !== 'all' ? ' The selected month is highlighted.' : '');
 }
