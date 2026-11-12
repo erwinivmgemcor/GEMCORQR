@@ -58,6 +58,12 @@ tr.partial-attention {
 tr.completed-row {
   background: #f8fdf9 !important;
 }
+tr.cancelled-row {
+  background: #f8fafc !important;
+  border-left: 4px solid #94a3b8;
+}
+tr.cancelled-row td { color: #64748b; }
+tr.cancelled-row td code { text-decoration: line-through; }
 
 /* KPI highlight */
 .kpi-value.alert-value {
@@ -181,7 +187,7 @@ tr.completed-row {
       <div class="kpi-content">
         <div class="kpi-label">Total MRRs</div>
         <div class="kpi-value" id="mrrMonKpiTotal">—</div>
-        <div class="kpi-sub">All receipts</div>
+        <div class="kpi-sub" id="mrrMonKpiTotalSub">All receipts</div>
       </div>
     </div>
     <div class="erp-kpi-card kpi-amber kpi-clickable" onclick="mrrMonFilterStatus('PENDING')">
@@ -245,6 +251,10 @@ tr.completed-row {
         <i class="bi bi-check-circle-fill text-success"></i> Complete
         <span class="count" id="mrrChipCountComplete">0</span>
       </button>
+      <button class="filter-chip" data-status="CANCELLED" onclick="mrrMonFilterStatusChip(this, 'CANCELLED')" title="Mga na-cancel na MRR — para sa series number tracking">
+        <i class="bi bi-x-octagon-fill text-secondary"></i> Cancelled
+        <span class="count" id="mrrChipCountCancelled">0</span>
+      </button>
     </div>
 
     <div class="erp-filters-row">
@@ -259,6 +269,7 @@ tr.completed-row {
         <option value="PENDING">PENDING</option>
         <option value="PARTIAL">PARTIAL</option>
         <option value="COMPLETED">COMPLETED</option>
+        <option value="CANCELLED">CANCELLED</option>
       </select>
       <select id="mrrMonVendorFilter" class="erp-select" onchange="mrrMonApplyFilters()">
         <option value="">All Vendors</option>
