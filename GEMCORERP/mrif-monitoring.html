@@ -58,6 +58,12 @@ tr.partial-attention {
 tr.served-row {
   background: #f8fdf9 !important;
 }
+tr.cancelled-row {
+  background: #f8fafc !important;
+  border-left: 4px solid #94a3b8;
+}
+tr.cancelled-row td { color: #64748b; }
+tr.cancelled-row td code { text-decoration: line-through; }
 
 /* KPI value highlight */
 .kpi-value.alert-value {
@@ -104,6 +110,7 @@ tr.served-row {
 <script defer src="erp-config.js"></script>
 <script defer src="erp-supabase.js"></script>
 <script defer src="erp-nav.js"></script>
+<script defer src="js/cancel-info.js"></script>
 <script defer src="mrif-monitoring.js"></script>
 <script defer src="notif-alerts.js"></script>
 <script defer src="notifications.js"></script>
@@ -167,7 +174,7 @@ tr.served-row {
       <div class="kpi-content">
         <div class="kpi-label">Total MRIFs</div>
         <div class="kpi-value" id="mrifMonKpiTotal">—</div>
-        <div class="kpi-sub">All documents</div>
+        <div class="kpi-sub" id="mrifMonKpiTotalSub">All documents</div>
       </div>
     </div>
     <div class="erp-kpi-card kpi-red kpi-clickable" onclick="mrifMonFilterStatus('UNSERVED')">
@@ -231,6 +238,10 @@ tr.served-row {
         <i class="bi bi-check-circle-fill text-success"></i> Served
         <span class="count" id="chipCountServed">0</span>
       </button>
+      <button class="filter-chip" data-status="CANCELLED" onclick="mrifMonFilterStatusChip(this, 'CANCELLED')" title="Mga na-cancel na MRIF — para sa series number tracking">
+        <i class="bi bi-x-octagon-fill text-secondary"></i> Cancelled
+        <span class="count" id="chipCountCancelled">0</span>
+      </button>
     </div>
 
     <div class="erp-filters-row">
@@ -245,6 +256,7 @@ tr.served-row {
         <option value="PENDING">PENDING</option>
         <option value="PARTIAL">PARTIAL</option>
         <option value="COMPLETED">COMPLETED</option>
+        <option value="CANCELLED">CANCELLED</option>
       </select>
       <select id="mrifMonRequestorFilter" class="erp-select" onchange="mrifMonApplyFilters()">
         <option value="">All Requestors</option>
