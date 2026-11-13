@@ -646,6 +646,27 @@
     document.head.appendChild(sc);
   }
 
+  // Notes & Reminders (user menu) — loads on every page so the due-badge works
+  function _loadNotesScript(cb) {
+    if (window.erpNotes) { cb && cb(); return; }
+    var existing = document.getElementById('erpNotesScript');
+    if (existing) { if (cb) existing.addEventListener('load', cb); return; }
+    var sc = document.createElement('script');
+    sc.id = 'erpNotesScript';
+    sc.src = 'erp-notes.js';
+    sc.onload = function() { if (cb) cb(); };
+    sc.onerror = function() { if (typeof erpShowToast === 'function') erpShowToast('Could not load Notes', 'warning'); };
+    document.head.appendChild(sc);
+  }
+  function _startNotes() {
+    try { if (!localStorage.getItem('ivm_username')) return; } catch(e) { return; }
+    _loadNotesScript();
+  }
+  window.erpOpenNotes = function() {
+    document.querySelectorAll('.erp-user-menu.open').forEach(function(m) { m.classList.remove('open'); });
+    _loadNotesScript(function() { if (window.erpNotes) window.erpNotes.open(); });
+  };
+
   // First-time guide (production users). Auto-starts once; replay from user menu → Quick Guide.
   function _loadTourScript(cb) {
     if (window.erpTour) { cb(); return; }
@@ -722,6 +743,7 @@
               '</div>' +
             '</div>' +
             '<button class="erp-user-dropdown-item" type="button" onclick="erpUserRefresh()"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>' +
+            '<button class="erp-user-dropdown-item" type="button" onclick="erpOpenNotes()"><i class="bi bi-journal-text"></i> Notes &amp; Reminders <span class="erp-notes-badge" id="erpNotesBadge"></span></button>' +
             '<button class="erp-user-dropdown-item" type="button" onclick="erpUserSettings()"><i class="bi bi-gear"></i> Settings</button>' +
             '<button class="erp-user-dropdown-item" type="button" onclick="erpStartTour(true)"><i class="bi bi-signpost-split"></i> Quick Guide</button>' +
             '<div class="erp-user-dropdown-divider"></div>' +
@@ -865,6 +887,7 @@
     setTimeout(_syncProfileOnce, 800);
     setTimeout(_startChatAlerts, 1200);
     setTimeout(_startPresence, 1500);
+    setTimeout(_startNotes, 1800);
     setTimeout(function() { _startRequestsBadge(userRole); }, 1500);
     if (userRole === 'production') setTimeout(function() { window.erpStartTour(false); }, 1600);
   }
