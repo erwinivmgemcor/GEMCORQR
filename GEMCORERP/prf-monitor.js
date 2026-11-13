@@ -2426,3 +2426,16 @@ function renderVersionHistory(versions, audits) {
 }
 
 console.log('✅ prf-monitor.js v3.5 loaded (with version filter)');
+
+// Deep link: ?q=TEXT → i-prefill ang search box (galing sa Notes & Reminders)
+document.addEventListener('DOMContentLoaded', function() {
+  try {
+    var q = new URLSearchParams(location.search).get('q');
+    if (!q) return;
+    var tries = 0, t = setInterval(function() {
+      var el = document.getElementById('prfSearchInput');
+      if (el && typeof prfMonitorOnSearch === 'function') { clearInterval(t); el.value = q; prfMonitorOnSearch(); }
+      else if (++tries > 40) clearInterval(t);
+    }, 250);
+  } catch (e) {}
+});
