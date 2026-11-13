@@ -501,7 +501,7 @@ function mdashRenderTable() {
   mdashRenderPager(total, pages, startIdx, endIdx);
 
   if (total === 0) {
-    tbody.innerHTML = '<tr><td colspan="12" class="mdash-empty">' +
+    tbody.innerHTML = '<tr><td colspan="13" class="mdash-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>No items match your filters.</td></tr>';
     return;
   }
@@ -550,6 +550,7 @@ function mdashRenderTable() {
       '<td>' + erpEsc(it.base_unit || '—') + '</td>' +
       '<td class="qty-cell">' + erpPeso(unitCost) + '</td>' +
       '<td class="value-cell">' + erpPeso(onHandCost) + '</td>' +
+      '<td style="text-align:center;">' + erpTurnoverBadge(onHand, it.ave_monthly_consumption) + '</td>' +
       '<td style="text-align:center;">' + abcBadge + '</td>' +
       '<td style="text-align:center;">' + movBadge + '</td>' +
       '<td style="text-align:center;">' + statusBadge + '</td>' +
@@ -763,7 +764,7 @@ function mdashExportCSV() {
 
   var headers = [
     'Item Code', 'Description', 'Category', 'Location', 'Unit',
-    'On-Hand', 'Unit Cost', 'On-Hand Cost', 'ABC', 'Movement', 'Stock Class'
+    'On-Hand', 'Unit Cost', 'On-Hand Cost', 'Ave Monthly Consumption', 'Turnover (x/year)', 'Days of Stock', 'ABC', 'Movement', 'Stock Class'
   ];
 
   var rows = _mdash.filteredItems.map(function(it) {
@@ -776,6 +777,9 @@ function mdashExportCSV() {
       Number(it.on_hand || 0),
       Number(it.unit_cost || 0),
       Number(it.on_hand_cost || 0),
+      Number(it.ave_monthly_consumption || 0),
+      (function() { var t = erpItemTurnover(it.on_hand, it.ave_monthly_consumption); return t.ratio === null ? '' : Number(t.ratio.toFixed(2)); })(),
+      (function() { var t = erpItemTurnover(it.on_hand, it.ave_monthly_consumption); return t.days === null ? '' : Math.round(t.days); })(),
       it.abc_classification || '',
       it.inventory_movement || '',
       it.stock_classification || ''
@@ -902,7 +906,7 @@ console.log('✅ management-dashboard.js loaded');
 // TURNOVER RATIO — card + plain-English explainer
 // Bands are rules of thumb. Adjust with management to match company targets.
 // ═══════════════════════════════════════════════════════════
-var MDASH_TURNOVER_BANDS = [
+var MDASH_TURNOVER_BANDS = window.ERP_TURNOVER_BANDS || [
   { max: 2,        label: 'Very slow', cls: 'danger', meaning: 'Stock sits in the warehouse for most of the year. A lot of cash is tied up.' },
   { max: 4,        label: 'Slow',      cls: 'warn',   meaning: 'Stock moves, but slowly. There is room to reduce over-stocking.' },
   { max: 8,        label: 'Healthy',   cls: 'ok',     meaning: 'Stock moves at a good pace for a manufacturing operation.' },
