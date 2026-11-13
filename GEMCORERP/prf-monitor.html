@@ -147,7 +147,13 @@
 
 /* Item row status colors */
 .item-row-served { background: #f8fdf9 !important; }
-.item-row-canceled { background: #fef7f7 !important; }
+/* ── Cancelled = highlighted red (By PRF and By Item) ── */
+.item-row-canceled > td, .prf-row-canceled > td { background: rgba(239, 68, 68, 0.13) !important; color: #991b1b; }
+.item-row-canceled > td:first-child, .prf-row-canceled > td:first-child { box-shadow: inset 4px 0 0 #dc2626; }
+.item-row-canceled code, .prf-row-canceled code { color: #b91c1c; }
+.item-row-canceled:hover > td, .prf-row-canceled:hover > td { background: rgba(239, 68, 68, 0.2) !important; }
+.status-canceled { display: inline-block; background: #dc2626; color: #fff; font-size: 0.7rem; font-weight: 700; padding: 3px 10px; border-radius: 10px; letter-spacing: 0.3px; }
+[data-theme="dark"] .item-row-canceled > td, [data-theme="dark"] .prf-row-canceled > td { color: #fca5a5; }
 .item-row-staggered { background: #f5faff !important; }
 
 /* Inline status dropdown */
