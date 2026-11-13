@@ -164,7 +164,6 @@
   function ensurePanel() {
     if (document.getElementById('enPanel')) return;
     injectCss();
-    var back = document.createElement('div'); back.className = 'en-back'; back.id = 'enBack'; back.onclick = close;
     var p = document.createElement('div'); p.className = 'en-panel'; p.id = 'enPanel';
     p.innerHTML =
       '<div class="en-head"><i class="bi bi-journal-text"></i><h5>Notes &amp; Reminders</h5>' +
@@ -175,7 +174,7 @@
       '<div class="en-comp" id="enComp"></div>' +
       '<div class="en-filter" id="enFilter"></div>' +
       '<div class="en-list" id="enList"></div>';
-    document.body.appendChild(back); document.body.appendChild(p);
+    document.body.appendChild(p);
     document.getElementById('enClose').onclick = close;
     document.getElementById('enCopy').onclick = copySummary;
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && p.classList.contains('show')) close(); });
@@ -184,14 +183,21 @@
   function open() {
     ensurePanel();
     document.querySelectorAll('.erp-user-menu.open').forEach(function (m) { m.classList.remove('open'); });
-    document.getElementById('enBack').classList.add('show');
-    document.getElementById('enPanel').classList.add('show');
+    var old = document.getElementById('enBack'); if (old) old.remove();
+    var back = document.createElement('div'); back.className = 'en-back'; back.id = 'enBack'; back.onclick = close;
+    document.body.appendChild(back);
+    var p = document.getElementById('enPanel');
+    p.style.visibility = ''; p.style.pointerEvents = '';
+    // next frame para gumana ang slide-in animation
+    requestAnimationFrame(function () { back.classList.add('show'); p.classList.add('show'); });
     resetComposer(); render();
     load().then(render);
   }
   function close() {
+    // Tanggalin MISMO ang backdrop sa DOM para wala nang makaharang sa clicks
     var b = document.getElementById('enBack'), p = document.getElementById('enPanel');
-    if (b) b.classList.remove('show'); if (p) p.classList.remove('show');
+    if (b) b.remove();
+    if (p) { p.classList.remove('show'); p.style.visibility = 'hidden'; p.style.pointerEvents = 'none'; }
   }
 
   function resetComposer() { S.editId = null; S.cat = S.tab === 'team' ? 'HANDOFF' : 'GENERAL'; S.due = ''; S.prio = 'NORMAL'; S.shared = S.tab === 'team'; }
