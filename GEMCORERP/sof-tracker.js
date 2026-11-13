@@ -984,3 +984,16 @@ window.sofEditPartiesSave = async function(sofNo) {
     err.classList.remove('d-none');
   } finally { btn.disabled = false; }
 };
+
+// Deep link: ?q=TEXT → i-prefill ang search box (galing sa Notes & Reminders)
+document.addEventListener('DOMContentLoaded', function() {
+  try {
+    var q = new URLSearchParams(location.search).get('q');
+    if (!q) return;
+    var tries = 0, t = setInterval(function() {
+      var el = document.getElementById('sofSearchInput');
+      if (el && typeof sofTrackerOnSearch === 'function') { clearInterval(t); el.value = q; sofTrackerOnSearch(); }
+      else if (++tries > 40) clearInterval(t);
+    }, 250);
+  } catch (e) {}
+});
