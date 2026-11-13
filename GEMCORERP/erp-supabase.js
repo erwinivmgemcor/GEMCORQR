@@ -446,6 +446,8 @@ async function erpGetCategoryStats() {
     var byCategory = {};
     var byABC = { A: 0, B: 0, C: 0, 'N/A': 0 };
     var byMovement = {};
+    var abcCount = { A: 0, B: 0, C: 0, 'N/A': 0 };
+    var matrix = {};   // movement -> { A:{v,n}, B:{v,n}, C:{v,n}, 'N/A':{v,n} }  (v = stock value, n = item count)
     
     (rows || []).forEach(function(it) {
       var cat = it.category || 'UNCATEGORIZED';
@@ -461,9 +463,15 @@ async function erpGetCategoryStats() {
       var mov = String(it.inventory_movement || 'UNCLASSIFIED').toUpperCase();
       if (!byMovement[mov]) byMovement[mov] = 0;
       byMovement[mov]++;
+
+      var abcKey = (abc === 'A' || abc === 'B' || abc === 'C') ? abc : 'N/A';
+      abcCount[abcKey]++;
+      if (!matrix[mov]) matrix[mov] = { A: { v: 0, n: 0 }, B: { v: 0, n: 0 }, C: { v: 0, n: 0 }, 'N/A': { v: 0, n: 0 } };
+      matrix[mov][abcKey].v += Number(it.on_hand || 0) * Number(it.unit_cost || 0);
+      matrix[mov][abcKey].n++;
     });
     
-    return { success: true, byCategory: byCategory, byABC: byABC, byMovement: byMovement };
+    return { success: true, byCategory: byCategory, byABC: byABC, byMovement: byMovement, abcCount: abcCount, matrix: matrix };
   } catch(err) {
     console.error('[erpGetCategoryStats]', err);
     return { success: false, error: err.message, byCategory: {}, byABC: {}, byMovement: {} };
