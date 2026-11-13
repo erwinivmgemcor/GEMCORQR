@@ -261,11 +261,7 @@ function mdashRenderKPIs(data) {
   }
 
   // 4. Turnover
-  var toEl = document.getElementById('mdashKpiTurnover');
-  var toSubEl = document.getElementById('mdashKpiTurnoverSub');
-  var turnoverVal = Number(t.turnover_annualized || 0);
-  animateValue(toEl, 0, turnoverVal, 1200, false);
-  toSubEl.textContent = 'Annualized · ' + (t.days_in_period || 30) + 'd basis · ' + mdashPeriodLabel();
+  mdashRenderTurnoverCard(data);
 
   // 5. MRR
   var elMrr = document.getElementById('mdashKpiMrr');
@@ -900,3 +896,138 @@ async function loadReplenishmentWidget() {
 setTimeout(loadReplenishmentWidget, 1500);
 
 console.log('✅ management-dashboard.js loaded');
+
+
+// ═══════════════════════════════════════════════════════════
+// TURNOVER RATIO — card + plain-English explainer
+// Bands are rules of thumb. Adjust with management to match company targets.
+// ═══════════════════════════════════════════════════════════
+var MDASH_TURNOVER_BANDS = [
+  { max: 2,        label: 'Very slow', cls: 'danger', meaning: 'Stock sits in the warehouse for most of the year. A lot of cash is tied up.' },
+  { max: 4,        label: 'Slow',      cls: 'warn',   meaning: 'Stock moves, but slowly. There is room to reduce over-stocking.' },
+  { max: 8,        label: 'Healthy',   cls: 'ok',     meaning: 'Stock moves at a good pace for a manufacturing operation.' },
+  { max: Infinity, label: 'Fast',      cls: 'fast',   meaning: 'Stock moves very quickly. Check that buffers are enough to avoid stock-outs.' }
+];
+
+function mdashTurnoverBand(v) {
+  for (var i = 0; i < MDASH_TURNOVER_BANDS.length; i++) if (v < MDASH_TURNOVER_BANDS[i].max) return { i: i, b: MDASH_TURNOVER_BANDS[i] };
+  return { i: 3, b: MDASH_TURNOVER_BANDS[3] };
+}
+
+function mdashTurnoverFacts(data) {
+  var s = data.summary || {}, t = data.turnover || {}, act = data.activity || {};
+  var ratio = Number(t.turnover_annualized || 0);
+  var days = Number(t.days_in_period || 30);
+  var f = { ratio: ratio, days: days, issued: Number(act.mrif_value || 0), inv: Number(s.total_value || 0), mrifCount: Number(act.mrif_count || 0) };
+  f.daysOfStock = ratio > 0 ? 365 / ratio : null;
+  var mv = data.movement || [], tot = 0, nm = 0, sl = 0;
+  mv.forEach(function(m) {
+    var v = Number(m.total_value || 0), k = String(m.movement || '').toUpperCase();
+    tot += v; if (k === 'NO MOVEMENT') nm += v; else if (k === 'SLOW MOVING') sl += v;
+  });
+  f.mvTotal = tot; f.noMove = nm; f.slow = sl;
+  var calc = (f.inv > 0 && f.issued > 0) ? (f.issued / f.inv) * (365 / days) : 0;
+  f.check = (ratio > 0 && calc > 0 && Math.abs(calc - ratio) / ratio <= 0.15) ? calc : null;
+  return f;
+}
+
+function mdashRenderTurnoverCard(data) {
+  var toEl = document.getElementById('mdashKpiTurnover');
+  var subEl = document.getElementById('mdashKpiTurnoverSub');
+  var pill = document.getElementById('mdashTurnoverPill');
+  if (!toEl) return;
+  var f = mdashTurnoverFacts(data);
+  _mdash.turnoverFacts = f;
+  animateValue(toEl, 0, f.ratio, 1200, false);
+  toEl.classList.toggle('has-x', f.ratio > 0);
+  subEl.textContent = 'times per year · based on ' + f.days + ' days (' + mdashPeriodLabel() + ')';
+  if (f.ratio > 0) {
+    var band = mdashTurnoverBand(f.ratio).b;
+    pill.innerHTML = '<span class="tp tp-' + band.cls + '">' + band.label + '</span>' +
+      '<span class="tp-days">≈ ' + Math.round(f.daysOfStock) + ' days of stock on hand</span>';
+  } else {
+    pill.innerHTML = '<span class="tp-days">Not enough issuance data in this period</span>';
+  }
+}
+
+function mdashShowTurnoverInfo() {
+  var f = _mdash.turnoverFacts;
+  if (!f) return;
+  var peso = function(v) { return (typeof erpPeso === 'function') ? erpPeso(v) : '₱' + Math.round(v).toLocaleString(); };
+  var pct = function(a, b) { return b > 0 ? Math.round(a / b * 100) : 0; };
+  var has = f.ratio > 0;
+  var bi = has ? mdashTurnoverBand(f.ratio) : { i: -1, b: null };
+  var period = mdashPeriodLabel();
+
+  // marker position on the 4-segment scale
+  var pos = 0;
+  if (has) {
+    var v = f.ratio;
+    pos = v < 2 ? v / 2 * 25 : v < 4 ? 25 + (v - 2) / 2 * 25 : v < 8 ? 50 + (v - 4) / 4 * 25 : Math.min(100, 75 + (v - 8) / 4 * 25);
+  }
+
+  var html = '';
+  html += '<div class="to-sec" style="margin-top:0"><p class="mb-2"><b>In one sentence:</b> Turnover Ratio shows how many times a year the stock in our warehouse is used up and replaced. ' +
+          '<b>Higher = stock moves faster. Lower = stock sits longer and ties up cash.</b></p></div>';
+
+  html += '<div class="to-big">' +
+    '<div><div class="l">Turnover ratio</div><div class="n">' + (has ? f.ratio.toFixed(1) + '×' : '—') + '</div><div class="to-note">times per year</div></div>' +
+    '<div><div class="l">Days of stock on hand</div><div class="n">' + (has ? Math.round(f.daysOfStock) : '—') + '</div><div class="to-note">' + (has ? '≈ ' + (f.daysOfStock / 30.4).toFixed(1) + ' months (365 ÷ ' + f.ratio.toFixed(1) + ')' : '') + '</div></div>' +
+    '<div><div class="l">Status</div><div class="n" style="font-size:1.25rem">' + (has ? bi.b.label : 'No data') + '</div><div class="to-note">' + (has ? bi.b.meaning : '') + '</div></div>' +
+    '</div>';
+
+  html += '<div class="to-sec"><h6>1. How is it computed?</h6>' +
+    '<div class="to-formula">Turnover (for the period) = Value of stock issued ÷ Value of inventory<br>' +
+    'Turnover Ratio (per year) = Turnover for the period × (365 ÷ days in period)</div>' +
+    '<div class="to-note">We look at the last ' + f.days + ' days (' + erpEsc(period) + ') and scale it to a full year so it is comparable with other periods.</div>' +
+    '<table class="to-mini mt-2"><tbody>' +
+      '<tr><td>Period</td><td>' + erpEsc(period) + ' (' + f.days + ' days)</td></tr>' +
+      '<tr><td>Stock issued to production (MRIF) in this period</td><td>' + peso(f.issued) + (f.mrifCount ? ' · ' + f.mrifCount + ' docs' : '') + '</td></tr>' +
+      '<tr><td>Current inventory value</td><td>' + peso(f.inv) + '</td></tr>' +
+    '</tbody></table>' +
+    (f.check ? '<div class="to-note">Quick check: ' + peso(f.issued) + ' ÷ ' + peso(f.inv) + ' × (365 ÷ ' + f.days + ') ≈ <b>' + f.check.toFixed(1) + '×</b></div>' : '') +
+    '</div>';
+
+  html += '<div class="to-sec"><h6>2. How to read it</h6>' +
+    '<div class="to-scale">' + (has ? '<div class="to-marker" style="left:' + pos + '%">' + f.ratio.toFixed(1) + '×</div>' : '') +
+      '<span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span></div>' +
+    '<div class="to-scale-lbl">' +
+      MDASH_TURNOVER_BANDS.map(function(b, i) {
+        var from = i === 0 ? 0 : MDASH_TURNOVER_BANDS[i - 1].max;
+        var rng = b.max === Infinity ? '> ' + from : (i === 0 ? '< ' + b.max : from + ' – ' + b.max);
+        return '<span class="' + (i === bi.i ? 'cur' : '') + '">' + b.label + '<br>' + rng + '×</span>';
+      }).join('') +
+    '</div>' +
+    '<div class="to-note">These ranges are general rules of thumb. The right target depends on our products and lead times, so management can adjust them.</div></div>';
+
+  if (f.mvTotal > 0) {
+    html += '<div class="to-sec"><h6>3. What is pulling it down?</h6><div class="to-callout">' +
+      '<b>' + pct(f.noMove, f.mvTotal) + '%</b> of our stock value (' + peso(f.noMove) + ') is in items with <b>no movement</b>, and ' +
+      '<b>' + pct(f.slow, f.mvTotal) + '%</b> (' + peso(f.slow) + ') is in <b>slow-moving</b> items. ' +
+      'Money sitting in items that are not being used is the main reason turnover stays low.</div></div>';
+  }
+
+  html += '<div class="to-sec"><h6>' + (f.mvTotal > 0 ? '4' : '3') + '. How can we improve it?</h6><ul class="mb-0">' +
+    '<li>Stop or reduce re-ordering of <b>no-movement</b> and <b>slow-moving</b> items.</li>' +
+    '<li>Use up, return to supplier, or dispose of stock that is no longer needed.</li>' +
+    '<li>Order closer to actual consumption. Review buffer stock and PRF quantities for over-stocked items.</li>' +
+    '<li>Focus on <b>Class A</b> items first, since they hold the most value.</li></ul></div>';
+
+  var el = document.getElementById('turnoverInfoModal');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'turnoverInfoModal';
+    el.className = 'modal fade to-modal';
+    el.tabIndex = -1;
+    el.innerHTML = '<div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">' +
+      '<div class="modal-header"><h5 class="modal-title"><i class="bi bi-arrow-repeat me-2"></i>Turnover Ratio: how fast does our inventory move?</h5>' +
+      '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>' +
+      '<div class="modal-body" id="turnoverInfoBody"></div>' +
+      '<div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button></div>' +
+      '</div></div>';
+    document.body.appendChild(el);
+  }
+  document.getElementById('turnoverInfoBody').innerHTML = html;
+  bootstrap.Modal.getOrCreateInstance(el).show();
+}
+window.mdashShowTurnoverInfo = mdashShowTurnoverInfo;
