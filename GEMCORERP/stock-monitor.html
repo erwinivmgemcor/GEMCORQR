@@ -179,16 +179,30 @@
       </div>
     </div>
     <div class="erp-chart-card">
-      <div class="erp-chart-header">ABC Classification</div>
+      <div class="erp-chart-header">
+        <div>Stock Value by ABC Class</div>
+        <div class="erp-chart-sub">Peso value of stock on hand (On-Hand × Unit Cost). A = highest-value items, C = lowest-value items.</div>
+      </div>
       <div class="erp-chart-body">
         <canvas id="chartABC"></canvas>
       </div>
+      <div class="erp-chart-note" id="abcNote"></div>
     </div>
     <div class="erp-chart-card">
-      <div class="erp-chart-header">Movement Classification</div>
+      <div class="erp-chart-header erp-chart-header-flex">
+        <div>
+          <div>Stock Value by Movement Speed</div>
+          <div class="erp-chart-sub">How fast stock is moving, split by ABC class. Same colors as the ABC chart.</div>
+        </div>
+        <div class="erp-chart-toggle" id="movToggle">
+          <button type="button" class="active" data-mode="value" onclick="erpSetMovMode('value')">₱ Value</button>
+          <button type="button" data-mode="items" onclick="erpSetMovMode('items')">Items</button>
+        </div>
+      </div>
       <div class="erp-chart-body">
         <canvas id="chartMovement"></canvas>
       </div>
+      <div class="erp-chart-note" id="movNote"></div>
     </div>
   </div>
 
