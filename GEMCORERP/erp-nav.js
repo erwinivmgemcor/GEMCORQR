@@ -653,7 +653,7 @@
     if (existing) { if (cb) existing.addEventListener('load', cb); return; }
     var sc = document.createElement('script');
     sc.id = 'erpNotesScript';
-    sc.src = 'erp-notes.js';
+    sc.src = 'erp-notes.js?v=3';
     sc.onload = function() { if (cb) cb(); };
     sc.onerror = function() { if (typeof erpShowToast === 'function') erpShowToast('Could not load Notes', 'warning'); };
     document.head.appendChild(sc);
