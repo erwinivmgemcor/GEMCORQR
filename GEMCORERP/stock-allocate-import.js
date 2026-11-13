@@ -146,7 +146,7 @@ window.saiRun = async function() {
   if (!confirm('I-import ang ' + ok.length + ' row(s) sa ' + groups.length + ' SOF?\n' + (m.value === 'add' ? 'IDADAGDAG din sa on-hand ang mga qty.' : 'Hindi magbabago ang on-hand.') + '\n\nAng nasa system na ay lalaktawan.')) return;
   document.getElementById('saiRun').disabled = true;
   document.getElementById('saiFile').disabled = true;
-  var done = 0;
+  var done = 0, partiesFail = 0;
   for (var g = 0; g < groups.length; g++) {
     var grp = groups[g], header = { client_name: grp.client, project_name: grp.project };
     document.getElementById('saiProgress').textContent = 'SOF ' + grp.sof + ' (' + (g + 1) + '/' + groups.length + ')…';
@@ -161,12 +161,20 @@ window.saiRun = async function() {
         catch (e2) { row.status = 'err'; row.msg = e2.message; }
       }
     }
+    // Ilagay ang Client mula sa CSV sa SOF (hindi ino-overwrite ang na-edit nang client)
+    if (grp.client && grp.rows.some(function(r) { return r.status === 'done'; })) {
+      try {
+        var pr = await saRpc('erp_sof_update_parties', { p_sof_no: grp.sof, p_client: grp.client, p_vendor: null, p_user: saUser(), p_only_if_blank: true });
+        if (!pr || !pr.success) partiesFail++;
+      } catch (e3) { partiesFail++; }
+    }
   }
   done = _sai.rows.filter(function(r) { return r.status === 'done'; }).length;
   var failed = _sai.rows.filter(function(r) { return r.status === 'err' && r.item; }).length;
   document.getElementById('saiProgress').textContent = '';
   document.getElementById('saiPreview').innerHTML =
     '<div class="alert alert-' + (failed ? 'warning' : 'success') + '">✅ Na-import: <b>' + done + '</b> · Hindi na-import: <b>' + failed + '</b> · Nilaktawan (parehas na): <b>' + (saiCount('dup_sys') + saiCount('dup_file')) + '</b></div>' +
+    (partiesFail ? '<div class="alert alert-warning py-2 small">Hindi na-save ang <b>Client</b> sa ' + partiesFail + ' SOF. I-run ang <code>sof-edit.sql</code> sa Supabase, tapos i-edit ang Client sa SOF Tracker (pencil button).</div>' : '') +
     (failed ? '<div class="table-responsive"><table class="table table-sm" style="font-size:.82rem"><thead><tr><th>Row</th><th>SOF</th><th>Item</th><th>Dahilan</th></tr></thead><tbody>' +
       _sai.rows.filter(function(r) { return r.status === 'err' && r.item; }).map(function(r) { return '<tr><td>' + r.line + '</td><td>' + saiEsc(r.sof) + '</td><td><code>' + saiEsc(r.code) + '</code></td><td class="text-danger">' + saiEsc(r.msg) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '');
   erpShowToast('Import done: ' + done + ' allocated', failed ? 'warning' : 'success');
