@@ -501,7 +501,7 @@ function mdashRenderTable() {
   mdashRenderPager(total, pages, startIdx, endIdx);
 
   if (total === 0) {
-    tbody.innerHTML = '<tr><td colspan="13" class="mdash-empty">' +
+    tbody.innerHTML = '<tr><td colspan="14" class="mdash-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>No items match your filters.</td></tr>';
     return;
   }
@@ -551,6 +551,7 @@ function mdashRenderTable() {
       '<td class="qty-cell">' + erpPeso(unitCost) + '</td>' +
       '<td class="value-cell">' + erpPeso(onHandCost) + '</td>' +
       '<td style="text-align:center;">' + erpTurnoverBadge(onHand, it.ave_monthly_consumption) + '</td>' +
+      '<td style="text-align:center;">' + erpInventoryRatioBadge(onHand, it.ave_monthly_consumption) + '</td>' +
       '<td style="text-align:center;">' + abcBadge + '</td>' +
       '<td style="text-align:center;">' + movBadge + '</td>' +
       '<td style="text-align:center;">' + statusBadge + '</td>' +
@@ -764,7 +765,7 @@ function mdashExportCSV() {
 
   var headers = [
     'Item Code', 'Description', 'Category', 'Location', 'Unit',
-    'On-Hand', 'Unit Cost', 'On-Hand Cost', 'Ave Monthly Consumption', 'Turnover (x/year)', 'Days of Stock', 'ABC', 'Movement', 'Stock Class'
+    'On-Hand', 'Unit Cost', 'On-Hand Cost', 'Ave Monthly Consumption', 'Turnover (x/year)', 'Inventory Ratio (days)', 'ABC', 'Movement', 'Stock Class'
   ];
 
   var rows = _mdash.filteredItems.map(function(it) {
@@ -813,7 +814,7 @@ function _mdashCsvEsc(val) {
 // LOADING / ERROR STATE
 // ═══════════════════════════════════════════════════════════
 function mdashShowLoading() {
-  var ids = ['mdashKpiTotalItems', 'mdashKpiValue', 'mdashKpiAccuracy', 'mdashKpiTurnover',
+  var ids = ['mdashKpiTotalItems', 'mdashKpiValue', 'mdashKpiAccuracy', 'mdashKpiTurnover', 'mdashKpiInvRatio',
              'mdashKpiMrr', 'mdashKpiMrif', 'mdashKpiReplenish', 'mdashKpiOutOfStock'];
   ids.forEach(function(id) {
     var el = document.getElementById(id);
@@ -952,7 +953,102 @@ function mdashRenderTurnoverCard(data) {
   } else {
     pill.innerHTML = '<span class="tp-days">Not enough issuance data in this period</span>';
   }
+  mdashRenderInvRatioCard(f);
 }
+
+// ═══════════════════════════════════════════════════════════
+// INVENTORY RATIO (days of stock on hand) — card + explainer
+// Days of stock = 365 ÷ Turnover Ratio = Inventory ÷ average daily usage
+// ═══════════════════════════════════════════════════════════
+function mdashRenderInvRatioCard(f) {
+  var vEl = document.getElementById('mdashKpiInvRatio');
+  var sEl = document.getElementById('mdashKpiInvRatioSub');
+  var pill = document.getElementById('mdashInvRatioPill');
+  if (!vEl) return;
+  if (f.daysOfStock) {
+    animateValue(vEl, 0, Math.round(f.daysOfStock), 1200, false);
+    vEl.classList.add('has-days');
+    var band = mdashTurnoverBand(f.ratio).b;
+    sEl.textContent = '≈ ' + (f.daysOfStock / 30.4).toFixed(1) + ' months of stock on hand';
+    pill.innerHTML = '<span class="tp tp-' + band.cls + '">' + band.label + '</span>' +
+      '<span class="tp-days">= 365 ÷ ' + f.ratio.toFixed(1) + '× turnover</span>';
+  } else {
+    vEl.textContent = '—'; vEl.classList.remove('has-days');
+    sEl.textContent = 'days of stock on hand';
+    pill.innerHTML = '<span class="tp-days">Not enough issuance data in this period</span>';
+  }
+}
+
+function mdashShowInventoryRatioInfo() {
+  var f = _mdash.turnoverFacts;
+  if (!f) return;
+  var peso = function(v) { return (typeof erpPeso === 'function') ? erpPeso(v) : '₱' + Math.round(v).toLocaleString(); };
+  var has = f.ratio > 0 && f.daysOfStock;
+  var bi = has ? mdashTurnoverBand(f.ratio) : { i: -1, b: null };
+  var d = has ? f.daysOfStock : 0;
+  // marker on a Fast → Very slow scale (days increase to the right)
+  var pos = 0;
+  if (has) pos = d < 46 ? d / 46 * 25 : d < 91 ? 25 + (d - 46) / 45 * 25 : d < 183 ? 50 + (d - 91) / 92 * 25 : Math.min(100, 75 + (d - 183) / 182 * 25);
+  var B = MDASH_TURNOVER_BANDS; // [Very slow, Slow, Healthy, Fast]
+  var scale = [
+    { b: B[3], rng: '< 46 days',     idx: 3 },
+    { b: B[2], rng: '46 – 91 days',  idx: 2 },
+    { b: B[1], rng: '91 – 183 days', idx: 1 },
+    { b: B[0], rng: '> 183 days',    idx: 0 }
+  ];
+
+  var html = '<p class="mb-2"><b>In one sentence:</b> Inventory Ratio shows <b>how many days our current stock would last</b> at the usual rate of usage. ' +
+    '<b>Lower = stock moves faster. Higher = stock sits longer and ties up cash.</b></p>';
+
+  html += '<div class="to-big">' +
+    '<div><div class="l">Inventory ratio</div><div class="n">' + (has ? Math.round(d) + ' days' : '—') + '</div><div class="to-note">of stock on hand</div></div>' +
+    '<div><div class="l">In months</div><div class="n">' + (has ? (d / 30.4).toFixed(1) : '—') + '</div><div class="to-note">months of stock</div></div>' +
+    '<div><div class="l">Status</div><div class="n" style="font-size:1.25rem">' + (has ? bi.b.label : 'No data') + '</div><div class="to-note">' + (has ? bi.b.meaning : '') + '</div></div>' +
+    '</div>';
+
+  html += '<div class="to-sec"><h6>1. How is it computed?</h6>' +
+    '<div class="to-formula">Inventory Ratio (days) = Inventory ÷ Average daily usage<br>' +
+    'or, the same thing: 365 ÷ Turnover Ratio</div>' +
+    '<div class="to-note">' + (has ? 'With a turnover of <b>' + f.ratio.toFixed(1) + '×</b> per year: 365 ÷ ' + f.ratio.toFixed(1) + ' = <b>' + Math.round(d) + ' days</b>. ' : '') +
+    'It uses the same data as the Turnover Ratio card (' + erpEsc(mdashPeriodLabel()) + ', ' + f.days + '-day basis), so the two always agree.</div></div>';
+
+  html += '<div class="to-sec"><h6>2. How is it different from Turnover Ratio?</h6>' +
+    '<table class="to-mini"><tbody>' +
+      '<tr><td>Turnover Ratio</td><td>How many <b>times a year</b> stock is used up (higher is better)</td></tr>' +
+      '<tr><td>Inventory Ratio</td><td>How many <b>days</b> the stock will last (lower is better)</td></tr>' +
+    '</tbody></table>' +
+    '<div class="to-note">Same information in two forms. Turnover is better for comparing over time. Inventory Ratio is easier to picture.</div></div>';
+
+  html += '<div class="to-sec"><h6>3. How to read it</h6>' +
+    '<div class="to-scale">' + (has ? '<div class="to-marker" style="left:' + pos + '%">' + Math.round(d) + ' d</div>' : '') +
+      '<span class="s4"></span><span class="s3"></span><span class="s2"></span><span class="s1"></span></div>' +
+    '<div class="to-scale-lbl">' + scale.map(function(s) {
+      return '<span class="' + (s.idx === bi.i ? 'cur' : '') + '">' + s.b.label + '<br>' + s.rng + '</span>';
+    }).join('') + '</div>' +
+    '<div class="to-note">General rules of thumb. The right level depends on supplier lead times and the kind of items, so management can adjust them.</div></div>';
+
+  html += '<div class="to-sec"><h6>4. Per-item view</h6>' +
+    'Stock Monitor and the Inventory Master table below now show an <b>Inventory Ratio (days)</b> column for every item, so you can see which items hold the most days of stock. ' +
+    'Per item: On-Hand ÷ average daily usage (from Ave/Mo).</div>';
+
+  var el = document.getElementById('invRatioInfoModal');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'invRatioInfoModal';
+    el.className = 'modal fade to-modal';
+    el.tabIndex = -1;
+    el.innerHTML = '<div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">' +
+      '<div class="modal-header"><h5 class="modal-title"><i class="bi bi-calendar3 me-2"></i>Inventory Ratio: how many days of stock do we have?</h5>' +
+      '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>' +
+      '<div class="modal-body" id="invRatioInfoBody"></div>' +
+      '<div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button></div>' +
+      '</div></div>';
+    document.body.appendChild(el);
+  }
+  document.getElementById('invRatioInfoBody').innerHTML = html;
+  bootstrap.Modal.getOrCreateInstance(el).show();
+}
+window.mdashShowInventoryRatioInfo = mdashShowInventoryRatioInfo;
 
 function mdashShowTurnoverInfo() {
   var f = _mdash.turnoverFacts;
