@@ -474,7 +474,7 @@ function prfMonitorRenderPrfTab() {
     var statusIcon = '';
     if (status === 'SERVED') { statusClass = 'status-completed'; statusIcon = 'bi-check-circle-fill'; }
     else if (status === 'STAGGERED') { statusClass = 'status-partial'; statusIcon = 'bi-hourglass'; }
-    else if (status === 'CANCELED') { statusClass = 'status-pending'; statusIcon = 'bi-x-circle-fill'; }
+    else if (status === 'CANCELED') { statusClass = 'status-canceled'; statusIcon = 'bi-x-circle-fill'; }
     else { statusClass = 'status-pending'; statusIcon = 'bi-clock-history'; }
 
     var categoryBadge = 'bg-secondary';
@@ -494,7 +494,7 @@ function prfMonitorRenderPrfTab() {
 var batchNum = parseInt(p.batch_number, 10) || 1;
 var batchBadge = batchNum > 1 ? ' <span class="badge bg-info text-dark" style="font-size:0.65rem;" title="Split Batch #' + batchNum + '">B' + batchNum + '</span>' : '';
 
-html += '<tr>' +
+html += '<tr class="' + (status === 'CANCELED' ? 'prf-row-canceled' : '') + '">' +
   '<td><code>' + erpEsc(p.prf_no) + '</code>' + batchBadge + versionBadge + '</td>' +
       '<td>' + erpEsc(dateStr) + '</td>' +
       '<td>' + erpEsc(p.requestor || '—') + '</td>' +
