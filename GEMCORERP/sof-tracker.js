@@ -46,7 +46,7 @@ async function sofTrackerCheckHealth() {
 async function sofTrackerLoad() {
   var tbody = document.getElementById('sofTableBody');
   if (tbody) {
-    tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
       '<div class="erp-spinner"></div>' +
       '<div class="mt-2">Loading SOF allocations...</div></td></tr>';
   }
@@ -63,6 +63,7 @@ async function sofTrackerLoad() {
     var data = await res.json();
     
     _sofTracker.allAllocations = (data && data.allocations) ? data.allocations : [];
+    await sofTrackerMergeMissing(_sofTracker.allAllocations);
     await sofTrackerEnrich(_sofTracker.allAllocations);
     await sofTrackerLoadPending();
     console.log('[SOF Tracker] Loaded ' + _sofTracker.allAllocations.length + ' allocations in ' + (Date.now() - t0) + 'ms');
@@ -73,7 +74,7 @@ async function sofTrackerLoad() {
   } catch(err) {
     console.error('[sofTrackerLoad]', err);
     if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="8" class="erp-empty text-danger">' +
+      tbody.innerHTML = '<tr><td colspan="9" class="erp-empty text-danger">' +
         '<i class="bi bi-exclamation-triangle-fill me-2"></i>Failed: ' + erpEsc(err.message) + '</td></tr>';
     }
   }
@@ -82,8 +83,55 @@ async function sofTrackerLoad() {
 window.sofTrackerLoad = sofTrackerLoad;
 
 // ═══════════════════════════════════════════════════════════
+// MERGE — SOF na may allocation items pero wala sa listahan ng RPC
+// (hal. galing sa Import Allocated). Binabasa nang direkta ang erp_sof_allocation_items
+// at erp_sof_allocations, para lumabas pa rin sila sa tracker kahit hindi sila ibinalik ng RPC.
+// ═══════════════════════════════════════════════════════════
+_sofTracker.headers = {};
+async function sofTrackerMergeMissing(list) {
+  _sofTracker.headers = {};
+  try {
+    var heads = await erpFetchAll('erp_sof_allocations', 'select=*&order=sof_no.asc') || [];
+    heads.forEach(function(h) { var k = sofKey(h.sof_no); if (k) _sofTracker.headers[k] = h; });
+
+    var items = await erpFetchAll('erp_sof_allocation_items', 'select=sof_no,item_code,allocated_qty,used_qty&order=sof_no.asc,item_code.asc') || [];
+    var have = {};
+    list.forEach(function(a) { have[sofKey(a.sof_no)] = true; });
+
+    var agg = {};
+    items.forEach(function(r) {
+      var k = sofKey(r.sof_no); if (!k) return;
+      var g = agg[k] || (agg[k] = { sof_no: String(r.sof_no).trim(), n: 0, alloc: 0, used: 0 });
+      g.n++; g.alloc += Number(r.allocated_qty || 0); g.used += Number(r.used_qty || 0);
+    });
+
+    var added = 0;
+    Object.keys(agg).forEach(function(k) {
+      if (have[k]) return;
+      var g = agg[k], h = _sofTracker.headers[k] || {};
+      var rem = g.alloc - g.used;
+      list.push({
+        sof_no: g.sof_no,
+        client_name: h.client_name || '',          // raw (vendor / supplier) — i-enrich mamaya
+        project_name: h.project_name || '',
+        jo_no: h.jo_no || '',
+        sof_date: h.sof_date || h.created_at || null,
+        status: h.status || (g.alloc > 0 && rem <= 0 ? 'COMPLETED' : 'ACTIVE'),
+        total_items: g.n,
+        total_allocated_qty: g.alloc,
+        total_used_qty: g.used,
+        total_remaining_qty: rem,
+        _merged: true
+      });
+      added++;
+    });
+    if (added) console.log('[SOF Tracker] Idinagdag mula sa items table (wala sa RPC list): ' + added + ' SOF');
+  } catch (e) { console.warn('[SOF Tracker] merge missing', e.message); }
+}
+
+// ═══════════════════════════════════════════════════════════
 // ENRICH — Client / Project / JO No.
-// CLIENT: erp_sof_cache → MRIF documents → blangko. HINDI na ginagamit ang client_name ng allocation,
+// CLIENT: na-edit na client (client_override) → erp_sof_cache → MRIF documents → blangko. HINDI na ginagamit ang client_name ng allocation,
 //         dahil supplier ang laman nito (hal. Yu Eng Kao, Greenlight), hindi ang tunay na client.
 // PROJECT / JO: erp_sof_cache → MRIF documents → (kung wala) ang nasa allocation.
 // ═══════════════════════════════════════════════════════════
@@ -109,8 +157,9 @@ async function sofTrackerEnrich(list) {
     list.forEach(function(a) {
       var c = cacheBySof[a.sof_no] || {};
       var m = mrifBySof[a.sof_no] || {};
-      a.supplier_name = a.client_name || '';                                   // (luma) hindi ipinapakita
-      a.client_name   = c.client_name  || m.client_name || '';                 // tunay na client, o blangko
+      var hd = (_sofTracker.headers || {})[sofKey(a.sof_no)] || {};
+      a.supplier_name = a.client_name || hd.client_name || '';                 // VENDOR / supplier (editable)
+      a.client_name   = hd.client_override || c.client_name || m.client_name || '';   // CLIENT: na-edit → SOF cache → MRIF → blangko
       a.project_name  = c.project_name || m.project     || a.project_name || '';
       a.jo_no         = a.jo_no        || c.jo_no       || m.jo_no        || '';
     });
@@ -191,6 +240,12 @@ function sofUpdatePendingPill() {
   document.head.appendChild(st);
 })();
 
+// Vendor na ipapakita (itatago kung kapareho lang ng client)
+function sofVendorShown(a) {
+  var v = String(a.supplier_name || '').trim(), c = String(a.client_name || '').trim();
+  return (v && v.toLowerCase() !== c.toLowerCase()) ? v : '';
+}
+
 // Na-release na = walang natirang naka-allocate (0 / 0) at hindi cancelled.
 function sofIsReleased(a) {
   return String(a.status || '').toUpperCase() !== 'CANCELLED' && Number(a.total_allocated_qty || 0) <= 0;
@@ -249,9 +304,11 @@ function sofTrackerApplyFilters() {
       var client = String(a.client_name || '').toLowerCase();
       var project = String(a.project_name || '').toLowerCase();
       var joNo = String(a.jo_no || '').toLowerCase();
+      var vendor = String(a.supplier_name || '').toLowerCase();
       
       if (sofNo.indexOf(search) === -1 &&
           client.indexOf(search) === -1 &&
+          vendor.indexOf(search) === -1 &&
           project.indexOf(search) === -1 &&
           joNo.indexOf(search) === -1) return false;
     }
@@ -275,7 +332,7 @@ function sofTrackerRender() {
   if (elCount) elCount.textContent = total + ' items';
 
   if (total === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
       '<div class="sof-empty"><i class="bi bi-inbox"></i>No SOF allocations found.</div></td></tr>';
     return;
   }
@@ -307,7 +364,8 @@ function sofTrackerRender() {
       '<td><div class="sof-client">' +
         (client ? '<div class="sof-avatar" style="background:' + sofAvatarColor(client) + '">' + sofInitials(client) + '</div>' : '') +
         '<div style="min-width:0"><div class="sof-client-name">' + sofTrackerEsc(client) + '</div>' +
-        (project ? '<div class="sof-client-sub"><i class="bi bi-folder2-open"></i>' + sofTrackerEsc(project) + '</div>' : '') + '</div>' +
+        (project ? '<div class="sof-client-sub"><i class="bi bi-folder2-open"></i>' + sofTrackerEsc(project) + '</div>' : '') +
+        (sofVendorShown(a) ? '<div class="sof-client-sub"><i class="bi bi-truck"></i>Vendor: ' + sofTrackerEsc(sofVendorShown(a)) + '</div>' : '') + '</div>' +
       '</div></td>' +
       '<td><span class="sof-jo">' + sofTrackerEsc(a.jo_no || '—') + '</span></td>' +
       '<td class="sof-date">' + sofTrackerEsc(dateStr) + '</td>' +
@@ -318,6 +376,9 @@ function sofTrackerRender() {
       '</div></td>' +
       '<td class="text-center"><span class="sof-rem ' + (remaining > 0 ? 'has' : 'zero') + '">' + sofTrackerNum(remaining) + '</span></td>' +
       '<td class="text-center"><span class="sof-status ' + stCls + '">' + sofTrackerEsc(status) + '</span></td>' +
+      '<td class="text-center" onclick="event.stopPropagation()">' + (sofCanProcess()
+        ? '<button type="button" class="btn btn-sm btn-outline-secondary" title="Edit Client / Vendor" onclick="event.stopPropagation();sofEditParties(\'' + sofJs + '\')"><i class="bi bi-pencil-square"></i></button>'
+        : '') + '</td>' +
     '</tr>';
   });
   tbody.innerHTML = html;
@@ -413,7 +474,7 @@ var _sofItemsView = { sofNo: '', items: [], PEND: { docs: {}, lines: {} }, statu
     '.sof-fchip.on .n{background:rgba(255,255,255,.22);color:#fff}' +
     '.sof-fchip.k-ACTIVE .dot{background:#0d6efd}.sof-fchip.k-PARTIAL .dot{background:#f59e0b}.sof-fchip.k-FULL .dot{background:#198754}' +
     '.sof-prog{height:6px;min-width:90px;background:#e2e8f0;border-radius:99px;overflow:hidden}.sof-prog>div{height:100%;background:#198754}' +
-    '.sof-info{display:grid;grid-template-columns:2fr 2fr 1fr 1fr;gap:12px 20px;padding:14px 16px;background:#fff;border-bottom:1px solid #e2e8f0}' +
+    '.sof-info{display:grid;grid-template-columns:2fr 2fr 2fr 1fr 1fr;gap:12px 20px;padding:14px 16px;background:#fff;border-bottom:1px solid #e2e8f0}' +
     '@media(max-width:768px){.sof-info{grid-template-columns:1fr 1fr}}' +
     '.sof-info .lbl{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:3px}' +
     '.sof-info .val{font-weight:600;color:#0f172a;word-break:break-word}' +
@@ -556,10 +617,10 @@ window.sofItemsExport = function() {
   if (!rows.length) return erpShowToast('Walang i-e-export', 'warning');
   function q(x) { return '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"'; }
   var inf = _sofItemsView.info || {};
-  var lines = [['SOF No', 'Client', 'Project', 'JO No', 'Item Code', 'Description', 'Unit', 'Allocated', 'Used', 'Remaining', 'Status', 'Pending MRIF'].map(q).join(',')];
+  var lines = [['SOF No', 'Client', 'Vendor', 'Project', 'JO No', 'Item Code', 'Description', 'Unit', 'Allocated', 'Used', 'Remaining', 'Status', 'Pending MRIF'].map(q).join(',')];
   rows.forEach(function(r) {
     var pend = r.pl.map(function(x) { return x.doc_no + ' ' + (x.requestor || '') + ' (' + x.need + ')'; }).join(' | ');
-    lines.push([_sofItemsView.sofNo, inf.client || '', inf.project || '', inf.jo || '', r.it.item_code, r.it.description || '', r.it.unit || '', r.alloc, r.used, r.rem,
+    lines.push([_sofItemsView.sofNo, inf.client || '', inf.vendor || '', inf.project || '', inf.jo || '', r.it.item_code, r.it.description || '', r.it.unit || '', r.alloc, r.used, r.rem,
       r.key === 'FULL' ? 'FULLY SERVED' : (r.key === 'ACTIVE' ? 'AVAILABLE' : r.key), pend].map(q).join(','));
   });
   var blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
@@ -576,7 +637,7 @@ function sofItemsFillInfo(sofNo) {
   if (!box) return;
   var a = (_sofTracker.allAllocations || []).filter(function(x) { return String(x.sof_no) === String(sofNo); })[0] || {};
   var v = _sofItemsView;
-  v.info = { client: a.client_name || '', project: a.project_name || '', jo: a.jo_no || '' };
+  v.info = { client: a.client_name || '', vendor: sofVendorShown(a), project: a.project_name || '', jo: a.jo_no || '' };
 
   function cell(label, value, extra) {
     return '<div><div class="lbl">' + label + '</div><div class="val' + (value ? '' : ' empty') + '">' +
@@ -591,6 +652,7 @@ function sofItemsFillInfo(sofNo) {
 
   var dateStr = a.sof_date ? new Date(a.sof_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
   box.innerHTML = clientHtml +
+    cell('Vendor', sofVendorShown(a), '<i class="bi bi-truck me-1 text-muted"></i>') +
     cell('Project', a.project_name || '', '<i class="bi bi-folder2-open me-1 text-muted"></i>') +
     '<div><div class="lbl">JO No.</div><div class="val' + (a.jo_no ? '' : ' empty') + '">' +
       (a.jo_no ? '<span class="sof-jo">' + sofTrackerEsc(a.jo_no) + '</span>' : '—') + '</div></div>' +
@@ -617,6 +679,7 @@ window.sofViewItems = async function(sofNo) {
       '<div class="modal-content">' +
         '<div class="modal-header" style="background:#1e3a5f;color:#fff;">' +
           '<h5 class="modal-title"><i class="bi bi-list-check me-2"></i>SOF Allocation Details — ' + sofTrackerEsc(sofNo) + '</h5>' +
+          (sofCanProcess() ? '<button type="button" class="btn btn-sm btn-light ms-3" onclick="sofEditParties(\'' + sofTrackerEsc(sofNo).replace(/'/g, "\\'") + '\')"><i class="bi bi-pencil-square me-1"></i>Edit Client / Vendor</button>' : '') +
           '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>' +
         '</div>' +
         '<div class="sof-info" id="sofItemsInfo"></div>' +
@@ -837,4 +900,72 @@ window.sofReleaseItem = async function(sofNo, itemCode, remaining) {
   } catch (e) {
     erpShowToast('Failed: ' + e.message + ' (na-run mo na ba ang sof-manual.sql?)', 'danger');
   }
+};
+
+
+// ═══════════════════════════════════════════════════════════
+// v2.3 — EDIT CLIENT / VENDOR (warehouse / admin lang)
+// Needs sof-edit.sql (erp_sof_update_parties)
+// ═══════════════════════════════════════════════════════════
+window.sofEditParties = function(sofNo) {
+  if (!sofCanProcess()) return erpShowToast('Warehouse / admin lang ang puwedeng mag-edit', 'warning');
+  var a = (_sofTracker.allAllocations || []).filter(function(x) { return String(x.sof_no) === String(sofNo); })[0];
+  if (!a) return erpShowToast('SOF not found', 'warning');
+
+  var clients = {}, vendors = {};
+  _sofTracker.allAllocations.forEach(function(x) {
+    if (x.client_name) clients[x.client_name] = 1;
+    if (x.supplier_name) vendors[x.supplier_name] = 1;
+  });
+  function dl(id, obj) { return '<datalist id="' + id + '">' + Object.keys(obj).sort().map(function(n) { return '<option value="' + sofTrackerEsc(n) + '">'; }).join('') + '</datalist>'; }
+
+  var old = document.getElementById('sofEditModal'); if (old) old.remove();
+  var w = document.createElement('div');
+  w.innerHTML =
+  '<div class="modal fade" id="sofEditModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">' +
+    '<div class="modal-header" style="background:#1e3a5f;color:#fff;"><h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit Client / Vendor — SOF ' + sofTrackerEsc(sofNo) + '</h5>' +
+      '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>' +
+    '<div class="modal-body">' +
+      '<div class="mb-3"><label class="form-label fw-bold small mb-1">Client</label>' +
+        '<input id="seClient" class="form-control" list="seClientList" autocomplete="off" value="' + sofTrackerEsc(a.client_name || '') + '" placeholder="e.g. PARKLINS">' + dl('seClientList', clients) +
+        '<div class="form-text">Ang customer ng project. Iwanang blangko para gamitin ulit ang client mula sa SOF Monitoring / MRIF.</div></div>' +
+      '<div class="mb-2"><label class="form-label fw-bold small mb-1">Vendor / Supplier</label>' +
+        '<input id="seVendor" class="form-control" list="seVendorList" autocomplete="off" value="' + sofTrackerEsc(a.supplier_name || '') + '" placeholder="e.g. Yu Eng Kao">' + dl('seVendorList', vendors) +
+        '<div class="form-text">Ang pinagbilhan / supplier ng allocated na stock.</div></div>' +
+      '<div class="alert alert-danger py-2 small d-none mt-3 mb-0" id="seErr"></div>' +
+    '</div>' +
+    '<div class="modal-footer"><button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>' +
+      '<button class="btn btn-primary" id="seSave" onclick="sofEditPartiesSave(\'' + String(sofNo).replace(/'/g, "\\'") + '\')"><i class="bi bi-check2-circle me-1"></i>Save</button></div>' +
+  '</div></div></div>';
+  document.body.appendChild(w.firstChild);
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('sofEditModal')).show();
+};
+
+window.sofEditPartiesSave = async function(sofNo) {
+  var client = document.getElementById('seClient').value.trim();
+  var vendor = document.getElementById('seVendor').value.trim();
+  var err = document.getElementById('seErr'), btn = document.getElementById('seSave');
+  err.classList.add('d-none'); btn.disabled = true;
+  try {
+    var r = await sofRpc('erp_sof_update_parties', { p_sof_no: sofNo, p_client: client, p_vendor: vendor, p_user: sofUser(), p_only_if_blank: false });
+    if (!r || !r.success) throw new Error((r && r.error) || 'Failed');
+    var a = (_sofTracker.allAllocations || []).filter(function(x) { return String(x.sof_no) === String(sofNo); })[0];
+    var hd = _sofTracker.headers[sofKey(sofNo)];
+    if (hd) { hd.client_override = client || null; hd.client_name = vendor; }
+    bootstrap.Modal.getInstance(document.getElementById('sofEditModal')).hide();
+    erpShowToast('✅ Na-save ang Client / Vendor ng SOF ' + sofNo, 'success');
+    if (a && client) {                       // may bagong client → i-update agad
+      a.client_name = client; a.supplier_name = vendor;
+      sofTrackerApplyFilters();
+      if (document.getElementById('sofItemsInfo') && String(_sofItemsView.sofNo) === String(sofNo)) sofItemsFillInfo(sofNo);
+    } else {                                 // blangko → ibalik sa client mula sa cache / MRIF
+      await sofTrackerLoad();
+      if (document.getElementById('sofItemsInfo') && String(_sofItemsView.sofNo) === String(sofNo)) sofItemsFillInfo(sofNo);
+    }
+  } catch (e) {
+    var m = String(e.message || e);
+    var missing = /could not find the function|404|PGRST202/i.test(m);
+    err.textContent = missing ? 'Wala pa ang function sa database. I-run muna ang sof-edit.sql sa Supabase SQL Editor, tapos subukan ulit.' : m;
+    err.classList.remove('d-none');
+  } finally { btn.disabled = false; }
 };
