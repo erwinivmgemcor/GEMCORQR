@@ -42,6 +42,19 @@
 .ar-cat b{font-weight:800;margin-left:5px;padding-left:5px;border-left:1px solid currentColor;opacity:.85;}
 .ar-catrow{display:flex;flex-wrap:wrap;justify-content:center;gap:3px;}
 .ar-catrow .ar-cat{margin:0;}
+.col-rmk{min-width:210px;}
+.ar-rmk-td{max-width:260px;}
+.ar-rmk{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3;font-size:.8rem;font-weight:600;color:#0f172a;word-break:break-word;background:#fffbeb;border-left:3px solid #f59e0b;padding:3px 8px;border-radius:4px;}
+.ar-rmk-by{font-size:.68rem;color:#64748b;margin-top:2px;}
+.ar-rmk-edit{color:#2563eb;margin-left:4px;}
+.ar-rmk-add{border:1.5px dashed #94a3b8;background:transparent;color:#475569;font-size:.74rem;font-weight:700;padding:3px 10px;border-radius:999px;cursor:pointer;white-space:nowrap;}
+.ar-rmk-add:hover{background:#f1f5f9;}
+.ar-rmk-add.late{border-color:#f59e0b;color:#b45309;background:#fffbeb;}
+.ar-rmk-none{font-size:.72rem;font-weight:700;color:#b45309;white-space:nowrap;}
+.ar-rmk-box{background:#fffbeb;border-left:4px solid #f59e0b;padding:8px 12px;border-radius:6px;font-size:.88rem;}
+.ar-rmk-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.ar-rmk-chip{border:1px solid #cbd5e1;background:#f8fafc;border-radius:999px;font-size:.72rem;padding:3px 10px;cursor:pointer;}
+.ar-rmk-chip:hover{background:#e2e8f0;}
 .ar-sof{white-space:nowrap;}
 .ar-sofno{font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;}
 .col-proj{min-width:120px;}
@@ -241,13 +254,14 @@ tr.ar-mine td:first-child{box-shadow:inset 4px 0 0 #0ea5e9;}
             <th class="col-sof">SOF No.</th>
             <th class="col-proj">Project</th>
             <th class="col-status text-center">Status</th>
+            <th class="col-rmk" title="Reason kung bakit pending / partial pa ang request">Remarks / Reason</th>
             <th class="col-items text-center">Items</th>
             <th class="col-actions text-center">Actions</th>
           </tr>
         </thead>
         <tbody id="allTableBody">
           <tr>
-            <td colspan="12" class="erp-empty">
+            <td colspan="13" class="erp-empty">
               <div class="erp-spinner"></div>
               <div class="mt-2">Loading requests...</div>
             </td>
