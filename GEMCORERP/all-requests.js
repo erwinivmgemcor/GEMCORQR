@@ -24,6 +24,8 @@ function arCatShort(k) { return AR_CAT_SHORT[k] || k; }
 function arCatFull(k)  { return AR_CAT_FULL[k]  || k; }
 
 var _allRequests = {
+  remarks: {},          // doc_no -> { remarks, by, at } (pinakabagong remark)
+  remarksOk: true,
   prints: {},        // doc_no -> {count, by, at}  (who printed it — see print-log.js)
   locks: {},          // doc_no -> {locked_by, locked_by_name, locked_at, idle_seconds}  (requests being processed)
   assignByUser: {},   // username(lowercase) -> [categories]   (from the database)
@@ -331,7 +333,7 @@ async function allRequestsLoad() {
   var tbody = document.getElementById('allTableBody');
   if (!tbody) return;
   
-  tbody.innerHTML = '<tr><td colspan="12" class="erp-empty">' +
+  tbody.innerHTML = '<tr><td colspan="13" class="erp-empty">' +
     '<div class="erp-spinner"></div>' +
     '<div class="mt-2">Loading requests...</div></td></tr>';
   
@@ -392,11 +394,12 @@ async function allRequestsLoad() {
     
     allRequestsComputeKPIs();
     await arRefreshLocks(false);
+    await arLoadRemarks(false);
     allRequestsRender();
     
   } catch(err) {
     console.error('[allRequestsLoad]', err);
-    tbody.innerHTML = '<tr><td colspan="12" class="erp-empty text-danger">' +
+    tbody.innerHTML = '<tr><td colspan="13" class="erp-empty text-danger">' +
       'Failed: ' + erpEsc(err.message) + '</td></tr>';
   }
 }
@@ -433,14 +436,14 @@ async function allRequestsRender() {
   if (f) {
     var tbody0 = document.getElementById('allTableBody');
     if (tbody0 && _allRequests.allDocs.some(function(d) { return !_allRequests.catByDoc[d.doc_no]; })) {
-      tbody0.innerHTML = '<tr><td colspan="12" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Checking categories...</div></td></tr>';
+      tbody0.innerHTML = '<tr><td colspan="13" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Checking categories...</div></td></tr>';
     }
     await allRequestsEnsureCats(_allRequests.allDocs);
     if (tok !== _allRequests.renderToken) return;
   }
   if (arAvailFilterValue() && !_allRequests.availAt) {
     var tb1 = document.getElementById('allTableBody');
-    if (tb1) tb1.innerHTML = '<tr><td colspan="12" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Checking stock availability...</div></td></tr>';
+    if (tb1) tb1.innerHTML = '<tr><td colspan="13" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Checking stock availability...</div></td></tr>';
     await arLoadAvailability();
     if (tok !== _allRequests.renderToken) return;
   }
@@ -482,8 +485,9 @@ function allRequestsRenderNow() {
     var jo = String(d.jo_no || '').toLowerCase();
     var sofS = arSofOf(d).toLowerCase();
     var projS = String(d.project || '').toLowerCase();
+    var rmkS = arRemarkText(d.doc_no).toLowerCase();
     return docNo.indexOf(search) !== -1 || req.indexOf(search) !== -1 || jo.indexOf(search) !== -1 ||
-           sofS.indexOf(search) !== -1 || projS.indexOf(search) !== -1;
+           sofS.indexOf(search) !== -1 || projS.indexOf(search) !== -1 || rmkS.indexOf(search) !== -1;
   });
   
   var total = _allRequests.filteredDocs.length;
@@ -501,7 +505,7 @@ function allRequestsRenderNow() {
   document.getElementById('allBtnNext').disabled = (end >= total);
   
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="12" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="13" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No requests found.</td></tr>';
     return;
@@ -540,6 +544,7 @@ function allRequestsRenderNow() {
       '<td class="ar-sof">' + arSofCellHtml(d) + '</td>' +
       '<td class="ar-proj">' + arProjectCellHtml(d) + '</td>' +
       '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span>' + arLockBadge(d.doc_no) + arAvailChip(d) + '</td>' +
+      '<td class="ar-rmk-td">' + arRemarksCellHtml(d, statusUpper) + '</td>' +
       '<td class="text-center">' + (d.item_count || 0) + '</td>' +
       '<td class="text-center" style="white-space:nowrap;">' +
         '<button class="erp-action-btn" onclick="erpOpenPrintPreview(\'' + safeDoc + '\', \'' + typeUpper + '\')" title="Print Preview">' +
@@ -717,6 +722,9 @@ async function viewRequestDetails(docNo, docType) {
     if (doc.carried_from) html += '<div class="col-12"><span class="badge bg-info text-dark"><i class="bi bi-arrow-return-right me-1"></i>Carried from ' + erpEsc(doc.carried_from) + (doc.created_at ? ' · ' + erpEsc(arCbFmt(doc.created_at)) : '') + '</span></div>';
     if (doc.carried_to) html += '<div class="col-12"><span class="badge bg-secondary"><i class="bi bi-arrow-right me-1"></i>Balance carried to ' + erpEsc(doc.carried_to) + '</span></div>';
     if (doc.closed_at) html += '<div class="col-12"><span class="badge bg-dark"><i class="bi bi-clock me-1"></i>Closed: ' + erpEsc(arCbFmt(doc.closed_at)) + '</span></div>';
+    var rmkD = _allRequests.remarks && _allRequests.remarks[doc.doc_no];
+    if (rmkD && rmkD.remarks) html += '<div class="col-12"><div class="ar-rmk-box"><i class="bi bi-chat-left-text me-1"></i><strong>Remarks:</strong> ' + erpEsc(rmkD.remarks) +
+      ' <span class="text-muted small">— ' + erpEsc(rmkD.by || '') + ' · ' + erpEsc(arRemarkWhen(rmkD.at)) + '</span></div></div>';
     html += '</div>';
     
     // Items table
@@ -934,7 +942,7 @@ function allRequestsExport() {
     return;
   }
   
-  var headers = ['Doc No.', 'Date', 'Requestor', 'Department', 'Type', 'JO No.', 'SOF No.', 'Project', 'Status', 'Items'];
+  var headers = ['Doc No.', 'Date', 'Requestor', 'Department', 'Type', 'JO No.', 'SOF No.', 'Project', 'Status', 'Remarks', 'Remarks By', 'Remarks Date', 'Items'];
   var rows = _allRequests.filteredDocs.map(function(d) {
     return [
       d.doc_no || '',
@@ -946,6 +954,9 @@ function allRequestsExport() {
       arSofOf(d),
       d.project || '',
       d.status || '',
+      arRemarkText(d.doc_no),
+      (_allRequests.remarks[d.doc_no] && _allRequests.remarks[d.doc_no].by) || '',
+      (_allRequests.remarks[d.doc_no] && _allRequests.remarks[d.doc_no].at) ? new Date(_allRequests.remarks[d.doc_no].at).toLocaleString() : '',
       d.item_count || 0
     ];
   });
@@ -1525,3 +1536,133 @@ window.arOpenCloseBalance = arOpenCloseBalance; window.arOpenMonthClose = arOpen
 window.arCbSetCat = arCbSetCat; window.arCbSearch = arCbSearch; window.arCbUntil = arCbUntil; window.arCbToggle = arCbToggle;
 window.arCbRowClick = arCbRowClick; window.arCbSelectShown = arCbSelectShown; window.arCbReview = arCbReview;
 window.arCbCheck = arCbCheck; window.arCbApply = arCbApply; window.arCbRenderPick = arCbRenderPick;
+
+
+// ═══════════════════════════════════════════════════════════
+// REMARKS / REASON — bakit hindi pa na-process ang pending / partial
+// Table: doc_remarks (all-requests-remarks.sql). Bawat save ay bagong entry (may history);
+// ang pinakabago ang ipinapakita. Lahat ay nakakakita; warehouse / admin lang ang puwedeng mag-edit.
+// ═══════════════════════════════════════════════════════════
+var AR_REMARK_REASONS = [
+  'Waiting for stock delivery',
+  'Waiting for PRF / PO approval',
+  'Waiting for supplier',
+  'Waiting for requestor / production',
+  'Under review / for clarification',
+  'Partial stock only, balance is on order'
+];
+
+function arCanRemark() {
+  try { return localStorage.getItem('ivm_userRole') === 'warehouse' || localStorage.getItem('ivm_isAdmin') === 'true'; } catch (e) { return false; }
+}
+function arRemarkText(docNo) { var r = _allRequests.remarks && _allRequests.remarks[docNo]; return (r && r.remarks) ? r.remarks : ''; }
+function arRemarkWhen(iso) {
+  try { return new Date(iso).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; }
+}
+
+async function arLoadRemarks(rerender) {
+  try {
+    var rows = await erpFetchAll('doc_remarks', 'select=id,doc_no,remarks,remarked_by,remarked_at&order=id.desc');
+    var map = {};
+    (rows || []).forEach(function(r) {
+      if (!map[r.doc_no]) map[r.doc_no] = { remarks: String(r.remarks || '').trim(), by: r.remarked_by || '', at: r.remarked_at };
+    });
+    _allRequests.remarks = map;
+    _allRequests.remarksOk = true;
+  } catch (e) {
+    _allRequests.remarksOk = false;      // table pa lang hindi installed → read-only na "—"
+    _allRequests.remarks = _allRequests.remarks || {};
+  }
+  if (rerender && _allRequests.allDocs.length) allRequestsRenderNow();
+}
+
+function arRemarksCellHtml(d, statusUpper) {
+  var r = _allRequests.remarks[d.doc_no];
+  var has = r && r.remarks;
+  var open = (statusUpper === 'PENDING' || statusUpper === 'PARTIAL');
+  var can = arCanRemark();
+  var safe = String(d.doc_no || '').replace(/'/g, "\\'");
+  var ageDays = d.created_at ? Math.floor((Date.now() - new Date(d.created_at).getTime()) / 86400000) : 0;
+
+  if (has) {
+    return '<div class="ar-rmk" title="' + erpEsc(r.remarks) + '">' + erpEsc(r.remarks) + '</div>' +
+      '<div class="ar-rmk-by">' + erpEsc(r.by || '') + ' · ' + erpEsc(arRemarkWhen(r.at)) +
+      (can ? ' <a href="javascript:void(0)" class="ar-rmk-edit" onclick="arOpenRemarks(\'' + safe + '\')" title="Edit remark"><i class="bi bi-pencil-square"></i></a>' : '') + '</div>';
+  }
+  if (!open) return '<span class="text-muted">—</span>';
+  var late = ageDays >= 2;
+  if (can) {
+    return '<button type="button" class="ar-rmk-add' + (late ? ' late' : '') + '" onclick="arOpenRemarks(\'' + safe + '\')">' +
+      '<i class="bi bi-plus-circle me-1"></i>' + (late ? 'Add reason (' + ageDays + 'd)' : 'Add remark') + '</button>';
+  }
+  return late ? '<span class="ar-rmk-none" title="Walang reason na nakalagay habang ' + ageDays + ' araw nang naka-' + statusUpper.toLowerCase() + '">⚠ No reason yet · ' + ageDays + 'd</span>' : '<span class="text-muted">—</span>';
+}
+
+async function arOpenRemarks(docNo) {
+  if (!arCanRemark()) { erpShowToast('Warehouse / admin lang ang puwedeng maglagay ng remarks', 'warning'); return; }
+  var d = _allRequests.allDocs.filter(function(x) { return x.doc_no === docNo; })[0] || {};
+  var cur = arRemarkText(docNo);
+  var old = document.getElementById('arRemarkModal'); if (old) old.remove();
+  var w = document.createElement('div');
+  w.innerHTML =
+  '<div class="modal fade" id="arRemarkModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">' +
+    '<div class="modal-header" style="background:#1e3a5f;color:#fff;"><h5 class="modal-title"><i class="bi bi-chat-left-text me-2"></i>Remarks — ' + erpEsc(docNo) + '</h5>' +
+      '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>' +
+    '<div class="modal-body">' +
+      '<div class="small text-muted mb-2">' + erpEsc(String(d.status || '')) + ' · ' + erpEsc(d.requestor || '') + (d.department ? ' · ' + erpEsc(d.department) : '') + '</div>' +
+      '<label class="form-label fw-bold small mb-1">Bakit hindi pa na-process? (makikita ito ng management)</label>' +
+      '<textarea id="arRmkText" class="form-control" rows="3" maxlength="300" placeholder="e.g. Waiting for PRF#11-13 delivery, ETA Nov 20">' + erpEsc(cur) + '</textarea>' +
+      '<div class="ar-rmk-chips mt-2">' + AR_REMARK_REASONS.map(function(t, i) {
+        return '<button type="button" class="ar-rmk-chip" data-i="' + i + '">' + erpEsc(t) + '</button>'; }).join('') + '</div>' +
+      '<div class="alert alert-danger py-2 small d-none mt-3 mb-0" id="arRmkErr"></div>' +
+      '<div class="mt-3"><div class="small fw-bold text-muted mb-1">History</div><div id="arRmkHist" class="small text-muted">Loading…</div></div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      (cur ? '<button class="btn btn-outline-danger me-auto" id="arRmkClear"><i class="bi bi-trash me-1"></i>Clear</button>' : '') +
+      '<button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>' +
+      '<button class="btn btn-primary" id="arRmkSave"><i class="bi bi-check2-circle me-1"></i>Save</button></div>' +
+  '</div></div></div>';
+  document.body.appendChild(w.firstChild);
+  var el = document.getElementById('arRemarkModal');
+  bootstrap.Modal.getOrCreateInstance(el).show();
+
+  el.querySelectorAll('.ar-rmk-chip').forEach(function(b) {
+    b.onclick = function() { document.getElementById('arRmkText').value = AR_REMARK_REASONS[Number(b.getAttribute('data-i'))]; document.getElementById('arRmkText').focus(); };
+  });
+  document.getElementById('arRmkSave').onclick = function() { arSaveRemark(docNo, document.getElementById('arRmkText').value); };
+  var clr = document.getElementById('arRmkClear'); if (clr) clr.onclick = function() { arSaveRemark(docNo, ''); };
+
+  // history
+  try {
+    var rows = await erpFetch('doc_remarks', 'select=remarks,remarked_by,remarked_at&doc_no=eq.' + encodeURIComponent(docNo) + '&order=id.desc&limit=10') || [];
+    document.getElementById('arRmkHist').innerHTML = rows.length ? rows.map(function(r) {
+      return '<div class="mb-1">' + (String(r.remarks || '').trim() ? erpEsc(r.remarks) : '<i>(cleared)</i>') + ' <span class="text-muted">— ' + erpEsc(r.remarked_by || '') + ' · ' + erpEsc(arRemarkWhen(r.remarked_at)) + '</span></div>';
+    }).join('') : 'Wala pang remarks.';
+  } catch (e) { var h = document.getElementById('arRmkHist'); if (h) h.textContent = '—'; }
+}
+
+async function arSaveRemark(docNo, text) {
+  text = String(text || '').trim();
+  var err = document.getElementById('arRmkErr'), btn = document.getElementById('arRmkSave');
+  err.classList.add('d-none'); btn.disabled = true;
+  try {
+    var who = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'UNKNOWN';
+    var d = _allRequests.allDocs.filter(function(x) { return x.doc_no === docNo; })[0] || {};
+    var res = await fetch(erpUrl('doc_remarks'), {
+      method: 'POST', headers: erpHeaders(),
+      body: JSON.stringify([{ doc_no: docNo, doc_type: d.doc_type || null, remarks: text, remarked_by: who }])
+    });
+    if (!res.ok) {
+      var t = await res.text();
+      throw new Error(res.status === 404 || /doc_remarks/i.test(t) && /not find|does not exist|relation/i.test(t)
+        ? 'Wala pa ang table. I-run muna ang all-requests-remarks.sql sa Supabase SQL Editor, tapos subukan ulit.' : (t || 'Failed to save'));
+    }
+    _allRequests.remarks[docNo] = { remarks: text, by: who, at: new Date().toISOString() };
+    bootstrap.Modal.getInstance(document.getElementById('arRemarkModal')).hide();
+    erpShowToast(text ? '✅ Na-save ang remarks' : 'Remarks cleared', 'success');
+    allRequestsRenderNow();
+  } catch (e) {
+    err.textContent = String(e.message || e); err.classList.remove('d-none');
+  } finally { btn.disabled = false; }
+}
+window.arOpenRemarks = arOpenRemarks;
