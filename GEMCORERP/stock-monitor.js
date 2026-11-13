@@ -396,7 +396,7 @@ async function erpLoadItems() {
   var tbody = document.getElementById('erpTableBody');
   if (!tbody) { _erpRenderLock = false; return; }
   
-  tbody.innerHTML = '<tr><td colspan="20" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading inventory...</div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="21" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading inventory...</div></td></tr>';
   
   var filters = {
     category: document.getElementById('erpCategoryFilter').value,
@@ -410,7 +410,7 @@ async function erpLoadItems() {
   var result = await erpGetAllItems(filters);
   
   if (!result.success) {
-    tbody.innerHTML = '<tr><td colspan="20" class="erp-empty text-danger">' +
+    tbody.innerHTML = '<tr><td colspan="21" class="erp-empty text-danger">' +
       '<i class="bi bi-exclamation-triangle-fill"></i> ' + erpEsc(result.error) + '</td></tr>';
     _erpRenderLock = false;
     return;
@@ -488,7 +488,7 @@ function erpRenderTable() {
   document.getElementById('erpBtnNext').disabled = (end >= total);
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="20" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="21" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No items match your filters.</td></tr>';
     return;
@@ -584,6 +584,7 @@ function erpRenderTable() {
       '<td class="text-end usage-cell">' + erpNum(aveMo) + '</td>' +
       '<td class="text-end usage-cell">' + erpNum(aveDay) + '</td>' +
       '<td class="text-center">' + erpTurnoverBadge(onHand, aveMo) + '</td>' +
+      '<td class="text-center">' + erpInventoryRatioBadge(onHand, aveMo) + '</td>' +
       '<td class="text-center">' + reorderStatus + '</td>' +
       '<td class="text-center">' + abcBadge + '</td>' +
       '<td class="text-center">' + movBadge + '</td>' +
