@@ -25,8 +25,11 @@ function wkAvg(a) { return a.length ? a.reduce(function(s, x) { return s + x; },
 
 function wkOnRange() {
   var custom = wkEl('wkRange').value === 'custom';
+  var pick = wkEl('wkRange').value === 'pick';
   wkEl('wkFrom').style.display = custom ? '' : 'none';
   wkEl('wkTo').style.display = custom ? '' : 'none';
+  wkEl('wkMonth').style.display = pick ? '' : 'none';
+  if (pick && !wkEl('wkMonth').value) wkEl('wkMonth').value = wkInput(new Date()).slice(0, 7);
   if (custom && !wkEl('wkFrom').value) {
     wkEl('wkFrom').value = wkInput(new Date(Date.now() - 30 * 86400000));
     wkEl('wkTo').value = wkInput(new Date());
@@ -38,7 +41,12 @@ function wkRangeDates() {
   var v = wkEl('wkRange').value, now = new Date(), from, to = new Date(now.getTime() + 60000);
   if (v === 'today') from = wkDay(now);
   else if (v === 'month') from = new Date(now.getFullYear(), now.getMonth(), 1);
-  else if (v === 'custom') {
+  else if (v === 'pick') {
+    var ym = (wkEl('wkMonth').value || wkInput(now).slice(0, 7)).split('-');
+    var y = parseInt(ym[0], 10), m = parseInt(ym[1], 10) - 1;
+    from = new Date(y, m, 1);
+    to = new Date(y, m + 1, 0, 23, 59, 59);
+  } else if (v === 'custom') {
     from = wkEl('wkFrom').value ? new Date(wkEl('wkFrom').value + 'T00:00:00') : wkDay(now);
     to = wkEl('wkTo').value ? new Date(wkEl('wkTo').value + 'T23:59:59') : to;
   } else from = wkDay(new Date(now.getTime() - (parseInt(v, 10) - 1) * 86400000));
@@ -103,7 +111,7 @@ function wkRender() {
   var type = wkEl('wkType').value;
   var slaMs = (parseFloat(wkEl('wkSla').value) || 24) * 3600000;
   var from = _wk.from.getTime(), to = _wk.to.getTime();
-  var days = Math.max(1, Math.ceil((to - from) / 86400000));
+  var days = Math.max(1, Math.ceil((Math.min(to, Date.now()) - from) / 86400000));
   var ok = function(d) { return !type || d.doc_type === type; };
 
   var docs = _wk.docs.filter(ok);
@@ -117,6 +125,19 @@ function wkRender() {
     d._hand = wkHandling(d);
   });
   var open = _wk.open.filter(ok);
+
+  // ── Staff filter (processed by). Dropdown lists everyone who processed something in this period.
+  var allDone = done;
+  var staffNames = {};
+  allDone.forEach(function(d) { staffNames[String(d.processed_by).trim()] = true; });
+  var staffSel = wkEl('wkStaff'), want = staffSel.value;
+  var names = Object.keys(staffNames).sort();
+  if (want && !staffNames[want]) want = '';
+  staffSel.innerHTML = '<option value="">All warehouse staff</option>' + names.map(function(n) {
+    return '<option value="' + wkEsc(n) + '"' + (n === want ? ' selected' : '') + '>' + wkEsc(n) + '</option>';
+  }).join('');
+  if (want) done = allDone.filter(function(d) { return String(d.processed_by).trim() === want; });
+  _wk.listRows = done.slice().sort(function(a, b) { return new Date(b.processed_at) - new Date(a.processed_at); });
 
   // ── KPI cards
   var tats = done.map(function(d) { return d._tat; }).filter(function(x) { return x >= 0; });
@@ -153,6 +174,22 @@ function wkRender() {
       '<td class="text-end">' + wkDur(wkAvg(s.hand)) + '</td></tr>';
   }).join('') : '<tr><td colspan="9" class="text-center text-muted py-3">Walang na-complete sa period na ito.</td></tr>';
 
+  // ── Processed requests list
+  var fmt = function(x) { return new Date(x).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); };
+  wkEl('wkListCount').textContent = _wk.listRows.length;
+  wkEl('wkListNote').textContent = want
+    ? 'Mga request na na-process ni ' + want + ' sa period na ito (pinakabago muna).'
+    : 'Mga request na na-process ng lahat ng warehouse staff sa period na ito (pinakabago muna).';
+  wkEl('tblDone').querySelector('tbody').innerHTML = _wk.listRows.length ? _wk.listRows.map(function(d, i) {
+    var okT = d._tat != null && d._tat >= 0 && d._tat <= slaMs;
+    return '<tr><td class="wk-rank">' + (i + 1) + '</td><td class="fw-semibold">' + wkEsc(d.doc_no) + '</td>' +
+      '<td><span class="badge ' + (d.doc_type === 'MRS' ? 'bg-warning text-dark' : 'bg-primary') + '">' + wkEsc(d.doc_type) + '</span></td>' +
+      '<td>' + wkEsc(d.requestor || '—') + '</td><td>' + wkEsc(d.department || '—') + '</td>' +
+      '<td>' + fmt(d.created_at) + '</td><td>' + fmt(d.processed_at) + '</td><td>' + wkEsc(d.processed_by) + '</td>' +
+      '<td class="text-end">' + wkDur(d._tat) + '</td><td class="text-end">' + wkDur(d._hand) + '</td>' +
+      '<td class="text-center"><span class="badge ' + (okT ? 'bg-success' : 'bg-danger') + '">' + (okT ? 'Within' : 'Late') + '</span></td></tr>';
+  }).join('') : '<tr><td colspan="11" class="text-center text-muted py-3">Walang na-process sa period na ito.</td></tr>';
+
   // ── Requestors (by created in range)
   var rq = {};
   received.forEach(function(d) {
@@ -188,5 +225,20 @@ function wkRender() {
   }).join('');
 }
 
+function wkExportList() {
+  var rows = _wk.listRows || [];
+  if (!rows.length) { alert('Walang ie-export.'); return; }
+  var esc = function(v) { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  var hdr = ['Doc No', 'Type', 'Requestor', 'Department', 'Submitted', 'Processed', 'Processed By', 'Turnaround (hrs)', 'Handling (min)'];
+  var csv = hdr.join(',') + '\n' + rows.map(function(d) {
+    return [d.doc_no, d.doc_type, d.requestor, d.department, d.created_at, d.processed_at, d.processed_by,
+      d._tat != null ? (d._tat / 3600000).toFixed(2) : '', d._hand != null ? (d._hand / 60000).toFixed(1) : ''].map(esc).join(',');
+  }).join('\n');
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  a.download = 'Processed_Requests_' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+}
+window.wkExportList = wkExportList;
 window.wkLoad = wkLoad; window.wkOnRange = wkOnRange; window.wkRender = wkRender;
 document.addEventListener('DOMContentLoaded', function() { setTimeout(wkLoad, 0); });
