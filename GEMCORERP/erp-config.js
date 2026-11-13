@@ -155,4 +155,25 @@ function erpTurnoverBadge(onHand, aveMonthly) {
     'font-size:0.72rem;font-weight:700;background:' + colors[0] + ';color:' + colors[1] + ';">' + txt + '</span>';
 }
 
+
+// Inventory Ratio per item = days of stock on hand = On-Hand ÷ average daily usage (= 365 ÷ turnover)
+function erpInventoryRatioBadge(onHand, aveMonthly) {
+  var t = erpItemTurnover(onHand, aveMonthly);
+  var colors = {
+    danger: ['#fee2e2', '#b91c1c'], warn: ['#fef3c7', '#b45309'], ok: ['#dcfce7', '#166534'],
+    fast: ['#dbeafe', '#1d4ed8'], na: ['#f1f5f9', '#64748b']
+  }[t.cls];
+  var txt, tip;
+  if (t.ratio === null) { txt = '—'; tip = 'Out of stock'; }
+  else if (t.days === null) { txt = 'No usage'; tip = 'Has stock but no recorded consumption'; }
+  else {
+    var d = Math.round(t.days);
+    txt = d >= 3650 ? '10y+' : d.toLocaleString() + ' d';
+    tip = t.label + '\nOn-Hand ' + Math.round(t.onHand).toLocaleString() + ' ÷ average daily usage ' + (t.annual / 365).toFixed(2) +
+          '\n= ' + d.toLocaleString() + ' days (≈ ' + (t.days / 30.4).toFixed(1) + ' months) of stock';
+  }
+  return '<span title="' + tip.replace(/"/g, '&quot;').replace(/\n/g, '&#10;') + '" style="display:inline-block;min-width:50px;padding:2px 8px;border-radius:999px;' +
+    'font-size:0.72rem;font-weight:700;background:' + colors[0] + ';color:' + colors[1] + ';">' + txt + '</span>';
+}
+
 console.log('✅ erp-config.js loaded — v' + ERP_APP_VERSION);
