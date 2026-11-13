@@ -39,7 +39,7 @@
   var seen = {}, participates = {}, owned = {}, partAt = 0, ticks = 0, busy = false, timer = null, started = false;
   var dmUnread = 0, docUnread = 0, docInfo = {};   // docInfo[docNo] = { type, total, unread, last, msgs:[{s,t}] }
   var WAREHOUSE_SEES_ALL_DOCS = true;              // warehouse handles every request → alert on every doc thread
-  var RETENTION_MS = 7 * 86400000;                 // same as chat.js (older rows are purged)
+  var DOC_RETENTION_MS = 30 * 86400000;            // document discussions: 1 month (same as chat.js DISCUSS_RETENTION_DAYS)
 
   // ── per-user read pointers for document threads ───────────
   var RD_KEY = 'ivm_docread_' + ME, BASE_KEY = 'ivm_docread_base_' + ME;
@@ -126,7 +126,7 @@
     } catch (e) {}
   }
 
-  // ── document discussions: summary of the last 7 days ──────
+  // ── document discussions: summary of the last 30 days ──────
   function viewingDoc(docNo) {
     var st = window._chatState;
     return CHAT_PAGE && !document.hidden && st && st.openType === 'doc' && st.openWith === docNo;
@@ -169,7 +169,7 @@
   async function refreshDocs() {
     try {
       await loadParticipation();
-      var cut = new Date(Date.now() - RETENTION_MS).toISOString();
+      var cut = new Date(Date.now() - DOC_RETENTION_MS).toISOString();
       var rows = await get('messages?select=doc_no,doc_type,sender,created_at&doc_no=not.is.null&doc_no=neq.' +
         '&doc_type=in.(' + docTypes() + ')&created_at=gte.' + q(cut) + '&order=created_at.desc&limit=2000');
       var info = {};
