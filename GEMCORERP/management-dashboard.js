@@ -982,152 +982,173 @@ function mdashRenderInvRatioCard(f) {
 function mdashShowInventoryRatioInfo() {
   var f = _mdash.turnoverFacts;
   if (!f) return;
-  var peso = function(v) { return (typeof erpPeso === 'function') ? erpPeso(v) : '₱' + Math.round(v).toLocaleString(); };
   var has = f.ratio > 0 && f.daysOfStock;
   var bi = has ? mdashTurnoverBand(f.ratio) : { i: -1, b: null };
   var d = has ? f.daysOfStock : 0;
-  // marker on a Fast → Very slow scale (days increase to the right)
+  var period = erpEsc(mdashPeriodLabel());
   var pos = 0;
   if (has) pos = d < 46 ? d / 46 * 25 : d < 91 ? 25 + (d - 46) / 45 * 25 : d < 183 ? 50 + (d - 91) / 92 * 25 : Math.min(100, 75 + (d - 183) / 182 * 25);
-  var B = MDASH_TURNOVER_BANDS; // [Very slow, Slow, Healthy, Fast]
-  var scale = [
-    { b: B[3], rng: '< 46 days',     idx: 3 },
-    { b: B[2], rng: '46 – 91 days',  idx: 2 },
-    { b: B[1], rng: '91 – 183 days', idx: 1 },
-    { b: B[0], rng: '> 183 days',    idx: 0 }
-  ];
+  var B = MDASH_TURNOVER_BANDS;
+  var scale = [ { b: B[3], rng: '< 46 days', idx: 3 }, { b: B[2], rng: '46 – 91 days', idx: 2 }, { b: B[1], rng: '91 – 183 days', idx: 1 }, { b: B[0], rng: '> 183 days', idx: 0 } ];
+  var html = '';
 
-  var html = '<p class="mb-2"><b>In one sentence:</b> Inventory Ratio shows <b>how many days our current stock would last</b> at the usual rate of usage. ' +
-    '<b>Lower = stock moves faster. Higher = stock sits longer and ties up cash.</b></p>';
+  html += '<div class="to-hero blue"><div class="to-hero-n">' + (has ? Math.round(d) + '<small> days</small>' : '—') + '</div>' +
+    '<div class="to-hero-t">' + (has
+      ? 'In plain words: if we kept using stock at the usual pace and nothing new came in, what we have now would last about <b>' + Math.round(d) + ' days</b> (' + (d / 30.4).toFixed(1) + ' months). ' +
+        'Status: <b>' + bi.b.label + '</b>. ' + bi.b.meaning
+      : 'Not enough issuance data in this period to compute the Inventory Ratio.') + '</div></div>';
 
-  html += '<div class="to-big">' +
-    '<div><div class="l">Inventory ratio</div><div class="n">' + (has ? Math.round(d) + ' days' : '—') + '</div><div class="to-note">of stock on hand</div></div>' +
-    '<div><div class="l">In months</div><div class="n">' + (has ? (d / 30.4).toFixed(1) : '—') + '</div><div class="to-note">months of stock</div></div>' +
-    '<div><div class="l">Status</div><div class="n" style="font-size:1.25rem">' + (has ? bi.b.label : 'No data') + '</div><div class="to-note">' + (has ? bi.b.meaning : '') + '</div></div>' +
-    '</div>';
+  html += '<div class="to-sec"><h6>The idea in 20 seconds</h6><div class="to-analogy">' +
+    'Think of the <b>fuel gauge</b> in a car. If the tank has <b>100 liters</b> and the car uses <b>2 liters a day</b>, the fuel lasts <b>50 days</b>.' +
+    '<ul><li>Our warehouse is the <b>tank</b></li><li>Our daily usage is the <b>fuel burned per day</b></li><li>Inventory Ratio is the <b>number of days before the tank is empty</b></li></ul>' +
+    '<b>Fewer days = stock moves fast. More days = stock sits in the warehouse and ties up cash.</b></div></div>';
 
-  html += '<div class="to-sec"><h6>1. How is it computed?</h6>' +
-    '<div class="to-formula">Inventory Ratio (days) = Inventory ÷ Average daily usage<br>' +
-    'or, the same thing: 365 ÷ Turnover Ratio</div>' +
-    '<div class="to-note">' + (has ? 'With a turnover of <b>' + f.ratio.toFixed(1) + '×</b> per year: 365 ÷ ' + f.ratio.toFixed(1) + ' = <b>' + Math.round(d) + ' days</b>. ' : '') +
-    'It uses the same data as the Turnover Ratio card (' + erpEsc(mdashPeriodLabel()) + ', ' + f.days + '-day basis), so the two always agree.</div></div>';
+  html += '<div class="to-sec"><h6>How the number is worked out</h6><div class="to-steps">' +
+    '<div class="to-step"><div class="num">1</div><div><div class="tt">Start with the Turnover Ratio</div><div class="vv">' + (has ? f.ratio.toFixed(1) + '× per year' : '—') + '</div>' +
+    '<div class="dd">How many times a year our stock is used up and refilled (' + period + ', ' + f.days + '-day basis)</div></div></div>' +
+    '<div class="to-step"><div class="num">2</div><div><div class="tt">Divide the days in a year by it</div><div class="vv">' + (has ? '365 ÷ ' + f.ratio.toFixed(1) + ' = ' + Math.round(d) + ' days' : '—') + '</div>' +
+    '<div class="dd">If stock is refilled ' + (has ? f.ratio.toFixed(1) : 'N') + ' times in 365 days, each "tankful" lasts 365 ÷ ' + (has ? f.ratio.toFixed(1) : 'N') + ' days</div></div></div>' +
+    '<div class="to-step result"><div class="num"><i class="bi bi-check-lg"></i></div><div><div class="tt">Result on the dashboard</div><div class="vv">' + (has ? Math.round(d) + ' days (≈ ' + (d / 30.4).toFixed(1) + ' months)' : '—') + '</div></div></div>' +
+    '</div><div class="to-note">Same thing, written another way: Inventory ÷ average daily usage.</div></div>';
 
-  html += '<div class="to-sec"><h6>2. How is it different from Turnover Ratio?</h6>' +
-    '<table class="to-mini"><tbody>' +
-      '<tr><td>Turnover Ratio</td><td>How many <b>times a year</b> stock is used up (higher is better)</td></tr>' +
-      '<tr><td>Inventory Ratio</td><td>How many <b>days</b> the stock will last (lower is better)</td></tr>' +
-    '</tbody></table>' +
-    '<div class="to-note">Same information in two forms. Turnover is better for comparing over time. Inventory Ratio is easier to picture.</div></div>';
-
-  html += '<div class="to-sec"><h6>3. How to read it</h6>' +
+  html += '<div class="to-sec"><h6>Where are we on the scale?</h6>' +
     '<div class="to-scale">' + (has ? '<div class="to-marker" style="left:' + pos + '%">' + Math.round(d) + ' d</div>' : '') +
-      '<span class="s4"></span><span class="s3"></span><span class="s2"></span><span class="s1"></span></div>' +
-    '<div class="to-scale-lbl">' + scale.map(function(s) {
-      return '<span class="' + (s.idx === bi.i ? 'cur' : '') + '">' + s.b.label + '<br>' + s.rng + '</span>';
-    }).join('') + '</div>' +
-    '<div class="to-note">General rules of thumb. The right level depends on supplier lead times and the kind of items, so management can adjust them.</div></div>';
+    '<span class="s4"></span><span class="s3"></span><span class="s2"></span><span class="s1"></span></div>' +
+    '<div class="to-scale-lbl">' + scale.map(function(s) { return '<span class="' + (s.idx === bi.i ? 'cur' : '') + '">' + s.b.label + '<br>' + s.rng + '</span>'; }).join('') + '</div></div>';
 
-  html += '<div class="to-sec"><h6>4. Per-item view</h6>' +
-    'Stock Monitor and the Inventory Master table below now show an <b>Inventory Ratio (days)</b> column for every item, so you can see which items hold the most days of stock. ' +
-    'Per item: On-Hand ÷ average daily usage (from Ave/Mo).</div>';
+  html += '<div class="to-sec"><h6>Turnover and Inventory Ratio side by side</h6>' + mdashRefTable(bi.i, 'Turnover Ratio') +
+    '<div class="to-note">These ranges are general rules of thumb. Management can adjust them to match company targets.</div></div>';
 
-  var el = document.getElementById('invRatioInfoModal');
+  html += '<div class="to-sec"><h6>Is fewer days always better?</h6><div class="to-callout">' +
+    'Not always. If stock lasts <b>fewer days than our supplier lead time</b>, we risk running out before the next delivery arrives. ' +
+    'Example: if a supplier takes 45 days to deliver but we only have 30 days of stock, production may stop. ' +
+    'The goal is a healthy middle: not too many days (cash stuck), not too few (risk of stock-out).</div></div>';
+
+  html += '<div class="to-sec"><h6>See it per item</h6>Stock Monitor and the Inventory Master table below have an <b>Inventory Ratio (days)</b> column for every item. ' +
+    'Per item it is: <b>On-Hand ÷ average daily usage</b>. Hover over a value to see the details.</div>';
+
+  html += '<div class="to-sec to-faq"><h6>Common questions</h6>' +
+    '<details><summary>What does "No usage" mean in the item table?</summary><div>The item has stock, but no consumption has been recorded, so there is no usage rate to count days from. These are the first items to review.</div></details>' +
+    '<details><summary>Why do the item days not add up to this total?</summary><div>This card is based on the system\'s overall turnover. Item columns use each item\'s own average monthly usage and current on-hand. They measure the same idea but are calculated separately, so use the item column to compare items with each other.</div></details>' +
+    '<details><summary>Which period is used?</summary><div>The period in the filter at the top (' + period + '), scaled to a full year.</div></details></div>';
+
+  mdashOpenInfoModal('invRatioInfoModal', 'Inventory Ratio: how many days of stock do we have?', 'bi-calendar3', html);
+}
+window.mdashShowInventoryRatioInfo = mdashShowInventoryRatioInfo;
+
+
+// ───────── Shared pieces for the two KPI explainers ─────────
+function mdashOpenInfoModal(id, title, icon, html) {
+  var el = document.getElementById(id);
   if (!el) {
     el = document.createElement('div');
-    el.id = 'invRatioInfoModal';
+    el.id = id;
     el.className = 'modal fade to-modal';
     el.tabIndex = -1;
     el.innerHTML = '<div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">' +
-      '<div class="modal-header"><h5 class="modal-title"><i class="bi bi-calendar3 me-2"></i>Inventory Ratio: how many days of stock do we have?</h5>' +
+      '<div class="modal-header"><h5 class="modal-title"><i class="bi ' + icon + ' me-2"></i>' + title + '</h5>' +
       '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>' +
-      '<div class="modal-body" id="invRatioInfoBody"></div>' +
+      '<div class="modal-body"></div>' +
       '<div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button></div>' +
       '</div></div>';
     document.body.appendChild(el);
   }
-  document.getElementById('invRatioInfoBody').innerHTML = html;
+  el.querySelector('.modal-body').innerHTML = html;
   bootstrap.Modal.getOrCreateInstance(el).show();
 }
-window.mdashShowInventoryRatioInfo = mdashShowInventoryRatioInfo;
+function mdashPesoFmt(v) { return (typeof erpPeso === 'function') ? erpPeso(v) : '₱' + Math.round(v).toLocaleString(); }
+var MDASH_BAND_COLORS = { danger: '#ef4444', warn: '#f59e0b', ok: '#22c55e', fast: '#3b82f6' };
+
+// Reference table: turnover ↔ days of stock ↔ status. Highlights the current row.
+function mdashRefTable(curIdx, firstCol) {
+  var B = MDASH_TURNOVER_BANDS;
+  var rows = [
+    { i: 3, t: '8× or more', d: 'less than 46 days' },
+    { i: 2, t: '4× to 8×',   d: '46 to 91 days (1.5 to 3 months)' },
+    { i: 1, t: '2× to 4×',   d: '91 to 183 days (3 to 6 months)' },
+    { i: 0, t: 'below 2×',   d: 'more than 183 days (over 6 months)' }
+  ];
+  return '<table class="to-tbl"><thead><tr><th>' + (firstCol || 'Turnover Ratio') + '</th><th>Stock lasts about</th><th>Status</th></tr></thead><tbody>' +
+    rows.map(function(r) {
+      var b = B[r.i];
+      return '<tr class="' + (r.i === curIdx ? 'cur' : '') + '"><td>' + r.t + '</td><td>' + r.d + '</td>' +
+        '<td><span class="dot" style="background:' + MDASH_BAND_COLORS[b.cls] + '"></span>' + b.label + (r.i === curIdx ? ' ← we are here' : '') + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
 
 function mdashShowTurnoverInfo() {
   var f = _mdash.turnoverFacts;
   if (!f) return;
-  var peso = function(v) { return (typeof erpPeso === 'function') ? erpPeso(v) : '₱' + Math.round(v).toLocaleString(); };
-  var pct = function(a, b) { return b > 0 ? Math.round(a / b * 100) : 0; };
+  var peso = mdashPesoFmt;
+  var pct = function(x, y) { return y > 0 ? Math.round(x / y * 100) : 0; };
   var has = f.ratio > 0;
   var bi = has ? mdashTurnoverBand(f.ratio) : { i: -1, b: null };
-  var period = mdashPeriodLabel();
-
-  // marker position on the 4-segment scale
-  var pos = 0;
-  if (has) {
-    var v = f.ratio;
-    pos = v < 2 ? v / 2 * 25 : v < 4 ? 25 + (v - 2) / 2 * 25 : v < 8 ? 50 + (v - 4) / 4 * 25 : Math.min(100, 75 + (v - 8) / 4 * 25);
-  }
-
+  var period = erpEsc(mdashPeriodLabel());
   var html = '';
-  html += '<div class="to-sec" style="margin-top:0"><p class="mb-2"><b>In one sentence:</b> Turnover Ratio shows how many times a year the stock in our warehouse is used up and replaced. ' +
-          '<b>Higher = stock moves faster. Lower = stock sits longer and ties up cash.</b></p></div>';
 
-  html += '<div class="to-big">' +
-    '<div><div class="l">Turnover ratio</div><div class="n">' + (has ? f.ratio.toFixed(1) + '×' : '—') + '</div><div class="to-note">times per year</div></div>' +
-    '<div><div class="l">Days of stock on hand</div><div class="n">' + (has ? Math.round(f.daysOfStock) : '—') + '</div><div class="to-note">' + (has ? '≈ ' + (f.daysOfStock / 30.4).toFixed(1) + ' months (365 ÷ ' + f.ratio.toFixed(1) + ')' : '') + '</div></div>' +
-    '<div><div class="l">Status</div><div class="n" style="font-size:1.25rem">' + (has ? bi.b.label : 'No data') + '</div><div class="to-note">' + (has ? bi.b.meaning : '') + '</div></div>' +
-    '</div>';
+  // ── Hero: the answer first
+  html += '<div class="to-hero"><div class="to-hero-n">' + (has ? f.ratio.toFixed(1) + '<small>×</small>' : '—') + '</div>' +
+    '<div class="to-hero-t">' + (has
+      ? 'In plain words: in a year, we use up and refill our inventory about <b>' + f.ratio.toFixed(1) + ' times</b>. ' +
+        'That means our stock lasts around <b>' + Math.round(f.daysOfStock) + ' days</b> (' + (f.daysOfStock / 30.4).toFixed(1) + ' months). ' +
+        'Status: <b>' + bi.b.label + '</b>. ' + bi.b.meaning
+      : 'Not enough issuance data in this period to compute a turnover ratio.') + '</div></div>';
 
-  html += '<div class="to-sec"><h6>1. How is it computed?</h6>' +
-    '<div class="to-formula">Turnover (for the period) = Value of stock issued ÷ Value of inventory<br>' +
-    'Turnover Ratio (per year) = Turnover for the period × (365 ÷ days in period)</div>' +
-    '<div class="to-note">We look at the last ' + f.days + ' days (' + erpEsc(period) + ') and scale it to a full year so it is comparable with other periods.</div>' +
-    '<table class="to-mini mt-2"><tbody>' +
-      '<tr><td>Period</td><td>' + erpEsc(period) + ' (' + f.days + ' days)</td></tr>' +
-      '<tr><td>Stock issued to production (MRIF) in this period</td><td>' + peso(f.issued) + (f.mrifCount ? ' · ' + f.mrifCount + ' docs' : '') + '</td></tr>' +
-      '<tr><td>Current inventory value</td><td>' + peso(f.inv) + '</td></tr>' +
-    '</tbody></table>' +
-    (f.check ? '<div class="to-note">Quick check: ' + peso(f.issued) + ' ÷ ' + peso(f.inv) + ' × (365 ÷ ' + f.days + ') ≈ <b>' + f.check.toFixed(1) + '×</b></div>' : '') +
-    '</div>';
+  // ── The idea
+  html += '<div class="to-sec"><h6>The idea in 20 seconds</h6><div class="to-analogy">' +
+    'Imagine a shelf that holds <b>100 boxes</b> of an item.' +
+    '<ul><li>If we use <b>400 boxes</b> in a year, we refill the shelf <b>4 times</b> → Turnover = <b>4×</b></li>' +
+    '<li>If we use only <b>100 boxes</b> in a year, we refill it <b>once</b> → Turnover = <b>1×</b></li>' +
+    '<li>If we use <b>nothing</b>, the shelf never gets refilled → Turnover = <b>0×</b></li></ul>' +
+    '<b>More refills = stock is moving and our money is working. Few refills = stock is sitting and our money is stuck.</b></div></div>';
 
-  html += '<div class="to-sec"><h6>2. How to read it</h6>' +
-    '<div class="to-scale">' + (has ? '<div class="to-marker" style="left:' + pos + '%">' + f.ratio.toFixed(1) + '×</div>' : '') +
-      '<span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span></div>' +
-    '<div class="to-scale-lbl">' +
-      MDASH_TURNOVER_BANDS.map(function(b, i) {
-        var from = i === 0 ? 0 : MDASH_TURNOVER_BANDS[i - 1].max;
-        var rng = b.max === Infinity ? '> ' + from : (i === 0 ? '< ' + b.max : from + ' – ' + b.max);
-        return '<span class="' + (i === bi.i ? 'cur' : '') + '">' + b.label + '<br>' + rng + '×</span>';
-      }).join('') +
-    '</div>' +
-    '<div class="to-note">These ranges are general rules of thumb. The right target depends on our products and lead times, so management can adjust them.</div></div>';
+  // ── Steps
+  html += '<div class="to-sec"><h6>How the number is worked out</h6><div class="to-steps">';
+  if (f.check) {
+    var raw = f.issued / f.inv;
+    html += '<div class="to-step"><div class="num">1</div><div><div class="tt">What went out</div><div class="vv">' + peso(f.issued) + '</div>' +
+      '<div class="dd">Value of stock issued to production (MRIF) in ' + period + ' (' + f.days + ' days)' + (f.mrifCount ? ' · ' + f.mrifCount + ' documents' : '') + '</div></div></div>' +
+      '<div class="to-step"><div class="num">2</div><div><div class="tt">What we keep in the warehouse</div><div class="vv">' + peso(f.inv) + '</div>' +
+      '<div class="dd">Total value of inventory on hand</div></div></div>' +
+      '<div class="to-step"><div class="num">3</div><div><div class="tt">How many refills in ' + f.days + ' days?</div><div class="vv">' + peso(f.issued) + ' ÷ ' + peso(f.inv) + ' = ' + raw.toFixed(2) + '</div>' +
+      '<div class="dd">Step 1 divided by Step 2</div></div></div>' +
+      '<div class="to-step"><div class="num">4</div><div><div class="tt">Scale it to a full year</div><div class="vv">' + raw.toFixed(2) + ' × (365 ÷ ' + f.days + ') ≈ ' + f.check.toFixed(1) + '×</div>' +
+      '<div class="dd">So periods of different lengths can be compared fairly</div></div></div>' +
+      '<div class="to-step result"><div class="num"><i class="bi bi-check-lg"></i></div><div><div class="tt">Result on the dashboard</div><div class="vv">' + f.ratio.toFixed(1) + '× per year</div></div></div>';
+  } else {
+    html += '<div class="to-step"><div class="num">1</div><div><div class="tt">What went out</div><div class="dd">Value of stock issued to production (MRIF) in ' + period + ' (' + f.days + ' days)</div></div></div>' +
+      '<div class="to-step"><div class="num">2</div><div><div class="tt">What we keep in the warehouse</div><div class="dd">Total value of inventory on hand</div></div></div>' +
+      '<div class="to-step"><div class="num">3</div><div><div class="tt">Divide Step 1 by Step 2</div><div class="dd">This gives the number of refills in ' + f.days + ' days</div></div></div>' +
+      '<div class="to-step"><div class="num">4</div><div><div class="tt">Scale it to a full year</div><div class="dd">Multiply by 365 ÷ ' + f.days + '</div></div></div>' +
+      '<div class="to-step result"><div class="num"><i class="bi bi-check-lg"></i></div><div><div class="tt">Result on the dashboard</div><div class="vv">' + (has ? f.ratio.toFixed(1) + '× per year' : '—') + '</div>' +
+      '<div class="dd">Exact figure is calculated by the system.</div></div></div>';
+  }
+  html += '</div></div>';
 
+  // ── Meaning table
+  html += '<div class="to-sec"><h6>What does the number mean?</h6>' + mdashRefTable(bi.i, 'Turnover Ratio') +
+    '<div class="to-note">These ranges are general rules of thumb. The right target depends on our products and supplier lead times, and management can adjust them.</div></div>';
+
+  // ── What is pulling it down
   if (f.mvTotal > 0) {
-    html += '<div class="to-sec"><h6>3. What is pulling it down?</h6><div class="to-callout">' +
+    html += '<div class="to-sec"><h6>What is affecting our number?</h6><div class="to-callout">' +
       '<b>' + pct(f.noMove, f.mvTotal) + '%</b> of our stock value (' + peso(f.noMove) + ') is in items with <b>no movement</b>, and ' +
       '<b>' + pct(f.slow, f.mvTotal) + '%</b> (' + peso(f.slow) + ') is in <b>slow-moving</b> items. ' +
       'Money sitting in items that are not being used is the main reason turnover stays low.</div></div>';
   }
 
-  html += '<div class="to-sec"><h6>' + (f.mvTotal > 0 ? '4' : '3') + '. How can we improve it?</h6><ul class="mb-0">' +
+  html += '<div class="to-sec"><h6>What can we do to improve it?</h6><ul class="mb-0">' +
     '<li>Stop or reduce re-ordering of <b>no-movement</b> and <b>slow-moving</b> items.</li>' +
     '<li>Use up, return to supplier, or dispose of stock that is no longer needed.</li>' +
-    '<li>Order closer to actual consumption. Review buffer stock and PRF quantities for over-stocked items.</li>' +
-    '<li>Focus on <b>Class A</b> items first, since they hold the most value.</li></ul></div>';
+    '<li>Order closer to actual consumption. Review buffer stock and PRF quantities.</li>' +
+    '<li>Start with <b>Class A</b> items, since they hold the most value.</li></ul></div>';
 
-  var el = document.getElementById('turnoverInfoModal');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'turnoverInfoModal';
-    el.className = 'modal fade to-modal';
-    el.tabIndex = -1;
-    el.innerHTML = '<div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">' +
-      '<div class="modal-header"><h5 class="modal-title"><i class="bi bi-arrow-repeat me-2"></i>Turnover Ratio: how fast does our inventory move?</h5>' +
-      '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>' +
-      '<div class="modal-body" id="turnoverInfoBody"></div>' +
-      '<div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button></div>' +
-      '</div></div>';
-    document.body.appendChild(el);
-  }
-  document.getElementById('turnoverInfoBody').innerHTML = html;
-  bootstrap.Modal.getOrCreateInstance(el).show();
+  html += '<div class="to-sec to-faq"><h6>Common questions</h6>' +
+    '<details><summary>Is a low number always bad?</summary><div>Not always. Some items must stay in stock even if they are rarely used, such as spare parts or safety stock. But a low number is a good reason to review whether we really need that much.</div></details>' +
+    '<details><summary>Why is the Turnover column in the item tables different from this card?</summary><div>This card uses the <b>total value issued</b> versus the <b>total inventory value</b>. The item columns use each item\'s <b>average monthly usage × 12 ÷ its current on-hand</b>. Both measure the same idea, but they will not add up exactly. The item column is best for comparing one item against another.</div></details>' +
+    '<details><summary>Which period is used?</summary><div>The period in the filter at the top (' + period + '). The result is always scaled to a full year so different periods can be compared.</div></details>' +
+    '<details><summary>What is the difference with Inventory Ratio?</summary><div>Same information in a different form. Turnover says <b>how many times a year</b> stock is refilled. Inventory Ratio says <b>how many days</b> the stock will last.</div></details></div>';
+
+  mdashOpenInfoModal('turnoverInfoModal', 'Turnover Ratio: how fast does our inventory move?', 'bi-arrow-repeat', html);
 }
 window.mdashShowTurnoverInfo = mdashShowTurnoverInfo;
