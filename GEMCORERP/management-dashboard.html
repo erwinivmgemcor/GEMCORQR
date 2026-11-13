@@ -650,6 +650,41 @@
 <script defer src="notif-alerts.js"></script>
 <script defer src="notifications.js"></script>
    <script defer src="js/update.js"></script>
+<style>
+/* Turnover Ratio card */
+.mdash-to-card { cursor: pointer; }
+.mdash-to-card:hover { box-shadow: 0 6px 20px rgba(245,158,11,.25); }
+#mdashKpiTurnover.has-x::after { content: "×"; font-size: .55em; margin-left: 3px; opacity: .65; font-weight: 700; }
+.mdash-to-pill { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: .72rem; font-weight: 600; }
+.mdash-to-pill .tp { padding: 2px 9px; border-radius: 999px; font-weight: 700; }
+.mdash-to-pill .tp-danger { background: #fee2e2; color: #b91c1c; }
+.mdash-to-pill .tp-warn   { background: #fef3c7; color: #b45309; }
+.mdash-to-pill .tp-ok     { background: #dcfce7; color: #166534; }
+.mdash-to-pill .tp-fast   { background: #dbeafe; color: #1d4ed8; }
+.mdash-to-pill .tp-days   { color: #475569; }
+.mdash-to-link { margin-top: 6px; font-size: .7rem; color: #2563eb; font-weight: 600; }
+/* Turnover explainer modal */
+.to-modal .modal-body { font-size: .9rem; color: #1e293b; }
+.to-big { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 14px; }
+.to-big > div { flex: 1 1 150px; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px 14px; background: #f8fafc; }
+.to-big .n { font-size: 1.7rem; font-weight: 800; line-height: 1.1; }
+.to-big .l { font-size: .72rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.to-sec { margin-top: 16px; }
+.to-sec h6 { font-weight: 800; margin-bottom: 6px; font-size: .92rem; }
+.to-formula { background: #0f172a; color: #f8fafc; border-radius: 10px; padding: 12px 14px; font-family: ui-monospace, Consolas, monospace; font-size: .82rem; line-height: 1.7; }
+.to-scale { position: relative; display: flex; height: 14px; border-radius: 7px; overflow: hidden; margin: 22px 0 6px; }
+.to-scale span { flex: 1; }
+.to-scale .s1 { background: #ef4444; } .to-scale .s2 { background: #f59e0b; } .to-scale .s3 { background: #22c55e; } .to-scale .s4 { background: #3b82f6; }
+.to-marker { position: absolute; top: -18px; transform: translateX(-50%); font-size: .7rem; font-weight: 800; }
+.to-marker::after { content: ""; display: block; margin: 1px auto 0; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid #0f172a; }
+.to-scale-lbl { display: flex; font-size: .68rem; color: #64748b; font-weight: 600; }
+.to-scale-lbl span { flex: 1; text-align: center; }
+.to-scale-lbl span.cur { color: #0f172a; font-weight: 800; }
+.to-note { font-size: .75rem; color: #64748b; margin-top: 4px; }
+.to-callout { border-left: 4px solid #f59e0b; background: #fffbeb; border-radius: 6px; padding: 10px 12px; }
+.to-mini { width: 100%; font-size: .82rem; }
+.to-mini td { padding: 3px 0; } .to-mini td:last-child { text-align: right; font-weight: 700; }
+</style>
 </head>
 <body>
 
@@ -786,13 +821,15 @@
     </div>
 
     <!-- KPI 4: Turnover Ratio -->
-    <div class="mdash-kpi kpi-amber">
+    <div class="mdash-kpi kpi-amber mdash-to-card" id="mdashTurnoverCard" onclick="mdashShowTurnoverInfo()" title="Click to see how this is computed">
       <div class="mdash-kpi-header">
         <div class="mdash-kpi-label">Turnover Ratio</div>
         <div class="mdash-kpi-icon icon-amber"><i class="bi bi-arrow-repeat"></i></div>
       </div>
       <div class="mdash-kpi-value kpi-value-sm" id="mdashKpiTurnover">—</div>
-      <div class="mdash-kpi-sub" id="mdashKpiTurnoverSub">Annualized</div>
+      <div class="mdash-kpi-sub" id="mdashKpiTurnoverSub">times per year</div>
+      <div class="mdash-to-pill" id="mdashTurnoverPill"></div>
+      <div class="mdash-to-link"><i class="bi bi-info-circle"></i> How is this computed?</div>
     </div>
 
     <!-- KPI 5: MRR -->
