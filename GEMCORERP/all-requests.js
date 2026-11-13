@@ -1666,3 +1666,16 @@ async function arSaveRemark(docNo, text) {
   } finally { btn.disabled = false; }
 }
 window.arOpenRemarks = arOpenRemarks;
+
+// Deep link: ?q=TEXT → i-prefill ang search box (galing sa Notes & Reminders)
+document.addEventListener('DOMContentLoaded', function() {
+  try {
+    var q = new URLSearchParams(location.search).get('q');
+    if (!q) return;
+    var tries = 0, t = setInterval(function() {
+      var el = document.getElementById('allSearchInput');
+      if (el && typeof allRequestsOnSearch === 'function') { clearInterval(t); el.value = q; allRequestsOnSearch(); }
+      else if (++tries > 40) clearInterval(t);
+    }, 250);
+  } catch (e) {}
+});
