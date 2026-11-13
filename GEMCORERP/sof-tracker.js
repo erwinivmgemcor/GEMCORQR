@@ -105,6 +105,21 @@ async function sofTrackerMergeMissing(list) {
       g.n++; g.alloc += Number(r.allocated_qty || 0); g.used += Number(r.used_qty || 0);
     });
 
+    // Kung may SOF sa RPC list pero iba ang totals (hal. 0 / 0 kahit may items) → sundin ang items table,
+    // para hindi mapunta sa "Released" at hindi maitago.
+    var fixed = [];
+    list.forEach(function(a) {
+      var g = agg[sofKey(a.sof_no)];
+      if (!g) return;
+      var rem = g.alloc - g.used;
+      var same = Number(a.total_allocated_qty || 0) === g.alloc && Number(a.total_used_qty || 0) === g.used && Number(a.total_items || 0) === g.n;
+      if (same) return;
+      fixed.push(a.sof_no + ' (RPC ' + Number(a.total_allocated_qty || 0) + ' → items ' + g.alloc + ')');
+      a.total_items = g.n; a.total_allocated_qty = g.alloc; a.total_used_qty = g.used; a.total_remaining_qty = rem;
+      if (!a.status) a.status = (g.alloc > 0 && rem <= 0) ? 'COMPLETED' : 'ACTIVE';
+    });
+    if (fixed.length) console.log('[SOF Tracker] Na-correct ang totals mula sa items table: ' + fixed.join('; '));
+
     var added = 0;
     Object.keys(agg).forEach(function(k) {
       if (have[k]) return;
