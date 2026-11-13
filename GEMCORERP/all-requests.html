@@ -65,6 +65,18 @@
 .ar-cat.mine{border-color:#0f172a;box-shadow:0 0 0 1px #fff inset;}
 tr.ar-mine{background:#f0f9ff;}
 tr.ar-mine td:first-child{box-shadow:inset 4px 0 0 #0ea5e9;}
+.ar-stchips{display:flex;flex-wrap:wrap;gap:6px;}
+.ar-stchip{border:1.5px solid #cbd5e1;background:#fff;color:#334155;font-size:.78rem;font-weight:700;padding:5px 12px;border-radius:999px;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:5px;}
+.ar-stchip b{background:#e2e8f0;color:#0f172a;border-radius:999px;padding:0 7px;font-size:.72rem;}
+.ar-stchip:hover{box-shadow:0 2px 8px rgba(15,23,42,.12);}
+.ar-stchip.active{background:#0f172a;border-color:#0f172a;color:#fff;}
+.ar-stchip.active b{background:rgba(255,255,255,.25);color:#fff;}
+.ar-stchip.st-unserved{border-color:#fca5a5;color:#b91c1c;}
+.ar-stchip.st-partial{border-color:#fcd34d;color:#b45309;}
+.ar-stchip.st-served{border-color:#86efac;color:#166534;}
+.ar-stchip.st-unserved.active{background:#dc2626;border-color:#dc2626;color:#fff;}
+.ar-stchip.st-partial.active{background:#f59e0b;border-color:#f59e0b;color:#fff;}
+.ar-stchip.st-served.active{background:#16a34a;border-color:#16a34a;color:#fff;}
 </style>
 </head>
 <body>
