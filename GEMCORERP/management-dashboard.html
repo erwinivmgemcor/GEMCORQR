@@ -225,9 +225,13 @@
 /* KPI Grid */
 .mdash-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 16px;
   margin-bottom: 24px;
+}
+
+@media (max-width: 1500px) {
+  .mdash-kpi-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
 @media (max-width: 1200px) {
@@ -654,6 +658,7 @@
 /* Turnover Ratio card */
 .mdash-to-card { cursor: pointer; }
 .mdash-to-card:hover { box-shadow: 0 6px 20px rgba(245,158,11,.25); }
+#mdashKpiInvRatio.has-days::after { content: " days"; font-size: .45em; margin-left: 2px; opacity: .65; font-weight: 700; }
 #mdashKpiTurnover.has-x::after { content: "×"; font-size: .55em; margin-left: 3px; opacity: .65; font-weight: 700; }
 .mdash-to-pill { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: .72rem; font-weight: 600; }
 .mdash-to-pill .tp { padding: 2px 9px; border-radius: 999px; font-weight: 700; }
@@ -832,6 +837,18 @@
       <div class="mdash-to-link"><i class="bi bi-info-circle"></i> How is this computed?</div>
     </div>
 
+    <!-- KPI 4b: Inventory Ratio (days of stock) -->
+    <div class="mdash-kpi kpi-blue mdash-to-card" id="mdashInvRatioCard" onclick="mdashShowInventoryRatioInfo()" title="Click to see how this is computed">
+      <div class="mdash-kpi-header">
+        <div class="mdash-kpi-label">Inventory Ratio</div>
+        <div class="mdash-kpi-icon icon-blue"><i class="bi bi-calendar3"></i></div>
+      </div>
+      <div class="mdash-kpi-value kpi-value-sm" id="mdashKpiInvRatio">—</div>
+      <div class="mdash-kpi-sub" id="mdashKpiInvRatioSub">days of stock on hand</div>
+      <div class="mdash-to-pill" id="mdashInvRatioPill"></div>
+      <div class="mdash-to-link"><i class="bi bi-info-circle"></i> How is this computed?</div>
+    </div>
+
     <!-- KPI 5: MRR -->
     <div class="mdash-kpi kpi-green">
       <div class="mdash-kpi-header">
@@ -922,15 +939,16 @@
         <thead>
           <tr>
             <th style="width:3%">#</th>
-            <th style="width:11%">Item Code</th>
-            <th style="width:16%">Description</th>
-            <th style="width:8%">Category</th>
+            <th style="width:10%">Item Code</th>
+            <th style="width:12%">Description</th>
+            <th style="width:7%">Category</th>
             <th style="width:5%">Location</th>
             <th style="width:7%;text-align:right;">On-Hand</th>
-            <th style="width:5%">Unit</th>
+            <th style="width:4%">Unit</th>
             <th style="width:8%;text-align:right;">Unit Cost</th>
             <th style="width:10%;text-align:right;">On-Hand Cost</th>
             <th style="width:7%;text-align:center;" title="Turnover Ratio per item (times per year) = (Ave monthly consumption × 12) ÷ On-Hand. Higher = moves faster. Hover a value for days of stock.">Turnover</th>
+            <th style="width:7%;text-align:center;" title="Inventory Ratio = days of stock on hand = On-Hand ÷ average daily usage. Lower = moves faster. Hover a value for details.">Inventory Ratio (days)</th>
             <th style="width:6%;text-align:center;">ABC</th>
             <th style="width:8%;text-align:center;">Movement</th>
             <th style="width:6%;text-align:center;">Status</th>
@@ -938,7 +956,7 @@
         </thead>
         <tbody id="mdashTableBody">
           <tr>
-            <td colspan="13" class="mdash-empty">
+            <td colspan="14" class="mdash-empty">
               <div class="mdash-spinner"></div>
               <div class="mt-2">Loading items...</div>
             </td>
