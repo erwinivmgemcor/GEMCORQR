@@ -215,7 +215,7 @@ async function prfMonitorLoad() {
       '<div class="mt-2">Loading PRFs...</div></td></tr>';
   }
   if (itemBody) {
-    itemBody.innerHTML = '<tr><td colspan="13" class="erp-empty">' +
+    itemBody.innerHTML = '<tr><td colspan="14" class="erp-empty">' +
       '<div class="erp-spinner"></div>' +
       '<div class="mt-2">Loading items...</div></td></tr>';
   }
@@ -304,7 +304,7 @@ async function prfMonitorLoad() {
         'Failed: ' + erpEsc(err.message) + '</td></tr>';
     }
     if (itemBody) {
-      itemBody.innerHTML = '<tr><td colspan="13" class="erp-empty text-danger">' +
+      itemBody.innerHTML = '<tr><td colspan="14" class="erp-empty text-danger">' +
         'Failed: ' + erpEsc(err.message) + '</td></tr>';
     }
   }
@@ -585,8 +585,10 @@ function prfMonitorRenderItemTab() {
       var poData = _resolvePoData(it);
       var poNo = String(poData.po_no || '').toLowerCase();
       var supplier = String(poData.supplier || '').toLowerCase();
+      var remarksTxt = String(it.remarks || '').toLowerCase();
 
       if (prfNo.indexOf(search) === -1 &&
+          remarksTxt.indexOf(search) === -1 &&
           itemCode.indexOf(search) === -1 &&
           desc.indexOf(search) === -1 &&
           poNo.indexOf(search) === -1 &&
@@ -622,7 +624,7 @@ function prfMonitorRenderItemTab() {
   document.getElementById('itemBtnNext').disabled = (end >= total);
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="13" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="14" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No items found.</td></tr>';
     return;
@@ -698,6 +700,8 @@ function prfMonitorRenderItemTab() {
       '<td class="text-center">' + poDisplay + '</td>' +
       '<td>' + supplierDisplay + '</td>' +
       '<td class="text-center" style="font-size:0.72rem;">' + dateDeliveredDisplay + '</td>' +
+      '<td style="font-size:0.72rem;white-space:normal;word-break:break-word;min-width:110px;" title="' + erpEsc(it.remarks || '') + '">' +
+        (it.remarks ? erpEsc(it.remarks) : '<span class="text-muted">—</span>') + '</td>' +
       '<td class="text-center">' +
         '<select class="form-select form-select-sm inline-status" onchange="updateItemStatus(' + it.id + ', this.value)">' +
           '<option value="UNSERVED"' + (status === 'UNSERVED' ? ' selected' : '') + '>UNSERVED' + (status === 'UNSERVED' && it.status_manual ? ' 🔒' : '') + '</option>' +
