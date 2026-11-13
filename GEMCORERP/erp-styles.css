@@ -2496,3 +2496,13 @@ html {
   .erp-item-num { grid-column: 1 / -1; text-align: left; }
   .erp-item-del { grid-column: 1 / -1; justify-self: end; }
 }
+
+
+/* ─── Stock Monitor: ABC / Movement chart extras ─── */
+.erp-chart-header-flex { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.erp-chart-sub { font-weight: 500; font-size: 0.72rem; color: var(--erp-text-muted, #64748b); margin-top: 2px; line-height: 1.35; }
+.erp-chart-note { padding: 10px 18px 14px; font-size: 0.78rem; line-height: 1.45; color: var(--erp-text, #334155); border-top: 1px dashed var(--erp-border); background: rgba(100,116,139,.06); min-height: 52px; }
+.erp-chart-note b { font-weight: 700; }
+.erp-chart-toggle { display: inline-flex; border: 1px solid var(--erp-border); border-radius: 8px; overflow: hidden; flex-shrink: 0; }
+.erp-chart-toggle button { border: 0; background: transparent; color: var(--erp-text); font-size: 0.72rem; font-weight: 700; padding: 4px 10px; cursor: pointer; }
+.erp-chart-toggle button.active { background: #0f172a; color: #fff; }
