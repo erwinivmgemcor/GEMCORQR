@@ -114,4 +114,45 @@ function erpNum(n) {
     maximumFractionDigits: 2
   });
 }
+
+// ═══════════════════════════════════════════════════════════
+// ITEM TURNOVER RATIO (per item) — shared by Stock Monitor and Management Dashboard
+// Turnover (×/year) = (Ave monthly consumption × 12) ÷ current On-Hand
+// Days of stock    = 365 ÷ turnover  (= On-Hand ÷ average daily usage)
+// Bands are rules of thumb; adjust with management.
+// ═══════════════════════════════════════════════════════════
+var ERP_TURNOVER_BANDS = [
+  { max: 2,        label: 'Very slow', cls: 'danger', meaning: 'Stock sits in the warehouse for most of the year. A lot of cash is tied up.' },
+  { max: 4,        label: 'Slow',      cls: 'warn',   meaning: 'Stock moves, but slowly. There is room to reduce over-stocking.' },
+  { max: 8,        label: 'Healthy',   cls: 'ok',     meaning: 'Stock moves at a good pace for a manufacturing operation.' },
+  { max: Infinity, label: 'Fast',      cls: 'fast',   meaning: 'Stock moves very quickly. Check that buffers are enough to avoid stock-outs.' }
+];
+
+function erpItemTurnover(onHand, aveMonthly) {
+  onHand = Number(onHand || 0); aveMonthly = Number(aveMonthly || 0);
+  if (onHand <= 0) return { ratio: null, cls: 'na', label: 'Out of stock', days: null, annual: aveMonthly * 12, onHand: onHand };
+  if (aveMonthly <= 0) return { ratio: 0, cls: 'danger', label: 'No usage', days: null, annual: 0, onHand: onHand };
+  var annual = aveMonthly * 12, ratio = annual / onHand, band = ERP_TURNOVER_BANDS[ERP_TURNOVER_BANDS.length - 1];
+  for (var i = 0; i < ERP_TURNOVER_BANDS.length; i++) { if (ratio < ERP_TURNOVER_BANDS[i].max) { band = ERP_TURNOVER_BANDS[i]; break; } }
+  return { ratio: ratio, cls: band.cls, label: band.label, days: 365 / ratio, annual: annual, onHand: onHand };
+}
+
+// Small colored badge (inline styles, so it works on any page)
+function erpTurnoverBadge(onHand, aveMonthly) {
+  var t = erpItemTurnover(onHand, aveMonthly);
+  var colors = {
+    danger: ['#fee2e2', '#b91c1c'], warn: ['#fef3c7', '#b45309'], ok: ['#dcfce7', '#166534'],
+    fast: ['#dbeafe', '#1d4ed8'], na: ['#f1f5f9', '#64748b']
+  }[t.cls];
+  var txt, tip;
+  if (t.ratio === null) { txt = '—'; tip = 'Out of stock: turnover not applicable'; }
+  else {
+    txt = t.ratio === 0 ? '0.0×' : (t.ratio < 0.1 ? '<0.1×' : (t.ratio >= 100 ? '99+×' : t.ratio.toFixed(1) + '×'));
+    tip = t.label + '\nAnnual usage ' + Math.round(t.annual).toLocaleString() + ' ÷ On-Hand ' + Math.round(t.onHand).toLocaleString() +
+          (t.days !== null ? '\n≈ ' + Math.round(t.days).toLocaleString() + ' days of stock on hand' : '\nNo consumption recorded');
+  }
+  return '<span title="' + tip.replace(/"/g, '&quot;').replace(/\n/g, '&#10;') + '" style="display:inline-block;min-width:44px;padding:2px 8px;border-radius:999px;' +
+    'font-size:0.72rem;font-weight:700;background:' + colors[0] + ';color:' + colors[1] + ';">' + txt + '</span>';
+}
+
 console.log('✅ erp-config.js loaded — v' + ERP_APP_VERSION);
