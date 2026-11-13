@@ -119,10 +119,10 @@
     st.textContent =
       '.erp-notes-badge{margin-left:auto;background:#dc2626;color:#fff;font-size:.66rem;font-weight:800;padding:1px 7px;border-radius:999px;display:none;}' +
       '#erpUserMenu.erp-has-notes-due .erp-user-avatar{box-shadow:0 0 0 2px #fff,0 0 0 4px #f59e0b;}' +
-      '.en-back{position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:10040;opacity:0;transition:opacity .2s;}' +
-      '.en-back.show{opacity:1;}' +
-      '.en-panel{position:fixed;top:0;right:0;height:100%;width:min(460px,100vw);background:#fff;z-index:10050;box-shadow:-8px 0 30px rgba(15,23,42,.18);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .22s;font-size:.86rem;color:#0f172a;}' +
-      '.en-panel.show{transform:none;}' +
+      '.en-back{position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:10040;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .2s,visibility .2s;}' +
+      '.en-back.show{opacity:1;visibility:visible;pointer-events:auto;}' +
+      '.en-panel{position:fixed;top:0;right:0;height:100%;width:min(460px,100vw);background:#fff;z-index:10050;box-shadow:-8px 0 30px rgba(15,23,42,.18);display:flex;flex-direction:column;transform:translateX(100%);visibility:hidden;pointer-events:none;transition:transform .22s,visibility .22s;font-size:.86rem;color:#0f172a;}' +
+      '.en-panel.show{transform:none;visibility:visible;pointer-events:auto;}' +
       '.en-head{padding:14px 16px;background:#1e3a5f;color:#fff;display:flex;align-items:center;gap:10px;}' +
       '.en-head h5{margin:0;font-size:1rem;font-weight:800;flex:1;}' +
       '.en-x{border:0;background:rgba(255,255,255,.15);color:#fff;border-radius:8px;width:30px;height:30px;cursor:pointer;}' +
