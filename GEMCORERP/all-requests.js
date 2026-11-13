@@ -641,6 +641,21 @@ function allRequestsRenderMineBanner() {
       : '<a href="javascript:void(0)" onclick="document.getElementById(\'allCatFilter\').value=\'MINE\';allRequestsOnCatChange()">Show only mine</a>');
 }
 
+// Filter ng item lines sa loob ng request modal (All / Unserved / Partial / Served)
+function arFilterItemsSt(st) {
+  var rows = document.querySelectorAll('#arItemsTable tr.ar-itrow');
+  var shown = 0;
+  rows.forEach(function(r) {
+    var ok = (st === 'ALL' || r.getAttribute('data-st') === st);
+    r.style.display = ok ? '' : 'none';
+    if (ok) shown++;
+  });
+  var chips = document.querySelectorAll('#arStChips .ar-stchip');
+  chips.forEach(function(c) { c.classList.toggle('active', c.getAttribute('data-st') === st); });
+  var cnt = document.getElementById('arItemShown'); if (cnt) cnt.textContent = shown;
+  var em = document.getElementById('arItemsEmpty'); if (em) em.style.display = shown === 0 ? '' : 'none';
+}
+
 // ═══════════════════════════════════════════════════════════
 // VIEW DETAILS
 // ═══════════════════════════════════════════════════════════
@@ -705,9 +720,26 @@ async function viewRequestDetails(docNo, docType) {
     html += '</div>';
     
     // Items table
-    html += '<h6 class="mt-3">Items (' + items.length + ')</h6>';
+    // Serve status per line: SERVED / PARTIAL / UNSERVED
+    function arLineSt(it) {
+      var rq = Number(it.requested_qty || 0), is = Number(it.issued_qty || 0);
+      if (is <= 0) return 'UNSERVED';
+      if (is >= rq) return 'SERVED';
+      return 'PARTIAL';
+    }
+    var stCount = { ALL: items.length, UNSERVED: 0, PARTIAL: 0, SERVED: 0 };
+    items.forEach(function(it) { stCount[arLineSt(it)]++; });
+
+    html += '<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 mb-2">';
+    html += '<h6 class="m-0">Items (<span id="arItemShown">' + items.length + '</span>' + ' of ' + items.length + ')</h6>';
+    html += '<div class="ar-stchips" id="arStChips">' +
+      '<button type="button" class="ar-stchip active" data-st="ALL" onclick="arFilterItemsSt(\'ALL\')">All <b>' + stCount.ALL + '</b></button>' +
+      '<button type="button" class="ar-stchip st-unserved" data-st="UNSERVED" onclick="arFilterItemsSt(\'UNSERVED\')"><i class="bi bi-x-circle"></i> Unserved <b>' + stCount.UNSERVED + '</b></button>' +
+      '<button type="button" class="ar-stchip st-partial" data-st="PARTIAL" onclick="arFilterItemsSt(\'PARTIAL\')"><i class="bi bi-hourglass-split"></i> Partial <b>' + stCount.PARTIAL + '</b></button>' +
+      '<button type="button" class="ar-stchip st-served" data-st="SERVED" onclick="arFilterItemsSt(\'SERVED\')"><i class="bi bi-check-circle"></i> Served <b>' + stCount.SERVED + '</b></button>' +
+      '</div></div>';
     html += '<div class="table-responsive">';
-    html += '<table class="erp-table" style="font-size:0.85rem;">';
+    html += '<table class="erp-table" id="arItemsTable" style="font-size:0.85rem;">';
     html += '<thead><tr>' +
       '<th>#</th><th>Item Code</th><th>Description</th><th class="text-center">Category</th>' +
       '<th class="text-center">Req Qty</th>' +
@@ -720,7 +752,7 @@ async function viewRequestDetails(docNo, docType) {
       html += '<tr><td colspan="8" class="text-center text-muted py-3">No items</td></tr>';
     } else {
       items.forEach(function(it, idx) {
-        html += '<tr>' +
+        html += '<tr class="ar-itrow" data-st="' + arLineSt(it) + '">' +
           '<td>' + (idx + 1) + '</td>' +
           '<td><code>' + erpEsc(it.item_code) + '</code></td>' +
           '<td>' + erpEsc(it.description || '—') + '</td>' +
@@ -737,6 +769,7 @@ async function viewRequestDetails(docNo, docType) {
         '</tr>';
       });
     }
+    html += '<tr id="arItemsEmpty" style="display:none;"><td colspan="8" class="text-center text-muted py-3">No items in this filter</td></tr>';
     html += '</tbody></table></div>';
     
     document.getElementById('requestDetailBody').innerHTML = html;
