@@ -774,16 +774,22 @@ function rpSavedSignatory(key, fallback) {
 
 // How many PRFs will the server create? (mirror of the RPC's rule, for the preview only)
 function rpPlanFor(rows) {
+  // Isang PRF lang para sa lahat ng pinili (kahit halo-halo ang category) — hahatiin lang kung lampas sa max items.
   var byCat = {};
   rows.forEach(function(it) {
     var c = it.category || 'UNCATEGORIZED';
     byCat[c] = (byCat[c] || 0) + 1;
   });
+  var cats = Object.keys(byCat).sort();
   var plan = [];
-  Object.keys(byCat).sort().forEach(function(c) {
-    var n = Math.ceil(byCat[c] / RP_MAX_ITEMS_PER_PRF);
-    plan.push({ category: c, items: byCat[c], prfs: n });
-  });
+  if (rows.length > 0) {
+    plan.push({
+      category: cats.length === 1 ? cats[0] : 'MIXED',
+      items: rows.length,
+      prfs: Math.ceil(rows.length / RP_MAX_ITEMS_PER_PRF),
+      cats: byCat
+    });
+  }
   return plan;
 }
 
@@ -970,12 +976,15 @@ function rpRenderPrfPlan(rows) {
   }
   var plan = rpPlanFor(rows);
   var totalPrfs = plan.reduce(function(s, p) { return s + p.prfs; }, 0);
+  var cats = plan.length ? plan[0].cats : {};
+  var catKeys = Object.keys(cats).sort();
   el.innerHTML = '<i class="bi bi-info-circle me-1"></i>' +
     (totalPrfs === 1 ? 'This will create <strong>1 PRF</strong>' : 'This will create <strong>' + totalPrfs + ' PRFs</strong>') +
-    ' — one per category' + (rows.length > RP_MAX_ITEMS_PER_PRF ? ', max ' + RP_MAX_ITEMS_PER_PRF + ' items each' : '') +
+    (catKeys.length > 1 ? ' — all categories together' : '') +
+    (rows.length > RP_MAX_ITEMS_PER_PRF ? ', max ' + RP_MAX_ITEMS_PER_PRF + ' items each (one printed page)' : '') +
     '. PRF numbers are assigned automatically.<br><span class="text-muted">' +
-    plan.map(function(p) {
-      return rpEsc(p.category) + ': ' + p.items + ' item' + (p.items === 1 ? '' : 's') + (p.prfs > 1 ? ' (' + p.prfs + ' PRFs)' : '');
+    catKeys.map(function(c) {
+      return rpEsc(c) + ': ' + cats[c] + ' item' + (cats[c] === 1 ? '' : 's');
     }).join(' · ') + '</span>';
 }
 
@@ -1074,6 +1083,7 @@ async function rpSubmitPrf() {
       item_code: it.item_code,
       qty: qty,
       unit: it.base_unit || null,
+      category: it.category || 'UNCATEGORIZED',
       remarks: remEl ? remEl.value.trim() : ''
     });
   });
@@ -1108,9 +1118,10 @@ async function rpSubmitPrf() {
           noted_by: notedBy,
           approved_by: approvedBy,
           notes: notes,
-          purpose: 'STOCK'
+          purpose: 'STOCK',
+          category: plan.length ? plan[0].category : ''
         },
-        splitByCategory: true,
+        splitByCategory: false,
         maxItems: RP_MAX_ITEMS_PER_PRF,
         force: force === true
       };
