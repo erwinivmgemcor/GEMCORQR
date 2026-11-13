@@ -170,8 +170,9 @@ async function erpLoadCharts() {
   var result = await erpGetCategoryStats();
   if (!result.success) return;
   erpRenderCategoryChart(result.byCategory || {});
-  erpRenderAbcChart(result.byABC || {});
-  erpRenderMovementChart(result.byMovement || {});
+  _erpStats = result;
+  erpRenderAbcChart(result);
+  erpRenderMovementChart(result);
 }
 
 function erpRenderCategoryChart(byCategory) {
@@ -213,67 +214,176 @@ function erpRenderCategoryChart(byCategory) {
   });
 }
 
-function erpRenderAbcChart(byABC) {
+var _erpStats = null;
+var _erpMovMode = 'value';   // 'value' (₱) or 'items'
+var ERP_ABC_COLORS = { A: '#dc3545', B: '#f59e0b', C: '#6c757d', 'N/A': '#cbd5e1' };
+
+function erpPesoShort(v) {
+  var n = Number(v || 0), a = Math.abs(n), sign = n < 0 ? '-' : '';
+  if (a >= 1e6) return sign + '₱' + (a / 1e6).toFixed(a >= 1e7 ? 1 : 2).replace(/\.?0+$/, '') + 'M';
+  if (a >= 1e3) return sign + '₱' + Math.round(a / 1e3) + 'K';
+  return sign + '₱' + Math.round(a);
+}
+function erpChartText() {
+  var v = getComputedStyle(document.documentElement).getPropertyValue('--erp-text').trim();
+  return v || '#334155';
+}
+
+// Draws a label above each bar/stack (total value + share)
+function erpTopLabelPlugin(getLines) {
+  return {
+    id: 'erpTopLabels',
+    afterDatasetsDraw: function(chart) {
+      var ctx = chart.ctx, yScale = chart.scales.y, meta0 = chart.getDatasetMeta(0);
+      var n = chart.data.labels.length;
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.fillStyle = erpChartText();
+      for (var i = 0; i < n; i++) {
+        var lines = getLines(i);
+        if (!lines) continue;
+        var x = meta0.data[i].x;
+        var total = 0;
+        chart.data.datasets.forEach(function(ds, di) { if (chart.isDatasetVisible(di)) total += Number(ds.data[i] || 0); });
+        var y = yScale.getPixelForValue(total) - 6;
+        ctx.font = '700 11px Inter, sans-serif';
+        ctx.fillText(lines[0], x, y - (lines[1] ? 12 : 0));
+        if (lines[1]) { ctx.font = '500 10px Inter, sans-serif'; ctx.fillText(lines[1], x, y); }
+      }
+      ctx.restore();
+    }
+  };
+}
+
+function erpRenderAbcChart(stats) {
   var canvas = document.getElementById('chartABC');
   if (!canvas) return;
   if (_erpCharts.abc) { _erpCharts.abc.destroy(); }
-  var labels = ['Class A', 'Class B', 'Class C'];
-  var values = [byABC.A || 0, byABC.B || 0, byABC.C || 0];
-  var colors = ['#dc3545', '#f59e0b', '#6c757d'];
+  var byABC = stats.byABC || {}, cnt = stats.abcCount || {};
+  var keys = ['A', 'B', 'C'];
+  var values = keys.map(function(k) { return byABC[k] || 0; });
+  var total = values.reduce(function(s, x) { return s + x; }, 0) || 1;
+  var totalItems = keys.reduce(function(s, k) { return s + (cnt[k] || 0); }, 0) || 1;
+  var labels = keys.map(function(k) { return ['Class ' + k, (cnt[k] || 0).toLocaleString() + ' items']; });
+
   _erpCharts.abc = new Chart(canvas.getContext('2d'), {
     type: 'bar',
-    data: { labels: labels, datasets: [{ label: 'Value', data: values, backgroundColor: colors, borderRadius: 6 }] },
+    data: { labels: labels, datasets: [{ label: 'Stock value', data: values, backgroundColor: keys.map(function(k) { return ERP_ABC_COLORS[k]; }), borderRadius: 6 }] },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { top: 34 } },
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: function(ctx) { return erpPeso(ctx.parsed.y); } } }
+        tooltip: { callbacks: {
+          title: function(items) { return 'Class ' + keys[items[0].dataIndex]; },
+          label: function(ctx) {
+            var k = keys[ctx.dataIndex];
+            return [erpPeso(ctx.parsed.y) + '  (' + Math.round(ctx.parsed.y / total * 100) + '% of total value)',
+                    (cnt[k] || 0).toLocaleString() + ' items (' + Math.round((cnt[k] || 0) / totalItems * 100) + '% of items)'];
+          }
+        } }
       },
       scales: {
-        y: { beginAtZero: true, ticks: { callback: function(v) { return erpPeso(v); }, font: { size: 10 } } },
-        x: { ticks: { font: { size: 11 } } }
+        y: { beginAtZero: true, title: { display: true, text: 'Stock value (₱)', font: { size: 10, weight: '600' } },
+             ticks: { callback: function(v) { return erpPesoShort(v); }, font: { size: 10 } } },
+        x: { ticks: { font: { size: 11, weight: '600' } } }
       }
-    }
+    },
+    plugins: [erpTopLabelPlugin(function(i) {
+      return [erpPesoShort(values[i]), Math.round(values[i] / total * 100) + '% of value'];
+    })]
   });
+
+  var note = document.getElementById('abcNote');
+  if (note) {
+    var aShareV = Math.round(values[0] / total * 100), aShareN = Math.round((cnt.A || 0) / totalItems * 100);
+    note.innerHTML = '<b>Class A</b> is only <b>' + aShareN + '%</b> of items but holds <b>' + aShareV + '%</b> of total stock value (' +
+      erpPesoShort(values[0]) + ' of ' + erpPesoShort(total) + '). Control and count these items most closely.';
+  }
 }
 
-function erpRenderMovementChart(byMovement) {
+function erpSetMovMode(mode) {
+  _erpMovMode = mode;
+  document.querySelectorAll('#movToggle button').forEach(function(b) { b.classList.toggle('active', b.getAttribute('data-mode') === mode); });
+  if (_erpStats) erpRenderMovementChart(_erpStats);
+}
+window.erpSetMovMode = erpSetMovMode;
+
+function erpRenderMovementChart(stats) {
   var canvas = document.getElementById('chartMovement');
   if (!canvas) return;
   if (_erpCharts.movement) { _erpCharts.movement.destroy(); }
-  var entries = Object.keys(byMovement)
-    .map(function(k) { return { label: k, value: byMovement[k] }; })
-    .sort(function(a, b) { return b.value - a.value; });
-  if (entries.length === 0) return;
-  var colorMap = {
-    'FAST MOVING': '#10b981', 'MODERATE MOVING': '#06b6d4',
-    'SLOW MOVING': '#f59e0b', 'NO MOVEMENT': '#6b7280', 'UNCLASSIFIED': '#9ca3af'
-  };
+  var matrix = stats.matrix || {};
+  var order = ['FAST MOVING', 'MODERATE MOVING', 'SLOW MOVING', 'NO MOVEMENT', 'UNCLASSIFIED'];
+  var pretty = { 'FAST MOVING': 'Fast', 'MODERATE MOVING': 'Moderate', 'SLOW MOVING': 'Slow', 'NO MOVEMENT': 'No Movement', 'UNCLASSIFIED': 'Unclassified' };
+  var moves = order.filter(function(m) { return matrix[m]; });
+  Object.keys(matrix).forEach(function(m) { if (moves.indexOf(m) === -1) moves.push(m); });
+  if (moves.length === 0) return;
+
+  var isVal = _erpMovMode === 'value';
+  var field = isVal ? 'v' : 'n';
+  var classes = ['A', 'B', 'C', 'N/A'];
+  var datasets = classes.map(function(k) {
+    return {
+      label: k === 'N/A' ? 'No ABC class' : 'Class ' + k,
+      data: moves.map(function(m) { return matrix[m][k][field]; }),
+      backgroundColor: ERP_ABC_COLORS[k],
+      borderRadius: 4,
+      borderSkipped: false
+    };
+  }).filter(function(ds) { return ds.data.some(function(x) { return x !== 0; }); });
+
+  function totalOf(i, f) { return classes.reduce(function(s, k) { return s + matrix[moves[i]][k][f]; }, 0); }
+  var grandV = moves.reduce(function(s, m, i) { return s + totalOf(i, 'v'); }, 0) || 1;
+  var grandN = moves.reduce(function(s, m, i) { return s + totalOf(i, 'n'); }, 0) || 1;
+  var labels = moves.map(function(m, i) { return [pretty[m] || m, totalOf(i, 'n').toLocaleString() + ' items']; });
+
   _erpCharts.movement = new Chart(canvas.getContext('2d'), {
     type: 'bar',
-    data: {
-      labels: entries.map(function(e) { return e.label; }),
-      datasets: [{
-        data: entries.map(function(e) { return e.value; }),
-        backgroundColor: entries.map(function(e) { return colorMap[e.label] || '#6b7280'; }),
-        borderRadius: 6
-      }]
-    },
+    data: { labels: labels, datasets: datasets },
     options: {
-      indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { top: 34 } },
       plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: function(ctx) { return ctx.parsed.x + ' items'; } } }
+        legend: { display: true, position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, font: { size: 10 } } },
+        tooltip: { callbacks: {
+          title: function(items) { return (pretty[moves[items[0].dataIndex]] || moves[items[0].dataIndex]) + (moves[items[0].dataIndex].indexOf('MOVEMENT') === -1 && moves[items[0].dataIndex] !== 'UNCLASSIFIED' ? ' moving' : ''); },
+          label: function(ctx) {
+            return ' ' + ctx.dataset.label + ': ' + (isVal ? erpPeso(ctx.parsed.y) : ctx.parsed.y.toLocaleString() + ' items');
+          },
+          footer: function(items) {
+            var i = items[0].dataIndex;
+            return isVal ? 'Total: ' + erpPeso(totalOf(i, 'v')) + ' (' + Math.round(totalOf(i, 'v') / grandV * 100) + '% of all stock value)'
+                         : 'Total: ' + totalOf(i, 'n').toLocaleString() + ' items (' + Math.round(totalOf(i, 'n') / grandN * 100) + '% of all items)';
+          }
+        } }
       },
       scales: {
-        x: { beginAtZero: true, ticks: { stepSize: 100, font: { size: 10 } } },
-        y: { ticks: { font: { size: 10 } } }
+        x: { stacked: true, ticks: { font: { size: 10, weight: '600' } } },
+        y: { stacked: true, beginAtZero: true,
+             title: { display: true, text: isVal ? 'Stock value (₱)' : 'Number of items', font: { size: 10, weight: '600' } },
+             ticks: { callback: function(v) { return isVal ? erpPesoShort(v) : v.toLocaleString(); }, font: { size: 10 } } }
       }
-    }
+    },
+    plugins: [erpTopLabelPlugin(function(i) {
+      return isVal ? [erpPesoShort(totalOf(i, 'v')), Math.round(totalOf(i, 'v') / grandV * 100) + '% of value']
+                   : [totalOf(i, 'n').toLocaleString(), Math.round(totalOf(i, 'n') / grandN * 100) + '% of items'];
+    })]
   });
+
+  var note = document.getElementById('movNote');
+  if (note) {
+    var ni = moves.indexOf('NO MOVEMENT');
+    if (ni === -1) { note.textContent = ''; return; }
+    var nmV = totalOf(ni, 'v'), nmN = totalOf(ni, 'n'), nmA = matrix['NO MOVEMENT'].A.v;
+    note.innerHTML = isVal
+      ? '<b>' + erpPesoShort(nmV) + ' (' + Math.round(nmV / grandV * 100) + '%)</b> of stock value is in <b>No Movement</b> items, ' +
+        'of which <b>' + erpPesoShort(nmA) + '</b> is Class A. Review these first for reduced ordering, transfer, or disposal.'
+      : '<b>' + nmN.toLocaleString() + ' items (' + Math.round(nmN / grandN * 100) + '%)</b> have had no movement. ' +
+        'Switch to ₱ Value to see how much money is tied up in them.';
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
