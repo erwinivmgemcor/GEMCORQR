@@ -266,7 +266,7 @@ async function loadDocumentThreads(silent) {
   var me = _chatState.currentUser;
   var typeFilter = '&doc_type=in.(' + _getAllowedDocTypes().join(',') + ')';
   var messagesRes = await erpFetch('messages',
-    'select=*&doc_no=not.is.null&doc_no=neq.' + typeFilter + _retentionCut() + '&order=created_at.desc&limit=500');
+    'select=*&doc_no=not.is.null&doc_no=neq.' + typeFilter + _retentionCut(true) + '&order=created_at.desc&limit=500');
 
   var threadMap = {};
   (messagesRes || []).forEach(function(m) {
@@ -380,6 +380,13 @@ function _showPanel() {
   document.getElementById('chatPanel').style.display = 'flex';
 }
 
+function _setRetentionNote(isDoc) {
+  var el = document.getElementById('chatRetentionNote');
+  if (!el) return;
+  el.innerHTML = '<i class="bi bi-clock-history me-1"></i>Messages are kept for ' +
+    (isDoc ? '1 month' : '7 days') + ', then auto-deleted.';
+}
+
 async function openUserConversation(otherUsername) {
   _chatState.openWith = otherUsername;
   _chatState.openType = 'user';
@@ -387,6 +394,7 @@ async function openUserConversation(otherUsername) {
   _resetThread();
   _showPanel();
   document.getElementById('chatDocBanner').style.display = 'none';
+  _setRetentionNote(false);
   document.querySelectorAll('.chat-conv-item').forEach(function(el) {
     el.classList.toggle('active', el.getAttribute('data-username') === otherUsername);
   });
@@ -418,6 +426,7 @@ async function openDocConversation(docNo, docType) {
     el.classList.toggle('active', el.getAttribute('data-doc') === docNo);
   });
   _fillHeader();
+  _setRetentionNote(true);
   var banner = document.getElementById('chatDocBanner');
   banner.style.display = 'block';
   banner.innerHTML = '<i class="bi bi-file-earmark-text me-1"></i>Discussion about <strong>' + erpEsc(docNo) + '</strong>' +
@@ -451,10 +460,14 @@ function _setThreadLoading() {
 // ═══════════════════════════════════════════════════════════
 // THREAD DATA (merge by id — never duplicates)
 // ═══════════════════════════════════════════════════════════
-// Chat retention: only the last 7 days are shown (older rows are purged server-side by the daily cron job)
-var CHAT_RETENTION_DAYS = 7;
-function _retentionCut() {
-  return '&created_at=gte.' + encodeURIComponent(new Date(Date.now() - CHAT_RETENTION_DAYS * 86400000).toISOString());
+// Chat retention (older rows are purged server-side by the daily cron job — keep the numbers in sync with it):
+//   - normal 1-on-1 chat (DM)   : 7 days
+//   - document discussions      : 30 days (1 month)
+var CHAT_RETENTION_DAYS    = 7;
+var DISCUSS_RETENTION_DAYS = 30;
+function _retentionCut(isDoc) {
+  var days = isDoc ? DISCUSS_RETENTION_DAYS : CHAT_RETENTION_DAYS;
+  return '&created_at=gte.' + encodeURIComponent(new Date(Date.now() - days * 86400000).toISOString());
 }
 
 function _msgKey(m) { return m.id != null ? 'i' + m.id : 'k' + m.created_at + '|' + m.sender + '|' + (m.body || ''); }
@@ -498,7 +511,7 @@ async function loadThread() {
       var r = await Promise.all(_dmQueries(''));
       rows = (r[0] || []).concat(r[1] || []);
     } else {
-      rows = await erpFetch('messages', 'select=*&doc_no=eq.' + encodeURIComponent(_chatState.openWith) + _retentionCut() + '&order=created_at.desc&limit=300');
+      rows = await erpFetch('messages', 'select=*&doc_no=eq.' + encodeURIComponent(_chatState.openWith) + _retentionCut(true) + '&order=created_at.desc&limit=300');
     }
     if (token !== _chatState.openType + '|' + _chatState.openWith) return;   // user switched meanwhile
     _chatState.msgs = []; _mergeMsgs(rows);
