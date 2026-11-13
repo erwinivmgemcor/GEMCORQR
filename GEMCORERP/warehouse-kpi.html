@@ -73,10 +73,15 @@ table.wk td,table.wk th{vertical-align:middle;font-size:.85rem}
         <option value="30" selected>Last 30 days</option>
         <option value="90">Last 90 days</option>
         <option value="month">This month</option>
+        <option value="pick">Pick a month…</option>
         <option value="custom">Custom…</option>
       </select>
+      <input type="month" id="wkMonth" class="erp-select" style="display:none" onchange="wkLoad()">
       <input type="date" id="wkFrom" class="erp-select" style="display:none" onchange="wkLoad()">
       <input type="date" id="wkTo" class="erp-select" style="display:none" onchange="wkLoad()">
+      <select id="wkStaff" class="erp-select" onchange="wkRender()" title="Filter by warehouse staff (processed by)">
+        <option value="">All warehouse staff</option>
+      </select>
       <select id="wkType" class="erp-select" onchange="wkRender()">
         <option value="">MRIF + MRS</option><option value="MRIF">MRIF only</option><option value="MRS">MRS only</option>
       </select>
@@ -100,6 +105,17 @@ table.wk td,table.wk th{vertical-align:middle;font-size:.85rem}
     <div class="wk-note mb-2">Ayon sa "processed by" at oras ng pag-complete sa napiling period. Turnaround = oras mula nang i-submit ng production hanggang ma-complete.</div>
     <div class="table-responsive"><table class="table table-sm wk" id="tblStaff"><thead><tr>
       <th>#</th><th>Staff</th><th class="text-end">Completed</th><th class="text-end">Per day</th><th class="text-end">Avg turnaround</th><th class="text-end">Fastest</th><th class="text-end">Slowest</th><th>Within target</th><th class="text-end">Avg handling</th>
+    </tr></thead><tbody></tbody></table></div>
+  </div>
+
+  <div class="erp-card" style="padding:16px 18px;margin-bottom:20px;">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-1">
+      <h6 class="fw-bold m-0"><i class="bi bi-check2-square me-1"></i>Processed Requests <span class="badge bg-dark ms-1" id="wkListCount">0</span></h6>
+      <button type="button" class="erp-btn-outline" onclick="wkExportList()"><i class="bi bi-download"></i> <span>Export CSV</span></button>
+    </div>
+    <div class="wk-note mb-2" id="wkListNote">Mga request na na-process sa napiling period.</div>
+    <div class="table-responsive" style="max-height:460px;overflow:auto"><table class="table table-sm wk" id="tblDone"><thead><tr>
+      <th>#</th><th>Doc No</th><th>Type</th><th>Requestor</th><th>Dept</th><th>Submitted</th><th>Processed</th><th>Processed by</th><th class="text-end">Turnaround</th><th class="text-end">Handling</th><th class="text-center">Target</th>
     </tr></thead><tbody></tbody></table></div>
   </div>
 
