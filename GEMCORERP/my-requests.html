@@ -30,6 +30,7 @@
   <script defer src="js/chat-helper.js"></script>          <!-- ← NEW -->
 <script defer src="js/erp-uom.js"></script>
 <script defer src="js/edit-request-permission.js"></script>  <!-- ← NEW -->
+<script defer src="cancel-info.js"></script>
 <script defer src="my-requests-dashboard.js"></script>
 <script defer src="js/mrif-cancel.js"></script>
 <script defer src="my-requests.js"></script>
@@ -173,13 +174,14 @@
             <th class="col-status text-center">Status</th>
             <th class="col-progress text-center">Progress</th>
             <th class="col-items text-center">Items</th>
+            <th class="col-remarks">Remarks / Reason</th>
             <th class="col-actions text-center">Actions</th>
             <th class="col-edit text-center">Edit</th>
           </tr>
         </thead>
         <tbody id="myTableBody">
           <tr>
-            <td colspan="7" class="erp-empty">
+            <td colspan="10" class="erp-empty">
               <div class="erp-spinner"></div>
               <div class="mt-2">Loading your requests...</div>
             </td>
