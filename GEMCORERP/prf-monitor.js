@@ -162,6 +162,20 @@ function _getLatestPrfIds(prfs) {
   return idSet;
 }
 
+// Items na lalabas sa "By Item" tab, KPIs at tab count.
+// - Ang items ng DRAFT PRF ay HINDI muna ipinapakita (lalabas lang kapag na-Finalize na ang PRF).
+// - Kung 'latest' mode: latest version lang.
+// Note: _prfMonitor.allItems ay buo pa rin (kasama ang draft) dahil kailangan ito sa PRF status compute at sa By PRF tab.
+function _itemsForItemView() {
+  var latestIds = _getLatestPrfIds(_prfMonitor.allPrfs);
+  var latestOnly = _prfMonitor.versionFilter === 'latest';
+  return _prfMonitor.allItems.filter(function(it) {
+    if (it._prfIsDraft) return false;
+    if (latestOnly && !latestIds[it.prf_id]) return false;
+    return true;
+  });
+}
+
 // ═══════════════════════════════════════════════════════════
 // TAB SWITCHING
 // ═══════════════════════════════════════════════════════════
@@ -276,6 +290,7 @@ async function prfMonitorLoad() {
         it._prfRequestor = prf.requestor || '';
         it._basePrfNo = prf.base_prf_no || prf.prf_no || '';
         it._versionNumber = parseInt(prf.version_number, 10) || 1;
+        it._prfIsDraft = _prfIsDraft(prf);   // DRAFT PRF -> items are hidden from By Item / KPIs until Finalized
       });
 
       _prfMonitor.allItems = allItems;
@@ -318,10 +333,7 @@ function prfUpdateTabCounts() {
     ? _getLatestVersionsOnly(_prfMonitor.allPrfs) 
     : _prfMonitor.allPrfs;
   
-  var latestIds = _getLatestPrfIds(_prfMonitor.allPrfs);
-  var itemsToCount = _prfMonitor.versionFilter === 'latest'
-    ? _prfMonitor.allItems.filter(function(it) { return latestIds[it.prf_id]; })
-    : _prfMonitor.allItems;
+  var itemsToCount = _itemsForItemView();
 
   if (prfCountEl) prfCountEl.textContent = prfsToCount.length;
   if (itemCountEl) itemCountEl.textContent = itemsToCount.length;
@@ -371,11 +383,7 @@ function prfMonitorComputeStatus() {
 // COMPUTE KPIs (latest only by default)
 // ═══════════════════════════════════════════════════════════
 function prfMonitorComputeKPIs() {
-  var latestIds = _getLatestPrfIds(_prfMonitor.allPrfs);
-  
-  var itemsToCount = _prfMonitor.versionFilter === 'latest'
-    ? _prfMonitor.allItems.filter(function(it) { return latestIds[it.prf_id]; })
-    : _prfMonitor.allItems;
+  var itemsToCount = _itemsForItemView();   // walang draft
 
   var totalItems = 0;
   var unservedItems = 0;
@@ -392,9 +400,9 @@ function prfMonitorComputeKPIs() {
     else if (s === 'CANCELED') canceledItems++;
   });
 
-  var prfCount = _prfMonitor.versionFilter === 'latest'
-    ? _getLatestVersionsOnly(_prfMonitor.allPrfs).length
-    : _prfMonitor.allPrfs.length;
+  var prfCount = (_prfMonitor.versionFilter === 'latest'
+    ? _getLatestVersionsOnly(_prfMonitor.allPrfs)
+    : _prfMonitor.allPrfs).filter(function(p) { return !_prfIsDraft(p); }).length;
 
   document.getElementById('prfKpiTotal').textContent = erpNum(totalItems);
   document.getElementById('prfKpiUnserved').textContent = erpNum(unservedItems);
@@ -553,10 +561,8 @@ function prfMonitorRenderItemTab() {
   var sortOrder = document.getElementById('itemSortOrder') ? document.getElementById('itemSortOrder').value : 'newest';
 
   // ✅ Filter by version mode
-  var latestIds = _getLatestPrfIds(_prfMonitor.allPrfs);
-  var baseItems = _prfMonitor.versionFilter === 'latest'
-    ? _prfMonitor.allItems.filter(function(it) { return latestIds[it.prf_id]; })
-    : _prfMonitor.allItems;
+  // ✅ Draft PRFs ay hindi muna lalabas dito (lalabas kapag na-Finalize na)
+  var baseItems = _itemsForItemView();
 
   // ✅ Count duplicates (bilangin kung ilang beses lumabas ang item_code)
   var itemCounts = {};
