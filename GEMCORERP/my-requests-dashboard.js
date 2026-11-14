@@ -9,6 +9,9 @@ var MRD_WEEKS = 8;             // weeks shown in the trend chart
 var MRD_PROGRESS_TTL = 60000;  // ms before item progress is fetched again
 var MRD_CHUNK = 50;            // docs per doc_items query (keeps the URL short)
 
+// Default / system values ng doc_items.remarks — hindi ito totoong remarks ni warehouse kaya hindi ipinapakita
+var MRD_AUTO_REMARKS = { 'PENDING': 1, 'SERVED': 1, 'PARTIAL': 1, 'COMPLETED': 1, 'CANCELLED': 1, 'ISSUED': 1 };
+
 var MRD_DAYS = 14;             // days shown in the daily view
 
 var _mrd = { progress: {}, progressAt: 0, loading: false, range: 'weekly' };
@@ -67,13 +70,15 @@ async function mrdLoadProgress() {
 
     var results = await Promise.all(chunks.map(function (c) {
       return erpFetch('doc_items',
-        'select=doc_no,requested_qty,issued_qty&doc_no=in.(' + encodeURIComponent(c.join(',')) + ')&limit=5000');
+        'select=doc_no,item_code,line_no,requested_qty,issued_qty,remarks&order=doc_no.asc,line_no.asc&doc_no=in.(' + encodeURIComponent(c.join(',')) + ')&limit=5000');
     }));
 
     var fresh = {};
     results.forEach(function (rows) {
       (rows || []).forEach(function (r) {
-        var p = fresh[r.doc_no] || (fresh[r.doc_no] = { lines: 0, done: 0, sum: 0 });
+        var p = fresh[r.doc_no] || (fresh[r.doc_no] = { lines: 0, done: 0, sum: 0, rems: [] });
+        var rem = String(r.remarks || '').trim();
+        if (rem && !MRD_AUTO_REMARKS[rem.toUpperCase()]) p.rems.push({ code: r.item_code || '', text: rem });
         var req = Number(r.requested_qty) || 0;
         var iss = Number(r.issued_qty) || 0;
         p.lines++;
@@ -117,6 +122,52 @@ function mrdProgressCell(d) {
   return '<div class="mrd-prog-cell">' + mrdBarHtml(mrdProgressPct(d), true) + '</div>';
 }
 
+// "Remarks / Reason" column — ang makikita ng production kung ano ang sinabi ni warehouse.
+//  - CANCELLED  : reason ng pag-cancel (documents.cancel_reason)
+//  - PARTIAL / COMPLETED : remarks na isinulat ni warehouse sa bawat item (doc_items.remarks)
+//  - PENDING    : wala pa (hindi pa napo-process ni warehouse; ang laman ng remarks ay galing pa sa requestor)
+function mrdRemarksCell(d) {
+  var dash = '<span class="mrd-prog-na">—</span>';
+  var st = mrdStatus(d);
+  var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
+  var typeUp = String(d.doc_type || '').toUpperCase();
+  var open = 'viewRequestDetails(\'' + safeDoc + '\', \'' + typeUp + '\')';
+
+  if (st === 'CANCELLED') {
+    var info = (typeof erpDocCancelInfo === 'function') ? erpDocCancelInfo(d) : { reason: '', by: '' };
+    var why = info.reason || 'Cancelled — walang nakalagay na reason';
+    var tip = (info.by ? 'Cancelled by ' + info.by + ': ' : 'Reason: ') + why;
+    return '<div class="mrd-rem mrd-rem-cancel" title="' + mrdE(tip) + '"><i class="bi bi-x-octagon"></i> ' + mrdE(why) + '</div>';
+  }
+  if (st === 'PENDING') return dash;
+
+  var p = _mrd.progress[d.doc_no];
+  var rems = (p && p.rems) || [];
+  if (!rems.length) return dash;
+
+  // pagsama-samahin ang parehong remarks
+  var groups = [], byText = {};
+  rems.forEach(function (r) {
+    var key = r.text.toLowerCase();
+    if (!byText[key]) { byText[key] = { text: r.text, codes: [] }; groups.push(byText[key]); }
+    byText[key].codes.push(r.code);
+  });
+  var fullTip = groups.map(function (g) {
+    return (g.codes.length === 1 ? g.codes[0] + ': ' : '') + g.text + (g.codes.length > 1 ? ' (' + g.codes.length + ' items)' : '');
+  }).join('\n');
+
+  var SHOW = 2, html = '';
+  groups.slice(0, SHOW).forEach(function (g) {
+    html += '<div class="mrd-rem-line">' +
+      (g.codes.length === 1 ? '<b>' + mrdE(g.codes[0]) + '</b>: ' : '') + mrdE(g.text) +
+      (g.codes.length > 1 ? ' <span class="mrd-rem-n">(' + g.codes.length + ' items)</span>' : '') + '</div>';
+  });
+  if (groups.length > SHOW) {
+    html += '<a href="#" class="mrd-rem-more" onclick="' + open + ';return false;">+' + (groups.length - SHOW) + ' more</a>';
+  }
+  return '<div class="mrd-rem" title="' + mrdE(fullTip) + '">' + html + '</div>';
+}
+
 function mrdAgeSub(d) {
   if (!mrdIsOpen(d)) return '';
   var days = mrdDaysSince(d.created_at);
@@ -130,6 +181,11 @@ function mrdFillCells() {
     var no = td.getAttribute('data-prog-doc');
     var d = (_myRequests.allDocs || []).filter(function (x) { return x.doc_no === no; })[0];
     if (d) td.innerHTML = mrdProgressCell(d);
+  });
+  document.querySelectorAll('[data-rem-doc]').forEach(function (td) {
+    var no = td.getAttribute('data-rem-doc');
+    var d = (_myRequests.allDocs || []).filter(function (x) { return x.doc_no === no; })[0];
+    if (d) td.innerHTML = mrdRemarksCell(d);
   });
 }
 
