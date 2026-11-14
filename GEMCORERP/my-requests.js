@@ -91,13 +91,13 @@ async function myRequestsLoad() {
   var tbody = document.getElementById('myTableBody');
   if (!tbody) return;
   
-  tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
+  tbody.innerHTML = '<tr><td colspan="10" class="erp-empty">' +
     '<div class="erp-spinner"></div>' +
     '<div class="mt-2">Loading your requests...</div></td></tr>';
   
   var userFullname = _myRequests.currentUser;
   if (!userFullname) {
-    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty text-danger">' +
+    tbody.innerHTML = '<tr><td colspan="10" class="erp-empty text-danger">' +
       'Could not determine user. Please log in again.</td></tr>';
     return;
   }
@@ -118,7 +118,7 @@ async function myRequestsLoad() {
     if (typeof mrdOnLoaded === 'function') mrdOnLoaded();
   } catch(err) {
     console.error('[myRequestsLoad]', err);
-    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty text-danger">' +
+    tbody.innerHTML = '<tr><td colspan="10" class="erp-empty text-danger">' +
       'Failed: ' + erpEsc(err.message) + '</td></tr>';
   }
 }
@@ -223,7 +223,7 @@ async function myRequestsRender() {
   if (el) el.disabled = (end >= total);
   
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="10" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No requests found. Click "New MRIF" or "New MRS" to create one.</td></tr>';
     return;
@@ -260,6 +260,7 @@ async function myRequestsRender() {
       '<td class="text-center"><span class="' + statusClass + '">' + statusUpper + '</span></td>' +
       '<td class="text-center" data-prog-doc="' + erpEsc(d.doc_no) + '">' + (typeof mrdProgressCell === 'function' ? mrdProgressCell(d) : '') + '</td>' +
       '<td class="text-center">' + (d.item_count || 0) + '</td>' +
+      '<td class="col-remarks" data-rem-doc="' + erpEsc(d.doc_no) + '">' + (typeof mrdRemarksCell === 'function' ? mrdRemarksCell(d) : '') + '</td>' +
       '<td class="text-center">' +
         '<button class="erp-action-btn primary" onclick="viewRequestDetails(\'' + safeDoc + '\', \'' + typeUpper + '\')" title="View Details">' +
           '<i class="bi bi-eye"></i>' +
