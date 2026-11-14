@@ -9,12 +9,9 @@ var MRD_WEEKS = 8;             // weeks shown in the trend chart
 var MRD_PROGRESS_TTL = 60000;  // ms before item progress is fetched again
 var MRD_CHUNK = 50;            // docs per doc_items query (keeps the URL short)
 
-// Default / system values ng doc_items.remarks — hindi ito totoong remarks ni warehouse kaya hindi ipinapakita
-var MRD_AUTO_REMARKS = { 'PENDING': 1, 'SERVED': 1, 'PARTIAL': 1, 'COMPLETED': 1, 'CANCELLED': 1, 'ISSUED': 1 };
-
 var MRD_DAYS = 14;             // days shown in the daily view
 
-var _mrd = { progress: {}, progressAt: 0, loading: false, range: 'weekly' };
+var _mrd = { progress: {}, progressAt: 0, loading: false, range: 'weekly', remarks: {}, remarksOk: false };
 
 // ── helpers ──────────────────────────────────────────────────
 function mrdStatus(d) { return String((d && d.status) || 'PENDING').toUpperCase(); }
@@ -70,15 +67,13 @@ async function mrdLoadProgress() {
 
     var results = await Promise.all(chunks.map(function (c) {
       return erpFetch('doc_items',
-        'select=doc_no,item_code,line_no,requested_qty,issued_qty,remarks&order=doc_no.asc,line_no.asc&doc_no=in.(' + encodeURIComponent(c.join(',')) + ')&limit=5000');
+        'select=doc_no,requested_qty,issued_qty&doc_no=in.(' + encodeURIComponent(c.join(',')) + ')&limit=5000');
     }));
 
     var fresh = {};
     results.forEach(function (rows) {
       (rows || []).forEach(function (r) {
-        var p = fresh[r.doc_no] || (fresh[r.doc_no] = { lines: 0, done: 0, sum: 0, rems: [] });
-        var rem = String(r.remarks || '').trim();
-        if (rem && !MRD_AUTO_REMARKS[rem.toUpperCase()]) p.rems.push({ code: r.item_code || '', text: rem });
+        var p = fresh[r.doc_no] || (fresh[r.doc_no] = { lines: 0, done: 0, sum: 0 });
         var req = Number(r.requested_qty) || 0;
         var iss = Number(r.issued_qty) || 0;
         p.lines++;
@@ -122,50 +117,58 @@ function mrdProgressCell(d) {
   return '<div class="mrd-prog-cell">' + mrdBarHtml(mrdProgressPct(d), true) + '</div>';
 }
 
-// "Remarks / Reason" column — ang makikita ng production kung ano ang sinabi ni warehouse.
-//  - CANCELLED  : reason ng pag-cancel (documents.cancel_reason)
-//  - PARTIAL / COMPLETED : remarks na isinulat ni warehouse sa bawat item (doc_items.remarks)
-//  - PENDING    : wala pa (hindi pa napo-process ni warehouse; ang laman ng remarks ay galing pa sa requestor)
+// ── "Remarks / Reason" — ang remarks / reason na inilagay ng warehouse staff sa All Requests
+//    (table doc_remarks; ang pinakabagong entry ang ipinapakita; read-only dito) ──────────────
+async function mrdLoadRemarks() {
+  var docs = (_myRequests.allDocs || []);
+  if (!docs.length) return false;
+  try {
+    var nos = docs.map(function (d) { return d.doc_no; }).filter(Boolean);
+    var chunks = [];
+    for (var i = 0; i < nos.length; i += MRD_CHUNK) chunks.push(nos.slice(i, i + MRD_CHUNK));
+    var results = await Promise.all(chunks.map(function (c) {
+      return erpFetch('doc_remarks',
+        'select=id,doc_no,remarks,remarked_by,remarked_at&doc_no=in.(' + encodeURIComponent(c.join(',')) + ')&order=id.desc&limit=5000');
+    }));
+    var map = {};
+    results.forEach(function (rows) {
+      (rows || []).forEach(function (r) {
+        // order=id.desc → ang una para sa doc_no ang pinakabago (kahit blank = na-clear na)
+        if (!map[r.doc_no]) map[r.doc_no] = { text: String(r.remarks || '').trim(), by: r.remarked_by || '', at: r.remarked_at };
+      });
+    });
+    _mrd.remarks = map;
+    _mrd.remarksOk = true;
+    return true;
+  } catch (err) {
+    console.warn('[MRD] Warehouse remarks unavailable:', err.message);
+    _mrd.remarksOk = false;
+    return false;
+  }
+}
+
+function mrdRemarkWhen(iso) {
+  try { return new Date(iso).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; }
+}
+
 function mrdRemarksCell(d) {
   var dash = '<span class="mrd-prog-na">—</span>';
-  var st = mrdStatus(d);
-  var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
-  var typeUp = String(d.doc_type || '').toUpperCase();
-  var open = 'viewRequestDetails(\'' + safeDoc + '\', \'' + typeUp + '\')';
-
-  if (st === 'CANCELLED') {
+  var r = _mrd.remarks[d.doc_no];
+  if (r && r.text) {
+    var by = (r.by ? mrdE(r.by) : 'Warehouse') + (r.at ? ' · ' + mrdE(mrdRemarkWhen(r.at)) : '');
+    return '<div class="mrd-rem" title="' + mrdE(r.text) + '">' +
+      '<div class="mrd-rem-text">' + mrdE(r.text) + '</div>' +
+      '<div class="mrd-rem-by"><i class="bi bi-person-badge"></i> ' + by + '</div></div>';
+  }
+  // walang remarks ni warehouse — kung cancelled, ipakita ang reason ng pag-cancel
+  if (mrdStatus(d) === 'CANCELLED') {
     var info = (typeof erpDocCancelInfo === 'function') ? erpDocCancelInfo(d) : { reason: '', by: '' };
-    var why = info.reason || 'Cancelled — walang nakalagay na reason';
-    var tip = (info.by ? 'Cancelled by ' + info.by + ': ' : 'Reason: ') + why;
-    return '<div class="mrd-rem mrd-rem-cancel" title="' + mrdE(tip) + '"><i class="bi bi-x-octagon"></i> ' + mrdE(why) + '</div>';
+    if (info.reason) {
+      var tip = (info.by ? 'Cancelled by ' + info.by + ': ' : 'Reason: ') + info.reason;
+      return '<div class="mrd-rem mrd-rem-cancel" title="' + mrdE(tip) + '"><i class="bi bi-x-octagon"></i> ' + mrdE(info.reason) + '</div>';
+    }
   }
-  if (st === 'PENDING') return dash;
-
-  var p = _mrd.progress[d.doc_no];
-  var rems = (p && p.rems) || [];
-  if (!rems.length) return dash;
-
-  // pagsama-samahin ang parehong remarks
-  var groups = [], byText = {};
-  rems.forEach(function (r) {
-    var key = r.text.toLowerCase();
-    if (!byText[key]) { byText[key] = { text: r.text, codes: [] }; groups.push(byText[key]); }
-    byText[key].codes.push(r.code);
-  });
-  var fullTip = groups.map(function (g) {
-    return (g.codes.length === 1 ? g.codes[0] + ': ' : '') + g.text + (g.codes.length > 1 ? ' (' + g.codes.length + ' items)' : '');
-  }).join('\n');
-
-  var SHOW = 2, html = '';
-  groups.slice(0, SHOW).forEach(function (g) {
-    html += '<div class="mrd-rem-line">' +
-      (g.codes.length === 1 ? '<b>' + mrdE(g.codes[0]) + '</b>: ' : '') + mrdE(g.text) +
-      (g.codes.length > 1 ? ' <span class="mrd-rem-n">(' + g.codes.length + ' items)</span>' : '') + '</div>';
-  });
-  if (groups.length > SHOW) {
-    html += '<a href="#" class="mrd-rem-more" onclick="' + open + ';return false;">+' + (groups.length - SHOW) + ' more</a>';
-  }
-  return '<div class="mrd-rem" title="' + mrdE(fullTip) + '">' + html + '</div>';
+  return dash;
 }
 
 function mrdAgeSub(d) {
@@ -468,6 +471,7 @@ async function mrdOnLoaded() {
   mrdRender();                         // instant, without item progress
   var changed = await mrdLoadProgress();
   if (changed) { mrdRender(); }
+  await mrdLoadRemarks();              // remarks / reason ni warehouse
   mrdFillCells();
 }
 
