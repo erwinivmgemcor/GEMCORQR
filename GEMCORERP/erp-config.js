@@ -123,7 +123,7 @@ function erpNum(n) {
 // Kung wala pa ang table, sa browser lang na ito muna ang save (localStorage).
 //
 // Defaults = eksaktong dating formula:
-//   Per item : Turnover = (Ave/Mo × 12) ÷ On-Hand ;  Inventory Ratio (days) = days-per-year ÷ Turnover
+//   Per item : Turnover = (Ave/Mo × 12) ÷ On-Hand ;  Inventory Ratio (stock cover) = days-per-year ÷ Turnover, shown as days / months / years
 //   Dashboard: Turnover = computed by the server (stock-ledger stock-out value ÷ current inventory × 365/days) ; Inventory Ratio = 365 ÷ Turnover
 // ═══════════════════════════════════════════════════════════
 var ERP_RATIO_LS_KEY = 'erp_ratio_settings_v1';
@@ -380,12 +380,14 @@ function erpInventoryRatioBadge(onHand, aveMonthly) {
   if (t.ratio === null) { txt = '—'; tip = 'Out of stock'; }
   else if (t.days === null) { txt = 'No usage'; tip = 'Has stock but no recorded consumption'; }
   else {
-    var d = Math.round(t.days);
-    txt = d >= 3650 ? '10y+' : d.toLocaleString() + ' d';
-    tip = t.label + (erpRatioIsDefault('item.invRatio')
-      ? '\nOn-Hand ' + Math.round(t.onHand).toLocaleString() + ' ÷ average daily usage ' + (t.annual / _erpRatio.cur.dpy).toFixed(2)
+    var d = Math.round(t.days), mo = t.days * 12 / _erpRatio.cur.dpy;       // months on the same basis as the Google Sheet (On-Hand ÷ Ave/Mo)
+    txt = d < 60 ? d.toLocaleString() + ' d' : (mo < 24 ? mo.toFixed(1) + ' mo' : (mo >= 1200 ? '100+ yr' : (mo / 12).toFixed(1) + ' yr'));
+    tip = 'Stock cover: how long the current On-Hand lasts at average usage\n' + t.label +
+          (erpRatioIsDefault('item.invRatio')
+      ? '\nOn-Hand ' + Math.round(t.onHand).toLocaleString() + ' ÷ average monthly usage ' + (t.annual / 12).toLocaleString(undefined, { maximumFractionDigits: 2 })
       : '\nFormula: ' + erpRatioWords(_erpRatio.cur.item.invRatio)) +
-          '\n= ' + d.toLocaleString() + ' days (≈ ' + (t.days / 30.4).toFixed(1) + ' months) of stock';
+          '\n= ' + mo.toLocaleString(undefined, { maximumFractionDigits: 1 }) + ' months (same as “Inventory Ratio” in the Google Sheet)' +
+          '\n≈ ' + d.toLocaleString() + ' days' + (mo >= 24 ? ' ≈ ' + (mo / 12).toFixed(1) + ' years' : '');
   }
   return '<span title="' + tip.replace(/"/g, '&quot;').replace(/\n/g, '&#10;') + '" style="display:inline-block;min-width:50px;padding:2px 8px;border-radius:999px;' +
     'font-size:0.72rem;font-weight:700;background:' + colors[0] + ';color:' + colors[1] + ';">' + txt + '</span>';
