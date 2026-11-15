@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEMCOR ERP — Monthly Movement</title>
+
+  <link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1e3a5f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="erp-design-system.css">
+<link rel="stylesheet" href="erp-styles.css">
+<link rel="stylesheet" href="erp-nav.css">
+  <link rel="stylesheet" href="erp-notif.css">
+
+
+<script src="erp-theme.js"></script>
+  <script src="erp-guard.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script defer src="erp-config.js"></script>
+<script defer src="erp-supabase.js"></script>
+<script defer src="erp-nav.js"></script>
+<script defer src="item-trend.js"></script>
+<script defer src="monthly-movement.js"></script>
+  <script defer src="notif-alerts.js"></script>
+  <script defer src="notifications.js"></script>
+  <script defer src="js/update.js"></script>
+<style>
+.mm-wrap{padding:0 2px}
+.mm-ctl{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:12px}
+.mm-row{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+.mm-f{display:flex;flex-direction:column;gap:3px}
+.mm-f>label{font-size:.64rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#6b7280;margin:0}
+.mm-seg{display:inline-flex;border:1px solid #d1d5db;border-radius:8px;overflow:hidden;background:#fff}
+.mm-seg button{border:0;background:#fff;padding:6px 12px;font-size:.8rem;font-weight:600;color:#374151;border-right:1px solid #e5e7eb;cursor:pointer}
+.mm-seg button:last-child{border-right:0}
+.mm-seg button.on{background:#1e3a5f;color:#fff}
+.mm-ctl .form-select,.mm-ctl .form-control{font-size:.82rem;min-height:34px}
+.mm-chk{display:flex;align-items:center;gap:6px;font-size:.82rem;color:#374151;height:34px;margin:0;cursor:pointer}
+.mm-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px}
+.mm-kpi{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px}
+.mm-kpi .l{font-size:.64rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#6b7280}
+.mm-kpi .v{font-size:1.25rem;font-weight:700;color:#1e3a5f;line-height:1.25}
+.mm-kpi .s{font-size:.7rem;color:#6b7280}
+.mm-chart{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px;margin-bottom:12px}
+.mm-chart .t{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-weight:700;font-size:.88rem;color:#1e3a5f;margin-bottom:4px}
+.mm-tcard{background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden}
+.mm-thead{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 14px;border-bottom:1px solid #e5e7eb}
+.mm-scroll{overflow:auto;max-height:68vh}
+table.mm{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;font-size:.78rem}
+table.mm th,table.mm td{padding:5px 9px;border-bottom:1px solid #f3f4f6;white-space:nowrap}
+table.mm thead th{position:sticky;top:0;z-index:3;background:#f3f4f6;color:#374151;font-size:.68rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;border-bottom:1px solid #d1d5db;text-align:right}
+table.mm thead th.l{text-align:left}
+table.mm td.n{text-align:right;font-variant-numeric:tabular-nums}
+table.mm td.z{color:#d1d5db}
+table.mm td.c1,table.mm th.c1{position:sticky;left:0;z-index:2;background:#fff;min-width:130px}
+table.mm td.c2,table.mm th.c2{position:sticky;left:130px;z-index:2;background:#fff;min-width:260px;max-width:320px;overflow:hidden;text-overflow:ellipsis;box-shadow:2px 0 0 #e5e7eb}
+table.mm thead th.c1,table.mm thead th.c2{z-index:4;background:#f3f4f6}
+table.mm tbody tr{cursor:pointer}
+table.mm tbody tr:hover td{background:#f8fafc}
+table.mm tbody tr:hover td.c1,table.mm tbody tr:hover td.c2{background:#f8fafc}
+table.mm td.tot{font-weight:700;background:#f9fafb}
+table.mm tfoot td{position:sticky;bottom:0;background:#eef2f7;font-weight:700;border-top:1px solid #cbd5e1;z-index:2}
+table.mm tfoot td.c1,table.mm tfoot td.c2{z-index:3;background:#eef2f7}
+table.mm th.cur{background:#fff7ed}
+.mm-code{font-family:ui-monospace,Consolas,monospace;font-size:.74rem;color:#1e3a5f;font-weight:600}
+.mm-nocost{font-size:.6rem;background:#fef3c7;color:#92400e;border-radius:4px;padding:0 4px;margin-left:4px}
+.mm-pager{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 14px;border-top:1px solid #e5e7eb;font-size:.78rem;color:#4b5563}
+.mm-empty{padding:34px;text-align:center;color:#6b7280}
+</style>
+</head>
+<body>
+
+<nav class="erp-topbar">
+  <div class="erp-topbar-left">
+    <img src="../gemcor-logo.png" alt="GEMCOR" class="erp-logo" onerror="this.style.display='none'">
+    <div>
+      <div class="erp-brand">GEMCOR ERP</div>
+      <div class="erp-brand-sub">Monthly Movement <span class="badge-live">LIVE</span></div>
+    </div>
+  </div>
+  <div id="erpNavBar"></div>
+  <div class="erp-topbar-right">
+    <div class="erp-health" id="erpHealthBadge">
+      <span class="dot dot-pending"></span>
+      <span id="erpHealthText">Checking...</span>
+    </div>
+    <button class="erp-btn-icon" onclick="mmRefresh()" title="Refresh data"><i class="bi bi-arrow-clockwise"></i></button>
+    <a href="stock-monitor.html" class="erp-btn-outline" title="Back to Stock Monitor"><i class="bi bi-arrow-left"></i> <span>Stock Monitor</span></a>
+  </div>
+</nav>
+
+<div class="erp-container">
+<div class="mm-wrap">
+
+  <div class="mb-3">
+    <h5 class="fw-bold mb-0" style="color:#1e3a5f">Monthly Movement by Item</h5>
+    <div class="text-muted small">Issued (MRIF) and received (MRR) per item, per month. Jan–Oct 2026 from the legacy sheet; from Nov 2026 live from the system.</div>
+  </div>
+
+  <div class="mm-ctl">
+    <div class="mm-row">
+      <div class="mm-f"><label>Show</label>
+        <div class="mm-seg" id="mmDataset">
+          <button data-v="issued" class="on">Issued (MRIF)</button><button data-v="received">Received (MRR)</button><button data-v="net">Net (Received − Issued)</button>
+        </div></div>
+      <div class="mm-f"><label>Measure</label>
+        <div class="mm-seg" id="mmMeasure"><button data-v="qty" class="on">Quantity</button><button data-v="value">Value (₱)</button></div></div>
+      <div class="mm-f"><label>Category</label><select class="form-select" id="mmCat" style="min-width:170px"><option value="">All categories</option></select></div>
+      <div class="mm-f" style="flex:1;min-width:220px"><label>Search</label><input type="search" class="form-control" id="mmSearch" placeholder="Item code or description" autocomplete="off"></div>
+      <div class="mm-f"><label>Sort by</label>
+        <select class="form-select" id="mmSort"><option value="total">Total (high to low)</option><option value="avg">Monthly average (high to low)</option><option value="last">Latest month (high to low)</option><option value="code">Item code (A–Z)</option><option value="desc">Description (A–Z)</option></select></div>
+      <div class="mm-f"><label>Rows</label><select class="form-select" id="mmPageSize"><option>50</option><option selected>100</option><option>250</option><option>500</option></select></div>
+      <label class="mm-chk"><input type="checkbox" id="mmHide" checked> Hide items with no movement</label>
+      <div class="mm-f"><label>&nbsp;</label><button class="btn btn-sm btn-outline-secondary" id="mmReset" style="min-height:34px">Reset</button></div>
+      <div class="mm-f"><label>&nbsp;</label><button class="btn btn-sm btn-success" id="mmExport" style="min-height:34px"><i class="bi bi-download me-1"></i>Export CSV</button></div>
+    </div>
+  </div>
+
+  <div class="mm-kpis" id="mmKpis"></div>
+  <div class="mm-chart"><div class="t"><span id="mmChartTitle">Monthly totals</span><span class="small fw-normal text-muted" id="mmChartSub"></span></div><div id="mmChart"></div></div>
+
+  <div class="mm-tcard">
+    <div class="mm-thead"><div class="fw-bold" style="color:#1e3a5f"><i class="bi bi-table me-2"></i><span id="mmTableTitle">Item detail</span></div><span class="text-muted small" id="mmCount"></span></div>
+    <div class="mm-scroll" id="mmScroll"><div class="mm-empty"><div class="spinner-border spinner-border-sm me-2"></div>Loading monthly data…</div></div>
+    <div class="mm-pager" id="mmPager"></div>
+  </div>
+
+  <div class="text-muted small mt-2">Value = quantity × current unit cost. The current month is in progress and is excluded from averages. Click a row to open the item trend.</div>
+</div>
+</div>
+
+<div class="modal fade" id="mmItemModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
+  <div class="modal-header" style="background:#1e3a5f;color:#fff"><h6 class="modal-title" id="mmItemTitle">Item</h6><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body"><div id="mmItemTrend"></div></div>
+</div></div></div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="erpToast" class="toast erp-toast"><div class="toast-body" id="erpToastBody">Message</div></div>
+</div>
+
+</body>
+</html>
