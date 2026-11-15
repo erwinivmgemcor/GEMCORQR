@@ -181,6 +181,7 @@ async function mdashLoad() {
     // Render everything
     mdashRenderKPIs(data);
     mdashRenderCharts(data);
+    if (!_mdash.histRows) mdashLoadHistory();     // non-blocking; hindi nakakaapekto sa pag-load kung wala pa ang history
 
     console.log('[Dashboard] Loaded successfully');
   } catch(err) {
@@ -919,6 +920,34 @@ function mdashTurnoverBand(v) {
   return { i: 3, b: MDASH_TURNOVER_BANDS[3] };
 }
 
+// ── Complete monthly history (legacy sheet Jan–Oct 2026 + live system data) — read-only, from erp_v_monthly_totals.
+// Average per COMPLETE calendar month since Jan 2026 (current month excluded). Follows the dashboard category filter.
+// Location / stock-class filters are not available in the history, so they do not apply to these two variables.
+function mdashHistVars() {
+  var rows = _mdash.histRows;
+  if (!rows) return { issuedMo: 0, receivedMo: 0, months: 0 };
+  var now = new Date(), y = 2026, m = 1, n = 0;
+  while (y < now.getFullYear() || (y === now.getFullYear() && m < now.getMonth() + 1)) { n++; m++; if (m > 12) { m = 1; y++; } }
+  var cutoff = now.getFullYear() + '-' + (now.getMonth() + 1 < 10 ? '0' : '') + (now.getMonth() + 1);
+  var cat = _mdash.filters.category, a = 0, b = 0;
+  rows.forEach(function(r) {
+    if (String(r.month_start).slice(0, 7) >= cutoff) return;
+    if (cat && r.category !== cat) return;
+    a += Number(r.mrif_value || 0); b += Number(r.mrr_value || 0);
+  });
+  return { issuedMo: n ? a / n : 0, receivedMo: n ? b / n : 0, months: n };
+}
+async function mdashLoadHistory() {
+  try {
+    _mdash.histRows = await erpFetchAll('erp_v_monthly_totals', 'select=month_start,category,mrif_value,mrr_value&order=month_start.asc,category.asc');
+  } catch (e) {
+    console.warn('[Dashboard] monthly history unavailable (run erp-history-setup.sql)', e);
+    _mdash.histRows = null; return;
+  }
+  window.dispatchEvent(new CustomEvent('erp-ratio-changed'));   // re-render cards that use the history variables
+}
+window.mdashHistVars = mdashHistVars;
+
 // Mga variable na magagamit sa formula (Ratio Settings) para sa overall Turnover / Inventory Ratio
 function mdashRatioVars(data) {
   data = data || _mdash.data;
@@ -930,7 +959,8 @@ function mdashRatioVars(data) {
     usageMo += ave * Number(it.unit_cost || 0);
     if (ave > 0) invActive += Number(it.on_hand_cost || 0);
   });
-  return { stockOut: Number(t.cogs || 0), issued: Number(act.mrif_value || 0), returned: Number(act.mrs_value || 0), inv: Number(s.total_value || 0), invActive: invActive, usageMo: usageMo,
+  var h = mdashHistVars();
+  return { issuedMo: h.issuedMo, receivedMo: h.receivedMo, stockOut: Number(t.cogs || 0), issued: Number(act.mrif_value || 0), returned: Number(act.mrs_value || 0), inv: Number(s.total_value || 0), invActive: invActive, usageMo: usageMo,
            days: Number(t.days_in_period || 30), dpy: erpRatioGet().dpy };
 }
 function mdashServerTurnover(data) { return Number(((data || _mdash.data || {}).turnover || {}).turnover_annualized || 0); }
@@ -1017,6 +1047,8 @@ function mdashFormulaSection(kind, f) {
   var expr = kind === 'turnover' ? S.overall.turnover : S.overall.invRatio;
   var names = kind === 'turnover' ? ERP_RATIO_VARS['overall.turnover'] : ERP_RATIO_VARS['overall.invRatio'];
   var meaning = {
+    issuedMo: ['Average value issued to production (MRIF) per complete month since Jan 2026 — legacy sheet + live system', peso(v.issuedMo)],
+    receivedMo: ['Average value received (MRR) per complete month since Jan 2026', peso(v.receivedMo)],
     stockOut: ['Value of all stock taken out of the warehouse in the period (stock ledger)', peso(v.stockOut)],
     issued: ['Value issued to production (MRIF) in the selected period', peso(v.issued)],
     returned: ['Value of returns (MRS) in the selected period', peso(v.returned)],
