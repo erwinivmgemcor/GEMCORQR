@@ -1058,27 +1058,46 @@ function mdashRenderInvRatioCard(f) {
   var vEl = document.getElementById('mdashKpiInvRatio');
   var sEl = document.getElementById('mdashKpiInvRatioSub');
   var pill = document.getElementById('mdashInvRatioPill');
+  var ref = document.getElementById('mdashInvRatioRef');
   if (!vEl) return;
   var S = erpRatioGet(), months = S.overall.invUnit === 'months';
+  var usesHist = /issuedMo|receivedMo/.test(S.overall.turnover + ' ' + S.overall.invRatio) && S.overall.tMode === 'custom';
+  var src = usesHist ? 'complete history' : (S.overall.tMode === 'system' && erpRatioIsDefault('overall.invRatio') ? mdashPeriodLabel() + ' · system ledger' : mdashPeriodLabel() + ' · custom formula');
   if (f.daysOfStock) {
     vEl.setAttribute('data-unit', months ? 'months' : 'days');
     if (months) {
       vEl.textContent = (f.daysOfStock / 30.4).toFixed(1);
-      sEl.textContent = '≈ ' + Math.round(f.daysOfStock).toLocaleString() + ' days of stock · whole warehouse, by value';
+      sEl.textContent = '≈ ' + Math.round(f.daysOfStock).toLocaleString() + ' days · ' + src;
     } else {
       animateValue(vEl, 0, Math.round(f.daysOfStock), 1200, false);
-      sEl.textContent = '≈ ' + (f.daysOfStock / 30.4).toFixed(1) + ' months of stock · whole warehouse, by value';
+      sEl.textContent = '≈ ' + (f.daysOfStock / 30.4).toFixed(1) + ' months · ' + src;
     }
     vEl.classList.add('has-days');
-    var band = mdashTurnoverBand(f.ratio).b;
+    // Status follows the DAYS of stock (same scale as the explainer), not only the turnover
+    var I = mdashBandInfo(), B = MDASH_TURNOVER_BANDS, d = f.daysOfStock;
+    var band = d < I.d1 ? B[3] : d < I.d2 ? B[2] : d < I.d3 ? B[1] : B[0];
     pill.innerHTML = '<span class="tp tp-' + band.cls + '">' + band.label + '</span>' +
-      (erpRatioIsDefault('overall.invRatio')
+      (erpRatioIsDefault('overall.invRatio') && !usesHist
         ? '<span class="tp-days">= ' + S.dpy + ' ÷ ' + f.ratio.toFixed(1) + '× turnover</span>'
-        : '<span class="tp-days">custom formula</span>');
+        : '<span class="tp-days">' + (usesHist ? 'avg monthly issuance basis' : 'custom formula') + '</span>');
   } else {
     vEl.textContent = '—'; vEl.classList.remove('has-days');
     sEl.textContent = months ? 'months of stock on hand' : 'days of stock on hand';
     pill.innerHTML = '<span class="tp-days">Not enough issuance data in this period</span>';
+  }
+
+  // ── Reference lines: the same question answered from the complete history, and how many items are really overstocked
+  if (ref) {
+    var v = f.vars || {}, h = (v.issuedMo > 0 && v.inv > 0) ? S.dpy * v.inv / (v.issuedMo * 12) : null;
+    var cs = mdashCoverStats(), o = cs.bands[4];
+    var pI = cs.totalItems ? Math.round(o.n / cs.totalItems * 100) : 0, pV = cs.totalValue ? Math.round(o.v / cs.totalValue * 100) : 0;
+    var html = '';
+    if (usesHist) html += '<div><b>Based on complete history:</b> average issuance per month since Jan 2026.</div>';
+    else if (h !== null) html += '<div><b>Complete history (avg since Jan 2026): ≈ ' + Math.round(h).toLocaleString() + ' days</b> (' + (h / 30.4).toFixed(1) + ' months)</div>';
+    else html += '<div class="mute">Complete history: not available yet (run the erp-history SQL).</div>';
+    if (cs.totalItems) html += '<div title="Months of stock = On-Hand ÷ average monthly usage"><b>' + pI + '% of items</b> hold over 12 months of stock (<b>' + pV + '% of inventory value</b>)</div>';
+    if (f.preGoLive) html += '<div class="warn">⚠ Period starts before system go-live (Nov 1, 2026); the system figure is understated.</div>';
+    ref.innerHTML = html;
   }
 }
 
