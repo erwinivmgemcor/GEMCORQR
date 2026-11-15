@@ -930,7 +930,7 @@ function mdashRatioVars(data) {
     usageMo += ave * Number(it.unit_cost || 0);
     if (ave > 0) invActive += Number(it.on_hand_cost || 0);
   });
-  return { issued: Number(act.mrif_value || 0), inv: Number(s.total_value || 0), invActive: invActive, usageMo: usageMo,
+  return { stockOut: Number(t.cogs || 0), issued: Number(act.mrif_value || 0), returned: Number(act.mrs_value || 0), inv: Number(s.total_value || 0), invActive: invActive, usageMo: usageMo,
            days: Number(t.days_in_period || 30), dpy: erpRatioGet().dpy };
 }
 function mdashServerTurnover(data) { return Number(((data || _mdash.data || {}).turnover || {}).turnover_annualized || 0); }
@@ -954,8 +954,8 @@ function mdashTurnoverFacts(data) {
     tot += v; if (k === 'NO MOVEMENT') nm += v; else if (k === 'SLOW MOVING') sl += v;
   });
   f.mvTotal = tot; f.noMove = nm; f.slow = sl;
-  var calc = (f.inv > 0 && f.issued > 0) ? (f.issued / f.inv) * (365 / days) : 0;
-  f.check = (!custom && ratio > 0 && calc > 0 && Math.abs(calc - ratio) / ratio <= 0.15) ? calc : null;
+  f.stockOut = Number(t.cogs || 0); f.invServer = Number(t.avg_inventory || 0);
+  f.check = (!custom && ratio > 0 && f.stockOut > 0 && f.invServer > 0) ? ratio : null;
   return f;
 }
 
@@ -1017,7 +1017,9 @@ function mdashFormulaSection(kind, f) {
   var expr = kind === 'turnover' ? S.overall.turnover : S.overall.invRatio;
   var names = kind === 'turnover' ? ERP_RATIO_VARS['overall.turnover'] : ERP_RATIO_VARS['overall.invRatio'];
   var meaning = {
+    stockOut: ['Value of all stock taken out of the warehouse in the period (stock ledger)', peso(v.stockOut)],
     issued: ['Value issued to production (MRIF) in the selected period', peso(v.issued)],
+    returned: ['Value of returns (MRS) in the selected period', peso(v.returned)],
     inv: ['Total value of inventory on hand', peso(v.inv)],
     invActive: ['Inventory value of items that have recorded usage only', peso(v.invActive)],
     usageMo: ['Average monthly usage value (Σ Ave/Mo × unit cost)', peso(v.usageMo)],
@@ -1172,23 +1174,23 @@ function mdashShowTurnoverInfo() {
   if (f.custom) { html += mdashFormulaSection('turnover', f); } else {
   html += '<div class="to-sec"><h6>How the number is worked out</h6><div class="to-steps">';
   if (f.check) {
-    var raw = f.issued / f.inv;
-    html += '<div class="to-step"><div class="num">1</div><div><div class="tt">What went out</div><div class="vv">' + peso(f.issued) + '</div>' +
-      '<div class="dd">Value of stock issued to production (MRIF) in ' + period + ' (' + f.days + ' days)' + (f.mrifCount ? ' · ' + f.mrifCount + ' documents' : '') + '</div></div></div>' +
-      '<div class="to-step"><div class="num">2</div><div><div class="tt">What we keep in the warehouse</div><div class="vv">' + peso(f.inv) + '</div>' +
-      '<div class="dd">Total value of inventory on hand</div></div></div>' +
-      '<div class="to-step"><div class="num">3</div><div><div class="tt">How many refills in ' + f.days + ' days?</div><div class="vv">' + peso(f.issued) + ' ÷ ' + peso(f.inv) + ' = ' + raw.toFixed(2) + '</div>' +
+    var raw = f.stockOut / f.invServer;
+    html += '<div class="to-step"><div class="num">1</div><div><div class="tt">What went out</div><div class="vv">' + peso(f.stockOut) + '</div>' +
+      '<div class="dd">Value of all stock taken out of the warehouse in ' + period + ' (' + f.days + ' days), from the stock ledger (MRIF issuances and any other stock-out)</div></div></div>' +
+      '<div class="to-step"><div class="num">2</div><div><div class="tt">What we keep in the warehouse</div><div class="vv">' + peso(f.invServer) + '</div>' +
+      '<div class="dd">Current value of inventory on hand</div></div></div>' +
+      '<div class="to-step"><div class="num">3</div><div><div class="tt">How many refills in ' + f.days + ' days?</div><div class="vv">' + peso(f.stockOut) + ' ÷ ' + peso(f.invServer) + ' = ' + raw.toFixed(2) + '</div>' +
       '<div class="dd">Step 1 divided by Step 2</div></div></div>' +
-      '<div class="to-step"><div class="num">4</div><div><div class="tt">Scale it to a full year</div><div class="vv">' + raw.toFixed(2) + ' × (365 ÷ ' + f.days + ') ≈ ' + f.check.toFixed(1) + '×</div>' +
+      '<div class="to-step"><div class="num">4</div><div><div class="tt">Scale it to a full year</div><div class="vv">' + raw.toFixed(2) + ' × (365 ÷ ' + f.days + ') ≈ ' + f.ratio.toFixed(1) + '×</div>' +
       '<div class="dd">So periods of different lengths can be compared fairly</div></div></div>' +
       '<div class="to-step result"><div class="num"><i class="bi bi-check-lg"></i></div><div><div class="tt">Result on the dashboard</div><div class="vv">' + f.ratio.toFixed(1) + '× per year</div></div></div>';
   } else {
-    html += '<div class="to-step"><div class="num">1</div><div><div class="tt">What went out</div><div class="dd">Value of stock issued to production (MRIF) in ' + period + ' (' + f.days + ' days)</div></div></div>' +
-      '<div class="to-step"><div class="num">2</div><div><div class="tt">What we keep in the warehouse</div><div class="dd">Total value of inventory on hand</div></div></div>' +
+    html += '<div class="to-step"><div class="num">1</div><div><div class="tt">What went out</div><div class="dd">Value of all stock taken out of the warehouse in ' + period + ' (' + f.days + ' days), from the stock ledger</div></div></div>' +
+      '<div class="to-step"><div class="num">2</div><div><div class="tt">What we keep in the warehouse</div><div class="dd">Current value of inventory on hand</div></div></div>' +
       '<div class="to-step"><div class="num">3</div><div><div class="tt">Divide Step 1 by Step 2</div><div class="dd">This gives the number of refills in ' + f.days + ' days</div></div></div>' +
       '<div class="to-step"><div class="num">4</div><div><div class="tt">Scale it to a full year</div><div class="dd">Multiply by 365 ÷ ' + f.days + '</div></div></div>' +
       '<div class="to-step result"><div class="num"><i class="bi bi-check-lg"></i></div><div><div class="tt">Result on the dashboard</div><div class="vv">' + (has ? f.ratio.toFixed(1) + '× per year' : '—') + '</div>' +
-      '<div class="dd">Exact figure is calculated by the system.</div></div></div>';
+      '<div class="dd">No stock-out recorded in this period.</div></div></div>';
   }
   html += '</div></div>';
   }
