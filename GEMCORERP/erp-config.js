@@ -116,10 +116,174 @@ function erpNum(n) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// RATIO FORMULA SETTINGS — Turnover Ratio & Inventory Ratio
+// Ang formula, days-per-year at status thresholds ay puwedeng baguhin sa "Ratio Settings"
+// (Management Dashboard / Stock Monitor) — walang kailangang i-edit sa code.
+// Naka-save sa Supabase table `erp_settings` (key = 'ratio_formula'), kaya pareho ang makikita ng lahat.
+// Kung wala pa ang table, sa browser lang na ito muna ang save (localStorage).
+//
+// Defaults = eksaktong dating formula:
+//   Per item : Turnover = (Ave/Mo × 12) ÷ On-Hand ;  Inventory Ratio (days) = days-per-year ÷ Turnover
+//   Dashboard: Turnover = computed by the server (issued ÷ inventory × 365/days) ; Inventory Ratio = 365 ÷ Turnover
+// ═══════════════════════════════════════════════════════════
+var ERP_RATIO_LS_KEY = 'erp_ratio_settings_v1';
+var ERP_RATIO_DEFAULTS = {
+  dpy: 365,
+  bands: [2, 4, 8],
+  overall: { tMode: 'system', turnover: 'issued / inv * (dpy / days)', invRatio: 'dpy / turnover', invUnit: 'days' },
+  item:    { turnover: 'aveMo * 12 / onHand', invRatio: 'dpy / turnover' }
+};
+// Mga variable na puwedeng gamitin sa bawat formula
+var ERP_RATIO_VARS = {
+  'overall.turnover': ['issued', 'inv', 'invActive', 'usageMo', 'days', 'dpy'],
+  'overall.invRatio': ['issued', 'inv', 'invActive', 'usageMo', 'days', 'dpy', 'turnover'],
+  'item.turnover':    ['onHand', 'aveMo', 'dpy'],
+  'item.invRatio':    ['onHand', 'aveMo', 'dpy', 'turnover']
+};
+var ERP_RATIO_FUNCS = { min: Math.min, max: Math.max, abs: Math.abs, sqrt: Math.sqrt, round: Math.round };
+
+var _erpRatio = { saved: null, cur: null, preview: false, loaded: false, compiled: {} };
+
+function erpRatioClone(o) { return JSON.parse(JSON.stringify(o)); }
+
+// Ligtas na formula evaluator: letters/numbers/+ - * / ( ) . , lang, at kilalang variable/function lang.
+function erpRatioCompile(expr, vars) {
+  expr = String(expr == null ? '' : expr).trim();
+  if (!expr) throw new Error('Walang formula');
+  if (expr.length > 200) throw new Error('Masyadong mahaba ang formula');
+  if (!/^[0-9A-Za-z_+\-*\/().,\s]+$/.test(expr)) throw new Error('Letters, numbers at + - * / ( ) . , lang ang puwede');
+  var ids = expr.match(/[A-Za-z_][A-Za-z0-9_]*/g) || [];
+  for (var i = 0; i < ids.length; i++) {
+    if (vars.indexOf(ids[i]) < 0 && !Object.prototype.hasOwnProperty.call(ERP_RATIO_FUNCS, ids[i])) {
+      throw new Error('Hindi kilalang variable: ' + ids[i]);
+    }
+  }
+  var fnNames = Object.keys(ERP_RATIO_FUNCS);
+  var names = vars.concat(fnNames);
+  var fn;
+  try { fn = new Function(names.join(','), '"use strict"; return (' + expr + ');'); }
+  catch (e) { throw new Error('May mali sa pagkakasulat ng formula'); }
+  return function (v) {
+    var args = vars.map(function (n) { return Number(v[n]); }).concat(fnNames.map(function (n) { return ERP_RATIO_FUNCS[n]; }));
+    return fn.apply(null, args);
+  };
+}
+
+// → { ok: true } o { ok: false, error: '...' }
+function erpRatioCheck(path, expr) {
+  try {
+    var f = erpRatioCompile(expr, ERP_RATIO_VARS[path]);
+    var sample = {}; ERP_RATIO_VARS[path].forEach(function (n) { sample[n] = 1; });
+    f(sample);
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message || String(e) }; }
+}
+
+// Kalkulahin. Kung may exprOverride, ito ang gagamitin (para sa preview). → number | null
+function erpRatioEval(path, vars, exprOverride) {
+  try {
+    var parts = path.split('.');
+    var expr = exprOverride != null ? exprOverride : _erpRatio.cur[parts[0]][parts[1]];
+    var key = path + '|' + expr;
+    var f = _erpRatio.compiled[key] || (_erpRatio.compiled[key] = erpRatioCompile(expr, ERP_RATIO_VARS[path]));
+    var r = f(vars);
+    return (typeof r === 'number' && isFinite(r)) ? r : null;
+  } catch (e) { return null; }
+}
+
+function erpRatioNormalize(raw) {
+  var d = erpRatioClone(ERP_RATIO_DEFAULTS), r = raw || {};
+  var dpy = Number(r.dpy);
+  if (dpy >= 1 && dpy <= 400) d.dpy = dpy;
+  if (Array.isArray(r.bands) && r.bands.length === 3) {
+    var b = r.bands.map(Number);
+    if (b[0] > 0 && b[0] < b[1] && b[1] < b[2]) d.bands = b;
+  }
+  ['overall.turnover', 'overall.invRatio', 'item.turnover', 'item.invRatio'].forEach(function (path) {
+    var pp = path.split('.'), v = r[pp[0]] && r[pp[0]][pp[1]];
+    if (typeof v === 'string' && erpRatioCheck(path, v).ok) d[pp[0]][pp[1]] = v.trim();
+  });
+  if (r.overall && r.overall.tMode === 'custom') d.overall.tMode = 'custom';
+  if (r.overall && r.overall.invUnit === 'months') d.overall.invUnit = 'months';
+  return d;
+}
+
+function erpRatioGet() { return _erpRatio.cur; }
+function erpRatioGetSaved() { return _erpRatio.saved; }
+function erpRatioIsPreview() { return _erpRatio.preview; }
+function erpRatioIsDefault(path) {
+  var pp = path.split('.');
+  if (path === 'overall.turnover' && _erpRatio.cur.overall.tMode === 'system') return true;
+  return _erpRatio.cur[pp[0]][pp[1]] === ERP_RATIO_DEFAULTS[pp[0]][pp[1]];
+}
+
+function erpRatioApplyBands() {
+  var b = _erpRatio.cur.bands;
+  // in-place, para ang lahat ng gumagamit ng ERP_TURNOVER_BANDS (dashboard, stock monitor) ay sumunod
+  ERP_TURNOVER_BANDS[0].max = b[0]; ERP_TURNOVER_BANDS[1].max = b[1]; ERP_TURNOVER_BANDS[2].max = b[2];
+}
+
+function erpRatioNotify() {
+  try { window.dispatchEvent(new CustomEvent('erp-ratio-changed', { detail: { preview: _erpRatio.preview } })); } catch (e) {}
+}
+
+// I-apply ang settings sa buong page. preview=true → hindi pa naka-save (mawawala pag nag-reload).
+function erpRatioApply(settings, preview) {
+  _erpRatio.cur = erpRatioNormalize(settings);
+  _erpRatio.preview = !!preview;
+  erpRatioApplyBands();
+  erpRatioNotify();
+}
+function erpRatioRevert() { erpRatioApply(_erpRatio.saved, false); }
+
+async function erpRatioLoad() {
+  try {
+    var res = await fetch(erpUrl('erp_settings') + '?select=value&key=eq.ratio_formula&limit=1', { headers: erpHeaders() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var rows = await res.json();
+    _erpRatio.loaded = true;
+    if (rows && rows[0] && rows[0].value) {
+      var norm = erpRatioNormalize(rows[0].value);
+      var changed = JSON.stringify(norm) !== JSON.stringify(_erpRatio.saved);
+      _erpRatio.saved = norm;
+      try { localStorage.setItem(ERP_RATIO_LS_KEY, JSON.stringify(norm)); } catch (e) {}
+      if (!_erpRatio.preview && changed) erpRatioApply(norm, false);
+    }
+    return true;
+  } catch (e) {
+    console.warn('[Ratio] settings table unavailable, using local/default:', e.message);
+    return false;
+  }
+}
+
+// → { ok, shared }  shared=false kapag sa browser lang na ito na-save (wala pa ang table)
+async function erpRatioSave(settings) {
+  var norm = erpRatioNormalize(settings);
+  var who = 'UNKNOWN';
+  try { who = localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'UNKNOWN'; } catch (e) {}
+  var shared = true;
+  try {
+    var res = await fetch(erpUrl('erp_settings') + '?on_conflict=key', {
+      method: 'POST',
+      headers: erpHeaders({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+      body: JSON.stringify([{ key: 'ratio_formula', value: norm, updated_by: who, updated_at: new Date().toISOString() }])
+    });
+    if (!res.ok) throw new Error(await res.text());
+  } catch (e) {
+    console.warn('[Ratio] save to Supabase failed:', e.message);
+    shared = false;
+  }
+  _erpRatio.saved = norm;
+  try { localStorage.setItem(ERP_RATIO_LS_KEY, JSON.stringify(norm)); } catch (e) {}
+  erpRatioApply(norm, false);
+  return { ok: true, shared: shared };
+}
+
+// ═══════════════════════════════════════════════════════════
 // ITEM TURNOVER RATIO (per item) — shared by Stock Monitor and Management Dashboard
-// Turnover (×/year) = (Ave monthly consumption × 12) ÷ current On-Hand
-// Days of stock    = 365 ÷ turnover  (= On-Hand ÷ average daily usage)
-// Bands are rules of thumb; adjust with management.
+// Default: Turnover (×/year) = (Ave monthly consumption × 12) ÷ current On-Hand
+//          Days of stock    = days-per-year ÷ turnover (= On-Hand ÷ average daily usage)
+// Puwedeng baguhin sa Ratio Settings. Bands (thresholds) ay nasa settings din.
 // ═══════════════════════════════════════════════════════════
 var ERP_TURNOVER_BANDS = [
   { max: 2,        label: 'Very slow', cls: 'danger', meaning: 'Stock sits in the warehouse for most of the year. A lot of cash is tied up.' },
@@ -128,13 +292,29 @@ var ERP_TURNOVER_BANDS = [
   { max: Infinity, label: 'Fast',      cls: 'fast',   meaning: 'Stock moves very quickly. Check that buffers are enough to avoid stock-outs.' }
 ];
 
+// Initial settings: galing sa naka-save na cache (para agad), tapos erpRatioLoad() ang magre-refresh mula sa server
+(function () {
+  var saved = null;
+  try { saved = JSON.parse(localStorage.getItem(ERP_RATIO_LS_KEY) || 'null'); } catch (e) {}
+  _erpRatio.saved = erpRatioNormalize(saved);
+  _erpRatio.cur = erpRatioClone(_erpRatio.saved);
+  erpRatioApplyBands();
+})();
+
 function erpItemTurnover(onHand, aveMonthly) {
   onHand = Number(onHand || 0); aveMonthly = Number(aveMonthly || 0);
   if (onHand <= 0) return { ratio: null, cls: 'na', label: 'Out of stock', days: null, annual: aveMonthly * 12, onHand: onHand };
   if (aveMonthly <= 0) return { ratio: 0, cls: 'danger', label: 'No usage', days: null, annual: 0, onHand: onHand };
-  var annual = aveMonthly * 12, ratio = annual / onHand, band = ERP_TURNOVER_BANDS[ERP_TURNOVER_BANDS.length - 1];
+  var S = _erpRatio.cur, annual = aveMonthly * 12;
+  var v = { onHand: onHand, aveMo: aveMonthly, dpy: S.dpy };
+  var ratio = erpRatioEval('item.turnover', v);
+  if (ratio === null) ratio = annual / onHand;                  // fallback: default formula
+  var band = ERP_TURNOVER_BANDS[ERP_TURNOVER_BANDS.length - 1];
   for (var i = 0; i < ERP_TURNOVER_BANDS.length; i++) { if (ratio < ERP_TURNOVER_BANDS[i].max) { band = ERP_TURNOVER_BANDS[i]; break; } }
-  return { ratio: ratio, cls: band.cls, label: band.label, days: 365 / ratio, annual: annual, onHand: onHand };
+  v.turnover = ratio;
+  var days = erpRatioEval('item.invRatio', v);
+  if (days === null || days < 0) days = ratio > 0 ? S.dpy / ratio : null;
+  return { ratio: ratio, cls: band.cls, label: band.label, days: days, annual: annual, onHand: onHand };
 }
 
 // Small colored badge (inline styles, so it works on any page)
@@ -148,7 +328,9 @@ function erpTurnoverBadge(onHand, aveMonthly) {
   if (t.ratio === null) { txt = '—'; tip = 'Out of stock: turnover not applicable'; }
   else {
     txt = t.ratio === 0 ? '0.0×' : (t.ratio < 0.1 ? '<0.1×' : (t.ratio >= 100 ? '99+×' : t.ratio.toFixed(1) + '×'));
-    tip = t.label + '\nAnnual usage ' + Math.round(t.annual).toLocaleString() + ' ÷ On-Hand ' + Math.round(t.onHand).toLocaleString() +
+    tip = t.label + (erpRatioIsDefault('item.turnover')
+      ? '\nAnnual usage ' + Math.round(t.annual).toLocaleString() + ' ÷ On-Hand ' + Math.round(t.onHand).toLocaleString()
+      : '\nFormula: ' + _erpRatio.cur.item.turnover + '  (aveMo = Ave/Mo, onHand = On-Hand)') +
           (t.days !== null ? '\n≈ ' + Math.round(t.days).toLocaleString() + ' days of stock on hand' : '\nNo consumption recorded');
   }
   return '<span title="' + tip.replace(/"/g, '&quot;').replace(/\n/g, '&#10;') + '" style="display:inline-block;min-width:44px;padding:2px 8px;border-radius:999px;' +
@@ -156,7 +338,7 @@ function erpTurnoverBadge(onHand, aveMonthly) {
 }
 
 
-// Inventory Ratio per item = days of stock on hand = On-Hand ÷ average daily usage (= 365 ÷ turnover)
+// Inventory Ratio per item = days of stock on hand (default: days-per-year ÷ turnover = On-Hand ÷ average daily usage)
 function erpInventoryRatioBadge(onHand, aveMonthly) {
   var t = erpItemTurnover(onHand, aveMonthly);
   var colors = {
@@ -169,7 +351,9 @@ function erpInventoryRatioBadge(onHand, aveMonthly) {
   else {
     var d = Math.round(t.days);
     txt = d >= 3650 ? '10y+' : d.toLocaleString() + ' d';
-    tip = t.label + '\nOn-Hand ' + Math.round(t.onHand).toLocaleString() + ' ÷ average daily usage ' + (t.annual / 365).toFixed(2) +
+    tip = t.label + (erpRatioIsDefault('item.invRatio')
+      ? '\nOn-Hand ' + Math.round(t.onHand).toLocaleString() + ' ÷ average daily usage ' + (t.annual / _erpRatio.cur.dpy).toFixed(2)
+      : '\nFormula: ' + _erpRatio.cur.item.invRatio + '  (turnover = item turnover)') +
           '\n= ' + d.toLocaleString() + ' days (≈ ' + (t.days / 30.4).toFixed(1) + ' months) of stock';
   }
   return '<span title="' + tip.replace(/"/g, '&quot;').replace(/\n/g, '&#10;') + '" style="display:inline-block;min-width:50px;padding:2px 8px;border-radius:999px;' +
