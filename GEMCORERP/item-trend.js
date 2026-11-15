@@ -1,11 +1,12 @@
 // ============================================================
-// GEMCOR ERP — Monthly Trend (MRIF / MRR kada buwan)
-//  • erpTrendRenderItem(hostId, item)  → trend ng isang material (Stock Monitor, item details)
-//  • erpTrendRenderTotals(hostId)      → buwanang issued vs received (Management Dashboard)
-// READ-ONLY: nagbabasa lang sa views erp_v_item_monthly / erp_v_monthly_totals / erp_inventory_snapshots.
-// Walang sinusulat at walang binabago sa kasalukuyang data (presyo, on-hand, Ave/Mo).
-// Kailangan ang erp-history-setup.sql (at erp-history-import.sql) sa Supabase. Kung wala pa, may mahinahong paalala lang.
-// Self-contained (inline SVG, walang dagdag na library).
+// GEMCOR ERP — Monthly Trend (MRIF / MRR by month)
+//  • erpTrendRenderItem(hostId, item)  → single-material trend (Stock Monitor item details)
+//  • erpTrendRenderTotals(hostId)      → monthly issued vs received (Management Dashboard)
+//  • erpTrendSvgBars(rows, opts)       → shared chart renderer (also used by Monthly Movement page)
+// READ-ONLY: reads views erp_v_item_monthly / erp_v_monthly_totals / erp_inventory_snapshots.
+// Never writes, and never changes existing data (prices, on-hand, Ave/Mo).
+// Requires erp-history-setup.sql (and erp-history-import.sql) in Supabase.
+// Self-contained (inline SVG, no extra library).
 // ============================================================
 (function () {
   'use strict';
@@ -33,20 +34,20 @@
     if (document.getElementById('erpTrendCss')) return;
     var st = document.createElement('style'); st.id = 'erpTrendCss';
     st.textContent =
-      '.tr-box{border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:14px 16px}' +
+      '.tr-box{border:1px solid #e5e7eb;border-radius:10px;background:#fff;padding:12px 14px}' +
       '.tr-h{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}' +
-      '.tr-h h6{margin:0;font-weight:700;color:#1e3a5f}' +
+      '.tr-h h6{margin:0;font-weight:700;font-size:.9rem;color:#1e3a5f}' +
       '.tr-leg{font-size:.75rem;color:#475569;display:flex;gap:12px;align-items:center}' +
       '.tr-leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}' +
-      '.tr-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:10px 0}' +
-      '.tr-stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:6px 10px}' +
-      '.tr-stat .l{font-size:.66rem;font-weight:700;text-transform:uppercase;color:#64748b}' +
-      '.tr-stat .v{font-size:1.05rem;font-weight:800;color:#1e3a5f}' +
+      '.tr-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px;margin:8px 0 4px}' +
+      '.tr-stat{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:5px 10px}' +
+      '.tr-stat .l{font-size:.62rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:#6b7280}' +
+      '.tr-stat .v{font-size:.95rem;font-weight:700;color:#1e3a5f}' +
       '.tr-stat .s{font-size:.68rem;color:#64748b}' +
-      '.tr-note{font-size:.74rem;color:#64748b;margin-top:6px}' +
+      '.tr-note{font-size:.7rem;color:#6b7280;margin-top:4px}' +
       '.tr-warn{font-size:.78rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:6px 10px}' +
-      '.tr-svg{width:100%;height:auto;display:block}' +
-      '.tr-tbl{width:100%;font-size:.78rem;border-collapse:collapse;margin-top:6px}' +
+      '.tr-svg{display:block;max-width:100%}' +
+      '.tr-tbl{width:100%;font-size:.75rem;border-collapse:collapse;margin-top:6px}' +
       '.tr-tbl th,.tr-tbl td{padding:3px 8px;border-bottom:1px solid #f1f5f9;text-align:right}' +
       '.tr-tbl th:first-child,.tr-tbl td:first-child{text-align:left}' +
       '.tr-tbl th{color:#64748b;font-size:.68rem;text-transform:uppercase}' +
@@ -54,29 +55,33 @@
     document.head.appendChild(st);
   }
 
-  // Grouped bars (inline SVG). rows: [{label, a, b, partial}]
-  function svgBars(rows, fmt, tipFmt) {
-    var W = 720, H = 210, L = 46, R = 10, T = 10, B = 28, iw = W - L - R, ih = H - T - B;
+  // Grouped bars (inline SVG) drawn at the real container width so text stays crisp and the chart stays compact.
+  // rows: [{label, a, b, partial}]   opts: {w, h, fmt, tip, labelA, labelB}
+  function svgBars(rows, opts) {
+    var W = Math.max(320, Math.round(opts.w || 640)), H = opts.h || 190, L = 48, R = 8, T = 8, B = 24, iw = W - L - R, ih = H - T - B;
+    var fmt = opts.fmt, tip = opts.tip || fmt, la = opts.labelA || 'Issued', lb = opts.labelB || 'Received';
     var max = 0; rows.forEach(function (r) { max = Math.max(max, r.a, r.b); });
     if (!(max > 0)) max = 1;
-    var step = Math.pow(10, Math.floor(Math.log(max) / Math.LN10)), nice = [1, 2, 2.5, 5, 10].map(function (k) { return k * step; }).filter(function (v) { return v >= max; })[0] || max;
-    max = nice;
+    var step = Math.pow(10, Math.floor(Math.log(max) / Math.LN10));
+    max = [1, 2, 2.5, 5, 10].map(function (k) { return k * step; }).filter(function (v) { return v >= max; })[0] || max;
     var g = '', i;
     for (i = 0; i <= 4; i++) {
       var y = T + ih - (ih * i / 4), v = max * i / 4;
-      g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y + '" y2="' + y + '" stroke="#e2e8f0" stroke-width="1"/>' +
-           '<text x="' + (L - 6) + '" y="' + (y + 3) + '" text-anchor="end" font-size="10" fill="#64748b">' + esc(fmt(v)) + '</text>';
+      g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y + '" y2="' + y + '" stroke="#e5e7eb" stroke-width="1"/>' +
+           '<text x="' + (L - 6) + '" y="' + (y + 3) + '" text-anchor="end" font-size="10" fill="#6b7280">' + esc(fmt(v)) + '</text>';
     }
-    var gw = iw / rows.length, bw = Math.min(22, gw * 0.36);
+    var gw = iw / rows.length, bw = Math.max(4, Math.min(16, gw * 0.32));
     rows.forEach(function (r, k) {
       var cx = L + gw * k + gw / 2, ha = ih * r.a / max, hb = ih * r.b / max;
-      g += '<g' + (r.partial ? ' opacity="0.7"' : '') + '>' +
-        '<rect x="' + (cx - bw - 1) + '" y="' + (T + ih - ha) + '" width="' + bw + '" height="' + Math.max(ha, r.a > 0 ? 1 : 0) + '" rx="2" fill="' + C_OUT + '"><title>' + esc(r.label + ' — Issued: ' + tipFmt(r.a)) + '</title></rect>' +
-        '<rect x="' + (cx + 1) + '" y="' + (T + ih - hb) + '" width="' + bw + '" height="' + Math.max(hb, r.b > 0 ? 1 : 0) + '" rx="2" fill="' + C_IN + '"><title>' + esc(r.label + ' — Received: ' + tipFmt(r.b)) + '</title></rect></g>' +
-        '<text x="' + cx + '" y="' + (H - 10) + '" text-anchor="middle" font-size="10" fill="#475569">' + esc(r.label) + (r.partial ? '*' : '') + '</text>';
+      g += '<g' + (r.partial ? ' opacity="0.65"' : '') + '>' +
+        '<rect x="' + (cx - bw - 1) + '" y="' + (T + ih - ha) + '" width="' + bw + '" height="' + Math.max(ha, r.a > 0 ? 1 : 0) + '" rx="1.5" fill="' + C_OUT + '"><title>' + esc(r.label + ' · ' + la + ': ' + tip(r.a)) + '</title></rect>' +
+        '<rect x="' + (cx + 1) + '" y="' + (T + ih - hb) + '" width="' + bw + '" height="' + Math.max(hb, r.b > 0 ? 1 : 0) + '" rx="1.5" fill="' + C_IN + '"><title>' + esc(r.label + ' · ' + lb + ': ' + tip(r.b)) + '</title></rect></g>' +
+        '<text x="' + cx + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="#4b5563">' + esc(r.label) + (r.partial ? '*' : '') + '</text>';
     });
-    return '<svg class="tr-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Monthly issued and received">' + g + '</svg>';
+    return '<svg class="tr-svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Monthly issued and received">' + g + '</svg>';
   }
+  window.erpTrendSvgBars = svgBars;
+  function hostWidth(host, fallback) { var w = host && host.clientWidth; return w > 120 ? w - 32 : (fallback || 640); }
   var LEG = '<span class="tr-leg"><span><i style="background:' + C_OUT + '"></i>Issued (MRIF)</span><span><i style="background:' + C_IN + '"></i>Received (MRR)</span></span>';
 
   function getJson(path) {
@@ -86,8 +91,8 @@
     });
   }
   function setupNote(err) {
-    return '<div class="tr-warn"><i class="bi bi-info-circle me-1"></i>Hindi pa available ang monthly history (' + esc(err && err.message || err) + '). ' +
-      'I-run ang <b>erp-history-setup.sql</b> at <b>erp-history-import.sql</b> sa Supabase. Walang epekto ito sa ibang bahagi ng system.</div>';
+    return '<div class="tr-warn"><i class="bi bi-info-circle me-1"></i>Monthly history is not available yet (' + esc(err && err.message || err) + '). ' +
+      'Run <b>erp-history-setup.sql</b> and <b>erp-history-import.sql</b> in Supabase. No other part of the system is affected.</div>';
   }
 
   // ── Per-item trend ─────────────────────────────────────
@@ -103,35 +108,37 @@
           var r = map[mo.key] || {};
           return { label: MN[mo.m - 1] + (mo.m === 1 || mo === months[0] ? " '" + String(mo.y).slice(2) : ''), key: mo.key, a: Number(r.mrif_qty || 0), b: Number(r.mrr_qty || 0), partial: isCurrent(mo.key), live: r.source === 'live' };
         });
-        var full = data.filter(function (d) { return !d.partial; });                // kumpletong buwan lang sa average
+        var full = data.filter(function (d) { return !d.partial; });
         var sumA = full.reduce(function (s, d) { return s + d.a; }, 0), sumB = full.reduce(function (s, d) { return s + d.b; }, 0);
         var active = full.filter(function (d) { return d.a > 0; }).length;
         var avgAll = full.length ? sumA / full.length : 0, avgAct = active ? sumA / active : 0;
-        var last = data[data.length - 1];
         var unit = item.base_unit ? ' ' + esc(item.base_unit) : '';
-        var html = '<div class="tr-box"><div class="tr-h"><h6><i class="bi bi-graph-up me-1"></i>Monthly Trend — MRIF &amp; MRR</h6>' + LEG + '</div>';
-        if (!rows.length) {
-          html += '<div class="text-muted small">Walang MRIF o MRR na naitala para sa item na ito mula Jan 2026.</div></div>';
-          host.innerHTML = html; return;
+        var head = '<div class="tr-h"><h6><i class="bi bi-graph-up me-1"></i>Monthly Movement — MRIF &amp; MRR</h6>' + LEG + '</div>';
+        if (!rows.length) { host.innerHTML = '<div class="tr-box">' + head + '<div class="text-muted small">No MRIF or MRR recorded for this item since January 2026.</div></div>'; return; }
+        function draw() {
+          host.innerHTML = '<div class="tr-box">' + head +
+            svgBars(data, { w: hostWidth(host, 640), h: 170, fmt: function (v) { return num(v, v < 10 ? 1 : 0); }, tip: function (v) { return num(v) + (item.base_unit ? ' ' + item.base_unit : ''); } }) +
+            '<div class="tr-stats">' +
+            '<div class="tr-stat"><div class="l">Total issued</div><div class="v">' + num(sumA) + unit + '</div><div class="s">' + full.length + ' complete months</div></div>' +
+            '<div class="tr-stat"><div class="l">Total received</div><div class="v">' + num(sumB) + unit + '</div><div class="s">MRR</div></div>' +
+            '<div class="tr-stat"><div class="l">Average issued / month</div><div class="v">' + num(avgAll) + '</div><div class="s">all complete months</div></div>' +
+            '<div class="tr-stat"><div class="l">Average / active month</div><div class="v">' + num(avgAct) + '</div><div class="s">' + active + ' months with issuance</div></div>' +
+            '<div class="tr-stat"><div class="l">System Ave/Mo</div><div class="v">' + num(item.ave_monthly_consumption || 0) + '</div><div class="s">unchanged, for comparison</div></div></div>' +
+            '<details><summary class="small fw-semibold" style="cursor:pointer">Monthly figures</summary><div class="tr-wrap"><table class="tr-tbl"><thead><tr><th>Month</th><th>Issued</th><th>Received</th><th>Source</th></tr></thead><tbody>' +
+            data.slice().reverse().map(function (d) {
+              return '<tr><td>' + esc(d.key) + (d.partial ? ' <span class="text-muted">(in progress)</span>' : '') + '</td><td>' + num(d.a) + '</td><td>' + num(d.b) + '</td><td>' + (d.live ? 'System' : 'Legacy sheet') + '</td></tr>';
+            }).join('') + '</tbody></table></div></details>' +
+            '<div class="tr-note">Jan–Oct 2026: imported from the legacy Google Sheet. From Nov 2026: live from the system. * Current month (in progress), excluded from averages.</div></div>';
         }
-        html += svgBars(data, function (v) { return num(v, v < 10 ? 1 : 0); }, function (v) { return num(v) + (item.base_unit ? ' ' + item.base_unit : ''); });
-        html += '<div class="tr-stats">' +
-          '<div class="tr-stat"><div class="l">Total issued</div><div class="v">' + num(sumA) + unit + '</div><div class="s">' + full.length + ' buong buwan</div></div>' +
-          '<div class="tr-stat"><div class="l">Total received</div><div class="v">' + num(sumB) + unit + '</div><div class="s">MRR</div></div>' +
-          '<div class="tr-stat"><div class="l">Avg issued / month</div><div class="v">' + num(avgAll) + '</div><div class="s">lahat ng buwan, pati zero</div></div>' +
-          '<div class="tr-stat"><div class="l">Avg / active month</div><div class="v">' + num(avgAct) + '</div><div class="s">' + active + ' buwan na may issue</div></div>' +
-          '<div class="tr-stat"><div class="l">Ave/Mo sa system</div><div class="v">' + num(item.ave_monthly_consumption || 0) + '</div><div class="s">hindi binago (para sa paghahambing)</div></div></div>';
-        html += '<details><summary class="small fw-semibold" style="cursor:pointer">Buwan-buwan na numero</summary><div class="tr-wrap"><table class="tr-tbl"><thead><tr><th>Month</th><th>Issued</th><th>Received</th><th>Source</th></tr></thead><tbody>' +
-          data.slice().reverse().map(function (d) {
-            return '<tr><td>' + esc(d.key) + (d.partial ? ' <span class="text-muted">(ongoing)</span>' : '') + '</td><td>' + num(d.a) + '</td><td>' + num(d.b) + '</td><td>' + (d.live ? 'system' : 'history') + '</td></tr>';
-          }).join('') + '</tbody></table></div></details>';
-        html += '<div class="tr-note">Jan–Oct 2026: galing sa dating Google Sheet. Mula Nov 2026: live mula sa system, nag-a-update sa bawat bagong MRIF/MRR. * = kasalukuyang buwan (hindi pa tapos, hindi kasama sa average).</div></div>';
-        host.innerHTML = html;
+        draw(); _reflow[hostId] = draw;
       })
       .catch(function (err) { console.warn('[Trend] item', err); host.innerHTML = '<div class="tr-box">' + setupNote(err) + '</div>'; });
   };
 
   // ── Company-wide monthly totals (Management Dashboard) ──
+  var _reflow = {};
+  var _rt = null;
+  window.addEventListener('resize', function () { clearTimeout(_rt); _rt = setTimeout(function () { Object.keys(_reflow).forEach(function (k) { if (document.getElementById(k)) { try { _reflow[k](); } catch (e) {} } }); }, 200); });
   var _tot = { rows: null, snaps: [], cat: '', mode: 'value', hostId: null };
 
   function renderTotals() {
@@ -160,19 +167,19 @@
       Object.keys(cats).sort().map(function (c) { return '<option value="' + esc(c) + '"' + (c === _tot.cat ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select>' +
       '<select class="form-select form-select-sm" style="width:auto" id="trMode"><option value="value"' + (val ? ' selected' : '') + '>Value (₱)</option><option value="qty"' + (!val ? ' selected' : '') + '>Quantity</option></select>' +
       LEG + '</div></div>' +
-      svgBars(data, fmt, tip) +
+      svgBars(data, { w: hostWidth(host, 900), h: 190, fmt: fmt, tip: tip }) +
       '<div class="tr-stats">' +
-      '<div class="tr-stat"><div class="l">Avg issued / month</div><div class="v">' + (val ? peso(avgA) : num(avgA, 0)) + '</div><div class="s">' + full.length + ' buong buwan</div></div>' +
-      '<div class="tr-stat"><div class="l">Total issued</div><div class="v">' + (val ? peso(sa) : num(sa, 0)) + '</div><div class="s">buong buwan lang</div></div>' +
-      '<div class="tr-stat"><div class="l">Total received</div><div class="v">' + (val ? peso(sb) : num(sb, 0)) + '</div><div class="s">' + (sb >= sa ? 'mas marami ang pumasok' : 'mas marami ang lumabas') + '</div></div>';
+      '<div class="tr-stat"><div class="l">Average issued / month</div><div class="v">' + (val ? peso(avgA) : num(avgA, 0)) + '</div><div class="s">' + full.length + ' complete months</div></div>' +
+      '<div class="tr-stat"><div class="l">Total issued</div><div class="v">' + (val ? peso(sa) : num(sa, 0)) + '</div><div class="s">complete months only</div></div>' +
+      '<div class="tr-stat"><div class="l">Total received</div><div class="v">' + (val ? peso(sb) : num(sb, 0)) + '</div><div class="s">' + (sb >= sa ? 'Receipts exceeded issues' : 'Issues exceeded receipts') + '</div></div>';
     if (_tot.snaps.length) {
       var s = _tot.snaps[_tot.snaps.length - 1];
       h += '<div class="tr-stat"><div class="l">Month-end inventory</div><div class="v">' + peso(s.total_value) + '</div><div class="s">' + esc(keyOf(s.snapshot_month)) + ' · ' + _tot.snaps.length + ' snapshot(s)</div></div>';
     }
     h += '</div>';
-    if (val && noCost > 0) h += '<div class="tr-note">Ang halaga ay quantity × kasalukuyang unit cost. May ' + noCost + ' item-buwan na walang unit cost kaya hindi nabilang sa halaga (nasa Quantity view sila).</div>';
-    h += '<div class="tr-note">Jan–Oct 2026: galing sa dating Google Sheet. Mula Nov 2026: live mula sa system. * = kasalukuyang buwan (hindi pa tapos, hindi kasama sa average).</div></div>';
-    host.innerHTML = h;
+    if (val && noCost > 0) h += '<div class="tr-note">Value = quantity × current unit cost. ' + noCost + ' item-months have no unit cost and are excluded from value (they appear in the Quantity view).</div>';
+    h += '<div class="tr-note">Jan–Oct 2026: imported from the legacy Google Sheet. From Nov 2026: live from the system. * Current month (in progress), excluded from averages. <a href="monthly-movement.html">Open item-level Monthly Movement</a></div></div>';
+    host.innerHTML = h; _reflow[_tot.hostId] = renderTotals;
     var c = document.getElementById('trCat'), m = document.getElementById('trMode');
     if (c) c.onchange = function () { _tot.cat = c.value; renderTotals(); };
     if (m) m.onchange = function () { _tot.mode = m.value; renderTotals(); };
