@@ -1022,17 +1022,17 @@ function mdashFormulaSection(kind, f) {
     invActive: ['Inventory value of items that have recorded usage only', peso(v.invActive)],
     usageMo: ['Average monthly usage value (Σ Ave/Mo × unit cost)', peso(v.usageMo)],
     days: ['Days in the selected period', String(v.days)],
-    dpy: ['Days per year (setting)', String(v.dpy)],
+    dpy: ['Days in a year (Ratio Settings)', String(v.dpy)],
     turnover: ['Turnover Ratio (card on the left)', f.ratio.toFixed(2) + '×']
   };
   var used = names.filter(function(n) { return new RegExp('\\b' + n + '\\b').test(expr); });
-  var rows = used.map(function(n) { return '<tr><td><code>' + n + '</code></td><td>' + meaning[n][0] + '</td><td><b>' + meaning[n][1] + '</b></td></tr>'; }).join('');
+  var rows = used.map(function(n) { return '<tr><td>' + erpEsc(ERP_RATIO_NAMES[n] || n) + '</td><td>' + meaning[n][0] + '</td><td><b>' + meaning[n][1] + '</b></td></tr>'; }).join('');
   var res = kind === 'turnover'
     ? (f.ratio > 0 ? f.ratio.toFixed(2) + '× per year' : '—')
     : (f.daysOfStock ? Math.round(f.daysOfStock).toLocaleString() + ' days (≈ ' + (f.daysOfStock / 30.4).toFixed(1) + ' months)' : '—');
   return '<div class="to-sec"><h6>Formula in use <small class="text-muted">(set in Ratio Settings' + (erpRatioIsPreview() ? ' · preview, not saved yet' : '') + ')</small></h6>' +
-    '<div class="to-callout"><code style="font-size:1rem;">' + erpEsc(expr) + '</code></div>' +
-    '<table class="to-tbl mt-2"><thead><tr><th>Variable</th><th>Meaning</th><th>Current value</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<div class="to-callout"><b>' + erpEsc(erpRatioWords(expr)) + '</b></div>' +
+    '<table class="to-tbl mt-2"><thead><tr><th>Item</th><th>Meaning</th><th>Current value</th></tr></thead><tbody>' + rows + '</tbody></table>' +
     '<div class="to-step result mt-2"><div class="num"><i class="bi bi-check-lg"></i></div><div><div class="tt">Result on the dashboard</div><div class="vv">' + res + '</div></div></div></div>';
 }
 
