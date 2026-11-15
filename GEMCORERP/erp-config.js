@@ -135,8 +135,8 @@ var ERP_RATIO_DEFAULTS = {
 };
 // Mga variable na puwedeng gamitin sa bawat formula
 var ERP_RATIO_VARS = {
-  'overall.turnover': ['stockOut', 'issued', 'returned', 'inv', 'invActive', 'usageMo', 'days', 'dpy'],
-  'overall.invRatio': ['stockOut', 'issued', 'returned', 'inv', 'invActive', 'usageMo', 'days', 'dpy', 'turnover'],
+  'overall.turnover': ['issuedMo', 'receivedMo', 'stockOut', 'issued', 'returned', 'inv', 'invActive', 'usageMo', 'days', 'dpy'],
+  'overall.invRatio': ['issuedMo', 'receivedMo', 'stockOut', 'issued', 'returned', 'inv', 'invActive', 'usageMo', 'days', 'dpy', 'turnover'],
   'item.turnover':    ['onHand', 'aveMo', 'dpy'],
   'item.invRatio':    ['onHand', 'aveMo', 'dpy', 'turnover']
 };
@@ -144,6 +144,8 @@ var ERP_RATIO_FUNCS = { min: Math.min, max: Math.max, abs: Math.abs, sqrt: Math.
 
 // Plain-language na pangalan ng bawat variable (ito ang makikita ng users, hindi ang code name)
 var ERP_RATIO_NAMES = {
+  issuedMo:  'Average monthly issued value (history)',
+  receivedMo:'Average monthly received value (history)',
   stockOut:  'Stock-out value (stock ledger)',
   issued:    'Issued value (MRIF)',
   returned:  'Returned value (MRS)',
