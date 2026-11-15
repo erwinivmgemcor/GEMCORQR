@@ -948,6 +948,44 @@ async function mdashLoadHistory() {
 }
 window.mdashHistVars = mdashHistVars;
 
+
+// ── Plain-language helpers for management (no changes to any data) ──
+function mdashGoLiveNote(f) {
+  if (!f || !f.preGoLive) return '';
+  return '<b>Heads up:</b> the selected period starts before the system went live (Nov 1, 2026). The system formula only sees stock-ledger movements from Nov 1, so this number is <b>understated</b>. ' +
+    'For a fair figure choose <b>“Average monthly issuance × 12 ÷ Inventory — complete history”</b> in Ratio Settings.';
+}
+// How stock cover is spread across items (months = On-Hand ÷ average monthly usage — same as the Google Sheet)
+function mdashCoverStats() {
+  var items = _mdash.allItems || [];
+  var defs = [ { k: 'u1', label: 'Up to 1 month', max: 1 }, { k: 'u3', label: '1 – 3 months', max: 3 }, { k: 'u6', label: '3 – 6 months', max: 6 }, { k: 'u12', label: '6 – 12 months', max: 12 }, { k: 'o12', label: 'More than 12 months', max: Infinity }, { k: 'nu', label: 'No recorded usage', max: null } ];
+  var b = defs.map(function(d) { return { label: d.label, max: d.max, n: 0, v: 0 }; }), tot = 0, totN = 0, ratios = [];
+  items.forEach(function(it) {
+    var oh = Number(it.on_hand || 0); if (!(oh > 0)) return;
+    var val = Number(it.on_hand_cost != null ? it.on_hand_cost : oh * Number(it.unit_cost || 0)) || 0, ave = Number(it.ave_monthly_consumption || 0);
+    tot += val; totN++;
+    if (!(ave > 0)) { b[5].n++; b[5].v += val; return; }
+    var mo = oh / ave; ratios.push(mo);
+    for (var i = 0; i < 5; i++) { if (mo <= b[i].max) { b[i].n++; b[i].v += val; break; } }
+  });
+  ratios.sort(function(x, y) { return x - y; });
+  return { bands: b, totalValue: tot, totalItems: totN, median: ratios.length ? ratios[Math.floor(ratios.length / 2)] : 0 };
+}
+function mdashCoverSection() {
+  var c = mdashCoverStats(); if (!c.totalItems) return '';
+  var peso = mdashPesoFmt, pc = function(v) { return c.totalValue > 0 ? Math.round(v / c.totalValue * 100) : 0; };
+  var rows = c.bands.map(function(x) {
+    return '<tr><td>' + x.label + '</td><td style="text-align:right">' + x.n.toLocaleString() + '</td><td style="text-align:right">' + peso(x.v) + '</td><td style="text-align:right"><b>' + pc(x.v) + '%</b></td></tr>';
+  }).join('');
+  var o = c.bands[4], nu = c.bands[5];
+  return '<div class="to-sec"><h6>Why item ratios can show years while this card shows days</h6>' +
+    '<div class="to-callout">This card measures the <b>whole warehouse by value</b>: total inventory ÷ total usage, in pesos. Most of our money is in items that move, so the total is short. ' +
+    'The Google Sheet and the item column look at <b>one item at a time</b>, so a cheap item with very little usage can show years of stock without affecting the total.</div>' +
+    '<table class="table table-sm" style="font-size:.8rem;margin:8px 0 4px"><thead><tr><th>Stock cover (months)</th><th style="text-align:right">Items</th><th style="text-align:right">Value</th><th style="text-align:right">% of value</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<div class="to-note">Items with more than 12 months of stock: <b>' + o.n.toLocaleString() + '</b> (' + peso(o.v) + ', ' + pc(o.v) + '% of value). Items with stock but no recorded usage: <b>' + nu.n.toLocaleString() + '</b> (' + peso(nu.v) + ', ' + pc(nu.v) + '% of value). ' +
+    'The typical (median) item has about <b>' + c.median.toFixed(1) + ' months</b> of stock. Months = On-Hand ÷ average monthly usage, the same as the “Inventory Ratio” column in the Google Sheet.</div></div>';
+}
+
 // Mga variable na magagamit sa formula (Ratio Settings) para sa overall Turnover / Inventory Ratio
 function mdashRatioVars(data) {
   data = data || _mdash.data;
@@ -984,6 +1022,8 @@ function mdashTurnoverFacts(data) {
     tot += v; if (k === 'NO MOVEMENT') nm += v; else if (k === 'SLOW MOVING') sl += v;
   });
   f.mvTotal = tot; f.noMove = nm; f.slow = sl;
+  f.from = String(((data.filters || {}).from_date) || '');
+  f.preGoLive = !!(f.from && f.from < '2026-11-01' && (!custom || /stockOut/.test(S.overall.turnover)));
   f.stockOut = Number(t.cogs || 0); f.invServer = Number(t.avg_inventory || 0);
   f.check = (!custom && ratio > 0 && f.stockOut > 0 && f.invServer > 0) ? ratio : null;
   return f;
@@ -1006,6 +1046,7 @@ function mdashRenderTurnoverCard(data) {
   } else {
     pill.innerHTML = '<span class="tp-days">Not enough issuance data in this period</span>';
   }
+  if (f.preGoLive) pill.innerHTML += '<span style="flex-basis:100%;color:#b45309;font-weight:600;font-size:.68rem;">⚠ Period starts before system go-live (Nov 1, 2026): understated. Tap for details.</span>';
   mdashRenderInvRatioCard(f);
 }
 
@@ -1023,10 +1064,10 @@ function mdashRenderInvRatioCard(f) {
     vEl.setAttribute('data-unit', months ? 'months' : 'days');
     if (months) {
       vEl.textContent = (f.daysOfStock / 30.4).toFixed(1);
-      sEl.textContent = '≈ ' + Math.round(f.daysOfStock).toLocaleString() + ' days of stock on hand';
+      sEl.textContent = '≈ ' + Math.round(f.daysOfStock).toLocaleString() + ' days of stock · whole warehouse, by value';
     } else {
       animateValue(vEl, 0, Math.round(f.daysOfStock), 1200, false);
-      sEl.textContent = '≈ ' + (f.daysOfStock / 30.4).toFixed(1) + ' months of stock on hand';
+      sEl.textContent = '≈ ' + (f.daysOfStock / 30.4).toFixed(1) + ' months of stock · whole warehouse, by value';
     }
     vEl.classList.add('has-days');
     var band = mdashTurnoverBand(f.ratio).b;
@@ -1090,6 +1131,7 @@ function mdashShowInventoryRatioInfo() {
         'Status: <b>' + bi.b.label + '</b>. ' + bi.b.meaning
       : 'Not enough issuance data in this period to compute the Inventory Ratio.') + '</div></div>';
 
+  if (f.preGoLive) html += '<div class="to-sec"><div class="to-callout" style="border-left-color:#f59e0b;background:#fffbeb">' + mdashGoLiveNote(f) + '</div></div>';
   html += '<div class="to-sec"><h6>The idea in 20 seconds</h6><div class="to-analogy">' +
     'Think of the <b>fuel gauge</b> in a car. If the tank has <b>100 liters</b> and the car uses <b>2 liters a day</b>, the fuel lasts <b>50 days</b>.' +
     '<ul><li>Our warehouse is the <b>tank</b></li><li>Our daily usage is the <b>fuel burned per day</b></li><li>Inventory Ratio is the <b>number of days before the tank is empty</b></li></ul>' +
@@ -1117,12 +1159,13 @@ function mdashShowInventoryRatioInfo() {
     'Example: if a supplier takes 45 days to deliver but we only have 30 days of stock, production may stop. ' +
     'The goal is a healthy middle: not too many days (cash stuck), not too few (risk of stock-out).</div></div>';
 
-  html += '<div class="to-sec"><h6>See it per item</h6>Stock Monitor and the Inventory Master table below have an <b>Inventory Ratio (days)</b> column for every item. ' +
-    'Per item it is: <b>On-Hand ÷ average daily usage</b>. Hover over a value to see the details.</div>';
+  html += mdashCoverSection();
+  html += '<div class="to-sec"><h6>See it per item</h6>Stock Monitor and the Inventory Master table below have an <b>Inventory Ratio</b> column for every item. ' +
+    'Per item it is: <b>On-Hand ÷ average monthly usage</b>, shown in days (under 2 months), months or years. The months value is the same as the Inventory Ratio in the Google Sheet. Hover over a value to see the exact figures.</div>';
 
   html += '<div class="to-sec to-faq"><h6>Common questions</h6>' +
     '<details><summary>What does "No usage" mean in the item table?</summary><div>The item has stock, but no consumption has been recorded, so there is no usage rate to count days from. These are the first items to review.</div></details>' +
-    '<details><summary>Why do the item days not add up to this total?</summary><div>This card is based on the system\'s overall turnover. Item columns use each item\'s own average monthly usage and current on-hand. They measure the same idea but are calculated separately, so use the item column to compare items with each other.</div></details>' +
+    '<details><summary>Why is the item column so much higher than this card?</summary><div>This card divides the <b>total peso value</b> of inventory by the <b>total peso value</b> of usage, so fast-moving, high-value items dominate. The item column is one item at a time, so slow, low-value items show long cover (even years) without moving the total. See the table above for how many items and how much value sit in each range.</div></details>' +
     '<details><summary>Which period is used?</summary><div>The period in the filter at the top (' + period + '), scaled to a full year.</div></details></div>';
 
   mdashOpenInfoModal('invRatioInfoModal', 'Inventory Ratio: how many days of stock do we have?', 'bi-calendar3', html);
@@ -1195,6 +1238,7 @@ function mdashShowTurnoverInfo() {
       : 'Not enough issuance data in this period to compute a turnover ratio.') + '</div></div>';
 
   // ── The idea
+  if (f.preGoLive) html += '<div class="to-sec"><div class="to-callout" style="border-left-color:#f59e0b;background:#fffbeb">' + mdashGoLiveNote(f) + '</div></div>';
   html += '<div class="to-sec"><h6>The idea in 20 seconds</h6><div class="to-analogy">' +
     'Imagine a shelf that holds <b>100 boxes</b> of an item.' +
     '<ul><li>If we use <b>400 boxes</b> in a year, we refill the shelf <b>4 times</b> → Turnover = <b>4×</b></li>' +
