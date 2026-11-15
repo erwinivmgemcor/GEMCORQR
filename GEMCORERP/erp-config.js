@@ -130,6 +130,7 @@ var ERP_RATIO_LS_KEY = 'erp_ratio_settings_v1';
 var ERP_RATIO_DEFAULTS = {
   dpy: 365,
   bands: [2, 4, 8],
+  targets: { min: 4, target: 6 },      // Turnover (times per year): minimum acceptable / management target
   overall: { tMode: 'system', turnover: 'stockOut / inv * (dpy / days)', invRatio: 'dpy / turnover', invUnit: 'days' },
   item:    { turnover: 'aveMo * 12 / onHand', invRatio: 'dpy / turnover' }
 };
@@ -174,6 +175,23 @@ function erpRatioWords(expr) {
 }
 
 var _erpRatio = { saved: null, cur: null, preview: false, loaded: false, compiled: {} };
+
+
+// ── Targets (editable in Ratio Settings). Turnover: higher is better. Inventory Ratio (days of stock): lower is better.
+function erpRatioTargets() {
+  var S = erpRatioGet(), t = S.targets || { min: 4, target: 6 }, dpy = S.dpy;
+  return { min: t.min, target: t.target, dpy: dpy, targetDays: dpy / t.target, maxDays: dpy / t.min };
+}
+function erpTurnoverTargetStatus(r) {
+  var t = erpRatioTargets();
+  if (!(r > 0)) return null;
+  return r >= t.target ? { label: 'On target', cls: 'ok' } : r >= t.min ? { label: 'Below target', cls: 'warn' } : { label: 'Below minimum', cls: 'danger' };
+}
+function erpDaysTargetStatus(d) {
+  var t = erpRatioTargets();
+  if (!(d > 0)) return null;
+  return d <= t.targetDays ? { label: 'On target', cls: 'ok' } : d <= t.maxDays ? { label: 'Above target', cls: 'warn' } : { label: 'Too high', cls: 'danger' };
+}
 
 function erpRatioClone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -230,6 +248,7 @@ function erpRatioNormalize(raw) {
     var b = r.bands.map(Number);
     if (b[0] > 0 && b[0] < b[1] && b[1] < b[2]) d.bands = b;
   }
+  if (r.targets) { var tm = Number(r.targets.min), tt = Number(r.targets.target); if (tm > 0 && tt > tm && tt <= 100) d.targets = { min: tm, target: tt }; }
   ['overall.turnover', 'overall.invRatio', 'item.turnover', 'item.invRatio'].forEach(function (path) {
     var pp = path.split('.'), v = r[pp[0]] && r[pp[0]][pp[1]];
     if (typeof v === 'string' && erpRatioCheck(path, v).ok) d[pp[0]][pp[1]] = v.trim();
