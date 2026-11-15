@@ -311,73 +311,112 @@ function erpSetMovMode(mode) {
 window.erpSetMovMode = erpSetMovMode;
 
 function erpRenderMovementChart(stats) {
-  // ABC class (rows) x Movement speed (columns). Rows add up to the ABC chart, columns to each speed group,
-  // and everything to the same grand total — so the two views can be read together instead of compared by eye.
+  // One horizontal bar per ABC class. Bar length = the same class total as the ABC chart on the left.
+  // Segment colors = movement speed (own palette, different from the ABC colors), so the two charts reconcile
+  // and the colors are never confused.
   var canvas = document.getElementById('chartMovement');
   if (!canvas) return;
   if (_erpCharts.movement) { _erpCharts.movement.destroy(); _erpCharts.movement = null; }
-  canvas.style.display = 'none';
-  var host = document.getElementById('movMatrix');
-  if (!host) { host = document.createElement('div'); host.id = 'movMatrix'; canvas.parentNode.insertBefore(host, canvas); }
-  if (!document.getElementById('erpMatrixCss')) {
-    var st = document.createElement('style'); st.id = 'erpMatrixCss';
-    st.textContent = '.mxw{padding:6px 2px;overflow-x:auto}.mx{width:100%;border-collapse:separate;border-spacing:3px;font-size:.78rem;table-layout:fixed}' +
-      '.mx th{font-size:.68rem;font-weight:700;color:#334155;text-align:center;padding:4px 2px;vertical-align:bottom}.mx th.r{text-align:left}' +
-      '.mx th .dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}' +
-      '.mx td{text-align:center;border-radius:6px;padding:7px 2px;background:#f8fafc;line-height:1.2}.mx td .v{font-weight:700;font-size:.82rem;color:#0f172a}.mx td .s{font-size:.64rem;color:#64748b}' +
-      '.mx td.tt{background:#eef2f7}.mx td.tt .v{color:#1e3a5f}.mx td.att{outline:2px solid #f59e0b;outline-offset:-2px}' +
-      '.mx td.zero .v{color:#cbd5e1;font-weight:500}.mx tr.tot td{background:#eef2f7;font-weight:700}' +
-      '.mx-key{font-size:.68rem;color:#64748b;margin-top:6px}.mx-key i{display:inline-block;width:10px;height:10px;border:2px solid #f59e0b;border-radius:3px;vertical-align:-2px;margin-right:4px}';
+  var oldTable = document.getElementById('movMatrix'); if (oldTable) oldTable.innerHTML = '';
+  canvas.style.display = '';
+  if (!document.getElementById('erpSpeedCss')) {
+    var st = document.createElement('style'); st.id = 'erpSpeedCss';
+    st.textContent = '.sp-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:6px}.sp-chip{display:inline-flex;align-items:center;gap:6px;font-size:.74rem;color:#334155}' +
+      '.sp-chip i{width:10px;height:10px;border-radius:3px;display:inline-block}.sp-chip b{color:#0f172a}.sp-chip span{color:#64748b}';
     document.head.appendChild(st);
   }
   var matrix = stats.matrix || {};
   var order = ['FAST MOVING', 'MODERATE MOVING', 'SLOW MOVING', 'NO MOVEMENT', 'UNCLASSIFIED'];
   var pretty = { 'FAST MOVING': 'Fast', 'MODERATE MOVING': 'Moderate', 'SLOW MOVING': 'Slow', 'NO MOVEMENT': 'No Movement', 'UNCLASSIFIED': 'Unclassified' };
   var SPEED_COLORS = { 'FAST MOVING': '#10b981', 'MODERATE MOVING': '#38bdf8', 'SLOW MOVING': '#6366f1', 'NO MOVEMENT': '#1e3a5f', 'UNCLASSIFIED': '#cbd5e1' };
+  var DARK_TEXT = { 'MODERATE MOVING': 1, 'UNCLASSIFIED': 1 };
   var moves = order.filter(function(m) { return matrix[m]; });
   Object.keys(matrix).forEach(function(m) { if (moves.indexOf(m) === -1) moves.push(m); });
-  if (moves.length === 0) { host.innerHTML = ''; return; }
+  if (moves.length === 0) return;
 
   var isVal = _erpMovMode === 'value', field = isVal ? 'v' : 'n';
-  var classes = ['A', 'B', 'C', 'N/A'].filter(function(k) { return moves.some(function(m) { return matrix[m][k] && (matrix[m][k].v || matrix[m][k].n); }); });
   function cell(m, k) { return (matrix[m] && matrix[m][k]) ? matrix[m][k] : { v: 0, n: 0 }; }
-  function rowTot(k, f) { return moves.reduce(function(s, m) { return s + cell(m, k)[f]; }, 0); }
-  function colTot(m, f) { return classes.reduce(function(s, k) { return s + cell(m, k)[f]; }, 0); }
-  var grandV = classes.reduce(function(s, k) { return s + rowTot(k, 'v'); }, 0) || 1;
-  var grandN = classes.reduce(function(s, k) { return s + rowTot(k, 'n'); }, 0) || 1;
+  var classes = ['A', 'B', 'C', 'N/A'].filter(function(k) { return moves.some(function(m) { var c = cell(m, k); return c.v || c.n; }); });
+  function rowTot(k, f) { return moves.reduce(function(sum, m) { return sum + cell(m, k)[f]; }, 0); }
+  function colTot(m, f) { return classes.reduce(function(sum, k) { return sum + cell(m, k)[f]; }, 0); }
+  var grandV = classes.reduce(function(sum, k) { return sum + rowTot(k, 'v'); }, 0) || 1;
+  var grandN = classes.reduce(function(sum, k) { return sum + rowTot(k, 'n'); }, 0) || 1;
   var grand = isVal ? grandV : grandN;
-  function main(x) { return isVal ? erpPesoShort(x) : x.toLocaleString(); }
-  function sub(x, items) { return isVal ? items.toLocaleString() + ' items' : Math.round(x / grandN * 100) + '% of items'; }
-  function pct(x) { return Math.round(x / grand * 100) + '%'; }
+  function main(x) { return isVal ? erpPesoShort(x) : Number(x).toLocaleString(); }
   var clsName = { A: 'Class A', B: 'Class B', C: 'Class C', 'N/A': 'No ABC class' };
 
-  var h = '<div class="mxw"><table class="mx"><thead><tr><th class="r" style="width:19%">ABC class ↓<br>Speed →</th>' +
-    moves.map(function(m) { return '<th><span class="dot" style="background:' + (SPEED_COLORS[m] || '#94a3b8') + '"></span>' + (pretty[m] || m) + '</th>'; }).join('') + '<th>Total</th></tr></thead><tbody>';
-  classes.forEach(function(k) {
-    h += '<tr><th class="r"><span class="dot" style="background:' + (ERP_ABC_COLORS[k] || '#94a3b8') + '"></span>' + clsName[k] + '</th>';
-    moves.forEach(function(m) {
-      var c = cell(m, k), x = c[field], share = x / grand, att = (k === 'A' || k === 'B') && (m === 'SLOW MOVING' || m === 'NO MOVEMENT') && x > 0;
-      var bg = x > 0 ? 'background:rgba(30,58,95,' + (0.05 + Math.min(0.3, share * 1.4)).toFixed(2) + ');' : '';
-      h += '<td class="' + (x === 0 ? 'zero ' : '') + (att ? 'att' : '') + '" style="' + bg + '" title="' + clsName[k] + ' · ' + (pretty[m] || m) + ': ' + (isVal ? erpPeso(c.v) + ' · ' + c.n.toLocaleString() + ' items' : c.n.toLocaleString() + ' items · ' + erpPeso(c.v)) + '"><div class="v">' + (x === 0 ? '–' : main(x)) + '</div>' + (x === 0 ? '' : '<div class="s">' + sub(x, c.n) + '</div>') + '</td>';
-    });
-    var rt = rowTot(k, field);
-    h += '<td class="tt"><div class="v">' + main(rt) + '</div><div class="s">' + pct(rt) + (isVal ? ' of value' : ' of items') + '</div></td></tr>';
+  var labels = classes.map(function(k) { return [clsName[k], rowTot(k, 'n').toLocaleString() + ' items']; });
+  var datasets = moves.map(function(m) {
+    return { label: pretty[m] || m, data: classes.map(function(k) { return cell(m, k)[field]; }), backgroundColor: SPEED_COLORS[m] || '#94a3b8', borderSkipped: false, borderWidth: 1, borderColor: '#fff' };
   });
-  h += '<tr class="tot"><th class="r">Total</th>' + moves.map(function(m) {
-    var ct = colTot(m, field); return '<td><div class="v">' + main(ct) + '</div><div class="s">' + pct(ct) + '</div></td>';
-  }).join('') + '<td><div class="v">' + main(grand) + '</div><div class="s">100%</div></td></tr></tbody></table>' +
-    '<div class="mx-key"><i></i>Review first: Class A or B stock that is Slow or has No Movement.</div></div>';
-  host.innerHTML = h;
+
+  var plugin = {
+    id: 'erpSpeedLabels',
+    afterDatasetsDraw: function(chart) {
+      var ctx = chart.ctx, xs = chart.scales.x;
+      ctx.save(); ctx.textBaseline = 'middle';
+      chart.data.datasets.forEach(function(ds, di) {
+        var meta = chart.getDatasetMeta(di);
+        meta.data.forEach(function(bar, i) {
+          var val = Number(ds.data[i] || 0), w = Math.abs(bar.x - bar.base);
+          if (!val || w < 46) return;
+          ctx.fillStyle = DARK_TEXT[moves[di]] ? '#0f172a' : '#ffffff';
+          ctx.font = '700 10px Inter, sans-serif'; ctx.textAlign = 'center';
+          ctx.fillText(main(val), (bar.x + bar.base) / 2, bar.y);
+        });
+      });
+      var m0 = chart.getDatasetMeta(0);
+      classes.forEach(function(k, i) {
+        var bar = m0.data[i]; if (!bar) return;
+        var tot = rowTot(k, field), x = xs.getPixelForValue(tot) + 8;
+        ctx.fillStyle = erpChartText(); ctx.textAlign = 'left';
+        ctx.font = '700 11px Inter, sans-serif'; ctx.fillText(main(tot), x, bar.y - 6);
+        ctx.font = '500 10px Inter, sans-serif'; ctx.fillText(Math.round(tot / grand * 100) + (isVal ? '% of value' : '% of items'), x, bar.y + 7);
+      });
+      ctx.restore();
+    }
+  };
+
+  _erpCharts.movement = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: { labels: labels, datasets: datasets },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { right: 78 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          title: function(items) { return clsName[classes[items[0].dataIndex]] + ' · ' + items[0].dataset.label; },
+          label: function(ctx) {
+            var k = classes[ctx.dataIndex], m = moves[ctx.datasetIndex], c = cell(m, k), rt = rowTot(k, field);
+            var share = rt ? Math.round(c[field] / rt * 100) : 0;
+            return [erpPeso(c.v) + '  ·  ' + c.n.toLocaleString() + ' items', share + '% of ' + clsName[k] + (isVal ? ' value' : ' items')];
+          }
+        } }
+      },
+      scales: {
+        x: { stacked: true, beginAtZero: true, ticks: { callback: function(v) { return isVal ? erpPesoShort(v) : Number(v).toLocaleString(); }, font: { size: 10 }, maxTicksLimit: 5 },
+             title: { display: true, text: isVal ? 'Stock value (₱)' : 'Number of items', font: { size: 10, weight: '600' } } },
+        y: { stacked: true, ticks: { font: { size: 11, weight: '600' } }, grid: { display: false } }
+      }
+    },
+    plugins: [plugin]
+  });
 
   var title = document.getElementById('movTitle'); if (title) title.textContent = 'ABC Class × Movement Speed';
   var subEl = document.getElementById('movSub');
-  if (subEl) subEl.textContent = 'ABC = how important the item is by value. Speed = how active it is. Each row adds up to the ABC chart on the left; the grand total is ' + (isVal ? erpPesoShort(grandV) : grandN.toLocaleString() + ' items') + ' for both.';
+  if (subEl) subEl.textContent = 'Each bar is one ABC class, with the same total as the ABC chart. The colors show how fast that stock moves. Everything adds up to ' + (isVal ? erpPesoShort(grandV) : grandN.toLocaleString() + ' items') + '.';
   var note = document.getElementById('movNote');
   if (note) {
+    var legend = '<div class="sp-legend">' + moves.map(function(m) {
+      var t = colTot(m, field); return '<span class="sp-chip"><i style="background:' + (SPEED_COLORS[m] || '#94a3b8') + '"></i>' + (pretty[m] || m) + ' <b>' + main(t) + '</b><span>' + Math.round(t / grand * 100) + '%</span></span>';
+    }).join('') + '</div>';
     var sn = ['SLOW MOVING', 'NO MOVEMENT'].filter(function(m) { return matrix[m]; });
-    var snT = sn.reduce(function(s, m) { return s + colTot(m, field); }, 0);
-    var snAB = sn.reduce(function(s, m) { return s + cell(m, 'A')[field] + cell(m, 'B')[field]; }, 0);
-    note.innerHTML = '<b>Slow + No Movement</b> hold <b>' + main(snT) + '</b> (' + pct(snT) + (isVal ? ' of stock value' : ' of items') + '). Of this, <b>' + main(snAB) + '</b> is Class A or B (highlighted) — review these first for reduced ordering, transfer, or disposal.';
+    var snT = sn.reduce(function(sum, m) { return sum + colTot(m, field); }, 0);
+    var snAB = sn.reduce(function(sum, m) { return sum + cell(m, 'A')[field] + cell(m, 'B')[field]; }, 0);
+    note.innerHTML = legend + '<b>Slow + No Movement</b> hold <b>' + main(snT) + '</b> (' + Math.round(snT / grand * 100) + '%). Of this, <b>' + main(snAB) + '</b> is Class A or B: review these first for reduced ordering, transfer, or disposal.';
   }
 }
 
