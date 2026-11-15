@@ -650,15 +650,21 @@
 <script defer src="erp-dashboard-api.js"></script>
 <script defer src="erp-nav.js"></script>
 <script defer src="management-dashboard.js"></script>
+<script defer src="ratio-settings.js"></script>
 <script defer src="management-dashboard-exec.js"></script>
 <script defer src="notif-alerts.js"></script>
 <script defer src="notifications.js"></script>
    <script defer src="js/update.js"></script>
 <style>
 /* Turnover Ratio card */
-.mdash-to-card { cursor: pointer; }
+.mdash-to-card { cursor: pointer; position: relative; }
+.mdash-to-gear { position: absolute; right: 10px; bottom: 10px; width: 26px; height: 26px; border-radius: 50%; border: 1px solid #cbd5e1; background: #fff; color: #475569;
+  display: flex; align-items: center; justify-content: center; font-size: .8rem; cursor: pointer; }
+.mdash-to-gear:hover { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
+.mdash-ratio-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; border: 1px solid #f59e0b; background: #fffbeb; color: #92400e; font-size: .85rem; font-weight: 600; cursor: pointer; }
+.mdash-ratio-btn:hover { background: #f59e0b; color: #fff; }
 .mdash-to-card:hover { box-shadow: 0 6px 20px rgba(245,158,11,.25); }
-#mdashKpiInvRatio.has-days::after { content: " days"; font-size: .45em; margin-left: 2px; opacity: .65; font-weight: 700; }
+#mdashKpiInvRatio.has-days::after { content: " " attr(data-unit); font-size: .45em; margin-left: 2px; opacity: .65; font-weight: 700; }
 #mdashKpiTurnover.has-x::after { content: "×"; font-size: .55em; margin-left: 3px; opacity: .65; font-weight: 700; }
 .mdash-to-pill { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: .72rem; font-weight: 600; }
 .mdash-to-pill .tp { padding: 2px 9px; border-radius: 999px; font-weight: 700; }
@@ -807,6 +813,9 @@
       <button class="mdash-refresh-btn" onclick="mdashRefresh()" title="Refresh data">
         <i class="bi bi-arrow-clockwise"></i> Refresh
       </button>
+      <button class="mdash-ratio-btn erp-ratio-btn" onclick="erpRatioOpenSettings()" title="Set the formula of Turnover Ratio and Inventory Ratio">
+        <i class="bi bi-sliders"></i> Ratio Settings
+      </button>
       <button class="mdash-export-btn" onclick="mdashExportCSV()" title="Export to CSV">
         <i class="bi bi-file-earmark-excel"></i> Export
       </button>
@@ -861,6 +870,7 @@
       <div class="mdash-kpi-sub" id="mdashKpiTurnoverSub">times per year</div>
       <div class="mdash-to-pill" id="mdashTurnoverPill"></div>
       <div class="mdash-to-link"><i class="bi bi-info-circle"></i> How is this computed?</div>
+      <span class="mdash-to-gear erp-ratio-gear" onclick="event.stopPropagation();erpRatioOpenSettings()" title="Ratio Settings — set the formula"><i class="bi bi-sliders"></i></span>
     </div>
 
     <!-- KPI 4b: Inventory Ratio (days of stock) -->
@@ -869,10 +879,11 @@
         <div class="mdash-kpi-label">Inventory Ratio</div>
         <div class="mdash-kpi-icon icon-blue"><i class="bi bi-calendar3"></i></div>
       </div>
-      <div class="mdash-kpi-value kpi-value-sm" id="mdashKpiInvRatio">—</div>
+      <div class="mdash-kpi-value kpi-value-sm" id="mdashKpiInvRatio" data-unit="days">—</div>
       <div class="mdash-kpi-sub" id="mdashKpiInvRatioSub">days of stock on hand</div>
       <div class="mdash-to-pill" id="mdashInvRatioPill"></div>
       <div class="mdash-to-link"><i class="bi bi-info-circle"></i> How is this computed?</div>
+      <span class="mdash-to-gear erp-ratio-gear" onclick="event.stopPropagation();erpRatioOpenSettings()" title="Ratio Settings — set the formula"><i class="bi bi-sliders"></i></span>
     </div>
 
     <!-- KPI 5: MRR -->
