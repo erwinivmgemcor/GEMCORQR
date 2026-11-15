@@ -674,6 +674,11 @@
 .mdash-to-pill .tp-ok     { background: #dcfce7; color: #166534; }
 .mdash-to-pill .tp-fast   { background: #dbeafe; color: #1d4ed8; }
 .mdash-to-pill .tp-days   { color: #475569; }
+.mdash-to-ref { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #e2e8f0; font-size: .7rem; color: #475569; line-height: 1.45; }
+.mdash-to-ref div + div { margin-top: 3px; }
+.mdash-to-ref b { color: #1e3a5f; }
+.mdash-to-ref .warn { color: #b45309; font-weight: 600; }
+.mdash-to-ref .mute { color: #94a3b8; }
 .mdash-to-link { margin-top: 6px; font-size: .7rem; color: #2563eb; font-weight: 600; }
 /* Turnover explainer modal */
 .to-modal .modal-body { font-size: .9rem; color: #1e293b; }
@@ -883,6 +888,7 @@
       <div class="mdash-kpi-value kpi-value-sm" id="mdashKpiInvRatio" data-unit="days">—</div>
       <div class="mdash-kpi-sub" id="mdashKpiInvRatioSub">days of stock on hand</div>
       <div class="mdash-to-pill" id="mdashInvRatioPill"></div>
+      <div class="mdash-to-ref" id="mdashInvRatioRef"></div>
       <div class="mdash-to-link"><i class="bi bi-info-circle"></i> How is this computed?</div>
       <span class="mdash-to-gear erp-ratio-gear" onclick="event.stopPropagation();erpRatioOpenSettings()" title="Ratio Settings — set the formula"><i class="bi bi-sliders"></i></span>
     </div>
