@@ -1601,6 +1601,7 @@ async function erpShowItemDetails(itemCode) {
       cell('Movement', erpEsc(it.inventory_movement || '—')) +
       '</div>';
 
+    html += '<div id="erpItemTrendBox" class="mt-3"></div>';
     html += '<h6 class="fw-bold mt-3 mb-2"><i class="bi bi-clock-history me-1"></i>Recent Movements</h6>';
     var mv = erpMergeManualAdjustments((mRes && mRes.movements) || [], editRows).slice(0, 50);
     if (mv.length === 0) {
@@ -1629,6 +1630,7 @@ async function erpShowItemDetails(itemCode) {
       html += '</tbody></table></div>';
     }
     body.innerHTML = html;
+    try { if (window.erpTrendRenderItem) window.erpTrendRenderItem('erpItemTrendBox', it); } catch (e) { console.warn('[Trend]', e); }
   } catch (err) {
     console.error('[erpShowItemDetails]', err);
     body.innerHTML = '<div class="text-center text-danger py-4">Failed to load: ' + erpEsc(err.message) + '</div>';
