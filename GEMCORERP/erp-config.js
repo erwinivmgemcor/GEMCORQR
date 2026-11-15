@@ -142,6 +142,33 @@ var ERP_RATIO_VARS = {
 };
 var ERP_RATIO_FUNCS = { min: Math.min, max: Math.max, abs: Math.abs, sqrt: Math.sqrt, round: Math.round };
 
+// Plain-language na pangalan ng bawat variable (ito ang makikita ng users, hindi ang code name)
+var ERP_RATIO_NAMES = {
+  issued:    'Issued value (MRIF)',
+  inv:       'Inventory value',
+  invActive: 'Inventory value (items with usage only)',
+  usageMo:   'Average monthly usage value',
+  days:      'Days in period',
+  dpy:       'Days in a year',
+  turnover:  'Turnover Ratio',
+  onHand:    'On-Hand qty',
+  aveMo:     'Average monthly usage'
+};
+// Mga pagpipilian para sa "Days in a year"
+var ERP_RATIO_DPY_OPTIONS = [
+  { v: 365, label: '365 — every calendar day (default)' },
+  { v: 360, label: '360 — 12 months × 30 days (banking style)' },
+  { v: 312, label: '312 — working days, Mon–Sat' },
+  { v: 260, label: '260 — working days, Mon–Fri' }
+];
+// Gawing pangungusap ang formula: "issued / inv * (dpy / days)" → "Issued value (MRIF) ÷ Inventory value × (Days in a year ÷ Days in period)"
+function erpRatioWords(expr) {
+  return String(expr == null ? '' : expr).replace(/[A-Za-z_][A-Za-z0-9_]*|[*\/+\-]/g, function (t) {
+    if (ERP_RATIO_NAMES[t]) return ERP_RATIO_NAMES[t];
+    return { '*': '×', '/': '÷', '-': '−', '+': '+' }[t] || t;
+  }).replace(/\s+/g, ' ').trim();
+}
+
 var _erpRatio = { saved: null, cur: null, preview: false, loaded: false, compiled: {} };
 
 function erpRatioClone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -149,20 +176,20 @@ function erpRatioClone(o) { return JSON.parse(JSON.stringify(o)); }
 // Ligtas na formula evaluator: letters/numbers/+ - * / ( ) . , lang, at kilalang variable/function lang.
 function erpRatioCompile(expr, vars) {
   expr = String(expr == null ? '' : expr).trim();
-  if (!expr) throw new Error('Walang formula');
-  if (expr.length > 200) throw new Error('Masyadong mahaba ang formula');
-  if (!/^[0-9A-Za-z_+\-*\/().,\s]+$/.test(expr)) throw new Error('Letters, numbers at + - * / ( ) . , lang ang puwede');
+  if (!expr) throw new Error('Formula is empty');
+  if (expr.length > 200) throw new Error('Formula is too long');
+  if (!/^[0-9A-Za-z_+\-*\/().,\s]+$/.test(expr)) throw new Error('Only letters, numbers and + − × ÷ ( ) are allowed');
   var ids = expr.match(/[A-Za-z_][A-Za-z0-9_]*/g) || [];
   for (var i = 0; i < ids.length; i++) {
     if (vars.indexOf(ids[i]) < 0 && !Object.prototype.hasOwnProperty.call(ERP_RATIO_FUNCS, ids[i])) {
-      throw new Error('Hindi kilalang variable: ' + ids[i]);
+      throw new Error('Unknown item: ' + ids[i]);
     }
   }
   var fnNames = Object.keys(ERP_RATIO_FUNCS);
   var names = vars.concat(fnNames);
   var fn;
   try { fn = new Function(names.join(','), '"use strict"; return (' + expr + ');'); }
-  catch (e) { throw new Error('May mali sa pagkakasulat ng formula'); }
+  catch (e) { throw new Error('The formula is not written correctly'); }
   return function (v) {
     var args = vars.map(function (n) { return Number(v[n]); }).concat(fnNames.map(function (n) { return ERP_RATIO_FUNCS[n]; }));
     return fn.apply(null, args);
@@ -330,7 +357,7 @@ function erpTurnoverBadge(onHand, aveMonthly) {
     txt = t.ratio === 0 ? '0.0×' : (t.ratio < 0.1 ? '<0.1×' : (t.ratio >= 100 ? '99+×' : t.ratio.toFixed(1) + '×'));
     tip = t.label + (erpRatioIsDefault('item.turnover')
       ? '\nAnnual usage ' + Math.round(t.annual).toLocaleString() + ' ÷ On-Hand ' + Math.round(t.onHand).toLocaleString()
-      : '\nFormula: ' + _erpRatio.cur.item.turnover + '  (aveMo = Ave/Mo, onHand = On-Hand)') +
+      : '\nFormula: ' + erpRatioWords(_erpRatio.cur.item.turnover)) +
           (t.days !== null ? '\n≈ ' + Math.round(t.days).toLocaleString() + ' days of stock on hand' : '\nNo consumption recorded');
   }
   return '<span title="' + tip.replace(/"/g, '&quot;').replace(/\n/g, '&#10;') + '" style="display:inline-block;min-width:44px;padding:2px 8px;border-radius:999px;' +
@@ -353,7 +380,7 @@ function erpInventoryRatioBadge(onHand, aveMonthly) {
     txt = d >= 3650 ? '10y+' : d.toLocaleString() + ' d';
     tip = t.label + (erpRatioIsDefault('item.invRatio')
       ? '\nOn-Hand ' + Math.round(t.onHand).toLocaleString() + ' ÷ average daily usage ' + (t.annual / _erpRatio.cur.dpy).toFixed(2)
-      : '\nFormula: ' + _erpRatio.cur.item.invRatio + '  (turnover = item turnover)') +
+      : '\nFormula: ' + erpRatioWords(_erpRatio.cur.item.invRatio)) +
           '\n= ' + d.toLocaleString() + ' days (≈ ' + (t.days / 30.4).toFixed(1) + ' months) of stock';
   }
   return '<span title="' + tip.replace(/"/g, '&quot;').replace(/\n/g, '&#10;') + '" style="display:inline-block;min-width:50px;padding:2px 8px;border-radius:999px;' +
