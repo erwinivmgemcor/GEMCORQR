@@ -16,10 +16,12 @@
   // ── Mga pagpipilian (plain language) ─────────────────────
   var PRESETS = {
     'overall.turnover': [
-      { id: 'system', label: 'Standard — computed by the system (current)', expr: 'stockOut / inv * (dpy / days)', system: true,
+      { id: 'system', label: 'Standard — computed by the system (current default)', expr: 'stockOut / inv * (dpy / days)', system: true,
         say: 'Value of ALL stock taken out of the warehouse in the period (from the stock ledger), divided by the current inventory value, then scaled to a full year. This is what the system uses today.' },
       { id: 'p2', label: 'Same as Standard, calculated on this page (follows “Days in a year”)', expr: 'stockOut / inv * (dpy / days)',
         say: 'Same idea as Standard, but computed here so it follows your “Days in a year” setting and the dashboard inventory value.' },
+      { id: 'p9', label: 'Average monthly issuance × 12 ÷ Inventory — complete history (recommended)', expr: 'issuedMo * 12 / inv',
+        say: 'Takes the average value issued to production (MRIF) per complete month since January 2026 (legacy sheet plus live system data), multiplies it by 12, and divides by the current inventory value. It does not depend on the selected date range, so it stays stable.' },
       { id: 'p7', label: 'Issued to production (MRIF) ÷ Inventory, scaled to a year', expr: 'issued / inv * (dpy / days)',
         say: 'Counts only material requisitions (MRIF) created in the period. Based on the issued quantities of those documents.' },
       { id: 'p8', label: 'Net issued (MRIF − returns) ÷ Inventory, scaled to a year', expr: '(issued - returned) / inv * (dpy / days)',
@@ -293,6 +295,10 @@
     sn.innerHTML = prev
       ? '<i class="bi bi-eye me-1"></i><b>A preview is showing on this page now.</b> It is not saved and goes away when you reload.'
       : '<i class="bi bi-check-circle me-1"></i>The saved settings are in use.';
+    var bv = window.mdashRatioVars && window.mdashRatioVars();
+    if (bv && /issuedMo|receivedMo/.test(get('overall.turnover') + ' ' + get('overall.invRatio')) && !(bv.issuedMo > 0)) {
+      sn.innerHTML += ' <b>Monthly history is not loaded yet</b> (run erp-history-setup.sql and erp-history-import.sql, then refresh).';
+    }
     sn.innerHTML += admin ? '' : ' <b>Only an Admin can save for everyone</b>; you can still try it on your own screen.';
     $('rsRevert').classList.toggle('d-none', !prev);
     $('rsSave').disabled = !ok || !admin;
