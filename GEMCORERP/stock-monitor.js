@@ -311,83 +311,73 @@ function erpSetMovMode(mode) {
 window.erpSetMovMode = erpSetMovMode;
 
 function erpRenderMovementChart(stats) {
+  // ABC class (rows) x Movement speed (columns). Rows add up to the ABC chart, columns to each speed group,
+  // and everything to the same grand total — so the two views can be read together instead of compared by eye.
   var canvas = document.getElementById('chartMovement');
   if (!canvas) return;
-  if (_erpCharts.movement) { _erpCharts.movement.destroy(); }
+  if (_erpCharts.movement) { _erpCharts.movement.destroy(); _erpCharts.movement = null; }
+  canvas.style.display = 'none';
+  var host = document.getElementById('movMatrix');
+  if (!host) { host = document.createElement('div'); host.id = 'movMatrix'; canvas.parentNode.insertBefore(host, canvas); }
+  if (!document.getElementById('erpMatrixCss')) {
+    var st = document.createElement('style'); st.id = 'erpMatrixCss';
+    st.textContent = '.mxw{padding:6px 2px;overflow-x:auto}.mx{width:100%;border-collapse:separate;border-spacing:3px;font-size:.78rem;table-layout:fixed}' +
+      '.mx th{font-size:.68rem;font-weight:700;color:#334155;text-align:center;padding:4px 2px;vertical-align:bottom}.mx th.r{text-align:left}' +
+      '.mx th .dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}' +
+      '.mx td{text-align:center;border-radius:6px;padding:7px 2px;background:#f8fafc;line-height:1.2}.mx td .v{font-weight:700;font-size:.82rem;color:#0f172a}.mx td .s{font-size:.64rem;color:#64748b}' +
+      '.mx td.tt{background:#eef2f7}.mx td.tt .v{color:#1e3a5f}.mx td.att{outline:2px solid #f59e0b;outline-offset:-2px}' +
+      '.mx td.zero .v{color:#cbd5e1;font-weight:500}.mx tr.tot td{background:#eef2f7;font-weight:700}' +
+      '.mx-key{font-size:.68rem;color:#64748b;margin-top:6px}.mx-key i{display:inline-block;width:10px;height:10px;border:2px solid #f59e0b;border-radius:3px;vertical-align:-2px;margin-right:4px}';
+    document.head.appendChild(st);
+  }
   var matrix = stats.matrix || {};
   var order = ['FAST MOVING', 'MODERATE MOVING', 'SLOW MOVING', 'NO MOVEMENT', 'UNCLASSIFIED'];
   var pretty = { 'FAST MOVING': 'Fast', 'MODERATE MOVING': 'Moderate', 'SLOW MOVING': 'Slow', 'NO MOVEMENT': 'No Movement', 'UNCLASSIFIED': 'Unclassified' };
+  var SPEED_COLORS = { 'FAST MOVING': '#10b981', 'MODERATE MOVING': '#38bdf8', 'SLOW MOVING': '#6366f1', 'NO MOVEMENT': '#1e3a5f', 'UNCLASSIFIED': '#cbd5e1' };
   var moves = order.filter(function(m) { return matrix[m]; });
   Object.keys(matrix).forEach(function(m) { if (moves.indexOf(m) === -1) moves.push(m); });
-  if (moves.length === 0) return;
+  if (moves.length === 0) { host.innerHTML = ''; return; }
 
-  var isVal = _erpMovMode === 'value';
-  var field = isVal ? 'v' : 'n';
-  var classes = ['A', 'B', 'C', 'N/A'];
-  // One bar per movement speed, colored by SPEED so it is not mistaken for the ABC chart.
-  // The ABC split is shown in the tooltip instead of as stacked colors.
-  var SPEED_COLORS = { 'FAST MOVING': '#10b981', 'MODERATE MOVING': '#38bdf8', 'SLOW MOVING': '#6366f1', 'NO MOVEMENT': '#1e3a5f', 'UNCLASSIFIED': '#cbd5e1' };
-  var datasets = [{
-    label: isVal ? 'Stock value' : 'Items',
-    data: moves.map(function(m) { return classes.reduce(function(sum, k) { return sum + matrix[m][k][field]; }, 0); }),
-    backgroundColor: moves.map(function(m) { return SPEED_COLORS[m] || '#94a3b8'; }),
-    borderRadius: 6
-  }];
+  var isVal = _erpMovMode === 'value', field = isVal ? 'v' : 'n';
+  var classes = ['A', 'B', 'C', 'N/A'].filter(function(k) { return moves.some(function(m) { return matrix[m][k] && (matrix[m][k].v || matrix[m][k].n); }); });
+  function cell(m, k) { return (matrix[m] && matrix[m][k]) ? matrix[m][k] : { v: 0, n: 0 }; }
+  function rowTot(k, f) { return moves.reduce(function(s, m) { return s + cell(m, k)[f]; }, 0); }
+  function colTot(m, f) { return classes.reduce(function(s, k) { return s + cell(m, k)[f]; }, 0); }
+  var grandV = classes.reduce(function(s, k) { return s + rowTot(k, 'v'); }, 0) || 1;
+  var grandN = classes.reduce(function(s, k) { return s + rowTot(k, 'n'); }, 0) || 1;
+  var grand = isVal ? grandV : grandN;
+  function main(x) { return isVal ? erpPesoShort(x) : x.toLocaleString(); }
+  function sub(x, items) { return isVal ? items.toLocaleString() + ' items' : Math.round(x / grandN * 100) + '% of items'; }
+  function pct(x) { return Math.round(x / grand * 100) + '%'; }
+  var clsName = { A: 'Class A', B: 'Class B', C: 'Class C', 'N/A': 'No ABC class' };
 
-  function totalOf(i, f) { return classes.reduce(function(s, k) { return s + matrix[moves[i]][k][f]; }, 0); }
-  var grandV = moves.reduce(function(s, m, i) { return s + totalOf(i, 'v'); }, 0) || 1;
-  var grandN = moves.reduce(function(s, m, i) { return s + totalOf(i, 'n'); }, 0) || 1;
-  var labels = moves.map(function(m, i) { return [pretty[m] || m, totalOf(i, 'n').toLocaleString() + ' items']; });
-
-  _erpCharts.movement = new Chart(canvas.getContext('2d'), {
-    type: 'bar',
-    data: { labels: labels, datasets: datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      layout: { padding: { top: 34 } },
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: {
-          title: function(items) { return (pretty[moves[items[0].dataIndex]] || moves[items[0].dataIndex]) + (moves[items[0].dataIndex].indexOf('MOVEMENT') === -1 && moves[items[0].dataIndex] !== 'UNCLASSIFIED' ? ' moving' : ''); },
-          label: function(ctx) {
-            var i = ctx.dataIndex, m = moves[i], lines = [];
-            lines.push(isVal ? erpPeso(totalOf(i, 'v')) + '  (' + Math.round(totalOf(i, 'v') / grandV * 100) + '% of all stock value)'
-                             : totalOf(i, 'n').toLocaleString() + ' items  (' + Math.round(totalOf(i, 'n') / grandN * 100) + '% of all items)');
-            lines.push('ABC split of this group:');
-            ['A', 'B', 'C', 'N/A'].forEach(function(k) {
-              var x = matrix[m][k][field];
-              if (x) lines.push('   ' + (k === 'N/A' ? 'No ABC class' : 'Class ' + k) + ': ' + (isVal ? erpPeso(x) : x.toLocaleString() + ' items'));
-            });
-            return lines;
-          }
-        } }
-      },
-      scales: {
-        x: { ticks: { font: { size: 10, weight: '600' } } },
-        y: { beginAtZero: true,
-             title: { display: true, text: isVal ? 'Stock value (₱)' : 'Number of items', font: { size: 10, weight: '600' } },
-             ticks: { callback: function(v) { return isVal ? erpPesoShort(v) : v.toLocaleString(); }, font: { size: 10 } } }
-      }
-    },
-    plugins: [erpTopLabelPlugin(function(i) {
-      return isVal ? [erpPesoShort(totalOf(i, 'v')), Math.round(totalOf(i, 'v') / grandV * 100) + '% of value']
-                   : [totalOf(i, 'n').toLocaleString(), Math.round(totalOf(i, 'n') / grandN * 100) + '% of items'];
-    })]
+  var h = '<div class="mxw"><table class="mx"><thead><tr><th class="r" style="width:19%">ABC class ↓<br>Speed →</th>' +
+    moves.map(function(m) { return '<th><span class="dot" style="background:' + (SPEED_COLORS[m] || '#94a3b8') + '"></span>' + (pretty[m] || m) + '</th>'; }).join('') + '<th>Total</th></tr></thead><tbody>';
+  classes.forEach(function(k) {
+    h += '<tr><th class="r"><span class="dot" style="background:' + (ERP_ABC_COLORS[k] || '#94a3b8') + '"></span>' + clsName[k] + '</th>';
+    moves.forEach(function(m) {
+      var c = cell(m, k), x = c[field], share = x / grand, att = (k === 'A' || k === 'B') && (m === 'SLOW MOVING' || m === 'NO MOVEMENT') && x > 0;
+      var bg = x > 0 ? 'background:rgba(30,58,95,' + (0.05 + Math.min(0.3, share * 1.4)).toFixed(2) + ');' : '';
+      h += '<td class="' + (x === 0 ? 'zero ' : '') + (att ? 'att' : '') + '" style="' + bg + '" title="' + clsName[k] + ' · ' + (pretty[m] || m) + ': ' + (isVal ? erpPeso(c.v) + ' · ' + c.n.toLocaleString() + ' items' : c.n.toLocaleString() + ' items · ' + erpPeso(c.v)) + '"><div class="v">' + (x === 0 ? '–' : main(x)) + '</div>' + (x === 0 ? '' : '<div class="s">' + sub(x, c.n) + '</div>') + '</td>';
+    });
+    var rt = rowTot(k, field);
+    h += '<td class="tt"><div class="v">' + main(rt) + '</div><div class="s">' + pct(rt) + (isVal ? ' of value' : ' of items') + '</div></td></tr>';
   });
+  h += '<tr class="tot"><th class="r">Total</th>' + moves.map(function(m) {
+    var ct = colTot(m, field); return '<td><div class="v">' + main(ct) + '</div><div class="s">' + pct(ct) + '</div></td>';
+  }).join('') + '<td><div class="v">' + main(grand) + '</div><div class="s">100%</div></td></tr></tbody></table>' +
+    '<div class="mx-key"><i></i>Review first: Class A or B stock that is Slow or has No Movement.</div></div>';
+  host.innerHTML = h;
 
-  var sub = document.getElementById('movSub');
-  if (sub) sub.textContent = 'Grouped by how fast items move (not by value rank). Same ' + erpPesoShort(grandV) + ' total as the ABC chart. Hover a bar to see its ABC split.';
+  var title = document.getElementById('movTitle'); if (title) title.textContent = 'ABC Class × Movement Speed';
+  var subEl = document.getElementById('movSub');
+  if (subEl) subEl.textContent = 'ABC = how important the item is by value. Speed = how active it is. Each row adds up to the ABC chart on the left; the grand total is ' + (isVal ? erpPesoShort(grandV) : grandN.toLocaleString() + ' items') + ' for both.';
   var note = document.getElementById('movNote');
   if (note) {
-    var ni = moves.indexOf('NO MOVEMENT');
-    if (ni === -1) { note.textContent = ''; return; }
-    var nmV = totalOf(ni, 'v'), nmN = totalOf(ni, 'n'), nmA = matrix['NO MOVEMENT'].A.v;
-    note.innerHTML = isVal
-      ? '<b>' + erpPesoShort(nmV) + ' (' + Math.round(nmV / grandV * 100) + '%)</b> of stock value is in <b>No Movement</b> items, ' +
-        'of which <b>' + erpPesoShort(nmA) + '</b> is Class A. Review these first for reduced ordering, transfer, or disposal.'
-      : '<b>' + nmN.toLocaleString() + ' items (' + Math.round(nmN / grandN * 100) + '%)</b> have had no movement. ' +
-        'Switch to ₱ Value to see how much money is tied up in them.';
+    var sn = ['SLOW MOVING', 'NO MOVEMENT'].filter(function(m) { return matrix[m]; });
+    var snT = sn.reduce(function(s, m) { return s + colTot(m, field); }, 0);
+    var snAB = sn.reduce(function(s, m) { return s + cell(m, 'A')[field] + cell(m, 'B')[field]; }, 0);
+    note.innerHTML = '<b>Slow + No Movement</b> hold <b>' + main(snT) + '</b> (' + pct(snT) + (isVal ? ' of stock value' : ' of items') + '). Of this, <b>' + main(snAB) + '</b> is Class A or B (highlighted) — review these first for reduced ordering, transfer, or disposal.';
   }
 }
 
