@@ -218,6 +218,13 @@
           roles: ['warehouse']
         },
         {
+          id: 'monthly-movement',
+          label: 'Monthly Movement',
+          icon: 'bi-table',
+          href: 'monthly-movement.html',
+          roles: ['warehouse']
+        },
+        {
           id: 'process-history',
           label: 'Process History',
           icon: 'bi-clock-history',
@@ -351,6 +358,7 @@
     'item-in-out': 'Item In & Out',
     'weekly-monitor': 'Weekly Monitoring',
     'usage-trend': 'Usage Trend',
+    'monthly-movement': 'Monthly Movement',
     'usage-entry': 'Usage Entry',
     'process-history': 'Process History',
     'warehouse-kpi': 'Warehouse KPI',
