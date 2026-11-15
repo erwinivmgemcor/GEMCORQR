@@ -986,6 +986,18 @@ function mdashCoverSection() {
     'The typical (median) item has about <b>' + c.median.toFixed(1) + ' months</b> of stock. Months = On-Hand ÷ average monthly usage, the same as the “Inventory Ratio” column in the Google Sheet.</div></div>';
 }
 
+
+function mdashTargetSection(f) {
+  if (!f || !(f.daysOfStock > 0)) return '';
+  var T = erpRatioTargets(), st = erpDaysTargetStatus(f.daysOfStock), inv = Number(f.inv || 0), d = f.daysOfStock;
+  var html = '<div class="to-sec"><h6>Target</h6><div class="to-callout">' +
+    '<b>Target: ' + T.target.toFixed(1) + '× a year or more (≤ ' + Math.round(T.targetDays) + ' days of stock).</b> Minimum acceptable: ' + T.min.toFixed(1) + '× (≤ ' + Math.round(T.maxDays) + ' days). ' +
+    'Management can change these in Ratio Settings. For reference, typical manufacturing runs about 4×–8× a year (roughly 45–90 days); fast-moving manufacturing 6× or more.<br><br>' +
+    'Now: <b>' + Math.round(d).toLocaleString() + ' days</b> — <b>' + (st ? st.label : '') + '</b>.';
+  if (inv > 0 && d > T.targetDays) html += ' At the target, inventory would be about <b>' + mdashPesoFmt(inv * (1 - T.targetDays / d)) + '</b> (' + Math.round((1 - T.targetDays / d) * 100) + '%) lower for the same usage.';
+  return html + '</div></div>';
+}
+
 // Mga variable na magagamit sa formula (Ratio Settings) para sa overall Turnover / Inventory Ratio
 function mdashRatioVars(data) {
   data = data || _mdash.data;
@@ -1040,13 +1052,19 @@ function mdashRenderTurnoverCard(data) {
   toEl.classList.toggle('has-x', f.ratio > 0);
   subEl.textContent = 'times per year · based on ' + f.days + ' days (' + mdashPeriodLabel() + ')';
   if (f.ratio > 0) {
-    var band = mdashTurnoverBand(f.ratio).b;
-    pill.innerHTML = '<span class="tp tp-' + band.cls + '">' + band.label + '</span>' +
+    var st = erpTurnoverTargetStatus(f.ratio);
+    pill.innerHTML = '<span class="tp tp-' + st.cls + '">' + st.label + '</span>' +
       '<span class="tp-days">≈ ' + Math.round(f.daysOfStock) + ' days of stock on hand</span>';
   } else {
     pill.innerHTML = '<span class="tp-days">Not enough issuance data in this period</span>';
   }
   if (f.preGoLive) pill.innerHTML += '<span style="flex-basis:100%;color:#b45309;font-weight:600;font-size:.68rem;">⚠ Period starts before system go-live (Nov 1, 2026): understated. Tap for details.</span>';
+  var tRef = document.getElementById('mdashTurnoverRef');
+  if (tRef) {
+    var T = erpRatioTargets(), h = '<div><b>Target: ' + T.target.toFixed(1) + '× or more</b> (≤ ' + Math.round(T.targetDays) + ' days) · minimum ' + T.min.toFixed(1) + '× (≤ ' + Math.round(T.maxDays) + ' days)</div>';
+    if (f.ratio > 0) h += '<div>' + (f.ratio >= T.target ? 'At or above target.' : 'Gap to target: <b>' + (T.target - f.ratio).toFixed(1) + '×</b>' + (f.ratio < T.min ? ' · ' + (T.min - f.ratio).toFixed(1) + '× below the minimum' : '')) + '</div>';
+    tRef.innerHTML = h;
+  }
   mdashRenderInvRatioCard(f);
 }
 
@@ -1074,8 +1092,7 @@ function mdashRenderInvRatioCard(f) {
     }
     vEl.classList.add('has-days');
     // Status follows the DAYS of stock (same scale as the explainer), not only the turnover
-    var I = mdashBandInfo(), B = MDASH_TURNOVER_BANDS, d = f.daysOfStock;
-    var band = d < I.d1 ? B[3] : d < I.d2 ? B[2] : d < I.d3 ? B[1] : B[0];
+    var band = erpDaysTargetStatus(f.daysOfStock);
     pill.innerHTML = '<span class="tp tp-' + band.cls + '">' + band.label + '</span>' +
       (erpRatioIsDefault('overall.invRatio') && !usesHist
         ? '<span class="tp-days">= ' + S.dpy + ' ÷ ' + f.ratio.toFixed(1) + '× turnover</span>'
@@ -1091,7 +1108,15 @@ function mdashRenderInvRatioCard(f) {
     var v = f.vars || {}, h = (v.issuedMo > 0 && v.inv > 0) ? S.dpy * v.inv / (v.issuedMo * 12) : null;
     var cs = mdashCoverStats(), o = cs.bands[4];
     var pI = cs.totalItems ? Math.round(o.n / cs.totalItems * 100) : 0, pV = cs.totalValue ? Math.round(o.v / cs.totalValue * 100) : 0;
-    var html = '';
+    var T = erpRatioTargets(), html = '';
+    if (f.daysOfStock) {
+      html += '<div><b>Target: ≤ ' + Math.round(T.targetDays) + ' days</b> · limit ' + Math.round(T.maxDays) + ' days (' + T.target.toFixed(1) + '× / ' + T.min.toFixed(1) + '× a year)</div>';
+      var inv = Number(f.inv || 0), d0 = f.daysOfStock;
+      if (inv > 0 && d0 > T.targetDays) {
+        var exT = inv * (1 - T.targetDays / d0), exM = d0 > T.maxDays ? inv * (1 - T.maxDays / d0) : 0;
+        html += '<div class="warn">Stock above target: ≈ ' + mdashPesoFmt(exT) + ' (' + Math.round(exT / inv * 100) + '% of inventory)' + (exM > 0 ? ' · above the limit: ≈ ' + mdashPesoFmt(exM) : '') + '</div>';
+      } else if (d0 > 0) html += '<div>Inventory is within target.</div>';
+    }
     if (usesHist) html += '<div><b>Based on complete history:</b> average issuance per month since Jan 2026.</div>';
     else if (h !== null) html += '<div><b>Complete history (avg since Jan 2026): ≈ ' + Math.round(h).toLocaleString() + ' days</b> (' + (h / 30.4).toFixed(1) + ' months)</div>';
     else html += '<div class="mute">Complete history: not available yet (run the erp-history SQL).</div>';
@@ -1151,6 +1176,7 @@ function mdashShowInventoryRatioInfo() {
       : 'Not enough issuance data in this period to compute the Inventory Ratio.') + '</div></div>';
 
   if (f.preGoLive) html += '<div class="to-sec"><div class="to-callout" style="border-left-color:#f59e0b;background:#fffbeb">' + mdashGoLiveNote(f) + '</div></div>';
+  html += mdashTargetSection(f);
   html += '<div class="to-sec"><h6>The idea in 20 seconds</h6><div class="to-analogy">' +
     'Think of the <b>fuel gauge</b> in a car. If the tank has <b>100 liters</b> and the car uses <b>2 liters a day</b>, the fuel lasts <b>50 days</b>.' +
     '<ul><li>Our warehouse is the <b>tank</b></li><li>Our daily usage is the <b>fuel burned per day</b></li><li>Inventory Ratio is the <b>number of days before the tank is empty</b></li></ul>' +
@@ -1258,6 +1284,7 @@ function mdashShowTurnoverInfo() {
 
   // ── The idea
   if (f.preGoLive) html += '<div class="to-sec"><div class="to-callout" style="border-left-color:#f59e0b;background:#fffbeb">' + mdashGoLiveNote(f) + '</div></div>';
+  html += mdashTargetSection(f);
   html += '<div class="to-sec"><h6>The idea in 20 seconds</h6><div class="to-analogy">' +
     'Imagine a shelf that holds <b>100 boxes</b> of an item.' +
     '<ul><li>If we use <b>400 boxes</b> in a year, we refill the shelf <b>4 times</b> → Turnover = <b>4×</b></li>' +
