@@ -187,6 +187,13 @@
           '<input type="number" step="1" min="1" max="400" class="form-control d-none" style="width:110px" id="rsDpy"></div>' +
           '<div class="rs-err mt-1" id="rsErrDpy"></div></div>' +
 
+        '<div class="rs-sec"><h6><i class="bi bi-bullseye me-1"></i>Targets</h6>' +
+          '<div class="rs-sub">What management expects. They drive the status and the “stock above target” amount on the dashboard cards. For reference, typical manufacturing runs about 4×–8× a year (roughly 45–90 days of stock); fast-moving manufacturing 6× or more. Adjust to your supplier lead times.</div>' +
+          '<div class="d-flex flex-wrap gap-3">' +
+            '<div><label class="small fw-bold">Minimum acceptable turnover</label><div class="input-group input-group-sm" style="width:150px"><input type="number" step="0.1" min="0.1" class="form-control" id="rsTmin"><span class="input-group-text">× / year</span></div><div class="rs-sub mb-0" id="rsTminD"></div></div>' +
+            '<div><label class="small fw-bold">Target turnover</label><div class="input-group input-group-sm" style="width:150px"><input type="number" step="0.1" min="0.1" class="form-control" id="rsTtgt"><span class="input-group-text">× / year</span></div><div class="rs-sub mb-0" id="rsTtgtD"></div></div>' +
+          '</div><div class="rs-err mt-1" id="rsErrTargets"></div></div>' +
+
         '<div class="rs-sec"><h6><i class="bi bi-traffic-light me-1"></i>Status colors</h6>' +
           '<div class="rs-sub">Based on the Turnover Ratio (times per year). The “days of stock” ranges in the info windows follow these automatically.</div>' +
           '<div class="rs-bands">' +
@@ -254,6 +261,8 @@
       }
     });
     if ($('rsUnit')) $('rsUnit').value = draft.overall.invUnit;
+    if (document.activeElement !== $('rsTmin')) $('rsTmin').value = draft.targets.min;
+    if (document.activeElement !== $('rsTtgt')) $('rsTtgt').value = draft.targets.target;
     $('rsB0').value = draft.bands[0]; $('rsB1').value = draft.bands[1]; $('rsB2').value = draft.bands[2];
     var known = ERP_RATIO_DPY_OPTIONS.some(function (o) { return o.v === Number(draft.dpy); });
     $('rsDpySel').value = known ? String(draft.dpy) : 'other';
@@ -264,6 +273,9 @@
 
   function bandTexts() {
     var b = draft.bands, dp = Number(draft.dpy) || 365;
+    var tg = draft.targets, dd2 = function (t) { return t > 0 ? Math.round(dp / t) : '—'; };
+    $('rsTminD').textContent = 'about ' + dd2(tg.min) + ' days of stock at most';
+    $('rsTtgtD').textContent = 'about ' + dd2(tg.target) + ' days of stock';
     function dd(t) { return t > 0 ? Math.round(dp / t) : '—'; }
     $('rsBx0').textContent = 'Under ' + b[0] + '× a year ≈ over ' + dd(b[0]) + ' days of stock';
     $('rsBx1').textContent = b[0] + '× to ' + b[1] + '× ≈ ' + dd(b[1]) + '–' + dd(b[0]) + ' days';
@@ -284,9 +296,11 @@
     });
     var b = draft.bands, bandsOk = b[0] > 0 && b[0] < b[1] && b[1] < b[2];
     var dpyOk = draft.dpy >= 1 && draft.dpy <= 400;
+    var tg = draft.targets, tgOk = tg.min > 0 && tg.target > tg.min && tg.target <= 100;
+    $('rsErrTargets').textContent = !tgOk ? '⚠ The target must be higher than the minimum (both above 0).' : '';
     $('rsErrBands').textContent = !bandsOk ? '⚠ Each limit must be higher than the one before: Very slow < Slow < Healthy (all above 0).' : '';
     $('rsErrDpy').textContent = !dpyOk ? '⚠ Days in a year must be between 1 and 400.' : '';
-    return ok && bandsOk && dpyOk;
+    return ok && bandsOk && dpyOk && tgOk;
   }
 
   function refreshPreview() {
@@ -371,6 +385,8 @@
       else { draft.dpy = Number(v); $('rsDpy').classList.add('d-none'); $('rsDpy').value = v; }
       schedule();
     });
+    $('rsTmin').addEventListener('input', function () { draft.targets.min = Number($('rsTmin').value); schedule(); });
+    $('rsTtgt').addEventListener('input', function () { draft.targets.target = Number($('rsTtgt').value); schedule(); });
     $('rsDpy').addEventListener('input', function () { draft.dpy = Number($('rsDpy').value); schedule(); });
     if ($('rsUnit')) $('rsUnit').addEventListener('change', function () { draft.overall.invUnit = $('rsUnit').value; schedule(); });
     $('rsTestOn').addEventListener('input', schedule); $('rsTestAve').addEventListener('input', schedule);
