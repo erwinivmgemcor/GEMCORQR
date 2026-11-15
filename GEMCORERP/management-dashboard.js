@@ -919,12 +919,35 @@ function mdashTurnoverBand(v) {
   return { i: 3, b: MDASH_TURNOVER_BANDS[3] };
 }
 
+// Mga variable na magagamit sa formula (Ratio Settings) para sa overall Turnover / Inventory Ratio
+function mdashRatioVars(data) {
+  data = data || _mdash.data;
+  if (!data) return null;
+  var s = data.summary || {}, t = data.turnover || {}, act = data.activity || {};
+  var usageMo = 0, invActive = 0;
+  (_mdash.allItems || []).forEach(function(it) {
+    var ave = Number(it.ave_monthly_consumption || 0);
+    usageMo += ave * Number(it.unit_cost || 0);
+    if (ave > 0) invActive += Number(it.on_hand_cost || 0);
+  });
+  return { issued: Number(act.mrif_value || 0), inv: Number(s.total_value || 0), invActive: invActive, usageMo: usageMo,
+           days: Number(t.days_in_period || 30), dpy: erpRatioGet().dpy };
+}
+function mdashServerTurnover(data) { return Number(((data || _mdash.data || {}).turnover || {}).turnover_annualized || 0); }
+window.mdashRatioVars = mdashRatioVars;
+window.mdashServerTurnover = mdashServerTurnover;
+
 function mdashTurnoverFacts(data) {
   var s = data.summary || {}, t = data.turnover || {}, act = data.activity || {};
-  var ratio = Number(t.turnover_annualized || 0);
+  var S = erpRatioGet();
+  var vars = mdashRatioVars(data);
+  var custom = S.overall.tMode === 'custom';
+  var ratio = Number(t.turnover_annualized || 0);                 // 'system' mode: galing sa server (dating formula)
+  if (custom) { var r = erpRatioEval('overall.turnover', vars); ratio = (r !== null && r > 0) ? r : 0; }
   var days = Number(t.days_in_period || 30);
-  var f = { ratio: ratio, days: days, issued: Number(act.mrif_value || 0), inv: Number(s.total_value || 0), mrifCount: Number(act.mrif_count || 0) };
-  f.daysOfStock = ratio > 0 ? 365 / ratio : null;
+  var f = { ratio: ratio, days: days, issued: Number(act.mrif_value || 0), inv: Number(s.total_value || 0), mrifCount: Number(act.mrif_count || 0), vars: vars, custom: custom };
+  var dd = erpRatioEval('overall.invRatio', Object.assign({}, vars, { turnover: ratio }));
+  f.daysOfStock = (dd !== null && dd > 0) ? dd : null;
   var mv = data.movement || [], tot = 0, nm = 0, sl = 0;
   mv.forEach(function(m) {
     var v = Number(m.total_value || 0), k = String(m.movement || '').toUpperCase();
@@ -932,7 +955,7 @@ function mdashTurnoverFacts(data) {
   });
   f.mvTotal = tot; f.noMove = nm; f.slow = sl;
   var calc = (f.inv > 0 && f.issued > 0) ? (f.issued / f.inv) * (365 / days) : 0;
-  f.check = (ratio > 0 && calc > 0 && Math.abs(calc - ratio) / ratio <= 0.15) ? calc : null;
+  f.check = (!custom && ratio > 0 && calc > 0 && Math.abs(calc - ratio) / ratio <= 0.15) ? calc : null;
   return f;
 }
 
@@ -965,18 +988,52 @@ function mdashRenderInvRatioCard(f) {
   var sEl = document.getElementById('mdashKpiInvRatioSub');
   var pill = document.getElementById('mdashInvRatioPill');
   if (!vEl) return;
+  var S = erpRatioGet(), months = S.overall.invUnit === 'months';
   if (f.daysOfStock) {
-    animateValue(vEl, 0, Math.round(f.daysOfStock), 1200, false);
+    vEl.setAttribute('data-unit', months ? 'months' : 'days');
+    if (months) {
+      vEl.textContent = (f.daysOfStock / 30.4).toFixed(1);
+      sEl.textContent = '≈ ' + Math.round(f.daysOfStock).toLocaleString() + ' days of stock on hand';
+    } else {
+      animateValue(vEl, 0, Math.round(f.daysOfStock), 1200, false);
+      sEl.textContent = '≈ ' + (f.daysOfStock / 30.4).toFixed(1) + ' months of stock on hand';
+    }
     vEl.classList.add('has-days');
     var band = mdashTurnoverBand(f.ratio).b;
-    sEl.textContent = '≈ ' + (f.daysOfStock / 30.4).toFixed(1) + ' months of stock on hand';
     pill.innerHTML = '<span class="tp tp-' + band.cls + '">' + band.label + '</span>' +
-      '<span class="tp-days">= 365 ÷ ' + f.ratio.toFixed(1) + '× turnover</span>';
+      (erpRatioIsDefault('overall.invRatio')
+        ? '<span class="tp-days">= ' + S.dpy + ' ÷ ' + f.ratio.toFixed(1) + '× turnover</span>'
+        : '<span class="tp-days">custom formula</span>');
   } else {
     vEl.textContent = '—'; vEl.classList.remove('has-days');
-    sEl.textContent = 'days of stock on hand';
+    sEl.textContent = months ? 'months of stock on hand' : 'days of stock on hand';
     pill.innerHTML = '<span class="tp-days">Not enough issuance data in this period</span>';
   }
+}
+
+// Kapag custom ang formula: ipakita ang mismong formula at ang halaga ng bawat variable (hindi yung default na step-by-step)
+function mdashFormulaSection(kind, f) {
+  var S = erpRatioGet(), peso = mdashPesoFmt, v = f.vars || {};
+  var expr = kind === 'turnover' ? S.overall.turnover : S.overall.invRatio;
+  var names = kind === 'turnover' ? ERP_RATIO_VARS['overall.turnover'] : ERP_RATIO_VARS['overall.invRatio'];
+  var meaning = {
+    issued: ['Value issued to production (MRIF) in the selected period', peso(v.issued)],
+    inv: ['Total value of inventory on hand', peso(v.inv)],
+    invActive: ['Inventory value of items that have recorded usage only', peso(v.invActive)],
+    usageMo: ['Average monthly usage value (Σ Ave/Mo × unit cost)', peso(v.usageMo)],
+    days: ['Days in the selected period', String(v.days)],
+    dpy: ['Days per year (setting)', String(v.dpy)],
+    turnover: ['Turnover Ratio (card on the left)', f.ratio.toFixed(2) + '×']
+  };
+  var used = names.filter(function(n) { return new RegExp('\\b' + n + '\\b').test(expr); });
+  var rows = used.map(function(n) { return '<tr><td><code>' + n + '</code></td><td>' + meaning[n][0] + '</td><td><b>' + meaning[n][1] + '</b></td></tr>'; }).join('');
+  var res = kind === 'turnover'
+    ? (f.ratio > 0 ? f.ratio.toFixed(2) + '× per year' : '—')
+    : (f.daysOfStock ? Math.round(f.daysOfStock).toLocaleString() + ' days (≈ ' + (f.daysOfStock / 30.4).toFixed(1) + ' months)' : '—');
+  return '<div class="to-sec"><h6>Formula in use <small class="text-muted">(set in Ratio Settings' + (erpRatioIsPreview() ? ' · preview, not saved yet' : '') + ')</small></h6>' +
+    '<div class="to-callout"><code style="font-size:1rem;">' + erpEsc(expr) + '</code></div>' +
+    '<table class="to-tbl mt-2"><thead><tr><th>Variable</th><th>Meaning</th><th>Current value</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<div class="to-step result mt-2"><div class="num"><i class="bi bi-check-lg"></i></div><div><div class="tt">Result on the dashboard</div><div class="vv">' + res + '</div></div></div></div>';
 }
 
 function mdashShowInventoryRatioInfo() {
@@ -986,10 +1043,11 @@ function mdashShowInventoryRatioInfo() {
   var bi = has ? mdashTurnoverBand(f.ratio) : { i: -1, b: null };
   var d = has ? f.daysOfStock : 0;
   var period = erpEsc(mdashPeriodLabel());
+  var I = mdashBandInfo(), DPY = I.dpy, r0 = Math.round;
   var pos = 0;
-  if (has) pos = d < 46 ? d / 46 * 25 : d < 91 ? 25 + (d - 46) / 45 * 25 : d < 183 ? 50 + (d - 91) / 92 * 25 : Math.min(100, 75 + (d - 183) / 182 * 25);
+  if (has) pos = d < I.d1 ? d / I.d1 * 25 : d < I.d2 ? 25 + (d - I.d1) / (I.d2 - I.d1) * 25 : d < I.d3 ? 50 + (d - I.d2) / (I.d3 - I.d2) * 25 : Math.min(100, 75 + (d - I.d3) / I.d3 * 25);
   var B = MDASH_TURNOVER_BANDS;
-  var scale = [ { b: B[3], rng: '< 46 days', idx: 3 }, { b: B[2], rng: '46 – 91 days', idx: 2 }, { b: B[1], rng: '91 – 183 days', idx: 1 }, { b: B[0], rng: '> 183 days', idx: 0 } ];
+  var scale = [ { b: B[3], rng: '< ' + r0(I.d1) + ' days', idx: 3 }, { b: B[2], rng: r0(I.d1) + ' – ' + r0(I.d2) + ' days', idx: 2 }, { b: B[1], rng: r0(I.d2) + ' – ' + r0(I.d3) + ' days', idx: 1 }, { b: B[0], rng: '> ' + r0(I.d3) + ' days', idx: 0 } ];
   var html = '';
 
   html += '<div class="to-hero blue"><div class="to-hero-n">' + (has ? Math.round(d) + '<small> days</small>' : '—') + '</div>' +
@@ -1003,11 +1061,12 @@ function mdashShowInventoryRatioInfo() {
     '<ul><li>Our warehouse is the <b>tank</b></li><li>Our daily usage is the <b>fuel burned per day</b></li><li>Inventory Ratio is the <b>number of days before the tank is empty</b></li></ul>' +
     '<b>Fewer days = stock moves fast. More days = stock sits in the warehouse and ties up cash.</b></div></div>';
 
+  if (!erpRatioIsDefault('overall.invRatio')) html += mdashFormulaSection('inv', f); else
   html += '<div class="to-sec"><h6>How the number is worked out</h6><div class="to-steps">' +
     '<div class="to-step"><div class="num">1</div><div><div class="tt">Start with the Turnover Ratio</div><div class="vv">' + (has ? f.ratio.toFixed(1) + '× per year' : '—') + '</div>' +
     '<div class="dd">How many times a year our stock is used up and refilled (' + period + ', ' + f.days + '-day basis)</div></div></div>' +
-    '<div class="to-step"><div class="num">2</div><div><div class="tt">Divide the days in a year by it</div><div class="vv">' + (has ? '365 ÷ ' + f.ratio.toFixed(1) + ' = ' + Math.round(d) + ' days' : '—') + '</div>' +
-    '<div class="dd">If stock is refilled ' + (has ? f.ratio.toFixed(1) : 'N') + ' times in 365 days, each "tankful" lasts 365 ÷ ' + (has ? f.ratio.toFixed(1) : 'N') + ' days</div></div></div>' +
+    '<div class="to-step"><div class="num">2</div><div><div class="tt">Divide the days in a year by it</div><div class="vv">' + (has ? DPY + ' ÷ ' + f.ratio.toFixed(1) + ' = ' + Math.round(d) + ' days' : '—') + '</div>' +
+    '<div class="dd">If stock is refilled ' + (has ? f.ratio.toFixed(1) : 'N') + ' times in ' + DPY + ' days, each "tankful" lasts ' + DPY + ' ÷ ' + (has ? f.ratio.toFixed(1) : 'N') + ' days</div></div></div>' +
     '<div class="to-step result"><div class="num"><i class="bi bi-check-lg"></i></div><div><div class="tt">Result on the dashboard</div><div class="vv">' + (has ? Math.round(d) + ' days (≈ ' + (d / 30.4).toFixed(1) + ' months)' : '—') + '</div></div></div>' +
     '</div><div class="to-note">Same thing, written another way: Inventory ÷ average daily usage.</div></div>';
 
@@ -1060,13 +1119,20 @@ function mdashPesoFmt(v) { return (typeof erpPeso === 'function') ? erpPeso(v) :
 var MDASH_BAND_COLORS = { danger: '#ef4444', warn: '#f59e0b', ok: '#22c55e', fast: '#3b82f6' };
 
 // Reference table: turnover ↔ days of stock ↔ status. Highlights the current row.
+// Saklaw ng bawat status batay sa thresholds at days-per-year ng Ratio Settings
+function mdashBandInfo() {
+  var S = erpRatioGet(), a = S.bands[0], b = S.bands[1], c = S.bands[2], dpy = S.dpy;
+  var d1 = dpy / c, d2 = dpy / b, d3 = dpy / a;
+  var mo = function(d) { return (Math.round(d / 30.4 * 10) / 10); };
+  return { a: a, b: b, c: c, dpy: dpy, d1: d1, d2: d2, d3: d3, mo: mo };
+}
 function mdashRefTable(curIdx, firstCol) {
-  var B = MDASH_TURNOVER_BANDS;
+  var B = MDASH_TURNOVER_BANDS, I = mdashBandInfo(), r0 = Math.round;
   var rows = [
-    { i: 3, t: '8× or more', d: 'less than 46 days' },
-    { i: 2, t: '4× to 8×',   d: '46 to 91 days (1.5 to 3 months)' },
-    { i: 1, t: '2× to 4×',   d: '91 to 183 days (3 to 6 months)' },
-    { i: 0, t: 'below 2×',   d: 'more than 183 days (over 6 months)' }
+    { i: 3, t: I.c + '× or more',          d: 'less than ' + r0(I.d1) + ' days' },
+    { i: 2, t: I.b + '× to ' + I.c + '×',  d: r0(I.d1) + ' to ' + r0(I.d2) + ' days (' + I.mo(I.d1) + ' to ' + I.mo(I.d2) + ' months)' },
+    { i: 1, t: I.a + '× to ' + I.b + '×',  d: r0(I.d2) + ' to ' + r0(I.d3) + ' days (' + I.mo(I.d2) + ' to ' + I.mo(I.d3) + ' months)' },
+    { i: 0, t: 'below ' + I.a + '×',       d: 'more than ' + r0(I.d3) + ' days (over ' + I.mo(I.d3) + ' months)' }
   ];
   return '<table class="to-tbl"><thead><tr><th>' + (firstCol || 'Turnover Ratio') + '</th><th>Stock lasts about</th><th>Status</th></tr></thead><tbody>' +
     rows.map(function(r) {
@@ -1103,6 +1169,7 @@ function mdashShowTurnoverInfo() {
     '<b>More refills = stock is moving and our money is working. Few refills = stock is sitting and our money is stuck.</b></div></div>';
 
   // ── Steps
+  if (f.custom) { html += mdashFormulaSection('turnover', f); } else {
   html += '<div class="to-sec"><h6>How the number is worked out</h6><div class="to-steps">';
   if (f.check) {
     var raw = f.issued / f.inv;
@@ -1124,6 +1191,7 @@ function mdashShowTurnoverInfo() {
       '<div class="dd">Exact figure is calculated by the system.</div></div></div>';
   }
   html += '</div></div>';
+  }
 
   // ── Meaning table
   html += '<div class="to-sec"><h6>What does the number mean?</h6>' + mdashRefTable(bi.i, 'Turnover Ratio') +
@@ -1152,3 +1220,13 @@ function mdashShowTurnoverInfo() {
   mdashOpenInfoModal('turnoverInfoModal', 'Turnover Ratio: how fast does our inventory move?', 'bi-arrow-repeat', html);
 }
 window.mdashShowTurnoverInfo = mdashShowTurnoverInfo;
+
+
+// ═══════════════════════════════════════════════════════════
+// RATIO SETTINGS CHANGED — i-update agad ang cards at tables (walang reload)
+// ═══════════════════════════════════════════════════════════
+window.addEventListener('erp-ratio-changed', function() {
+  if (typeof _mdash === 'undefined' || !_mdash.data) return;
+  try { mdashRenderTurnoverCard(_mdash.data); } catch (e) { console.warn('[Ratio] card render', e); }
+  try { mdashApplySearchFilter(); mdashRenderTable(); } catch (e) { console.warn('[Ratio] table render', e); }
+});
