@@ -324,15 +324,15 @@ function erpRenderMovementChart(stats) {
   var isVal = _erpMovMode === 'value';
   var field = isVal ? 'v' : 'n';
   var classes = ['A', 'B', 'C', 'N/A'];
-  var datasets = classes.map(function(k) {
-    return {
-      label: k === 'N/A' ? 'No ABC class' : 'Class ' + k,
-      data: moves.map(function(m) { return matrix[m][k][field]; }),
-      backgroundColor: ERP_ABC_COLORS[k],
-      borderRadius: 4,
-      borderSkipped: false
-    };
-  }).filter(function(ds) { return ds.data.some(function(x) { return x !== 0; }); });
+  // One bar per movement speed, colored by SPEED so it is not mistaken for the ABC chart.
+  // The ABC split is shown in the tooltip instead of as stacked colors.
+  var SPEED_COLORS = { 'FAST MOVING': '#10b981', 'MODERATE MOVING': '#38bdf8', 'SLOW MOVING': '#6366f1', 'NO MOVEMENT': '#1e3a5f', 'UNCLASSIFIED': '#cbd5e1' };
+  var datasets = [{
+    label: isVal ? 'Stock value' : 'Items',
+    data: moves.map(function(m) { return classes.reduce(function(sum, k) { return sum + matrix[m][k][field]; }, 0); }),
+    backgroundColor: moves.map(function(m) { return SPEED_COLORS[m] || '#94a3b8'; }),
+    borderRadius: 6
+  }];
 
   function totalOf(i, f) { return classes.reduce(function(s, k) { return s + matrix[moves[i]][k][f]; }, 0); }
   var grandV = moves.reduce(function(s, m, i) { return s + totalOf(i, 'v'); }, 0) || 1;
@@ -347,22 +347,25 @@ function erpRenderMovementChart(stats) {
       maintainAspectRatio: false,
       layout: { padding: { top: 34 } },
       plugins: {
-        legend: { display: true, position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, font: { size: 10 } } },
+        legend: { display: false },
         tooltip: { callbacks: {
           title: function(items) { return (pretty[moves[items[0].dataIndex]] || moves[items[0].dataIndex]) + (moves[items[0].dataIndex].indexOf('MOVEMENT') === -1 && moves[items[0].dataIndex] !== 'UNCLASSIFIED' ? ' moving' : ''); },
           label: function(ctx) {
-            return ' ' + ctx.dataset.label + ': ' + (isVal ? erpPeso(ctx.parsed.y) : ctx.parsed.y.toLocaleString() + ' items');
-          },
-          footer: function(items) {
-            var i = items[0].dataIndex;
-            return isVal ? 'Total: ' + erpPeso(totalOf(i, 'v')) + ' (' + Math.round(totalOf(i, 'v') / grandV * 100) + '% of all stock value)'
-                         : 'Total: ' + totalOf(i, 'n').toLocaleString() + ' items (' + Math.round(totalOf(i, 'n') / grandN * 100) + '% of all items)';
+            var i = ctx.dataIndex, m = moves[i], lines = [];
+            lines.push(isVal ? erpPeso(totalOf(i, 'v')) + '  (' + Math.round(totalOf(i, 'v') / grandV * 100) + '% of all stock value)'
+                             : totalOf(i, 'n').toLocaleString() + ' items  (' + Math.round(totalOf(i, 'n') / grandN * 100) + '% of all items)');
+            lines.push('ABC split of this group:');
+            ['A', 'B', 'C', 'N/A'].forEach(function(k) {
+              var x = matrix[m][k][field];
+              if (x) lines.push('   ' + (k === 'N/A' ? 'No ABC class' : 'Class ' + k) + ': ' + (isVal ? erpPeso(x) : x.toLocaleString() + ' items'));
+            });
+            return lines;
           }
         } }
       },
       scales: {
-        x: { stacked: true, ticks: { font: { size: 10, weight: '600' } } },
-        y: { stacked: true, beginAtZero: true,
+        x: { ticks: { font: { size: 10, weight: '600' } } },
+        y: { beginAtZero: true,
              title: { display: true, text: isVal ? 'Stock value (₱)' : 'Number of items', font: { size: 10, weight: '600' } },
              ticks: { callback: function(v) { return isVal ? erpPesoShort(v) : v.toLocaleString(); }, font: { size: 10 } } }
       }
@@ -373,6 +376,8 @@ function erpRenderMovementChart(stats) {
     })]
   });
 
+  var sub = document.getElementById('movSub');
+  if (sub) sub.textContent = 'Grouped by how fast items move (not by value rank). Same ' + erpPesoShort(grandV) + ' total as the ABC chart. Hover a bar to see its ABC split.';
   var note = document.getElementById('movNote');
   if (note) {
     var ni = moves.indexOf('NO MOVEMENT');
