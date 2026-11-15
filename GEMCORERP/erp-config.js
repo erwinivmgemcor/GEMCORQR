@@ -124,19 +124,19 @@ function erpNum(n) {
 //
 // Defaults = eksaktong dating formula:
 //   Per item : Turnover = (Ave/Mo × 12) ÷ On-Hand ;  Inventory Ratio (days) = days-per-year ÷ Turnover
-//   Dashboard: Turnover = computed by the server (issued ÷ inventory × 365/days) ; Inventory Ratio = 365 ÷ Turnover
+//   Dashboard: Turnover = computed by the server (stock-ledger stock-out value ÷ current inventory × 365/days) ; Inventory Ratio = 365 ÷ Turnover
 // ═══════════════════════════════════════════════════════════
 var ERP_RATIO_LS_KEY = 'erp_ratio_settings_v1';
 var ERP_RATIO_DEFAULTS = {
   dpy: 365,
   bands: [2, 4, 8],
-  overall: { tMode: 'system', turnover: 'issued / inv * (dpy / days)', invRatio: 'dpy / turnover', invUnit: 'days' },
+  overall: { tMode: 'system', turnover: 'stockOut / inv * (dpy / days)', invRatio: 'dpy / turnover', invUnit: 'days' },
   item:    { turnover: 'aveMo * 12 / onHand', invRatio: 'dpy / turnover' }
 };
 // Mga variable na puwedeng gamitin sa bawat formula
 var ERP_RATIO_VARS = {
-  'overall.turnover': ['issued', 'inv', 'invActive', 'usageMo', 'days', 'dpy'],
-  'overall.invRatio': ['issued', 'inv', 'invActive', 'usageMo', 'days', 'dpy', 'turnover'],
+  'overall.turnover': ['stockOut', 'issued', 'returned', 'inv', 'invActive', 'usageMo', 'days', 'dpy'],
+  'overall.invRatio': ['stockOut', 'issued', 'returned', 'inv', 'invActive', 'usageMo', 'days', 'dpy', 'turnover'],
   'item.turnover':    ['onHand', 'aveMo', 'dpy'],
   'item.invRatio':    ['onHand', 'aveMo', 'dpy', 'turnover']
 };
@@ -144,7 +144,9 @@ var ERP_RATIO_FUNCS = { min: Math.min, max: Math.max, abs: Math.abs, sqrt: Math.
 
 // Plain-language na pangalan ng bawat variable (ito ang makikita ng users, hindi ang code name)
 var ERP_RATIO_NAMES = {
+  stockOut:  'Stock-out value (stock ledger)',
   issued:    'Issued value (MRIF)',
+  returned:  'Returned value (MRS)',
   inv:       'Inventory value',
   invActive: 'Inventory value (items with usage only)',
   usageMo:   'Average monthly usage value',
