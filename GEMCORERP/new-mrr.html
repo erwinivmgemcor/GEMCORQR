@@ -257,19 +257,20 @@ tr.selected-item-row {
       <table class="erp-table erp-compact-table" id="itemsTable">
         <thead>
           <tr>
-            <th style="width:5%">#</th>
-            <th style="width:20%">Item Code</th>
-            <th style="width:25%">Description</th>
-            <th style="width:9%" class="text-center">Req Qty</th>
-            <th style="width:9%" class="text-center">ATL Qty</th>
-            <th style="width:8%" class="text-center">Unit</th>
-            <th style="width:14%">Remarks</th>
+            <th style="width:4%">#</th>
+            <th style="width:17%">Item Code</th>
+            <th style="width:21%">Description</th>
+            <th style="width:8%" class="text-center">Req Qty</th>
+            <th style="width:8%" class="text-center">ATL Qty</th>
+            <th style="width:7%" class="text-center">Unit</th>
+            <th style="width:13%" class="text-center" title="Required. Updates the Inventory Master / Stock Monitor unit cost. NOT printed on the MRR.">Unit Cost (₱) <span class="text-danger">*</span></th>
+            <th style="width:16%">Remarks</th>
             <th style="width:6%"></th>
           </tr>
         </thead>
         <tbody id="itemsBody">
           <tr>
-            <td colspan="8" class="text-center text-muted py-4">
+            <td colspan="9" class="text-center text-muted py-4">
               <i class="bi bi-inbox fs-3 d-block mb-2 opacity-50"></i>
               Click "+ Add Item", or enter a PO No. / PRF No. above to load items.
             </td>
@@ -277,6 +278,7 @@ tr.selected-item-row {
         </tbody>
       </table>
     </div>
+    <div class="small text-muted mt-2 mb-1"><i class="bi bi-info-circle me-1"></i><strong>Unit Cost</strong> is required for every item received. It updates the <strong>Inventory Master / Stock Monitor</strong> to the latest cost (or sets it if the item has none yet) and is <strong>not printed</strong> on the MRR.</div>
     <div class="erp-add-item-bar">
       <button class="btn btn-primary" onclick="addItemRow()">
         <i class="bi bi-plus-lg me-1"></i>Add Item
