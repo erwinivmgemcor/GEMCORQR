@@ -311,7 +311,7 @@ function erpSetMovMode(mode) {
 window.erpSetMovMode = erpSetMovMode;
 
 function erpRenderMovementChart(stats) {
-  // One horizontal bar per ABC class. Bar length = the same class total as the ABC chart on the left.
+  // One vertical stacked column per ABC class. Column height = the same class total as the ABC chart on the left.
   // Segment colors = movement speed (own palette, different from the ABC colors), so the two charts reconcile
   // and the colors are never confused.
   var canvas = document.getElementById('chartMovement');
@@ -353,25 +353,25 @@ function erpRenderMovementChart(stats) {
   var plugin = {
     id: 'erpSpeedLabels',
     afterDatasetsDraw: function(chart) {
-      var ctx = chart.ctx, xs = chart.scales.x;
-      ctx.save(); ctx.textBaseline = 'middle';
+      var ctx = chart.ctx, ys = chart.scales.y;
+      ctx.save(); ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
       chart.data.datasets.forEach(function(ds, di) {
         var meta = chart.getDatasetMeta(di);
         meta.data.forEach(function(bar, i) {
-          var val = Number(ds.data[i] || 0), w = Math.abs(bar.x - bar.base);
-          if (!val || w < 46) return;
+          var val = Number(ds.data[i] || 0), h = Math.abs(bar.base - bar.y);
+          if (!val || h < 16) return;                                   // segment too thin for a label
           ctx.fillStyle = DARK_TEXT[moves[di]] ? '#0f172a' : '#ffffff';
-          ctx.font = '700 10px Inter, sans-serif'; ctx.textAlign = 'center';
-          ctx.fillText(main(val), (bar.x + bar.base) / 2, bar.y);
+          ctx.font = '700 10px Inter, sans-serif';
+          ctx.fillText(main(val), bar.x, (bar.y + bar.base) / 2);
         });
       });
       var m0 = chart.getDatasetMeta(0);
       classes.forEach(function(k, i) {
         var bar = m0.data[i]; if (!bar) return;
-        var tot = rowTot(k, field), x = xs.getPixelForValue(tot) + 8;
-        ctx.fillStyle = erpChartText(); ctx.textAlign = 'left';
-        ctx.font = '700 11px Inter, sans-serif'; ctx.fillText(main(tot), x, bar.y - 6);
-        ctx.font = '500 10px Inter, sans-serif'; ctx.fillText(Math.round(tot / grand * 100) + (isVal ? '% of value' : '% of items'), x, bar.y + 7);
+        var tot = rowTot(k, field), y = ys.getPixelForValue(tot) - 7;
+        ctx.fillStyle = erpChartText(); ctx.textBaseline = 'alphabetic';
+        ctx.font = '700 11px Inter, sans-serif'; ctx.fillText(main(tot), bar.x, y - 12);
+        ctx.font = '500 10px Inter, sans-serif'; ctx.fillText(Math.round(tot / grand * 100) + (isVal ? '% of value' : '% of items'), bar.x, y);
       });
       ctx.restore();
     }
@@ -381,10 +381,10 @@ function erpRenderMovementChart(stats) {
     type: 'bar',
     data: { labels: labels, datasets: datasets },
     options: {
-      indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
-      layout: { padding: { right: 78 } },
+      layout: { padding: { top: 36 } },
+      datasets: { bar: { barPercentage: 0.62, categoryPercentage: 0.9 } },
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: {
@@ -397,9 +397,9 @@ function erpRenderMovementChart(stats) {
         } }
       },
       scales: {
-        x: { stacked: true, beginAtZero: true, ticks: { callback: function(v) { return isVal ? erpPesoShort(v) : Number(v).toLocaleString(); }, font: { size: 10 }, maxTicksLimit: 5 },
-             title: { display: true, text: isVal ? 'Stock value (₱)' : 'Number of items', font: { size: 10, weight: '600' } } },
-        y: { stacked: true, ticks: { font: { size: 11, weight: '600' } }, grid: { display: false } }
+        x: { stacked: true, ticks: { font: { size: 11, weight: '600' } }, grid: { display: false } },
+        y: { stacked: true, beginAtZero: true, title: { display: true, text: isVal ? 'Stock value (₱)' : 'Number of items', font: { size: 10, weight: '600' } },
+             ticks: { callback: function(v) { return isVal ? erpPesoShort(v) : Number(v).toLocaleString(); }, font: { size: 10 }, maxTicksLimit: 6 } }
       }
     },
     plugins: [plugin]
@@ -407,7 +407,7 @@ function erpRenderMovementChart(stats) {
 
   var title = document.getElementById('movTitle'); if (title) title.textContent = 'ABC Class × Movement Speed';
   var subEl = document.getElementById('movSub');
-  if (subEl) subEl.textContent = 'Each bar is one ABC class, with the same total as the ABC chart. The colors show how fast that stock moves. Everything adds up to ' + (isVal ? erpPesoShort(grandV) : grandN.toLocaleString() + ' items') + '.';
+  if (subEl) subEl.textContent = 'Each column is one ABC class, with the same total as the ABC chart. The colors show how fast that stock moves. Everything adds up to ' + (isVal ? erpPesoShort(grandV) : grandN.toLocaleString() + ' items') + '.';
   var note = document.getElementById('movNote');
   if (note) {
     var legend = '<div class="sp-legend">' + moves.map(function(m) {
