@@ -110,7 +110,7 @@
     $('mmChartSub').textContent = (S.cat || 'All categories') + (S.q ? ' · search: "' + S.q + '"' : '') + ' · ' + (S.measure === 'value' ? 'Value (₱)' : 'Quantity');
     var host = $('mmChart'), w = host.clientWidth || 900;
     host.innerHTML = '<div class="tr-leg mb-1" style="font-size:.74rem;color:#4b5563;display:flex;gap:14px"><span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#ef4444;margin-right:4px"></i>Issued (MRIF)</span><span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#10b981;margin-right:4px"></i>Received (MRR)</span></div>' +
-      window.erpTrendSvgBars(cm, { w: w, h: 170, fmt: f, tip: S.measure === 'value' ? fmtVal : fmtQty });
+      window.erpTrendSvgBars(cm, { w: w, h: 320, big: true, labels: true, barFmt: S.measure === 'value' ? short : window.erpCompactNum, fmt: f, tip: S.measure === 'value' ? fmtVal : fmtQty });
   }
   function kpi(l, v, s) { return '<div class="mm-kpi"><div class="l">' + esc(l) + '</div><div class="v">' + esc(v) + '</div><div class="s">' + esc(s) + '</div></div>'; }
 
