@@ -456,11 +456,11 @@ function renderItems() {
           'oninput="updateItem(' + idx + ', \'unit\', this.value)">' +
       '</td>' +
       '<td>' +
-        '<input type="number" inputmode="decimal" class="form-control form-control-sm text-end item-cost-input" ' +
+        '<input type="text" inputmode="decimal" autocomplete="off" class="form-control form-control-sm text-end item-cost-input" ' +
           'id="mrrItemCost' + idx + '" ' +
-          'value="' + erpEsc(it.unitCost === undefined || it.unitCost === null ? '' : it.unitCost) + '" ' +
-          'min="0" step="0.0001" placeholder="0.00" ' +
-          'oninput="updateItem(' + idx + ', \'unitCost\', this.value); _mrrCostHint(' + idx + ')">' +
+          'value="' + erpEsc(_mrrGroup(it.unitCost)) + '" ' +
+          'placeholder="0.00" ' +
+          'oninput="_mrrCostInput(this, ' + idx + ')" onblur="_mrrCostBlur(this, ' + idx + ')">' +
         '<div class="small text-muted text-end" id="mrrCostHint' + idx + '" style="font-size:.7rem;line-height:1.1;margin-top:2px;"></div>' +
       '</td>' +
       '<td>' +
@@ -491,6 +491,41 @@ function _mrrParseCost(v) {
 }
 function _mrrPeso(n) {
   return '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+}
+
+// ── Auto-comma while typing (10564 → 10,564). State keeps the plain number without commas. ──
+function _mrrCleanNum(v) {
+  var raw = String(v == null ? '' : v).replace(/[^0-9.]/g, '');
+  var d = raw.indexOf('.');
+  if (d !== -1) raw = raw.slice(0, d + 1) + raw.slice(d + 1).replace(/\./g, '').slice(0, 4);   // one dot, max 4 decimals
+  return raw;
+}
+function _mrrGroup(v) {
+  var raw = _mrrCleanNum(v), d = raw.indexOf('.');
+  var ip = d === -1 ? raw : raw.slice(0, d), fp = d === -1 ? '' : raw.slice(d);
+  ip = ip.replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return ip + fp;
+}
+function _mrrCostInput(el, idx) {
+  var pos = el.selectionStart == null ? el.value.length : el.selectionStart;
+  var sig = el.value.slice(0, pos).replace(/[^0-9.]/g, '').length;        // digits/dot before the caret
+  var out = _mrrGroup(el.value);
+  el.value = out;
+  var i = 0, n = 0;
+  if (sig > 0) { for (; i < out.length; i++) { if (/[0-9.]/.test(out.charAt(i))) n++; if (n === sig) { i++; break; } } }
+  try { el.setSelectionRange(i, i); } catch (e) {}
+  updateItem(idx, 'unitCost', _mrrCleanNum(out));
+  _mrrCostHint(idx);
+}
+function _mrrCostBlur(el, idx) {      // 10,564 → 10,564.00
+  var raw = _mrrCleanNum(el.value);
+  if (!raw || raw === '.') { el.value = ''; updateItem(idx, 'unitCost', ''); return; }
+  var num = Number(raw);
+  if (isNaN(num)) return;
+  var dec = (raw.split('.')[1] || '').length;
+  el.value = num.toLocaleString('en-US', { minimumFractionDigits: Math.max(2, dec), maximumFractionDigits: 4 });
+  updateItem(idx, 'unitCost', String(num));
+  _mrrCostHint(idx);
 }
 
 // Show "Current: ₱x" (or "No cost yet") under the input, and flag big changes
