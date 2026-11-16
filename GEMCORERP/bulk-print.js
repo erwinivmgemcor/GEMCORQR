@@ -29,7 +29,7 @@
     st.textContent =
       '.erp-bulk-cb{width:16px;height:16px;cursor:pointer;accent-color:#4f46e5;vertical-align:middle;}' +
       '.erp-bulk-cb:disabled{cursor:not-allowed;opacity:.35;}' +
-      '.erp-table th.col-check,.erp-table td.col-check{width:38px;text-align:center;padding-left:8px;padding-right:4px;}' +
+      '.erp-table th.col-check,.erp-table td.col-check{width:1%;min-width:38px;max-width:44px;white-space:nowrap;text-align:center;padding-left:8px;padding-right:4px;}' +
       'tr.erp-bulk-selected{background:#eef2ff !important;}' +
       '.erp-bulk-bar{display:none;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 16px;background:#eef2ff;border-bottom:1px solid #c7d2fe;font-size:.85rem;color:#312e81;}' +
       '.erp-bulk-bar .erp-bulk-count{font-weight:700;}' +
