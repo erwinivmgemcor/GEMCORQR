@@ -58,7 +58,7 @@ async function mrifListLoad() {
     return;
   }
   
-  tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
+  tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
     '<div class="erp-spinner"></div>' +
     '<div class="mt-2">Loading MRIF documents...</div></td></tr>';
   
@@ -90,7 +90,7 @@ async function mrifListLoad() {
   } catch(err) {
     console.error('[mrifListLoad]', err);
     if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="8" class="erp-empty text-danger">' +
+      tbody.innerHTML = '<tr><td colspan="9" class="erp-empty text-danger">' +
         '<i class="bi bi-exclamation-triangle-fill"></i> Failed: ' + erpEsc(err.message) + '</td></tr>';
     }
   }
@@ -136,6 +136,7 @@ function mrifListComputeKPIs() {
 function mrifListRender() {
   var tbody = document.getElementById('mrifTableBody');
   if (!tbody) return;
+  erpBulkInit({ docType: 'MRIF', tbodyId: 'mrifTableBody', getFiltered: function() { return _mrifFilteredDocs; }, getPage: function() { return _mrifFilteredDocs.slice((_mrifCurrentPage - 1) * _mrifPageSize, _mrifCurrentPage * _mrifPageSize); } });
   
   var userRole = localStorage.getItem('ivm_userRole') || '';
   var canEdit = (userRole === 'warehouse');
@@ -176,9 +177,10 @@ function mrifListRender() {
   if (elBtnNext) elBtnNext.disabled = (end >= total);
   
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No MRIF documents found.</td></tr>';
+    erpBulkSync();
     return;
   }
   
@@ -197,7 +199,8 @@ function mrifListRender() {
     var editable = canEdit && (statusUpper === 'PENDING' || statusUpper === 'PARTIAL' || statusUpper === 'COMPLETED');
     var editTitle = statusUpper === 'COMPLETED' ? 'Edit (items, qty, details) — Warehouse' : 'Edit (Warehouse)';
     
-    html += '<tr>' +
+    html += '<tr' + erpBulkRowClass(d) + '>' +
+      erpBulkCellHtml(d) +
       '<td><code>' + erpEsc(d.doc_no) + '</code></td>' +
       '<td>' + erpEsc(dateStr) + '</td>' +
       '<td>' + erpEsc(d.requestor || '—') + '</td>' +
@@ -234,6 +237,7 @@ function mrifListRender() {
       '</tr>';
   });
   tbody.innerHTML = html;
+  erpBulkSync();
 }
 
 function mrifListPrint(docNo) {
