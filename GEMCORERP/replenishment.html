@@ -284,6 +284,11 @@ tr.row-stale { border-left-color:#dc2626; background:#fff7f7; color:#475569; }
       <select id="rpLocationFilter" class="erp-select" onchange="rpOnFilterChange()">
         <option value="">All Locations</option>
       </select>
+      <select id="rpClassFilter" class="erp-select" onchange="rpOnClassChange()" title="STD = Standard stock (usage in 5 or more months) — ito ang nire-replenish. PROJ = Project stock (usage in fewer than 5 months) — kadalasan hindi na kailangang i-replenish.">
+        <option value="STD" selected>Class: STD only</option>
+        <option value="">Class: STD + PROJ</option>
+        <option value="PROJ">Class: PROJ only</option>
+      </select>
       <select id="rpActiveFilter" class="erp-select" onchange="rpOnActiveChange()" title="How many months the item actually had usage (Active Months)">
         <option value="">Active months: any</option>
         <option value="ge:1">Active ≥ 1 month</option>
@@ -310,6 +315,7 @@ tr.row-stale { border-left-color:#dc2626; background:#fff7f7; color:#475569; }
     </div>
     <div class="rp-chips" id="rpChips"></div>
     <div class="rp-hidden-note" id="rpHiddenNote"></div>
+    <div class="rp-hidden-note" id="rpClassNote"></div>
   </div>
 
   <!-- TABLE -->
@@ -356,6 +362,7 @@ tr.row-stale { border-left-color:#dc2626; background:#fff7f7; color:#475569; }
             <th style="width:5%" class="text-end" data-sort="ave">Ave/Mo</th>
             <th style="width:5%" class="text-center" data-sort="cover" title="Available ÷ arawang konsumo">Cover</th>
             <th style="width:8%" class="text-center" data-sort="active" title="Months with actual usage / movement class">Active Mo.</th>
+            <th style="width:4%" class="text-center" data-sort="cls" title="STD = Standard stock (5+ active months). PROJ = Project stock (below 5 active months).">Class</th>
             <th style="width:5%" class="text-end" data-sort="qneeded">Qty Needed</th>
             <th style="width:7%" class="text-center">On Order</th>
             <th style="width:6%" class="text-end" data-sort="net">Net Needed</th>
@@ -365,7 +372,7 @@ tr.row-stale { border-left-color:#dc2626; background:#fff7f7; color:#475569; }
           </tr>
         </thead>
         <tbody id="rpTableBody">
-          <tr><td colspan="17" class="erp-empty">
+          <tr><td colspan="18" class="erp-empty">
             <div class="erp-spinner"></div>
             <div class="mt-2">Loading replenishment needs...</div>
           </td></tr>
