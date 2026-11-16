@@ -258,6 +258,10 @@ async function imPreview(id) {
       return '<li><code>' + imEsc(m.item) + '</code> → <code>' + imEsc(g.keep) + '</code>: ililipat ang stock na <b>' + imNum(m.on_hand_moved) + '</b></li>';
     }).join('');
     var tables = Object.keys(r.tables || {}).map(function(t) { return '<li><code>' + imEsc(t) + '</code>: ' + imNum(r.tables[t]) + ' row(s) ililipat sa <code>' + imEsc(g.keep) + '</code></li>'; }).join('');
+    var comb = (r.combined || []).map(function(c) {
+      var add = Object.keys(c.added || {}).filter(function(k) { return Number(c.added[k]) !== 0; }).map(function(k) { return imEsc(k) + ' +' + imNum(c.added[k]); }).join(', ');
+      return '<li><code>' + imEsc(c.table) + '</code> (' + imEsc(c.item) + '): pinagsama ang ' + imNum(c.rows) + ' row(s) sa <code>' + imEsc(g.keep) + '</code>' + (add ? ' · idadagdag: <b>' + add + '</b>' : '') + '</li>';
+    }).join('');
     var conflicts = (r.conflicts || []).map(function(c) { return '<li><code>' + imEsc(c.table) + '</code> (' + imEsc(c.item) + '): ' + imEsc(c.why) + '</li>'; }).join('');
     var okBtn = r.can_merge
       ? '<div class="d-flex gap-2 align-items-center flex-wrap mt-2">' +
@@ -272,6 +276,7 @@ async function imPreview(id) {
       '<div>Iiwan: <code>' + imEsc(g.keep) + '</code> · Ide-deactivate: ' + dups.map(function(d) { return '<code>' + imEsc(d) + '</code>'; }).join(', ') + '</div>' +
       '<ul class="mb-1 mt-1">' + (moved || '') + '</ul>' +
       (tables ? '<div class="text-muted">Mga record na ililipat sa code na iiwan:</div><ul class="mb-1">' + tables + '</ul>' : '<div class="text-muted">Walang dokumento / PRF / SOF na gumagamit ng mga code na ito.</div>') +
+      (comb ? '<div class="text-muted">Pinagsasama (idadagdag sa code na iiwan):</div><ul class="mb-1">' + comb + '</ul>' : '') +
       (conflicts ? '<div class="text-danger fw-bold">Conflicts:</div><ul class="text-danger mb-1">' + conflicts + '</ul>' : '') +
       '<div class="text-muted">Mananatili ang lumang stock history ng deactivated na code (para tama ang mga dating ledger).</div>' +
       okBtn + '</div>';
