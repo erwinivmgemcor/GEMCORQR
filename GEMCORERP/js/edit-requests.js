@@ -348,6 +348,7 @@ async function erApprove(reqId) {
     
     erShowToast('✅ Edit request approved', 'success');
     erLoadEditRequests();
+    window.dispatchEvent(new Event('erp-edit-requests-changed')); // refresh sidebar badge
     
   } catch(err) {
     console.error('[erApprove]', err);
@@ -442,6 +443,7 @@ async function erConfirmReject() {
     
     erShowToast('✅ Edit request rejected', 'success');
     erLoadEditRequests();
+    window.dispatchEvent(new Event('erp-edit-requests-changed')); // refresh sidebar badge
     
   } catch(err) {
     console.error('[erConfirmReject]', err);
