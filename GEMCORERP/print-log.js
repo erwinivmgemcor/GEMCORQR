@@ -26,6 +26,19 @@
     } catch (e) { return false; }
   }
 
+  // Log many docs in one request (used by bulk print)
+  async function logMany(docNos, docType) {
+    try {
+      if (!docNos || !docNos.length) return true;
+      var by = me();
+      var res = await fetch(erpUrl('doc_print_log'), {
+        method: 'POST', headers: erpHeaders(),
+        body: JSON.stringify(docNos.map(function (n) { return { doc_no: n, doc_type: docType || null, printed_by: by }; }))
+      });
+      return res.ok;
+    } catch (e) { return false; }
+  }
+
   // doc_no -> { count, by, at } for recent prints (null if the table is not installed)
   async function list() {
     try {
@@ -89,6 +102,6 @@
     };
   }
 
-  window.erpPrintLog = { log: log, list: list, one: one };
+  window.erpPrintLog = { log: log, logMany: logMany, list: list, one: one };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wrap); else wrap();
 })();
