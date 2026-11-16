@@ -16,9 +16,14 @@ var _notifState = {
   refreshInterval: null,
   lastFetchTs: 0,
   fetching: false,
-  hadError: false
+  hadError: false,
+  ov: {},   // per-item read/unread override  { id: { s: 'r'|'u', t: notifTimestamp } }
+  dm: {},   // per-item dismissed (hidden)    { id: { t: notifTimestamp } }
+  nc: { open: false, tab: 'request', q: '', type: '', unreadOnly: false, sel: {}, lastIdx: -1, undo: null }
 };
 
+var NOTIF_MAX_PER_CAT = 100;      // kept in memory per category; the bell dropdown only lists the newest NOTIF_DROPDOWN_MAX
+var NOTIF_DROPDOWN_MAX = 20;
 var NOTIF_REFRESH_MS = 15000;        // while the tab is visible
 var NOTIF_REFRESH_HIDDEN_MS = 30000; // background tabs keep polling so sound alerts still arrive
 
@@ -38,6 +43,8 @@ function initNotifications() {
   }
 
   try { _notifState.tab = localStorage.getItem('ivm_notif_tab') === 'announce' ? 'announce' : 'request'; } catch (e) {}
+  _notifState.ov = nsLoad('ov');
+  _notifState.dm = nsLoad('dm');
 
   // Warehouse: stock & conflict announcements (banner + alerts)
   if ((_notifState.userRole === 'warehouse' || _notifState.userRole === 'production') && !window.erpStockAlerts) {
@@ -103,14 +110,17 @@ async function fetchNotifications() {
       return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
     });
     // Cap each category separately so a flood of stock alerts can never push requests out of the list
-    var reqs = notifications.filter(function(n) { return notifCategory(n) === 'request'; }).slice(0, 20);
-    var anns = notifications.filter(function(n) { return notifCategory(n) === 'announce'; }).slice(0, 20);
+    // (dismissed items are hidden here, after the alert pass above, so they can never re-trigger a sound)
+    var visible = notifications.filter(function(n) { return !isNotifDismissed(n); });
+    var reqs = visible.filter(function(n) { return notifCategory(n) === 'request'; }).slice(0, NOTIF_MAX_PER_CAT);
+    var anns = visible.filter(function(n) { return notifCategory(n) === 'announce'; }).slice(0, NOTIF_MAX_PER_CAT);
     _notifState.notifications = reqs.concat(anns);
     computeUnreadCount(_notifState.notifications);
     _notifState.lastFetchTs = Date.now();
 
     renderBell();
     renderDropdown();
+    if (_notifState.nc.open) ncRender();
 
     console.log('[Notifications] Fetched', notifications.length, 'notifications · Unread:', _notifState.unreadCount);
 
@@ -248,13 +258,38 @@ function notifCategory(n) {
   return String(n.id || '').indexOf('stk_') === 0 ? 'announce' : 'request';
 }
 
+// ── per-item state (read / unread overrides + dismissed), stored per user in this browser ──
+function nsKey(k) { return 'ivm_notif_' + k + '_' + _notifState.username; }
+function nsLoad(k) {
+  try { return JSON.parse(localStorage.getItem(nsKey(k)) || '{}') || {}; } catch (e) { return {}; }
+}
+function nsSave(k, o) {
+  var ids = Object.keys(o);
+  if (ids.length > 600) {   // keep the newest ~500 entries
+    ids.sort(function(a, b) { return (o[a].t || 0) - (o[b].t || 0); })
+       .slice(0, ids.length - 500).forEach(function(i) { delete o[i]; });
+  }
+  try { localStorage.setItem(nsKey(k), JSON.stringify(o)); } catch (e) {}
+}
+function notifTs(n) { return new Date(n.timestamp).getTime() || 0; }
+
+// An override only applies to the notification version it was made for (same timestamp or older),
+// so an alert that fires again later comes back as new / unread.
+function isNotifUnread(n) {
+  var ts = notifTs(n), o = _notifState.ov[n.id];
+  if (o && ts <= o.t) return o.s === 'u';
+  return ts > getLastReadTs(notifCategory(n));
+}
+function isNotifDismissed(n) {
+  var d = _notifState.dm[n.id];
+  return !!d && notifTs(n) <= d.t;
+}
+
 function computeUnreadCount(notifications) {
-  var req = getLastReadTs('request'), ann = getLastReadTs('announce');
   var r = 0, a = 0;
   notifications.forEach(function(n) {
-    var ts = new Date(n.timestamp).getTime();
-    if (notifCategory(n) === 'announce') { if (ts > ann) a++; }
-    else if (ts > req) r++;
+    if (!isNotifUnread(n)) return;
+    if (notifCategory(n) === 'announce') a++; else r++;
   });
   _notifState.unreadReq = r;
   _notifState.unreadAnn = a;
@@ -277,6 +312,13 @@ function getLastReadTs(cat) {
 
 function setLastReadTs(ts, cat) {
   try { localStorage.setItem(notifReadKey(cat || 'request'), String(ts)); } catch(e) {}
+  // "Mark all read" also clears items that were manually marked unread in that category
+  var c = cat || 'request', changed = false;
+  Object.keys(_notifState.ov).forEach(function(id) {
+    var idCat = id.indexOf('stk_') === 0 ? 'announce' : 'request';
+    if (idCat === c && _notifState.ov[id].s === 'u') { delete _notifState.ov[id]; changed = true; }
+  });
+  if (changed) nsSave('ov', _notifState.ov);
 }
 
 function setNotifTab(tab, e) {
@@ -335,8 +377,8 @@ function renderDropdown() {
 
   var hasTabs = _notifState.userRole === 'warehouse';
   var tab = hasTabs ? _notifState.tab : 'request';
-  var notifs = _notifState.notifications.filter(function(n) { return notifCategory(n) === tab; });
-  var lastReadTs = getLastReadTs(tab);
+  var allTab = _notifState.notifications.filter(function(n) { return notifCategory(n) === tab; });
+  var notifs = allTab.slice(0, NOTIF_DROPDOWN_MAX);
 
   var html = '<div class="erp-notif-dropdown">';
 
@@ -367,7 +409,7 @@ function renderDropdown() {
     html += '<div class="erp-notif-list">';
     notifs.forEach(function(n) {
       var ts = new Date(n.timestamp).getTime();
-      var isUnread = ts > lastReadTs;
+      var isUnread = isNotifUnread(n);
       var timeAgo = formatTimeAgo(ts);
 
       var safeDoc = String(n.docNo || '').replace(/'/g, "\\'");
@@ -390,9 +432,9 @@ function renderDropdown() {
 
     // Footer
     html += '<div class="erp-notif-footer">' +
-      '<a href="' + getNotifViewAllLink(tab) + '" class="erp-notif-view-all">' +
-        'View All <i class="bi bi-arrow-right ms-1"></i>' +
-      '</a>' +
+      '<button type="button" class="erp-notif-view-all" onclick="openNotifCenter(event)">' +
+        'View All' + (allTab.length > notifs.length ? ' (' + allTab.length + ')' : '') + ' <i class="bi bi-arrow-right ms-1"></i>' +
+      '</button>' +
     '</div>';
   }
 
@@ -466,6 +508,355 @@ document.addEventListener('keydown', function(e) {
     if (container) container.classList.remove('open');
   }
 });
+
+// ═══════════════════════════════════════════════════════════
+// NOTIFICATION CENTER — "View All" modal
+// Browse everything, select one / many (click, Shift+click, Ctrl+A),
+// then Mark read · Mark unread · Dismiss (with Undo) · Open.
+// Read / dismissed state is kept per user in this browser (localStorage).
+// ═══════════════════════════════════════════════════════════
+function ncEl(id) { return document.getElementById(id); }
+
+function ncList() {
+  var nc = _notifState.nc, q = nc.q.trim().toLowerCase();
+  return _notifState.notifications.filter(function(n) {
+    if (notifCategory(n) !== nc.tab) return false;
+    if (nc.type && n.title !== nc.type) return false;
+    if (nc.unreadOnly && !isNotifUnread(n)) return false;
+    if (q && (n.title + ' ' + n.subtitle + ' ' + (n.meta || '')).toLowerCase().indexOf(q) === -1) return false;
+    return true;
+  });
+}
+
+function ncGroup(ts) {
+  var d = new Date(ts), t = new Date();
+  var d0 = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  var t0 = new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
+  var diff = Math.round((t0 - d0) / 86400000);
+  if (diff <= 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function openNotifCenter(e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  var nc = _notifState.nc;
+  nc.tab = _notifState.userRole === 'warehouse' ? _notifState.tab : 'request';
+  nc.q = ''; nc.type = ''; nc.unreadOnly = false; nc.sel = {}; nc.lastIdx = -1; nc.undo = null; nc.vis = [];
+
+  var dd = ncEl('erpNotifContainer');
+  if (dd) dd.classList.remove('open');
+
+  ncBuild();
+  ncEl('erpNcQ').value = '';
+  ncEl('erpNcUnread').checked = false;
+  ncEl('erpNcSnack').className = 'erp-nc-snack';
+
+  nc.open = true;
+  ncEl('erpNcOverlay').classList.add('show');
+  document.body.classList.add('erp-nc-lock');
+  ncRender();
+  setTimeout(function() { var m = ncEl('erpNcModal'); if (m) m.focus(); }, 30);
+}
+
+function closeNotifCenter() {
+  var nc = _notifState.nc;
+  if (!nc.open) return;
+  nc.open = false;
+  var ov = ncEl('erpNcOverlay');
+  if (ov) ov.classList.remove('show');
+  document.body.classList.remove('erp-nc-lock');
+  var bell = ncEl('erpBellBtn');
+  if (bell) bell.focus();
+}
+
+function ncBuild() {
+  if (ncEl('erpNcOverlay')) return;
+  var ov = document.createElement('div');
+  ov.id = 'erpNcOverlay';
+  ov.className = 'erp-nc-overlay';
+  ov.innerHTML =
+    '<div class="erp-nc-modal" id="erpNcModal" role="dialog" aria-modal="true" aria-labelledby="erpNcTitle" tabindex="-1">' +
+      '<div class="erp-nc-head">' +
+        '<div class="erp-nc-title" id="erpNcTitle"><i class="bi bi-bell-fill"></i> Notifications</div>' +
+        '<button type="button" class="erp-nc-x" data-nc="close" aria-label="Close">&times;</button>' +
+      '</div>' +
+      '<div class="erp-nc-tabs" id="erpNcTabs"></div>' +
+      '<div class="erp-nc-tools">' +
+        '<label class="erp-nc-selall" title="Select all shown"><input type="checkbox" id="erpNcAll"><span>Select all</span></label>' +
+        '<div class="erp-nc-search"><i class="bi bi-search"></i>' +
+          '<input type="search" id="erpNcQ" placeholder="Search doc no., item code, requestor…" autocomplete="off"></div>' +
+        '<select id="erpNcType" aria-label="Filter by type"><option value="">All types</option></select>' +
+        '<label class="erp-nc-unreadonly"><input type="checkbox" id="erpNcUnread"><span>Unread only</span></label>' +
+      '</div>' +
+      '<div class="erp-nc-bar" id="erpNcBar"></div>' +
+      '<div class="erp-nc-list" id="erpNcList" role="listbox" aria-multiselectable="true"></div>' +
+      '<div class="erp-nc-foot">' +
+        '<span class="erp-nc-hint">Click to select · Shift+click for a range · Ctrl+A select all · Esc to close</span>' +
+        '<a id="erpNcGo" href="#">Open page <i class="bi bi-arrow-right"></i></a>' +
+      '</div>' +
+      '<div class="erp-nc-snack" id="erpNcSnack"></div>' +
+    '</div>';
+  document.body.appendChild(ov);
+
+  // click: backdrop, buttons (data-nc), rows
+  ov.addEventListener('click', function(e) {
+    if (e.target === ov) { closeNotifCenter(); return; }
+    var btn = e.target.closest('[data-nc]');
+    if (btn) { ncAction(btn.getAttribute('data-nc'), btn); return; }
+    var openBtn = e.target.closest('.erp-nc-open');
+    var row = e.target.closest('.erp-nc-row');
+    if (openBtn && row) { ncOpenItem(row.getAttribute('data-id')); return; }
+    if (row) ncToggle(parseInt(row.getAttribute('data-idx'), 10), e.shiftKey);
+  });
+
+  ncEl('erpNcQ').addEventListener('input', function() {
+    _notifState.nc.q = this.value; _notifState.nc.lastIdx = -1; ncRender();
+  });
+  ncEl('erpNcType').addEventListener('change', function() {
+    _notifState.nc.type = this.value; _notifState.nc.lastIdx = -1; ncRender();
+  });
+  ncEl('erpNcUnread').addEventListener('change', function() {
+    _notifState.nc.unreadOnly = this.checked; _notifState.nc.lastIdx = -1; ncRender();
+  });
+  ncEl('erpNcAll').addEventListener('change', function() { ncSelectAll(this.checked); });
+}
+
+// Esc closes, Ctrl/Cmd+A selects everything shown, Space/Enter toggles a focused row
+document.addEventListener('keydown', function(e) {
+  var nc = _notifState.nc;
+  if (!nc || !nc.open) return;
+  var tag = (e.target && e.target.tagName) || '';
+  var typing = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
+  if (e.key === 'Escape') { e.preventDefault(); closeNotifCenter(); return; }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A') && !typing) {   // inside a text box, Ctrl+A keeps its normal meaning
+    e.preventDefault(); ncSelectAll(true); return;
+  }
+  if ((e.key === ' ' || e.key === 'Enter') && e.target.classList && e.target.classList.contains('erp-nc-row')) {
+    e.preventDefault(); ncToggle(parseInt(e.target.getAttribute('data-idx'), 10), e.shiftKey);
+  }
+});
+
+function ncSelectAll(on) {
+  var nc = _notifState.nc;
+  (nc.vis || []).forEach(function(id) { if (on) nc.sel[id] = true; else delete nc.sel[id]; });
+  ncRender();
+}
+
+function ncToggle(idx, shift) {
+  var nc = _notifState.nc, id = (nc.vis || [])[idx];
+  if (id === undefined) return;
+  if (shift && nc.lastIdx >= 0 && nc.vis[nc.lastIdx] !== undefined) {
+    var a = Math.min(nc.lastIdx, idx), b = Math.max(nc.lastIdx, idx);
+    for (var i = a; i <= b; i++) nc.sel[nc.vis[i]] = true;
+  } else {
+    if (nc.sel[id]) delete nc.sel[id]; else nc.sel[id] = true;
+    nc.lastIdx = idx;
+  }
+  ncRender();
+}
+
+function ncAction(act, btn) {
+  var nc = _notifState.nc;
+  if (act === 'close') return closeNotifCenter();
+  if (act === 'tab') {
+    nc.tab = btn.getAttribute('data-tab') === 'announce' ? 'announce' : 'request';
+    nc.type = ''; nc.sel = {}; nc.lastIdx = -1;
+    try { _notifState.tab = nc.tab; localStorage.setItem('ivm_notif_tab', nc.tab); } catch (e) {}
+    renderDropdown();
+    return ncRender();
+  }
+  if (act === 'clear') { nc.sel = {}; return ncRender(); }
+  if (act === 'readall') {
+    setLastReadTs(Date.now(), nc.tab);
+    ncSnack(nc.tab === 'announce' ? 'All announcements marked as read' : 'All requests marked as read');
+    return ncRefreshAll();
+  }
+  if (act === 'undo') return ncUndo();
+  if (act === 'open') {
+    var one = Object.keys(nc.sel)[0];
+    return one && ncOpenItem(one);
+  }
+  if (act === 'read' || act === 'unread' || act === 'dismiss') return ncApply(act);
+}
+
+function ncSelectedItems() {
+  var sel = _notifState.nc.sel;
+  return _notifState.notifications.filter(function(n) { return sel[n.id]; });
+}
+
+function ncApply(kind) {
+  var nc = _notifState.nc, items = ncSelectedItems();
+  if (!items.length) return;
+  var label = items.length + (items.length === 1 ? ' notification' : ' notifications');
+
+  if (kind === 'read' || kind === 'unread') {
+    items.forEach(function(n) { _notifState.ov[n.id] = { s: kind === 'read' ? 'r' : 'u', t: notifTs(n) }; });
+    nsSave('ov', _notifState.ov);
+    ncSnack(label + ' marked as ' + kind);
+  } else {
+    var prev = {}, gone = {};
+    items.forEach(function(n) {
+      prev[n.id] = _notifState.dm[n.id] || null;
+      _notifState.dm[n.id] = { t: notifTs(n) };
+      gone[n.id] = true;
+    });
+    nsSave('dm', _notifState.dm);
+    _notifState.notifications = _notifState.notifications.filter(function(n) { return !gone[n.id]; });
+    nc.undo = { prev: prev, items: items };
+    ncSnack(label + ' dismissed', true);
+  }
+  nc.sel = {}; nc.lastIdx = -1;
+  ncRefreshAll();
+}
+
+function ncUndo() {
+  var nc = _notifState.nc, u = nc.undo;
+  if (!u) return;
+  u.items.forEach(function(n) {
+    if (u.prev[n.id]) _notifState.dm[n.id] = u.prev[n.id]; else delete _notifState.dm[n.id];
+    _notifState.notifications.push(n);
+  });
+  _notifState.notifications.sort(function(a, b) { return notifTs(b) - notifTs(a); });
+  nsSave('dm', _notifState.dm);
+  nc.undo = null;
+  ncSnack(u.items.length + ' restored');
+  ncRefreshAll();
+}
+
+function ncOpenItem(id) {
+  var n = null;
+  _notifState.notifications.forEach(function(x) { if (x.id === id) n = x; });
+  if (!n) return;
+  _notifState.ov[n.id] = { s: 'r', t: notifTs(n) };   // opening one item marks only that item as read
+  nsSave('ov', _notifState.ov);
+  computeUnreadCount(_notifState.notifications);
+  renderBell();
+  closeNotifCenter();
+  if (n.link && n.link !== '#') window.location.href = n.link;
+}
+
+function ncRefreshAll() {
+  computeUnreadCount(_notifState.notifications);
+  renderBell();
+  renderDropdown();
+  ncRender();
+}
+
+var _ncSnackTimer = null;
+function ncSnack(msg, withUndo) {
+  var el = ncEl('erpNcSnack');
+  if (!el) return;
+  el.innerHTML = '<span>' + erpEsc(msg) + '</span>' + (withUndo ? '<button type="button" data-nc="undo">Undo</button>' : '');
+  el.className = 'erp-nc-snack show';
+  clearTimeout(_ncSnackTimer);
+  _ncSnackTimer = setTimeout(function() { el.className = 'erp-nc-snack'; }, withUndo ? 8000 : 2500);
+}
+
+function ncRender() {
+  var nc = _notifState.nc, ov = ncEl('erpNcOverlay');
+  if (!ov) return;
+  var isWh = _notifState.userRole === 'warehouse';
+
+  // drop selections whose notification is gone
+  var present = {};
+  _notifState.notifications.forEach(function(n) { present[n.id] = true; });
+  Object.keys(nc.sel).forEach(function(id) { if (!present[id]) delete nc.sel[id]; });
+
+  // tabs (warehouse only)
+  var tabsEl = ncEl('erpNcTabs');
+  if (isWh) {
+    var rTot = 0, aTot = 0;
+    _notifState.notifications.forEach(function(n) { if (notifCategory(n) === 'announce') aTot++; else rTot++; });
+    tabsEl.style.display = '';
+    tabsEl.innerHTML =
+      '<button type="button" class="erp-nc-tab' + (nc.tab === 'request' ? ' on' : '') + '" data-nc="tab" data-tab="request">' +
+        '<i class="bi bi-file-earmark-plus"></i> Requests <span class="n">' + rTot + '</span>' +
+        (_notifState.unreadReq > 0 ? '<span class="u">' + _notifState.unreadReq + ' new</span>' : '') + '</button>' +
+      '<button type="button" class="erp-nc-tab' + (nc.tab === 'announce' ? ' on' : '') + '" data-nc="tab" data-tab="announce">' +
+        '<i class="bi bi-megaphone"></i> Announcements <span class="n">' + aTot + '</span>' +
+        (_notifState.unreadAnn > 0 ? '<span class="u">' + _notifState.unreadAnn + ' new</span>' : '') + '</button>';
+  } else {
+    tabsEl.style.display = 'none';
+  }
+
+  // type filter options (from what is in this tab)
+  var inTab = _notifState.notifications.filter(function(n) { return notifCategory(n) === nc.tab; });
+  var types = [];
+  inTab.forEach(function(n) { if (types.indexOf(n.title) === -1) types.push(n.title); });
+  types.sort();
+  if (nc.type && types.indexOf(nc.type) === -1) nc.type = '';
+  var sel = ncEl('erpNcType'), sig = types.join('|');
+  if (sel.getAttribute('data-sig') !== sig) {
+    sel.innerHTML = '<option value="">All types</option>' +
+      types.map(function(t) { return '<option value="' + erpEsc(t) + '">' + erpEsc(t) + '</option>'; }).join('');
+    sel.setAttribute('data-sig', sig);
+  }
+  sel.value = nc.type;
+
+  // list
+  var list = ncList();
+  nc.vis = list.map(function(n) { return n.id; });
+  var html = '', lastGroup = null;
+  list.forEach(function(n, idx) {
+    var ts = notifTs(n), g = ncGroup(ts);
+    if (g !== lastGroup) { html += '<div class="erp-nc-group">' + erpEsc(g) + '</div>'; lastGroup = g; }
+    var unread = isNotifUnread(n), on = !!nc.sel[n.id];
+    html += '<div class="erp-nc-row' + (unread ? ' unread' : '') + (on ? ' selected' : '') + '" role="option" aria-selected="' + on + '" tabindex="0" ' +
+        'data-id="' + erpEsc(n.id) + '" data-idx="' + idx + '">' +
+      '<span class="erp-nc-cb"><i class="bi ' + (on ? 'bi-check-square-fill' : 'bi-square') + '"></i></span>' +
+      '<div class="erp-notif-icon" style="background:' + erpEsc(n.iconColor) + '20;color:' + erpEsc(n.iconColor) + ';"><i class="bi ' + erpEsc(n.icon) + '"></i></div>' +
+      '<div class="erp-nc-main">' +
+        '<div class="erp-nc-rt">' + erpEsc(n.title) + (unread ? '<span class="erp-nc-new">NEW</span>' : '') + '</div>' +
+        '<div class="erp-notif-subtitle"><code>' + erpEsc(n.subtitle) + '</code></div>' +
+        (n.meta ? '<div class="erp-notif-meta">' + erpEsc(n.meta) + '</div>' : '') +
+      '</div>' +
+      '<div class="erp-nc-side">' +
+        '<span class="erp-nc-time" title="' + erpEsc(new Date(ts).toLocaleString()) + '">' + formatTimeAgo(ts) + '</span>' +
+        '<button type="button" class="erp-nc-open" title="Open">Open <i class="bi bi-arrow-right"></i></button>' +
+      '</div>' +
+    '</div>';
+  });
+  if (!list.length) {
+    html = '<div class="erp-notif-empty"><i class="bi bi-bell-slash fs-2 d-block mb-2"></i>' +
+      (inTab.length ? 'No notifications match your filters' : (nc.tab === 'announce' ? 'No announcements' : 'No requests')) + '</div>';
+  }
+  var listEl = ncEl('erpNcList'), st = listEl.scrollTop;
+  listEl.innerHTML = html;
+  listEl.scrollTop = st;
+
+  // select-all checkbox state
+  var selCount = Object.keys(nc.sel).length;
+  var visSel = nc.vis.filter(function(id) { return nc.sel[id]; }).length;
+  var all = ncEl('erpNcAll');
+  all.checked = nc.vis.length > 0 && visSel === nc.vis.length;
+  all.indeterminate = visSel > 0 && visSel < nc.vis.length;
+  all.disabled = nc.vis.length === 0;
+
+  // action bar
+  var bar = ncEl('erpNcBar');
+  if (selCount > 0) {
+    bar.className = 'erp-nc-bar active';
+    bar.innerHTML =
+      '<strong>' + selCount + ' selected</strong>' +
+      '<button type="button" data-nc="read"><i class="bi bi-envelope-open"></i> Mark read</button>' +
+      '<button type="button" data-nc="unread"><i class="bi bi-envelope"></i> Mark unread</button>' +
+      '<button type="button" class="danger" data-nc="dismiss"><i class="bi bi-trash3"></i> Dismiss</button>' +
+      (selCount === 1 ? '<button type="button" data-nc="open"><i class="bi bi-box-arrow-up-right"></i> Open</button>' : '') +
+      '<button type="button" class="ghost" data-nc="clear">Clear</button>';
+  } else {
+    var unreadHere = inTab.filter(isNotifUnread).length;
+    bar.className = 'erp-nc-bar';
+    bar.innerHTML =
+      '<span class="muted">' + list.length + (list.length === inTab.length ? '' : ' of ' + inTab.length) + ' shown · ' + unreadHere + ' unread</span>' +
+      (unreadHere > 0 ? '<button type="button" class="ghost" data-nc="readall"><i class="bi bi-check2-all"></i> Mark all read</button>' : '');
+  }
+
+  var go = ncEl('erpNcGo');
+  go.setAttribute('href', getNotifViewAllLink(nc.tab));
+  go.textContent = '';
+  go.innerHTML = (nc.tab === 'announce' ? 'Open Stock Monitor' : (_notifState.userRole === 'production' ? 'Open My Requests' : 'Open All Requests')) + ' <i class="bi bi-arrow-right"></i>';
+}
 
 // ═══════════════════════════════════════════════════════════
 // TIME FORMATTING
