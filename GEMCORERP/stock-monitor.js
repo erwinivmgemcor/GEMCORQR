@@ -430,7 +430,7 @@ async function erpLoadItems() {
   var tbody = document.getElementById('erpTableBody');
   if (!tbody) { _erpRenderLock = false; return; }
   
-  tbody.innerHTML = '<tr><td colspan="21" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading inventory...</div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="22" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading inventory...</div></td></tr>';
   
   var filters = {
     category: document.getElementById('erpCategoryFilter').value,
@@ -444,7 +444,7 @@ async function erpLoadItems() {
   var result = await erpGetAllItems(filters);
   
   if (!result.success) {
-    tbody.innerHTML = '<tr><td colspan="21" class="erp-empty text-danger">' +
+    tbody.innerHTML = '<tr><td colspan="22" class="erp-empty text-danger">' +
       '<i class="bi bi-exclamation-triangle-fill"></i> ' + erpEsc(result.error) + '</td></tr>';
     _erpRenderLock = false;
     return;
@@ -522,7 +522,7 @@ function erpRenderTable() {
   document.getElementById('erpBtnNext').disabled = (end >= total);
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="21" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="22" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No items match your filters.</td></tr>';
     return;
@@ -615,6 +615,7 @@ function erpRenderTable() {
       '<td class="text-end" style="font-family:\'Courier New\',monospace;">₱' + erpNum(unitCost.toFixed(2)) + '</td>' +
       '<td class="text-end fw-bold" style="font-family:\'Courier New\',monospace;color:#1e3a5f;">₱' + erpNum(onHandCost.toFixed(2)) + '</td>' +
       '<td class="text-center usage-cell">' + activeMo + '</td>' +
+      '<td class="text-center">' + erpClassBadge(activeMo) + '</td>' +
       '<td class="text-end usage-cell">' + erpNum(aveMo) + '</td>' +
       '<td class="text-end usage-cell">' + erpNum(aveDay) + '</td>' +
       '<td class="text-center">' + erpTurnoverBadge(onHand, aveMo) + '</td>' +
@@ -1630,6 +1631,7 @@ async function erpShowItemDetails(itemCode) {
       cell('On-Hand Cost', '₱' + erpNum((onHand * cost).toFixed(2))) +
       cell('Ave / Month', erpNum(it.ave_monthly_consumption || 0)) +
       cell('Active Months', erpNum(it.active_consumption_months || 0)) +
+      cell('Item Class', erpClassBadge(it.active_consumption_months)) +
       cell('Classification', erpEsc(it.stock_classification || '—')) +
       cell('ABC', erpEsc(it.abc_classification || '—')) +
       cell('Movement', erpEsc(it.inventory_movement || '—')) +
