@@ -7,7 +7,7 @@
 //  - Background sync support
 // ============================================================
 
-const CACHE_VERSION = '5.0.9';
+const CACHE_VERSION = '5.0.10';
 const STATIC_CACHE = `gemcor-erp-static-v${CACHE_VERSION}`;
 const RUNTIME_CACHE = `gemcor-erp-runtime-v${CACHE_VERSION}`;
 const OFFLINE_URL = '/GEMCORQR/GEMCORERP/offline.html';
