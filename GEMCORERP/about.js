@@ -407,7 +407,7 @@
       ['bi-cash-coin', 'Project Costing', 'The cost of each project and the movements behind it.', 'PWF'],
       ['bi-calendar-week', 'Weekly and document monitoring', 'Weekly Monitoring plus MRIF, MRR and MRS Monitoring.', 'WRF'],
       ['bi-arrow-left-right', 'Item In & Out', 'Beginning balance, total in, total out and ending balance per item.', 'W'],
-      ['bi-graph-up-arrow', 'Usage Trend and Monthly Usage', 'Monthly consumption and trends to support reordering.', 'W'],
+      ['bi-table', 'Monthly Movement', 'Issued and received per item per month, with the top items and category breakdown, to support reordering.', 'W'],
       ['bi-clock-history', 'Process History', 'Each warehouse staff member’s activity across MRIF, MRR, MRS and PRF.', 'W']
     ] },
     { id: 'adv', title: 'Advanced and admin', sub: 'Controls, safeguards and monitoring', items: [
