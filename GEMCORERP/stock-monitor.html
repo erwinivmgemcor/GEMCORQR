@@ -33,6 +33,7 @@
 <script defer src="ratio-settings.js"></script>
 <script defer src="item-trend.js"></script>
 <script defer src="item-merge.js"></script>
+<script defer src="item-code-edit.js"></script>
 <script defer src="stock-allocate.js"></script>
 <script defer src="stock-allocate-import.js"></script>
 <script defer src="stock-colfilters.js"></script>
@@ -694,7 +695,8 @@
           <i class="bi bi-info-circle me-1"></i>
           Editing: <strong id="editItemCodeDisplay">—</strong>
           <br>
-          <small class="text-muted">Item code cannot be changed.</small>
+          <small class="text-muted" id="editItemCodeNote">Admin lang ang puwedeng magpalit ng item code.</small>
+          <div id="editItemCodeAdminSlot"></div>
         </div>
         
         <input type="hidden" id="editItemCode">
