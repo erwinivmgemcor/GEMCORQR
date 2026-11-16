@@ -4,26 +4,27 @@
 // Works on the already-loaded items (no extra Supabase calls).
 // ============================================================
 (function () {
-  // key, header index, type: text | num | pick
+  // key (tugma sa data-cf ng <th>), type: text | num | pick
   var COLS = [
-    { k: 'code',       i: 0,  t: 'text', get: function (it) { return String(it.item_code || '').toLowerCase(); } },
-    { k: 'desc',       i: 1,  t: 'text', get: function (it) { return String(it.description || '').toLowerCase(); } },
-    { k: 'category',   i: 2,  t: 'pick', get: function (it) { return String(it.category || ''); } },
-    { k: 'location',   i: 3,  t: 'pick', get: function (it) { return String(it.location || ''); } },
-    { k: 'onhand',     i: 4,  t: 'num',  get: function (it) { return Number(it.on_hand || 0); } },
-    { k: 'variance',   i: 5,  t: 'num',  get: function (it) { return window._erpVarianceMap ? (window._erpVarianceMap[it.item_code] || 0) : 0; } },
-    { k: 'sof',        i: 6,  t: 'num',  get: function (it) { return Number((window._erpSofAllocatedMap || _erpSofAllocatedMap || {})[it.item_code] || 0); } },
-    { k: 'available',  i: 7,  t: 'num',  get: function (it) { return Number(it.on_hand || 0) - Number((_erpSofAllocatedMap || {})[it.item_code] || 0); } },
-    { k: 'buffer',     i: 8,  t: 'num',  get: function (it) { return Number(it.buffer_stock || 0); } },
-    { k: 'unit',       i: 9,  t: 'pick', get: function (it) { return String(it.base_unit || ''); } },
-    { k: 'unitcost',   i: 10, t: 'num',  get: function (it) { return Number(it.unit_cost || 0); } },
-    { k: 'onhandcost', i: 11, t: 'num',  get: function (it) { return Number(it.on_hand || 0) * Number(it.unit_cost || 0); } },
-    { k: 'activemo',   i: 12, t: 'num',  get: function (it) { return Number(it.active_consumption_months || 0); } },
-    { k: 'avemo',      i: 13, t: 'num',  get: function (it) { return Number(it.ave_monthly_consumption || 0); } },
-    { k: 'aveday',     i: 14, t: 'num',  get: function (it) { return Number(it.ave_daily_consumption || 0); } },
-    { k: 'status',     i: 15, t: 'pick', get: reorderStatus },
-    { k: 'abc',        i: 16, t: 'pick', get: function (it) { return String(it.abc_classification || ''); } },
-    { k: 'movement',   i: 17, t: 'pick', get: function (it) { return String(it.inventory_movement || '').toUpperCase(); } }
+    { k: 'code',       t: 'text', get: function (it) { return String(it.item_code || '').toLowerCase(); } },
+    { k: 'desc',       t: 'text', get: function (it) { return String(it.description || '').toLowerCase(); } },
+    { k: 'category',   t: 'pick', get: function (it) { return String(it.category || ''); } },
+    { k: 'location',   t: 'pick', get: function (it) { return String(it.location || ''); } },
+    { k: 'onhand',     t: 'num',  get: function (it) { return Number(it.on_hand || 0); } },
+    { k: 'variance',   t: 'num',  get: function (it) { return window._erpVarianceMap ? (window._erpVarianceMap[it.item_code] || 0) : 0; } },
+    { k: 'sof',        t: 'num',  get: function (it) { return Number((window._erpSofAllocatedMap || _erpSofAllocatedMap || {})[it.item_code] || 0); } },
+    { k: 'available',  t: 'num',  get: function (it) { return Number(it.on_hand || 0) - Number((_erpSofAllocatedMap || {})[it.item_code] || 0); } },
+    { k: 'buffer',     t: 'num',  get: function (it) { return Number(it.buffer_stock || 0); } },
+    { k: 'unit',       t: 'pick', get: function (it) { return String(it.base_unit || ''); } },
+    { k: 'unitcost',   t: 'num',  get: function (it) { return Number(it.unit_cost || 0); } },
+    { k: 'onhandcost', t: 'num',  get: function (it) { return Number(it.on_hand || 0) * Number(it.unit_cost || 0); } },
+    { k: 'activemo',   t: 'num',  get: function (it) { return Number(it.active_consumption_months || 0); } },
+    { k: 'class',      t: 'pick', get: function (it) { return (typeof erpItemClass === 'function') ? erpItemClass(it.active_consumption_months) : ''; } },
+    { k: 'avemo',      t: 'num',  get: function (it) { return Number(it.ave_monthly_consumption || 0); } },
+    { k: 'aveday',     t: 'num',  get: function (it) { return Number(it.ave_daily_consumption || 0); } },
+    { k: 'status',     t: 'pick', get: reorderStatus },
+    { k: 'abc',        t: 'pick', get: function (it) { return String(it.abc_classification || ''); } },
+    { k: 'movement',   t: 'pick', get: function (it) { return String(it.inventory_movement || '').toUpperCase(); } }
   ];
 
   var NUM_OPTS = [
@@ -148,8 +149,11 @@
     if (!ths.length || ths.length < 18 || document.getElementById('erpCF_code')) return;
     injectStyles();
 
+    var thByKey = {};
+    Array.prototype.forEach.call(ths, function (t) { var k = t.getAttribute('data-cf'); if (k) thByKey[k] = t; });
+
     COLS.forEach(function (c) {
-      var th = ths[c.i]; if (!th) return;
+      var th = thByKey[c.k]; if (!th) return;
       var el;
       if (c.t === 'text') {
         el = document.createElement('input');
@@ -175,7 +179,7 @@
       th.appendChild(el);
     });
 
-    var last = ths[18];
+    var last = ths[ths.length - 1];
     if (last) {
       var b = document.createElement('button');
       b.id = 'erpCF_clear'; b.type = 'button'; b.textContent = '✕ Clear';
