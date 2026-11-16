@@ -301,26 +301,27 @@
       <table class="erp-table">
 <thead>
   <tr>
-    <th class="col-code">Item Code</th>
-    <th>Description</th>
-    <th class="col-cat">Category</th>
-    <th class="col-loc">Location</th>
-    <th class="col-qty text-end">On-Hand</th>
-    <th class="col-qty text-center" style="color:#f59e0b;">Variance</th>
-    <th class="col-qty text-end" title="SOF Allocated Qty" style="color:#f59e0b;">SOF Allocated</th>
-    <th class="col-qty text-end" title="Available Stock = On-Hand − SOF Allocated" style="color:#10b981;">Available</th>
-    <th class="col-buffer text-end" title="Buffer Stock">Buffer</th>
-    <th class="col-unit text-center">Unit</th>
-    <th class="col-cost text-end">Unit Cost</th>
-    <th class="col-value text-end">On-Hand Cost</th>
-    <th class="col-usage text-center">Active Mo</th>
-    <th class="col-usage text-end">Ave/Mo</th>
-    <th class="col-usage text-end">Ave/Day</th>
+    <th data-cf="code" class="col-code">Item Code</th>
+    <th data-cf="desc">Description</th>
+    <th data-cf="category" class="col-cat">Category</th>
+    <th data-cf="location" class="col-loc">Location</th>
+    <th data-cf="onhand" class="col-qty text-end">On-Hand</th>
+    <th data-cf="variance" class="col-qty text-center" style="color:#f59e0b;">Variance</th>
+    <th data-cf="sof" class="col-qty text-end" title="SOF Allocated Qty" style="color:#f59e0b;">SOF Allocated</th>
+    <th data-cf="available" class="col-qty text-end" title="Available Stock = On-Hand − SOF Allocated" style="color:#10b981;">Available</th>
+    <th data-cf="buffer" class="col-buffer text-end" title="Buffer Stock">Buffer</th>
+    <th data-cf="unit" class="col-unit text-center">Unit</th>
+    <th data-cf="unitcost" class="col-cost text-end">Unit Cost</th>
+    <th data-cf="onhandcost" class="col-value text-end">On-Hand Cost</th>
+    <th data-cf="activemo" class="col-usage text-center">Active Mo</th>
+    <th data-cf="class" class="text-center" title="STD = Standard stock (usage in 5 or more months). PROJ = Project stock (usage in fewer than 5 months). Based on Active Mo.">Class</th>
+    <th data-cf="avemo" class="col-usage text-end">Ave/Mo</th>
+    <th data-cf="aveday" class="col-usage text-end">Ave/Day</th>
     <th class="col-usage text-center" title="Turnover Ratio per item (times per year) = (Ave/Mo × 12) ÷ On-Hand. Higher = moves faster. Hover a value for days of stock.">Turnover</th>
     <th class="col-usage text-center" title="Inventory Ratio = stock cover: how long the current On-Hand lasts at average monthly usage. Shown in days (under 2 months), months or years. Months match the &quot;Inventory Ratio&quot; column of the Google Sheet. Hover a value for details.">Inventory Ratio</th>
-    <th class="col-status text-center">Reorder Status</th>
-    <th class="col-abc text-center">ABC</th>
-    <th class="col-mov text-center">Movement</th>
+    <th data-cf="status" class="col-status text-center">Reorder Status</th>
+    <th data-cf="abc" class="col-abc text-center">ABC</th>
+    <th data-cf="movement" class="col-mov text-center">Movement</th>
     <th class="text-center">Action</th>
   </tr>
 </thead>
