@@ -241,6 +241,7 @@ async function lookupPoNo() {
         requestedQty: qty,
         issuedQty: remaining,
         unit: r.unit || 'PCS',
+        unitCost: '',
         remarks: '',
         itemNo: r.line_no || (i + 1)
       });
@@ -356,6 +357,7 @@ async function loadItemsFromPrf() {
       requestedQty: qty,
       issuedQty: rem,
       unit: l.unit || 'PCS',
+      unitCost: '',
       remarks: '',
       itemNo: l.line_no || (i + 1)
     };
@@ -387,6 +389,7 @@ function addItemRow() {
     requestedQty: 0,
     issuedQty: 0,
     unit: 'PCS',
+    unitCost: '',
     remarks: '',
     itemNo: _mrrState.items.length + 1
   });
@@ -404,7 +407,7 @@ function renderItems() {
   if (!tbody) return;
 
   if (_mrrState.items.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">' +
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">' +
       '<i class="bi bi-inbox fs-3 d-block mb-2 opacity-50"></i>' +
       'Click "+ Add Item", or enter a PO No. / PRF No. above to load items.</td></tr>';
     return;
@@ -453,6 +456,14 @@ function renderItems() {
           'oninput="updateItem(' + idx + ', \'unit\', this.value)">' +
       '</td>' +
       '<td>' +
+        '<input type="number" inputmode="decimal" class="form-control form-control-sm text-end item-cost-input" ' +
+          'id="mrrItemCost' + idx + '" ' +
+          'value="' + erpEsc(it.unitCost === undefined || it.unitCost === null ? '' : it.unitCost) + '" ' +
+          'min="0" step="0.0001" placeholder="0.00" ' +
+          'oninput="updateItem(' + idx + ', \'unitCost\', this.value); _mrrCostHint(' + idx + ')">' +
+        '<div class="small text-muted text-end" id="mrrCostHint' + idx + '" style="font-size:.7rem;line-height:1.1;margin-top:2px;"></div>' +
+      '</td>' +
+      '<td>' +
         '<input type="text" class="form-control form-control-sm" ' +
           'value="' + erpEsc(it.remarks) + '" ' +
           'placeholder="Optional" ' +
@@ -466,7 +477,110 @@ function renderItems() {
     '</tr>';
   });
   tbody.innerHTML = html;
+  _mrrRefreshCosts();
 }
+
+// ═══════════════════════════════════════════════════════════
+// UNIT COST — required per received item; updates erp_items (Inventory Master / Stock Monitor)
+// after the MRR is saved. NOT stored on the MRR document and NOT printed.
+// ═══════════════════════════════════════════════════════════
+function _mrrParseCost(v) {
+  var s = String(v == null ? '' : v).trim().replace(/₱|php|pesos?|\s/gi, '').replace(/,/g, '');
+  if (!/^[0-9]*\.?[0-9]+$/.test(s)) return NaN;
+  return Number(s);
+}
+function _mrrPeso(n) {
+  return '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+}
+
+// Show "Current: ₱x" (or "No cost yet") under the input, and flag big changes
+function _mrrCostHint(idx) {
+  var it = _mrrState.items[idx], el = document.getElementById('mrrCostHint' + idx);
+  if (!it || !el) return;
+  if (!String(it.itemCode || '').trim() || it.currentCost === undefined) { el.textContent = ''; return; }
+  var cur = Number(it.currentCost || 0), nw = _mrrParseCost(it.unitCost);
+  var html = cur > 0 ? 'Current: ' + _mrrPeso(cur) : '<span class="text-primary">No cost yet — will be set</span>';
+  if (cur > 0 && nw > 0 && Math.abs(nw - cur) / cur >= 0.5) {
+    var pct = Math.round((nw - cur) / cur * 100);
+    html += ' <span class="text-danger fw-bold">' + (pct > 0 ? '▲ +' : '▼ ') + pct + '%</span>';
+  }
+  el.innerHTML = html;
+}
+
+// Fetch current unit_cost from the master for rows that don't have it yet (DOM-only update, no re-render)
+async function _mrrRefreshCosts() {
+  var need = [];
+  _mrrState.items.forEach(function(it) {
+    var c = String(it.itemCode || '').trim();
+    if (c && it.currentCost === undefined && need.indexOf(c) === -1) need.push(c);
+  });
+  if (!need.length) { _mrrState.items.forEach(function(it, i) { _mrrCostHint(i); }); return; }
+  try {
+    var q = need.map(function(c) { return '"' + c.replace(/"/g, '') + '"'; }).map(encodeURIComponent).join(',');
+    var rows = await erpFetch('erp_items', 'select=item_code,unit_cost&item_code=in.(' + q + ')&limit=1000') || [];
+    var map = {};
+    rows.forEach(function(r) { map[String(r.item_code).toUpperCase()] = Number(r.unit_cost || 0); });
+    _mrrState.items.forEach(function(it, i) {
+      var c = String(it.itemCode || '').trim().toUpperCase();
+      if (c && it.currentCost === undefined && map[c] !== undefined) it.currentCost = map[c];
+      _mrrCostHint(i);
+    });
+  } catch (e) { console.warn('[MRR] current cost lookup failed:', e.message); }
+}
+
+async function _mrrRpc(name, body) {
+  var res = await fetch(erpUrl('rpc/' + name), { method: 'POST', headers: erpHeaders(), body: JSON.stringify(body) });
+  var txt = await res.text(), data = null;
+  try { data = txt ? JSON.parse(txt) : null; } catch (e) {}
+  if (!res.ok) {
+    var m = (data && (data.message || data.hint)) || txt || ('HTTP ' + res.status);
+    if (/Could not find the function|PGRST202/i.test(m)) m = 'erp_apply_unit_cost_update is not installed in the database (run erp-bulk-price-update.sql).';
+    throw new Error(m);
+  }
+  return data;
+}
+
+// Push the unit costs entered on this MRR into the Inventory Master (Stock Monitor reads the same table).
+// Same audited function as Bulk Price Update → has batch no. + Undo. Returns { ok, msg }.
+var _mrrPendingCost = null;
+async function _mrrApplyCosts(docNo, rows, confirmWithoutFreeze) {
+  if (!rows.length) return { ok: true, msg: '' };
+  try {
+    var prev = await _mrrRpc('erp_preview_unit_cost_update', { p_rows: rows });
+    if (!prev || !prev.success) throw new Error('Cost check failed');
+    var sm = prev.summary || {};
+    if (!sm.change) return { ok: true, msg: 'Unit costs already up to date.' };
+    if (sm.not_found || sm.invalid) console.warn('[MRR cost] skipped rows:', sm.not_found, sm.invalid);
+    if (!prev.freeze_active && !confirmWithoutFreeze &&
+        !confirm('WARNING: Ledger Cost Freeze is not installed.\n\nUpdating the unit cost will also change the cost of OLD projects / transactions.\n\nUpdate the Inventory Master cost anyway?')) {
+      return { ok: false, msg: 'Unit cost NOT updated (cancelled).' };
+    }
+    var r = await _mrrRpc('erp_apply_unit_cost_update', {
+      p_rows: rows, p_reason: 'MRR receipt ' + docNo, p_user: localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || 'WAREHOUSE'
+    });
+    if (!r || !r.success) throw new Error((r && r.error) || 'Update failed');
+    return { ok: true, msg: r.items_updated + ' unit cost' + (r.items_updated === 1 ? '' : 's') + ' updated in Inventory Master (batch ' + r.batch_no + ').' };
+  } catch (e) {
+    console.error('[MRR cost update]', e);
+    return { ok: false, msg: 'Unit cost NOT updated: ' + e.message };
+  }
+}
+
+function _mrrCostResultHtml(res) {
+  if (!res || !res.msg) return '';
+  if (res.ok) return '<div class="alert alert-success py-2 small mb-2"><i class="bi bi-currency-exchange me-1"></i>' + erpEsc(res.msg) + '</div>';
+  return '<div class="alert alert-danger py-2 small mb-2"><i class="bi bi-exclamation-triangle me-1"></i>' + erpEsc(res.msg) +
+    ' The MRR itself was saved. <button type="button" class="btn btn-sm btn-outline-danger ms-1" onclick="mrrRetryCostUpdate(this)">Retry cost update</button></div>';
+}
+
+window.mrrRetryCostUpdate = async function(btn) {
+  if (!_mrrPendingCost) return;
+  btn.disabled = true; btn.textContent = 'Updating…';
+  var res = await _mrrApplyCosts(_mrrPendingCost.docNo, _mrrPendingCost.rows, false);
+  var box = btn.closest('.alert');
+  if (res.ok) { _mrrPendingCost = null; if (box) box.outerHTML = _mrrCostResultHtml(res); erpShowToast('✅ ' + res.msg, 'success'); }
+  else { btn.disabled = false; btn.textContent = 'Retry cost update'; erpShowToast(res.msg, 'danger'); }
+};
 
 function updateItem(idx, field, value) {
   if (_mrrState.items[idx]) {
@@ -594,9 +708,11 @@ window._mrrPickItem = _mrrPickItem;
 
 function selectMrrItem(idx, code, description, unit) {
   if (_mrrState.items[idx]) {
+    if (_mrrState.items[idx].itemCode !== code) _mrrState.items[idx].currentCost = undefined;
     _mrrState.items[idx].itemCode = code;
     _mrrState.items[idx].description = description;
     _mrrState.items[idx].unit = unit;
+    _mrrRefreshCosts();
   }
 
   var codeInput = document.getElementById('mrrItemCode' + idx);
@@ -746,13 +862,13 @@ async function _mrrPreflight() {
   if (q.length) {
     try {
       rows = await erpFetch('erp_items',
-        'select=item_code,description,base_unit,is_active,is_deprecated_2026&item_code=in.(' + q.map(encodeURIComponent).join(',') + ')&limit=1000') || [];
+        'select=item_code,description,base_unit,unit_cost,is_active,is_deprecated_2026&item_code=in.(' + q.map(encodeURIComponent).join(',') + ')&limit=1000') || [];
     } catch (e) { erpShowToast('Could not verify the item codes. Check your connection and try again.', 'warning'); return false; }
   }
   var master = {};
   rows.forEach(function(r) { master[String(r.item_code).toUpperCase()] = r; });
 
-  var received = 0;
+  var received = 0, costSeen = {};
   items.forEach(function(it, i) {
     var code = String(it.itemCode || '').trim();
     if (!code) return;
@@ -775,6 +891,14 @@ async function _mrrPreflight() {
     if (req < 0 || rec < 0) problems.push(n + row.item_code + ' has a negative quantity.');
     received += rec;
     if (req > 0 && rec > req) warns.push(n + row.item_code + ': received (' + rec + ') is more than the PO / requested qty (' + req + ').');
+    var nc = _mrrParseCost(it.unitCost), oc = Number(row.unit_cost || 0);
+    if (rec > 0 && oc > 0 && nc > 0 && Math.abs(nc - oc) / oc >= 0.5) {
+      warns.push(n + row.item_code + ': new unit cost ' + _mrrPeso(nc) + ' is ' + Math.round((nc - oc) / oc * 100) + '% vs current ' + _mrrPeso(oc) + '. Typo?');
+    }
+    if (rec > 0 && nc > 0) {
+      if (costSeen[row.item_code] && costSeen[row.item_code].cost !== nc) warns.push(n + row.item_code + ' has a different unit cost than line #' + costSeen[row.item_code].line + ' (' + _mrrPeso(costSeen[row.item_code].cost) + '). The last line (' + _mrrPeso(nc) + ') will be saved as the item cost.');
+      costSeen[row.item_code] = { cost: nc, line: i + 1 };
+    }
     if (/^(PIECE|PIECES|PCS|PC|UNIT|SET)$/i.test(String(it.unit || '')) && rec % 1 !== 0) warns.push(n + row.item_code + ': decimal quantity (' + rec + ') for unit ' + it.unit + '.');
   });
 
@@ -826,6 +950,19 @@ async function submitMrr() {
   if (_mrrState.items.length === 0) { erpShowToast('No items to submit', 'warning'); return; }
 
   if (!_mrrState.vendor) { erpShowToast('Vendor / Client is required', 'warning'); return; }
+
+  // Unit Cost is required for every item that is actually received (ATL Qty > 0)
+  for (var ci = 0; ci < _mrrState.items.length; ci++) {
+    var cit = _mrrState.items[ci];
+    if (!(Number(cit.issuedQty) > 0)) continue;
+    var cv = _mrrParseCost(cit.unitCost);
+    if (!(cv > 0)) {
+      erpShowToast('Item #' + (ci + 1) + (cit.itemCode ? ' (' + cit.itemCode + ')' : '') + ': Unit Cost is required (must be more than 0)', 'warning');
+      var cEl = document.getElementById('mrrItemCost' + ci);
+      if (cEl) { cEl.focus(); cEl.classList.add('is-invalid'); setTimeout(function() { cEl.classList.remove('is-invalid'); }, 2500); }
+      return;
+    }
+  }
   if (!(await _mrrPreflight())) return;
 
   var validItems = [];
@@ -845,7 +982,15 @@ async function submitMrr() {
     });
   }
 
-  if (!confirm('Create MRR with ' + validItems.length + ' item(s)?')) return;
+  // item code -> latest unit cost typed on this MRR (kept OUT of validItems, so it is never saved on / printed with the document)
+  var costMap = {}, costRows = [];
+  _mrrState.items.forEach(function(it) {
+    var c = _mrrParseCost(it.unitCost);
+    if (Number(it.issuedQty) > 0 && c > 0 && it.itemCode) costMap[it.itemCode] = c;
+  });
+  Object.keys(costMap).forEach(function(code, k) { costRows.push({ row: k + 1, item_code: code, unit_cost: costMap[code] }); });
+
+  if (!confirm('Create MRR with ' + validItems.length + ' item(s)?\n\nThe unit cost of ' + costRows.length + ' item(s) will also be updated in the Inventory Master / Stock Monitor.')) return;
 
   _mrrState.isSubmitting = true;
   var btn = document.getElementById('btnSubmitMrr');
@@ -902,7 +1047,13 @@ async function submitMrr() {
     if (!data || !data.success) throw new Error(data.error || 'Unknown error');
 
     erpShowToast('✅ MRR created: ' + docNo, 'success');
-    var prfSummaryHtml = await _mrrPrfSummary(_mrrState.prfNo, _mrrState.poNo);
+
+    // Update Inventory Master / Stock Monitor unit cost (latest cost; sets it if the item had none)
+    var costRes = await _mrrApplyCosts(docNo, costRows, false);
+    _mrrPendingCost = costRes.ok ? null : { docNo: docNo, rows: costRows };
+    if (!costRes.ok) erpShowToast(costRes.msg, 'danger');
+
+    var prfSummaryHtml = _mrrCostResultHtml(costRes) + (await _mrrPrfSummary(_mrrState.prfNo, _mrrState.poNo));
     showSuccessModal(docNo, prfSummaryHtml);
 
   } catch(err) {
