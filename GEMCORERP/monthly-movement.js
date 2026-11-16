@@ -83,7 +83,57 @@
       return (y[k] - x[k]) || String(x.it.item_code).localeCompare(String(y.it.item_code));
     });
     S.view = rows; S.page = 1;
-    renderKpisChart(); renderTable();
+    renderKpisChart(); renderBreakdown(); renderTable();
+  }
+
+  // ── Top 10 items + by-category share (follows Show / Measure / Search; category bars ignore the Category filter so you can pick one) ──
+  var DS_LABEL = { issued: 'issued', received: 'received', net: 'net (received − issued)' };
+  function barFmtVal(v) { return S.measure === 'value' ? short(v) : window.erpCompactNum(v); }
+  function barRows(host, list, max, color, opts) {
+    if (!list.length) { host.innerHTML = '<div class="mm-bar-empty">No data for this selection.</div>'; return; }
+    host.innerHTML = list.map(function (r, i) {
+      var w = max > 0 ? Math.max(1, Math.abs(r.v) / max * 100) : 0, col = r.v < 0 ? '#f59e0b' : color;
+      return '<div class="mm-bar' + (opts.click ? ' click' : '') + (r.sel ? ' sel' : '') + '" data-k="' + esc(r.key) + '" title="' + esc(r.title + ' · ' + fmt(r.v)) + '">' +
+        '<div class="nm">' + (opts.rank ? '<span class="mm-rank">' + (i + 1) + '</span>' : '') + r.name + '</div>' +
+        '<div class="tk"><div class="fl" style="width:' + w.toFixed(1) + '%;background:' + col + '"></div></div>' +
+        '<div class="vl">' + esc(barFmtVal(r.v)) + (r.pct != null ? '<small>' + r.pct + '%</small>' : '') + '</div></div>';
+    }).join('');
+  }
+  function renderBreakdown() {
+    var q = S.q.trim().toLowerCase(), measure = S.measure === 'value' ? 'Value (₱)' : 'Quantity';
+    var items = [], cats = {}, catTotal = 0;
+    S.items.forEach(function (it) {
+      if (q && String(it.item_code).toLowerCase().indexOf(q) < 0 && String(it.description || '').toLowerCase().indexOf(q) < 0) return;
+      var mv = S.mv[it.item_code] || {}, t = 0, any = false;
+      S.months.forEach(function (m) { var c = mv[m.key]; if (c) { t += cellVal(it, c); if (c.a || c.b) any = true; } });
+      if (!any || t === 0) return;
+      var cat = it.category || '(No category)';
+      cats[cat] = (cats[cat] || 0) + t; catTotal += Math.abs(t);
+      if (!S.cat || it.category === S.cat) items.push({ it: it, v: t });
+    });
+    // Top 10 items
+    items.sort(function (a, b) { return Math.abs(b.v) - Math.abs(a.v); });
+    var top = items.slice(0, 10), tmax = top.length ? Math.abs(top[0].v) : 0;
+    $('mmTopTitle').textContent = 'Top 10 items — ' + DS_LABEL[S.dataset];
+    $('mmTopSub').textContent = measure + ' · ' + (S.cat || 'all categories') + ' · ' + (S.months.length ? S.months[0].key.slice(0, 4) : '') + ' to date';
+    barRows($('mmTop'), top.map(function (r) {
+      return { key: r.it.item_code, v: r.v, title: r.it.item_code + ' ' + (r.it.description || ''),
+        name: '<b>' + esc(r.it.item_code) + '</b>' + esc(r.it.description || '') };
+    }), tmax, S.dataset === 'received' ? '#10b981' : S.dataset === 'net' ? '#3b82f6' : '#ef4444', { rank: true, click: true });
+    $('mmTop').querySelectorAll('.mm-bar').forEach(function (el) { el.onclick = function () { openItem(el.getAttribute('data-k')); }; });
+    // By category (click = filter)
+    var list = Object.keys(cats).map(function (k) { return { key: k, v: cats[k] }; }).sort(function (a, b) { return Math.abs(b.v) - Math.abs(a.v); });
+    var cmax = list.length ? Math.abs(list[0].v) : 0;
+    $('mmCatTitle').textContent = 'By category — ' + DS_LABEL[S.dataset];
+    barRows($('mmCatBox'), list.slice(0, 12).map(function (r) {
+      return { key: r.key, v: r.v, title: r.key, name: esc(r.key), sel: S.cat && r.key === S.cat, pct: catTotal ? Math.round(Math.abs(r.v) / catTotal * 100) : 0 };
+    }), cmax, '#1e3a5f', { click: true });
+    $('mmCatBox').querySelectorAll('.mm-bar').forEach(function (el) {
+      el.onclick = function () {
+        var k = el.getAttribute('data-k'); if (k === '(No category)') return;
+        S.cat = (S.cat === k) ? '' : k; $('mmCat').value = S.cat; recompute();
+      };
+    });
   }
 
   // ── KPIs + chart (issued vs received of the filtered selection) ──
