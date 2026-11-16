@@ -32,7 +32,8 @@ var _rp = {
   prfFrameLoaded: false,
   prfsChanged: false,
   extraItems: [],       // items added by hand in the modal (not on the reorder list)
-  modalVals: {},        // typed qty/remarks, kept across re-renders
+  modalVals: {},        // typed qty/remarks per LINE (key = item_code, or a unique key for lines added by hand), kept across re-renders
+  xseq: 0,              // counter for unique keys of hand-added lines (the same item code can be added more than once)
   catalog: null,        // erp_items search list (loaded on first use)
   draftId: null,        // id ng draft na binuksan (Resume) — buburahin kapag na-create na ang PRF
   openMap: null         // {item_code: {qty, prfs:[{prf_no,status,open_qty}]}} — fresh each time the modal opens
@@ -793,11 +794,13 @@ function rpPlanFor(rows) {
   return plan;
 }
 
+// One key per PRF line. Items ticked from the list use their code; lines added by hand get a unique key,
+// so the same item code can appear on several lines (e.g. one per project / SOF).
+function rpKey(it) { return it._key || it.item_code; }
+
 function rpModalRows() {
   var rows = rpSelectedRows();
-  var have = {};
-  rows.forEach(function(it) { have[it.item_code] = true; });
-  _rp.extraItems.forEach(function(x) { if (!have[x.item_code]) rows.push(x); });
+  _rp.extraItems.forEach(function(x) { rows.push(x); });      // no de-duplication: the same code may be added more than once
   return rows;
 }
 
@@ -876,24 +879,29 @@ function rpRefreshModal() {
 // remember what the user typed before the table is re-drawn
 function rpStashModalVals() {
   document.querySelectorAll('.rp-prf-qty').forEach(function(el) {
-    var c = el.getAttribute('data-code');
+    var c = el.getAttribute('data-key') || el.getAttribute('data-code');
     _rp.modalVals[c] = _rp.modalVals[c] || {};
     _rp.modalVals[c].qty = el.value;
   });
   document.querySelectorAll('.rp-prf-remarks').forEach(function(el) {
-    var c = el.getAttribute('data-code');
+    var c = el.getAttribute('data-key') || el.getAttribute('data-code');
     _rp.modalVals[c] = _rp.modalVals[c] || {};
     _rp.modalVals[c].remarks = el.value;
   });
 }
 
-function rpRemoveModalItem(code) {
+function rpRemoveModalItem(key) {
   rpStashModalVals();
-  if (_rp.selectedItems[code]) {
-    delete _rp.selectedItems[code];
+  var isExtra = _rp.extraItems.some(function(x) { return x._key === key; });
+  if (isExtra) {
+    _rp.extraItems = _rp.extraItems.filter(function(x) { return x._key !== key; });
+  } else if (_rp.selectedItems[key]) {
+    delete _rp.selectedItems[key];
     rpRender();
+  } else {
+    _rp.extraItems = _rp.extraItems.filter(function(x) { return x.item_code !== key; });   // lines saved by older drafts
   }
-  _rp.extraItems = _rp.extraItems.filter(function(x) { return x.item_code !== code; });
+  delete _rp.modalVals[key];
   rpRefreshModal();
 }
 
@@ -920,12 +928,11 @@ async function rpAddItemSearch() {
   if (!cat) return;
 
   var inModal = {};
-  rpModalRows().forEach(function(it) { inModal[it.item_code] = true; });
+  rpModalRows().forEach(function(it) { inModal[it.item_code] = (inModal[it.item_code] || 0) + 1; });
 
   var hits = [];
   for (var i = 0; i < cat.length && hits.length < 15; i++) {
     var it = cat[i];
-    if (inModal[it.item_code]) continue;
     if (String(it.item_code || '').toLowerCase().indexOf(q) !== -1 ||
         String(it.description || '').toLowerCase().indexOf(q) !== -1) hits.push(it);
   }
@@ -938,10 +945,12 @@ async function rpAddItemSearch() {
       var tag = oi.qty > 0
         ? ' <span class="oo-badge ms-1" title="' + rpEsc(oi.prfs.map(function(p) { return p.prf_no + ' ' + p.status; }).join(', ')) + '">⚠ on order ' + rpNum(oi.qty) + '</span>'
         : '';
+      var already = inModal[it.item_code]
+        ? ' <span class="badge bg-info text-dark ms-1" title="You can add the same code again, e.g. for another project">in this PRF ×' + inModal[it.item_code] + ' · add again</span>' : '';
       return '<button type="button" class="list-group-item list-group-item-action small" data-code="' + rpEsc(it.item_code) + '">' +
         '<code>' + rpEsc(it.item_code) + '</code> — ' + rpEsc(rpTruncate(it.description || '', 55)) +
         ' <span class="cat-badge ms-1">' + rpEsc(it.category || '—') + '</span>' +
-        '<span class="text-muted ms-2">On-hand ' + rpNum(it.on_hand) + ' / Buffer ' + rpNum(it.buffer_stock) + '</span>' + tag + '</button>';
+        '<span class="text-muted ms-2">On-hand ' + rpNum(it.on_hand) + ' / Buffer ' + rpNum(it.buffer_stock) + '</span>' + tag + already + '</button>';
     }).join('');
     box.querySelectorAll('button[data-code]').forEach(function(btn) {
       btn.addEventListener('click', function() { rpAddExtraItem(btn.getAttribute('data-code')); });
@@ -961,7 +970,8 @@ function rpAddExtraItem(code) {
     base_unit: it.base_unit || 'PIECE',
     on_hand: Number(it.on_hand || 0),
     buffer_stock: Number(it.buffer_stock || 0),
-    _extra: true
+    _extra: true,
+    _key: 'x' + (++_rp.xseq) + ':' + it.item_code
   });
   document.getElementById('rpAddItemInput').value = '';
   document.getElementById('rpAddItemResults').style.display = 'none';
@@ -997,15 +1007,21 @@ function renderRpPrfItems(items) {
 
   var warnCount = 0;
   var html = '';
+  var codeCount = {}, codeSeen = {};
+  items.forEach(function(it) { codeCount[it.item_code] = (codeCount[it.item_code] || 0) + 1; });
   items.forEach(function(it, idx) {
-    var v = _rp.modalVals[it.item_code] || {};
+    var key = rpKey(it);
+    var v = _rp.modalVals[key] || {};
+    var dup = codeCount[it.item_code] > 1;
+    codeSeen[it.item_code] = (codeSeen[it.item_code] || 0) + 1;
+    var firstOfCode = codeSeen[it.item_code] === 1;
     var oi = rpOpenInfo(it);
     var sug = rpSuggested(it);
     var defQty = Math.max(1, sug);
-    if (oi.qty > 0) warnCount++;
+    if (oi.qty > 0 && firstOfCode) warnCount++;
 
     var warn = '';
-    if (oi.qty > 0) {
+    if (oi.qty > 0 && firstOfCode) {
       warn = '<div class="small text-danger mt-1" style="line-height:1.3;">⚠ Already on order: ' +
         oi.prfs.map(function(p) {
           var pd = (_rp.prfAge[it.item_code] && _rp.prfAge[it.item_code].prfs.filter(function(x) { return x.prf_no === p.prf_no; })[0]) || null;
@@ -1018,7 +1034,8 @@ function renderRpPrfItems(items) {
 
     html += '<tr' + (oi.qty > 0 ? ' class="table-danger"' : (it._extra ? ' class="table-warning"' : '')) + '>' +
       '<td class="text-center">' + (idx + 1) + '</td>' +
-      '<td><code style="font-size:0.75rem;">' + rpEsc(it.item_code) + '</code>' + (it._extra ? ' <span class="badge bg-warning text-dark">added</span>' : '') + warn + '</td>' +
+      '<td><code style="font-size:0.75rem;">' + rpEsc(it.item_code) + '</code>' + (it._extra ? ' <span class="badge bg-warning text-dark">added</span>' : '') +
+        (dup ? ' <span class="badge bg-primary" title="The same item code is on several lines of this PRF. Use Remarks to say why (project / SOF).">same code ×' + codeCount[it.item_code] + ' · line ' + codeSeen[it.item_code] + '</span>' : '') + warn + '</td>' +
       '<td><span class="cat-badge">' + rpEsc(it.category || '—') + '</span></td>' +
       '<td>' + rpEsc(rpTruncate(it.description || '', 60)) + '</td>' +
       '<td class="text-end">' + rpNum(it.on_hand) + '</td>' +
@@ -1026,7 +1043,7 @@ function renderRpPrfItems(items) {
       '<td class="text-end ' + (oi.qty > 0 ? 'fw-bold text-danger' : '') + '">' + (oi.qty > 0 ? rpNum(oi.qty) : '—') + '</td>' +
       '<td class="text-center">' +
         '<input type="number" class="form-control form-control-sm text-center rp-prf-qty" ' +
-          'data-code="' + rpEsc(it.item_code) + '" ' +
+          'data-code="' + rpEsc(it.item_code) + '" data-key="' + rpEsc(key) + '" ' +
           'value="' + rpEsc(v.qty !== undefined ? v.qty : defQty) + '" ' +
           'min="1" step="1" style="width:80px;margin:0 auto;">' +
         '<div class="small text-muted">' + hint + '</div>' +
@@ -1034,16 +1051,30 @@ function renderRpPrfItems(items) {
       '<td class="text-center">' + rpEsc(it.base_unit || '—') + '</td>' +
       '<td>' +
         '<input type="text" class="form-control form-control-sm rp-prf-remarks" ' +
-          'data-code="' + rpEsc(it.item_code) + '" value="' + rpEsc(v.remarks || '') + '" ' +
-          'placeholder="Optional" maxlength="200">' +
+          'data-code="' + rpEsc(it.item_code) + '" data-key="' + rpEsc(key) + '" value="' + rpEsc(v.remarks || '') + '" ' +
+          'placeholder="' + (dup ? 'Required — project / SOF / reason' : 'Optional') + '" maxlength="200"' + (dup && !String(v.remarks || '').trim() ? ' style="border-color:#dc3545"' : '') + '>' +
       '</td>' +
-      '<td class="text-center"><button type="button" class="btn btn-sm btn-link text-danger p-0 rp-rm" data-code="' + rpEsc(it.item_code) + '" title="Remove"><i class="bi bi-x-lg"></i></button></td>' +
+      '<td class="text-center"><button type="button" class="btn btn-sm btn-link text-danger p-0 rp-rm" data-key="' + rpEsc(key) + '" title="Remove"><i class="bi bi-x-lg"></i></button></td>' +
     '</tr>';
   });
   tbody.innerHTML = html;
   tbody.querySelectorAll('.rp-rm').forEach(function(btn) {
-    btn.addEventListener('click', function() { rpRemoveModalItem(btn.getAttribute('data-code')); });
+    btn.addEventListener('click', function() { rpRemoveModalItem(btn.getAttribute('data-key')); });
   });
+
+  var dupCodes = Object.keys(codeCount).filter(function(c) { return codeCount[c] > 1; });
+  var dupEl = document.getElementById('rpPrfDupNote');
+  if (!dupEl && tbody.closest('.modal-body')) {
+    dupEl = document.createElement('div'); dupEl.id = 'rpPrfDupNote'; dupEl.className = 'alert alert-primary py-2 small mb-2'; dupEl.style.display = 'none';
+    var tw = tbody.closest('table'); if (tw && tw.parentNode) tw.parentNode.insertBefore(dupEl, tw);
+  }
+  if (dupEl) {
+    if (dupCodes.length) {
+      dupEl.innerHTML = '<i class="bi bi-info-circle me-1"></i><strong>' + dupCodes.length + ' item code' + (dupCodes.length === 1 ? ' is' : 's are') + ' on more than one line</strong> (' + dupCodes.map(rpEsc).join(', ') +
+        '). This is allowed, for example one line per project. Write the project / SOF in <strong>Remarks</strong> on every line so it is clear why the same code has a different qty.';
+      dupEl.style.display = 'block';
+    } else dupEl.style.display = 'none';
+  }
 
   var warnEl = document.getElementById('rpPrfWarn');
   if (warnEl) {
@@ -1074,11 +1105,16 @@ async function rpSubmitPrf() {
   var rows = rpModalRows();
   var items = [];
   var bad = [];
+  var noRemarks = [];
+  var codeCount = {};
+  rows.forEach(function(it) { codeCount[it.item_code] = (codeCount[it.item_code] || 0) + 1; });
   rows.forEach(function(it) {
-    var qtyEl = document.querySelector('.rp-prf-qty[data-code="' + cssEscape(it.item_code) + '"]');
-    var remEl = document.querySelector('.rp-prf-remarks[data-code="' + cssEscape(it.item_code) + '"]');
+    var key = rpKey(it);
+    var qtyEl = document.querySelector('.rp-prf-qty[data-key="' + cssEscape(key) + '"]');
+    var remEl = document.querySelector('.rp-prf-remarks[data-key="' + cssEscape(key) + '"]');
     var qty = qtyEl ? parseFloat(qtyEl.value) : rpNetNeeded(it);
     if (!(qty > 0)) { bad.push(it.item_code); return; }
+    if (codeCount[it.item_code] > 1 && !(remEl && remEl.value.trim())) noRemarks.push(it.item_code);
     items.push({
       item_code: it.item_code,
       qty: qty,
@@ -1089,6 +1125,11 @@ async function rpSubmitPrf() {
   });
 
   if (bad.length) { erpShowToast('Qty must be greater than 0: ' + bad.join(', '), 'warning'); return; }
+  if (noRemarks.length) {
+    rpStashModalVals(); rpRefreshModal();
+    erpShowToast('Same item code on several lines — please write the project / SOF in Remarks for each line: ' + noRemarks.filter(function(c, i, a) { return a.indexOf(c) === i; }).join(', '), 'warning');
+    return;
+  }
   if (items.length === 0) { erpShowToast('No valid items to submit', 'warning'); return; }
 
   var plan = rpPlanFor(rows);
@@ -1130,7 +1171,8 @@ async function rpSubmitPrf() {
 
     if (!res || res.success !== true) {
       if (res && res.code === 'OPEN_PRF_CONFLICT') {
-        var list = (res.conflicts || []).map(function(c) {
+        var seenC = {};
+        var list = (res.conflicts || []).filter(function(c) { if (seenC[c.item_code]) return false; seenC[c.item_code] = true; return true; }).map(function(c) {
           var a = _rp.prfAge[c.item_code];
           var ageNote = a && a.days !== null ? ' (oldest PRF ' + rpAgeText(a.days) + ' old' + (a.days >= RP_STALE_DAYS ? ' — STALE' : '') + ')' : '';
           return '• ' + c.item_code + ' — ' + rpNum(c.open_qty) + ' already on ' + c.prf_nos + ageNote;
@@ -1262,7 +1304,7 @@ async function rpSaveDraft() {
 
   var cats = {};
   var items = rows.map(function(it) {
-    var v = _rp.modalVals[it.item_code] || {};
+    var v = _rp.modalVals[rpKey(it)] || {};
     cats[it.category || 'UNCATEGORIZED'] = true;
     return {
       code: it.item_code,
@@ -1341,13 +1383,19 @@ async function rpResumeDraft(id) {
   _rp.selectedItems = {}; _rp.extraItems = []; _rp.modalVals = {}; _rp.openMap = null;
   var missing = [];
   (d.items || []).forEach(function(x) {
-    _rp.modalVals[x.code] = { qty: x.qty, remarks: x.remarks || '' };
-    if (_rp.allItems.some(function(it) { return it.item_code === x.code; })) { _rp.selectedItems[x.code] = true; return; }
+    var onList = _rp.allItems.some(function(it) { return it.item_code === x.code; });
+    if (onList && !_rp.selectedItems[x.code]) {
+      _rp.selectedItems[x.code] = true;                                   // first line of this code: the ticked list row
+      _rp.modalVals[x.code] = { qty: x.qty, remarks: x.remarks || '' };
+      return;
+    }
     var c = (cat || []).filter(function(r) { return r.item_code === x.code; })[0];
     if (c) {
+      var key = 'x' + (++_rp.xseq) + ':' + c.item_code;                    // extra line (also used for repeated codes)
+      _rp.modalVals[key] = { qty: x.qty, remarks: x.remarks || '' };
       _rp.extraItems.push({
         item_code: c.item_code, description: c.description || '', category: c.category || 'UNCATEGORIZED',
-        base_unit: c.base_unit || 'PIECE', on_hand: Number(c.on_hand || 0), buffer_stock: Number(c.buffer_stock || 0), _extra: true
+        base_unit: c.base_unit || 'PIECE', on_hand: Number(c.on_hand || 0), buffer_stock: Number(c.buffer_stock || 0), _extra: true, _key: key
       });
     } else missing.push(x.code);
   });
