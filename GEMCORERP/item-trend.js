@@ -57,26 +57,54 @@
 
   // Grouped bars (inline SVG) drawn at the real container width so text stays crisp and the chart stays compact.
   // rows: [{label, a, b, partial}]   opts: {w, h, fmt, tip, labelA, labelB}
+  // Compact number for bar labels: 1,886,753 → 1.89M · 350,000 → 350K · 8,500 → 8.5K
+  function compactNum(n) {
+    n = Number(n || 0); var a = Math.abs(n), t = function (x, d) { return String(Number(x.toFixed(d))); };
+    if (a >= 1e9) return t(n / 1e9, 2) + 'B';
+    if (a >= 1e6) return t(n / 1e6, 2) + 'M';
+    if (a >= 1e4) return Math.round(n / 1e3) + 'K';
+    if (a >= 1e3) return t(n / 1e3, 1) + 'K';
+    return a < 10 ? t(n, 1) : String(Math.round(n));
+  }
+  window.erpCompactNum = compactNum;
+
+  // Grouped bars (inline SVG) drawn at the real container width so text stays crisp.
+  // rows: [{label, a, b, partial}]
+  // opts: {w, h, fmt, tip, labelA, labelB,
+  //        labels:true  → value printed above every bar (barFmt = formatter, default compact)
+  //        big:true     → wider bars}
   function svgBars(rows, opts) {
-    var W = Math.max(320, Math.round(opts.w || 640)), H = opts.h || 190, L = 48, R = 8, T = 8, B = 24, iw = W - L - R, ih = H - T - B;
+    var W = Math.max(320, Math.round(opts.w || 640)), H = opts.h || 190;
     var fmt = opts.fmt, tip = opts.tip || fmt, la = opts.labelA || 'Issued', lb = opts.labelB || 'Received';
+    var showVals = !!opts.labels, barFmt = opts.barFmt || compactNum;
     var max = 0; rows.forEach(function (r) { max = Math.max(max, r.a, r.b); });
     if (!(max > 0)) max = 1;
     var step = Math.pow(10, Math.floor(Math.log(max) / Math.LN10));
-    max = [1, 2, 2.5, 5, 10].map(function (k) { return k * step; }).filter(function (v) { return v >= max; })[0] || max;
-    var g = '', i;
+    max = [1, 1.2, 1.6, 2, 2.4, 3.2, 4, 4.8, 6, 8, 10].map(function (k) { return k * step; }).filter(function (v) { return v >= max; })[0] || max;
+    // left margin grows with the longest y-axis label (so "3,000,000" is never clipped)
+    var maxLbl = 0, i;
+    for (i = 0; i <= 4; i++) maxLbl = Math.max(maxLbl, String(fmt(max * i / 4)).length);
+    var L = Math.max(48, Math.round(maxLbl * 6 + 14)), R = 8, T = showVals ? 22 : 8, B = 24, iw = W - L - R, ih = H - T - B;
+    var g = '';
     for (i = 0; i <= 4; i++) {
       var y = T + ih - (ih * i / 4), v = max * i / 4;
       g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y + '" y2="' + y + '" stroke="#e5e7eb" stroke-width="1"/>' +
            '<text x="' + (L - 6) + '" y="' + (y + 3) + '" text-anchor="end" font-size="10" fill="#6b7280">' + esc(fmt(v)) + '</text>';
     }
-    var gw = iw / rows.length, bw = Math.max(4, Math.min(16, gw * 0.32));
+    var gw = iw / rows.length, bw = Math.max(4, Math.min(opts.big ? 34 : 16, gw * (opts.big ? 0.34 : 0.32)));
+    var labelFs = bw >= 24 ? 11 : 10, canLabel = showVals && gw >= 58;   // skip labels on very narrow screens (hover still works)
     rows.forEach(function (r, k) {
       var cx = L + gw * k + gw / 2, ha = ih * r.a / max, hb = ih * r.b / max;
+      var xa = cx - bw - 1, xb = cx + 1;
       g += '<g' + (r.partial ? ' opacity="0.65"' : '') + '>' +
-        '<rect x="' + (cx - bw - 1) + '" y="' + (T + ih - ha) + '" width="' + bw + '" height="' + Math.max(ha, r.a > 0 ? 1 : 0) + '" rx="1.5" fill="' + C_OUT + '"><title>' + esc(r.label + ' · ' + la + ': ' + tip(r.a)) + '</title></rect>' +
-        '<rect x="' + (cx + 1) + '" y="' + (T + ih - hb) + '" width="' + bw + '" height="' + Math.max(hb, r.b > 0 ? 1 : 0) + '" rx="1.5" fill="' + C_IN + '"><title>' + esc(r.label + ' · ' + lb + ': ' + tip(r.b)) + '</title></rect></g>' +
-        '<text x="' + cx + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="#4b5563">' + esc(r.label) + (r.partial ? '*' : '') + '</text>';
+        '<rect x="' + xa + '" y="' + (T + ih - ha) + '" width="' + bw + '" height="' + Math.max(ha, r.a > 0 ? 1 : 0) + '" rx="1.5" fill="' + C_OUT + '"><title>' + esc(r.label + ' · ' + la + ': ' + tip(r.a)) + '</title></rect>' +
+        '<rect x="' + xb + '" y="' + (T + ih - hb) + '" width="' + bw + '" height="' + Math.max(hb, r.b > 0 ? 1 : 0) + '" rx="1.5" fill="' + C_IN + '"><title>' + esc(r.label + ' · ' + lb + ': ' + tip(r.b)) + '</title></rect>';
+      if (canLabel) {
+        if (r.a > 0) g += '<text x="' + (xa + bw / 2) + '" y="' + (T + ih - ha - 4) + '" text-anchor="middle" font-size="' + labelFs + '" font-weight="600" fill="#b91c1c">' + esc(barFmt(r.a)) + '</text>';
+        if (r.b > 0) g += '<text x="' + (xb + bw / 2) + '" y="' + (T + ih - hb - 4) + '" text-anchor="middle" font-size="' + labelFs + '" font-weight="600" fill="#047857">' + esc(barFmt(r.b)) + '</text>';
+      }
+      g += '</g>' +
+        '<text x="' + cx + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="#4b5563">' + esc(r.label) + (r.partial ? '*' : '') + '</text>';
     });
     return '<svg class="tr-svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Monthly issued and received">' + g + '</svg>';
   }
