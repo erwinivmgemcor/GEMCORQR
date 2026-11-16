@@ -86,6 +86,38 @@ function erpDisplayText(v) {
 }
 window.erpDisplayText = erpDisplayText;
 
+// ─── Item Class: STD (Standard stock) vs PROJ (Project stock) ───
+// Batay sa Active Months (ilang buwan may actual na usage):
+//   Active Months ≥ ERP_STD_MIN_MONTHS  →  STD  (regular na ginagamit, dapat may buffer at nire-replenish)
+//   mas mababa                          →  PROJ (project-based / paminsan-minsan lang, hindi auto-replenish)
+// ISANG lugar lang ito — baguhin ang numero dito at susunod ang Stock Monitor at Replenishment.
+var ERP_STD_MIN_MONTHS = 5;
+
+function erpItemClass(activeMonths) {
+  return Number(activeMonths || 0) >= ERP_STD_MIN_MONTHS ? 'STD' : 'PROJ';
+}
+
+function erpClassBadge(activeMonths) {
+  var am = Number(activeMonths || 0);
+  var cls = erpItemClass(am);
+  var tip = (cls === 'STD' ? 'Standard stock' : 'Project stock') + ' — ' + am + ' active month' + (am === 1 ? '' : 's') +
+            (cls === 'STD' ? ' (' + ERP_STD_MIN_MONTHS + ' or more)' : ' (below ' + ERP_STD_MIN_MONTHS + ')');
+  return '<span class="erp-class-badge erp-class-' + cls.toLowerCase() + '" title="' + tip + '">' + cls + '</span>';
+}
+
+(function () {
+  if (typeof document === 'undefined' || document.getElementById('erpClassBadgeStyle')) return;
+  var st = document.createElement('style');
+  st.id = 'erpClassBadgeStyle';
+  st.textContent =
+    '.erp-class-badge{display:inline-block;min-width:44px;padding:2px 8px;border-radius:999px;font-size:.7rem;font-weight:700;letter-spacing:.03em;text-align:center;}' +
+    '.erp-class-std{background:#dcfce7;color:#166534;}' +
+    '.erp-class-proj{background:#fef3c7;color:#92400e;}' +
+    '[data-theme="dark"] .erp-class-std{background:#14532d;color:#bbf7d0;}' +
+    '[data-theme="dark"] .erp-class-proj{background:#78350f;color:#fde68a;}';
+  document.head.appendChild(st);
+})();
+
 // ─── Utility: escape HTML ───
 function erpEsc(s) {
   if (s === null || s === undefined) return '';
