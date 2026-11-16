@@ -195,7 +195,7 @@ async function mdashLoad() {
 // ═══════════════════════════════════════════════════════════
 async function mdashLoadItems() {
   try {
-    var query = 'select=item_code,description,category,location,base_unit,unit_cost,on_hand,on_hand_cost,abc_classification,inventory_movement,stock_classification,buffer_stock,ave_monthly_consumption,is_active' +
+    var query = 'select=item_code,description,category,location,base_unit,unit_cost,on_hand,on_hand_cost,abc_classification,inventory_movement,stock_classification,buffer_stock,ave_monthly_consumption,active_consumption_months,is_active' +
                 '&is_active=eq.true&is_deleted=eq.false&order=on_hand_cost.desc,item_code.asc';
 
     if (_mdash.filters.category) {
@@ -274,10 +274,8 @@ function mdashRenderKPIs(data) {
   animateValue(elMrif, 0, act.mrif_value || 0, 1200, true);
   document.getElementById('mdashKpiMrifSub').textContent = (act.mrif_count || 0) + ' docs issued · ' + mdashPeriodLabel();
 
-  // 7. Replenishment
-  var elRep = document.getElementById('mdashKpiReplenish');
-  animateValue(elRep, 0, s.replenishment_value || 0, 1200, true);
-  document.getElementById('mdashKpiReplenishSub').textContent = (s.replenishment_count || 0) + ' items below buffer · as of now';
+  // 7. Replenishment — STD (standard stock) lang ang binibilang; ang PROJ ay hindi nire-replenish
+  mdashRenderReplenishCard(s);
 
   // 8. Out of Stock
   var elOos = document.getElementById('mdashKpiOutOfStock');
@@ -873,26 +871,98 @@ document.addEventListener('visibilitychange', function() {
 // ═══════════════════════════════════════════════════════════
 // ✅ REPLENISHMENT WIDGET
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// STD-ONLY REPLENISHMENT (card + widget)
+// Ang listahan ng "below buffer" ay galing pa rin sa database (erp_v_reorder_list),
+// pero STD lang ang binibilang (Active Mo ≥ ERP_STD_MIN_MONTHS — tingnan ang erp-config.js).
+// Ang PROJ (project stock) ay hindi isinasama dahil hindi naman nire-replenish.
+// Halaga = (buffer − on-hand) × unit cost, para sa mga item na below buffer.
+// ═══════════════════════════════════════════════════════════
+var _mdashRep = { rows: null, items: null, at: 0, pending: null };
+
+async function mdashLoadRepData(force) {
+  if (!force && _mdashRep.rows && _mdashRep.items && Date.now() - _mdashRep.at < 60000) return _mdashRep;
+  if (_mdashRep.pending) return _mdashRep.pending;     // iisang request kahit sabay tawag ng card at widget
+  _mdashRep.pending = (async function() {
+    try {
+      var res = await Promise.all([
+        erpFetch('erp_v_reorder_list', 'select=item_code,urgency,on_hand,buffer_stock&limit=5000'),
+        erpFetchAll('erp_items', 'select=item_code,category,location,stock_classification,unit_cost,on_hand,buffer_stock,active_consumption_months&is_active=eq.true&is_deleted=eq.false')
+      ]);
+      _mdashRep.rows = res[0] || [];
+      _mdashRep.items = res[1] || [];
+      _mdashRep.at = Date.now();
+      return _mdashRep;
+    } finally { _mdashRep.pending = null; }
+  })();
+  return _mdashRep.pending;
+}
+
+function mdashCalcRep(filters) {
+  var map = {};
+  (_mdashRep.items || []).forEach(function(it) { map[it.item_code] = it; });
+  var out = { std: { count: 0, value: 0, critical: 0, urgent: 0 }, proj: { count: 0, value: 0 } };
+  (_mdashRep.rows || []).forEach(function(r) {
+    var it = map[r.item_code];
+    if (!it) return;                                   // deactivated / wala sa active items
+    if (filters) {
+      if (filters.category && it.category !== filters.category) return;
+      if (filters.location && it.location !== filters.location) return;
+      if (filters.stockClass && it.stock_classification !== filters.stockClass) return;
+    }
+    var oh = Number(r.on_hand != null ? r.on_hand : it.on_hand || 0);
+    var buf = Number(r.buffer_stock != null ? r.buffer_stock : it.buffer_stock || 0);
+    var value = Math.max(buf - oh, 0) * Number(it.unit_cost || 0);
+    var bucket = erpItemClass(it.active_consumption_months) === 'STD' ? out.std : out.proj;
+    bucket.count++; bucket.value += value;
+    if (bucket === out.std) {
+      var u = String(r.urgency || '').toUpperCase();
+      if (u === 'CRITICAL') out.std.critical++;
+      else if (u === 'URGENT') out.std.urgent++;
+    }
+  });
+  return out;
+}
+
+async function mdashRenderReplenishCard(s) {
+  var elRep = document.getElementById('mdashKpiReplenish');
+  var elSub = document.getElementById('mdashKpiReplenishSub');
+  if (!elRep || !elSub) return;
+  try {
+    await mdashLoadRepData();
+    var c = mdashCalcRep({
+      category: _mdash.filters.category || null,
+      location: _mdash.filters.location || null,
+      stockClass: _mdash.filters.stockClass || null
+    });
+    animateValue(elRep, 0, c.std.value, 1200, true);
+    elSub.textContent = c.std.count + ' STD items below buffer · as of now';
+    elSub.title = c.proj.count + ' PROJ (project stock, fewer than ' + ERP_STD_MIN_MONTHS + ' active months) are not counted' +
+      ' — about ₱' + Math.round(c.proj.value).toLocaleString();
+    console.log('[Dashboard] Replenishment STD:', c.std.count, '/ PROJ excluded:', c.proj.count,
+      '| all-class value (computed): ₱' + Math.round(c.std.value + c.proj.value).toLocaleString(),
+      '| database value: ₱' + Math.round(Number(s.replenishment_value || 0)).toLocaleString());
+  } catch (e) {
+    console.warn('[Dashboard] STD replenishment unavailable, using database numbers:', e.message);
+    animateValue(elRep, 0, s.replenishment_value || 0, 1200, true);
+    elSub.textContent = (s.replenishment_count || 0) + ' items below buffer · as of now';
+  }
+}
+
 async function loadReplenishmentWidget() {
   try {
-    var rows = await erpFetch('erp_v_reorder_list', 'select=item_code,urgency&limit=5000');
-    if (!rows || rows.length === 0) {
+    await mdashLoadRepData();
+    var c = mdashCalcRep(null);                          // widget = lahat ng STD, hindi sumusunod sa filters sa taas
+    if (c.std.count === 0) {
       document.getElementById('replenishmentWidget').style.display = 'none';
       return;
     }
-
-    var critical = 0, urgent = 0;
-    rows.forEach(function(r) {
-      var u = String(r.urgency || '').toUpperCase();
-      if (u === 'CRITICAL') critical++;
-      else if (u === 'URGENT') urgent++;
-    });
-
-    document.getElementById('replenishmentTotal').textContent = rows.length;
-    document.getElementById('replenishmentCritical').textContent = critical + ' critical';
-    document.getElementById('replenishmentUrgent').textContent = urgent + ' urgent';
+    document.getElementById('replenishmentTotal').textContent = c.std.count.toLocaleString();
+    document.getElementById('replenishmentCritical').textContent = c.std.critical + ' critical';
+    document.getElementById('replenishmentUrgent').textContent = c.std.urgent + ' urgent';
+    var note = document.getElementById('replenishmentNote');
+    if (note) note.textContent = c.proj.count ? c.proj.count + ' PROJ item' + (c.proj.count === 1 ? '' : 's') + ' not counted' : '';
     document.getElementById('replenishmentWidget').style.display = 'block';
-
   } catch(e) {
     console.warn('[Replenishment Widget]', e.message);
   }
