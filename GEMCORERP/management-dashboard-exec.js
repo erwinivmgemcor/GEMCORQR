@@ -53,7 +53,7 @@ function mdashExecRender() {
     var avg = Number(it.ave_monthly_consumption || 0), oh = Number(it.on_hand || 0), uc = Number(it.unit_cost || 0);
     if (avg > 0 && oh > avg * 12) { var ex = (oh - avg * 12) * uc; if (ex > 0) over.push({ it: it, v: ex, sub: (oh / avg).toFixed(0) + ' mo. of stock' }); }
     var buf = Number(it.buffer_stock || 0);
-    if (buf > 0 && oh < buf) { var need = (buf - oh) * uc; lowSum += need; low.push({ it: it, v: need, sub: oh + ' of ' + buf + ' ' + (it.base_unit || '') }); }
+    if (buf > 0 && oh < buf && erpItemClass(it.active_consumption_months) === 'STD') { var need = (buf - oh) * uc; lowSum += need; low.push({ it: it, v: need, sub: oh + ' of ' + buf + ' ' + (it.base_unit || '') }); }
   });
   var sorted = items.slice().sort(function(a, b) { return b.v - a.v; });
   var top20 = sorted.slice(0, 20).reduce(function(s, x) { return s + x.v; }, 0);
@@ -65,7 +65,7 @@ function mdashExecRender() {
   if (total > 0) {
     findings.push(['var(--nm)', '<b>' + xdP(seg.nm + seg.sl) + '</b> (' + xdPct(seg.nm + seg.sl, total).toFixed(0) + '%) of stock value is in slow or non-moving items.']);
     if (overSum > 0) findings.push(['var(--sl)', '<b>' + xdP(overSum) + '</b> is held beyond 12 months of usage across ' + over.length + ' items.']);
-    if (low.length) findings.push(['var(--sl)', '<b>' + low.length + ' items</b> are below buffer; restocking them costs about <b>' + xdP(lowSum) + '</b>.']);
+    if (low.length) findings.push(['var(--sl)', '<b>' + low.length + ' STD items</b> are below buffer; restocking them costs about <b>' + xdP(lowSum) + '</b>.']);
     findings.push(['var(--ink)', 'The top 20 items hold <b>' + xdPct(top20, total).toFixed(0) + '%</b> of total value. Count and protect these first.']);
     if (act.mrr_value != null) findings.push([Number(act.mrr_value) > Number(act.mrif_value || 0) ? 'var(--sl)' : 'var(--mv)',
       'In this period you received <b>' + xdP(act.mrr_value) + '</b> and issued <b>' + xdP(act.mrif_value || 0) + '</b>; stock ' + (Number(act.mrr_value) >= Number(act.mrif_value || 0) ? 'grew' : 'shrank') + ' by <b>' + xdP(Math.abs(Number(act.mrr_value) - Number(act.mrif_value || 0))) + '</b>.']);
@@ -106,7 +106,7 @@ function mdashExecRender() {
     '<div class="xd-grid"><div class="xd-card"><p class="xd-h">ABC classes and top items</p><p class="xd-s">A items are the few that carry most of the value</p><div class="xd-abc">' +
     ['A', 'B', 'C'].map(function(k) { return '<div style="--c:' + abcCol[k] + '"><small>Class ' + k + ' · ' + abc[k].n + ' items</small><span class="xd-num">' + xdP(abc[k].v) + '</span><small>' + xdPct(abc[k].v, total).toFixed(0) + '% of value</small></div>'; }).join('') + '</div>' +
     '<p class="xd-h" style="font-size:.82rem">Top 8 items by value</p>' + list(topItems, 'No items.') + '</div>' +
-    '<div class="xd-card"><p class="xd-h">Restock cost</p><p class="xd-s">Items below buffer, ranked by peso needed to reach buffer</p>' + list(low.slice(0, 8), 'No items below buffer.') + '</div></div>' +
+    '<div class="xd-card"><p class="xd-h">Restock cost</p><p class="xd-s">STD items below buffer (project stock not counted), ranked by peso needed to reach buffer</p>' + list(low.slice(0, 8), 'No items below buffer.') + '</div></div>' +
 
     '<div class="xd-grid"><div class="xd-card"><p class="xd-h">Idle capital</p><p class="xd-s">Items with stock but no movement: ' + xdP(idleSum) + ' in ' + idle.length + ' items</p>' + list(idle.slice(0, 8), 'Nothing idle.') + '</div>' +
     '<div class="xd-card"><p class="xd-h">Overstock</p><p class="xd-s">Value above 12 months of average usage: ' + xdP(overSum) + '</p>' + list(over.slice(0, 8), 'No overstock found.') + '</div></div>';
