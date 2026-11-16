@@ -150,6 +150,13 @@
           badgeId: 'editReqBadgeSidebar'
         },
         {
+          id: 'ai-agency',
+          label: 'Operations Floor',
+          icon: 'bi-buildings',
+          href: 'ai-agency.html',
+          roles: ['warehouse']
+        },
+        {
           id: 'sof-tracker',
           label: 'SOF Tracker',
           icon: 'bi-file-earmark-ruled',
@@ -344,6 +351,7 @@
     'mrs-list': 'MRS List',
     'prf-monitor': 'PRF Monitor',
     'edit-requests': 'Edit Requests',
+    'ai-agency': 'Operations Floor',
     'sof-tracker': 'SOF Tracker',
     'project-costing': 'Project Costing',
     'mrif-monitoring': 'MRIF Monitoring',
