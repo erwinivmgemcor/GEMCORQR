@@ -146,8 +146,9 @@
           label: 'Edit Requests',
           icon: 'bi-pencil-square',
           href: 'edit-requests.html',
-          roles: ['warehouse']
-        },   
+          roles: ['warehouse'],
+          badgeId: 'editReqBadgeSidebar'
+        },
         {
           id: 'sof-tracker',
           label: 'SOF Tracker',
@@ -626,6 +627,76 @@
     window.addEventListener('erp-requests-changed', refresh);
   }
 
+  // Sidebar badge on "Edit Requests": number of PENDING edit requests. Warehouse only.
+  // Red badge + highlighted row + (when the count goes UP) a toast popup and a bell sound.
+  function _startEditReqBadge(userRole) {
+    if (userRole !== 'warehouse' || window._erpEditReqBadgeStarted) return;
+    window._erpEditReqBadgeStarted = true;
+
+    function paint(n) {
+      var b = document.getElementById('editReqBadgeSidebar');
+      if (!b) return;
+      b.textContent = n > 99 ? '99+' : n;
+      b.classList.toggle('d-none', n <= 0);
+      var item = b.closest ? b.closest('.erp-sidebar-item') : null;
+      if (item) item.classList.toggle('has-unread', n > 0);
+    }
+
+    function toast(n, added) {
+      var old = document.getElementById('erpEditReqToast');
+      if (old) old.remove();
+      var el = document.createElement('a');
+      el.id = 'erpEditReqToast';
+      el.href = 'edit-requests.html';
+      el.className = 'erp-editreq-toast';
+      el.innerHTML = '<i class="bi bi-pencil-square"></i><div><strong>' +
+        (added === 1 ? 'May bagong Edit Request' : 'May ' + added + ' bagong Edit Requests') +
+        '</strong><span>' + n + ' pending — i-click para i-review</span></div>' +
+        '<button type="button" aria-label="Close">&times;</button>';
+      el.querySelector('button').addEventListener('click', function(e) {
+        e.preventDefault(); e.stopPropagation(); el.remove();
+      });
+      document.body.appendChild(el);
+      setTimeout(function() { if (el.parentNode) el.remove(); }, 12000);
+    }
+
+    function ding() {
+      if (window.erpAlerts && window.erpAlerts.play) { window.erpAlerts.play('request'); return; }
+      if (document.getElementById('erpAlertsScript')) return;
+      var sc = document.createElement('script');
+      sc.id = 'erpAlertsScript';
+      sc.src = 'notif-alerts.js';
+      sc.onload = function() { if (window.erpAlerts) window.erpAlerts.play('request'); };
+      document.head.appendChild(sc);
+    }
+
+    async function refresh() {
+      if (document.hidden || typeof window.erpUrl !== 'function') return;
+      try {
+        var res = await fetch(window.erpUrl('edit_requests') + '?select=id&status=eq.PENDING',
+          { method: 'HEAD', cache: 'no-store',
+            headers: Object.assign({}, window.erpHeaders(), { 'Prefer': 'count=exact', 'Range': '0-0' }) });
+        var n = parseInt((res.headers.get('content-range') || '').split('/')[1], 10);
+        if (isNaN(n)) return;
+        var prev = 0;
+        try { prev = parseInt(localStorage.getItem('ivm_editReqCount'), 10) || 0; } catch (e) {}
+        paint(n);
+        try { localStorage.setItem('ivm_editReqCount', String(n)); } catch (e) {}
+        if (n > prev) {
+          // don't pop up while the warehouse is already reading the Edit Requests page
+          if (!/edit-requests\.html/i.test(location.pathname)) toast(n, n - prev);
+          ding();
+        }
+      } catch (e) { /* keep the last badge value */ }
+    }
+
+    refresh();
+    setInterval(refresh, 30000);
+    document.addEventListener('visibilitychange', function() { if (!document.hidden) refresh(); });
+    // edit-requests.js fires this after approve / reject / reload
+    window.addEventListener('erp-edit-requests-changed', refresh);
+  }
+
   // New-message popups + sound + sidebar badge — runs on every page
   function _startChatAlerts() {
     try { if (!localStorage.getItem('ivm_username')) return; } catch(e) { return; }
@@ -889,6 +960,7 @@
     setTimeout(_startPresence, 1500);
     setTimeout(_startNotes, 1800);
     setTimeout(function() { _startRequestsBadge(userRole); }, 1500);
+    setTimeout(function() { _startEditReqBadge(userRole); }, 1600);
     if (userRole === 'production') setTimeout(function() { window.erpStartTour(false); }, 1600);
   }
 
