@@ -211,13 +211,6 @@
           roles: ['warehouse', 'production', 'procurement', 'finance']
         },
         {
-          id: 'usage-trend',
-          label: 'Usage Trend',
-          icon: 'bi-graph-up-arrow',
-          href: 'usage-trend.html',
-          roles: ['warehouse']
-        },
-        {
           id: 'monthly-movement',
           label: 'Monthly Movement',
           icon: 'bi-table',
@@ -357,7 +350,6 @@
     'mrs-monitoring': 'MRS Monitoring',
     'item-in-out': 'Item In & Out',
     'weekly-monitor': 'Weekly Monitoring',
-    'usage-trend': 'Usage Trend',
     'monthly-movement': 'Monthly Movement',
     'usage-entry': 'Usage Entry',
     'process-history': 'Process History',
