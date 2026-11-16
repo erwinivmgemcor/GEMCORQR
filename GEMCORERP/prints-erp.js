@@ -664,8 +664,12 @@ function erpShowPrintModal(html) {
 function erpPrintNow() {
   var content = document.getElementById('erpPrintContent');
   if (!content) return;
-  
-  var html = content.innerHTML;
+  erpPrintHtml(content.innerHTML);
+}
+
+// Actual print worker — used by single print (erpPrintNow) and bulk print (bulk-print.js)
+function erpPrintHtml(html, opts) {
+  opts = opts || {};
   var printStyles = 
     '@page { size: letter portrait; margin: 0.25in; }' +
     '* { box-sizing: border-box; }' +
@@ -699,7 +703,13 @@ function erpPrintNow() {
     '.mrif-sig, .mrr-sig { width: 26%; }' +
     '.mrif-sig-line, .mrr-sig-line { border-bottom: 1px solid #000; height: 22px; margin-bottom: 2px; }' +
     '.mrif-sig-label, .mrr-sig-label { font-size: 8pt; font-weight: bold; text-transform: uppercase; }' +
-    '.mrif-sig-name, .mrr-sig-name { font-size: 8pt; font-weight: 600; margin-bottom: 4px; }';
+    '.mrif-sig-name, .mrr-sig-name { font-size: 8pt; font-weight: 600; margin-bottom: 4px; }' +
+    // Bulk print: one document per page
+    '.bulk-print-page { break-after: page; page-break-after: always; }' +
+    '.bulk-print-page:last-child { break-after: auto; page-break-after: auto; }' +
+    // Bulk "save paper" mode: several documents per page, never split a document across pages
+    (opts.compact ? '.bulk-print-page { break-after: auto; page-break-after: auto; break-inside: avoid; page-break-inside: avoid; border-bottom: 1px dashed #888; padding-bottom: 4px; margin-bottom: 4px; }' +
+                    '.bulk-print-page:last-child { border-bottom: 0; }' : '');
   
   var fullHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Print</title><style>' + printStyles + '</style></head><body>' + html + '</body></html>';
   
