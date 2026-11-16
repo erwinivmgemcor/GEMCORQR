@@ -119,7 +119,7 @@ async function rpLoad() {
   var alertEl = document.getElementById('rpSetupAlert');
   if (alertEl) alertEl.style.display = 'none';
   if (tbody && _rp.allItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="17" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="18" class="erp-empty">' +
       '<div class="erp-spinner"></div>' +
       '<div class="mt-2">Loading replenishment needs...</div></td></tr>';
   }
@@ -170,7 +170,7 @@ async function rpLoad() {
       alertEl.style.display = 'block';
     }
     if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="17" class="erp-empty text-danger">' +
+      tbody.innerHTML = '<tr><td colspan="18" class="erp-empty text-danger">' +
         'Failed: ' + rpEsc(msg) + '</td></tr>';
     }
   }
@@ -206,6 +206,23 @@ function rpActiveLabel(f) {
   if (f === 'zero') return 'no usage';
   if (f === 'r12') return 'only 1–2 months';
   return '≥ ' + f.slice(3) + ' month' + (f === 'ge:1' ? '' : 's');
+}
+
+// STD / PROJ (rule lives in erp-config.js → ERP_STD_MIN_MONTHS). null = unknown (usage data not loaded)
+function rpItemClass(it) {
+  var am = rpActive(it);
+  return am === null ? null : erpItemClass(am);
+}
+function rpClassValue() {
+  var el = document.getElementById('rpClassFilter');
+  return el ? el.value : '';
+}
+// Does the item pass the Class filter?  ''=all | STD | PROJ.  Unknown class is never hidden.
+function rpClassMatch(it, f) {
+  if (f === undefined) f = rpClassValue();
+  if (!f) return true;
+  var c = rpItemClass(it);
+  return c === null ? true : c === f;
 }
 
 // ── PRF age (weekly Monday cycle) ───────────────────────────
@@ -256,6 +273,8 @@ function rpShowStale() {
   document.getElementById('rpOrderFilter').value = 'stale';
   document.getElementById('rpActiveFilter').value = '';
   rpLsSet('rp_active_filter', '');
+  document.getElementById('rpClassFilter').value = '';     // lahat ng stale PRF, STD man o PROJ
+  rpLsSet('rp_class_filter', 'ALL');
   _rp.currentPage = 1;
   rpRender();
 }
@@ -309,6 +328,7 @@ function rpComputeKPIs() {
   _rp.allItems.forEach(function(it) {
     if (rpIsCovered(it)) return;
     if (actF && _rp.hasActivity && !rpActiveMatch(it, actF)) return;
+    if (!rpClassMatch(it)) return;
     needsCount++;
     var u = String(it.urgency || '').toUpperCase();
     if (u === 'CRITICAL') critical++;
@@ -370,6 +390,27 @@ function rpRestorePrefs() {
   var af = rpLsGet('rp_active_filter');
   var afSel = document.getElementById('rpActiveFilter');
   if (af && afSel && afSel.querySelector('option[value="' + af + '"]')) afSel.value = af;
+  // Class filter: default = STD only (project stock ay hindi auto-replenish). 'ALL' = STD + PROJ
+  var cf = rpLsGet('rp_class_filter');
+  var cfSel = document.getElementById('rpClassFilter');
+  if (cfSel && cf !== null) {
+    var cv = cf === 'ALL' ? '' : cf;
+    if (cfSel.querySelector('option[value="' + cv + '"]')) cfSel.value = cv;
+  }
+}
+
+function rpOnClassChange() {
+  var v = rpClassValue();
+  rpLsSet('rp_class_filter', v === '' ? 'ALL' : v);
+  _rp.currentPage = 1;
+  rpRender();
+}
+
+function rpSetClassFilter(v) {
+  var sel = document.getElementById('rpClassFilter');
+  if (!sel) return;
+  sel.value = v;
+  rpOnClassChange();
 }
 
 function rpOnActiveChange() {
@@ -410,6 +451,7 @@ var RP_SORT_GET = {
   buffer:  function(it) { return Number(it.buffer_stock || 0); },
   ave:     function(it) { return Number(it.ave_monthly_consumption || 0); },
   active:  function(it) { var a = rpActive(it); return a === null ? -1 : a; },
+  cls:     function(it) { return rpItemClass(it) || ''; },
   reserved: function(it) { return Number(it.reserved_qty || 0); },
   cover:   function(it) { return it.days_of_cover === null || it.days_of_cover === undefined ? 1e9 : Number(it.days_of_cover); },
   mov:     function(it) { return String(it.inventory_movement || '').toLowerCase(); },
@@ -529,6 +571,8 @@ function rpRender() {
   var orderFilter = document.getElementById('rpOrderFilter').value;
   var activeFilter = document.getElementById('rpActiveFilter').value;
   var sortBy = document.getElementById('rpSortFilter').value;
+  var classFilter = rpClassValue();
+  var classHidden = 0;
 
   // everything except the Active-Months filter (the chips count from this set)
   var base = _rp.allItems.filter(function(it) {
@@ -544,6 +588,8 @@ function rpRender() {
       var desc = String(it.description || '').toLowerCase();
       if (code.indexOf(search) === -1 && desc.indexOf(search) === -1) return false;
     }
+    // Class (STD/PROJ) — huling check para mabilang kung ilan ang naitago nito
+    if (!rpClassMatch(it, classFilter)) { classHidden++; return false; }
     return true;
   });
 
@@ -562,6 +608,18 @@ function rpRender() {
         ' hidden by the Active-months filter (' + rpEsc(rpActiveLabel(activeFilter)) + '). <a onclick="rpSetActiveFilter(\'\')">Show all</a>';
       note.style.display = 'block';
     } else note.style.display = 'none';
+  }
+
+  var cnote = document.getElementById('rpClassNote');
+  if (cnote) {
+    if (classFilter && _rp.hasActivity && classHidden > 0) {
+      var hiddenName = classFilter === 'STD' ? 'PROJ (project stock)' : 'STD (standard stock)';
+      cnote.innerHTML = '<i class="bi bi-funnel-fill me-1"></i><strong>' + rpNum(classHidden) + '</strong> ' + hiddenName +
+        ' item' + (classHidden === 1 ? ' is' : 's are') + ' hidden by the Class filter' +
+        (classFilter === 'STD' ? ' (usage in fewer than ' + ERP_STD_MIN_MONTHS + ' months — usually not replenished)' : '') +
+        '. <a onclick="rpSetClassFilter(\'\')">Show STD + PROJ</a>';
+      cnote.style.display = 'block';
+    } else cnote.style.display = 'none';
   }
 
   var total = _rp.filteredItems.length;
@@ -586,9 +644,9 @@ function rpRender() {
   }
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="17" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="18" class="erp-empty">' +
       '<i class="bi bi-check-circle fs-2 d-block mb-2 text-success"></i>' +
-      (orderFilter === 'needs' && !activeFilter && !search && !catFilter && !locFilter && !urgFilter
+      (orderFilter === 'needs' && !activeFilter && !classFilter && !search && !catFilter && !locFilter && !urgFilter
         ? 'Nothing left to order — everything below buffer is already on a PRF or stock is healthy.'
         : 'No items match the filters.') + '</td></tr>';
     updateRpBulkBar();
@@ -640,6 +698,7 @@ function rpRender() {
       '<td class="text-end">' + rpNum(it.ave_monthly_consumption) + '</td>' +
       '<td class="text-center">' + rpCoverCell(it) + '</td>' +
       '<td class="text-center">' + amCell + '<div style="margin-top:3px;">' + movCell + '</div></td>' +
+      '<td class="text-center">' + (am === null ? '<span class="text-muted">—</span>' : erpClassBadge(am)) + '</td>' +
       '<td class="text-end">' + rpNum(it.qty_needed) + '</td>' +
       '<td class="text-center">' + onOrderCell + '</td>' +
       '<td class="text-end fw-bold ' + (covered ? '' : 'text-danger') + '">' + rpNum(rpNetNeeded(it)) + '</td>' +
@@ -837,13 +896,23 @@ function rpSuggested(it) {
 
 function rpCreatePrfFromSelection() {
   _rp.draftId = null; _rp.draftStamp = null;      // bagong PRF, hindi galing sa draft
-  var short = rpSelectedRows().filter(function(it) { var a = rpActive(it); return a !== null && a < RP_MIN_ACTIVE_MONTHS; });
-  if (short.length) {
-    var list = short.slice(0, 8).map(function(it) { return '  • ' + it.item_code + '  (' + rpActive(it) + ' mo)'; }).join('\n');
-    var more = short.length > 8 ? '\n  …and ' + (short.length - 8) + ' more' : '';
-    var msg = short.length + ' of the selected item' + (short.length === 1 ? ' has' : 's have') + ' less than ' + RP_MIN_ACTIVE_MONTHS +
-      ' months of usage history, so the buffer/quantity may not be reliable:\n\n' + list + more + '\n\nCreate the PRF anyway?';
+  var sel = rpSelectedRows();
+  var proj = sel.filter(function(it) { return rpItemClass(it) === 'PROJ'; });
+  var short = sel.filter(function(it) { var a = rpActive(it); return a !== null && a < RP_MIN_ACTIVE_MONTHS; });
+  function listOf(arr) {
+    return arr.slice(0, 8).map(function(it) { return '  • ' + it.item_code + '  (' + rpActive(it) + ' mo)'; }).join('\n') +
+      (arr.length > 8 ? '\n  …and ' + (arr.length - 8) + ' more' : '');
+  }
+  if (proj.length) {
+    var msg = proj.length + ' of the selected item' + (proj.length === 1 ? ' is' : 's are') + ' PROJ (project stock — fewer than ' + ERP_STD_MIN_MONTHS +
+      ' months of usage). Project stock is usually bought per project, not replenished:\n\n' + listOf(proj);
+    if (short.length) msg += '\n\n' + short.length + ' of them have under ' + RP_MIN_ACTIVE_MONTHS + ' months, so the buffer/quantity may not be reliable.';
+    msg += '\n\nCreate the PRF anyway?';
     if (!confirm(msg)) return;
+  } else if (short.length) {
+    // (hindi na dapat mangyari — ang <3 buwan ay PROJ na — pero iniiwan bilang safety kung binago ang rule)
+    if (!confirm(short.length + ' of the selected item' + (short.length === 1 ? ' has' : 's have') + ' less than ' + RP_MIN_ACTIVE_MONTHS +
+      ' months of usage history, so the buffer/quantity may not be reliable:\n\n' + listOf(short) + '\n\nCreate the PRF anyway?')) return;
   }
   _rp.extraItems = [];
   _rp.modalVals = {};
@@ -1517,6 +1586,8 @@ function rpClearFilters() {
   document.getElementById('rpLocationFilter').value = '';
   document.getElementById('rpActiveFilter').value = '';
   rpLsSet('rp_active_filter', '');
+  document.getElementById('rpClassFilter').value = 'STD';
+  rpLsSet('rp_class_filter', 'STD');
   document.getElementById('rpSortFilter').value = 'value_desc';
   _rp.hsort = null;
   _rp.currentPage = 1;
@@ -1544,7 +1615,7 @@ function rpExport() {
 
   var headers = ['Item Code', 'Description', 'Category', 'Location', 'Unit',
                  'On-Hand', 'Buffer Stock', 'Ave Monthly', 'Qty Needed', 'On Order',
-                 'Open PRF(s)', 'Net Needed', 'Unit Cost', 'Net Est. Cost', 'Urgency', 'Active Months', 'Movement', 'Oldest Open PRF (days)', 'Stale', 'Reserved (SOF)', 'Days of Cover'];
+                 'Open PRF(s)', 'Net Needed', 'Unit Cost', 'Net Est. Cost', 'Urgency', 'Active Months', 'Movement', 'Oldest Open PRF (days)', 'Stale', 'Reserved (SOF)', 'Days of Cover', 'Class'];
   var rows = _rp.filteredItems.map(function(it) {
     return [
       it.item_code || '',
@@ -1567,7 +1638,8 @@ function rpExport() {
       rpAge(it) === null ? '' : rpAge(it),
       rpIsStale(it) ? 'YES' : '',
       Number(it.reserved_qty || 0),
-      it.days_of_cover === undefined || it.days_of_cover === null ? '' : Number(it.days_of_cover)
+      it.days_of_cover === undefined || it.days_of_cover === null ? '' : Number(it.days_of_cover),
+      rpItemClass(it) || ''
     ];
   });
 
