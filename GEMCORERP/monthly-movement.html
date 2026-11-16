@@ -74,6 +74,20 @@ table.mm th.cur{background:#fff7ed}
 .mm-nocost{font-size:.6rem;background:#fef3c7;color:#92400e;border-radius:4px;padding:0 4px;margin-left:4px}
 .mm-pager{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 14px;border-top:1px solid #e5e7eb;font-size:.78rem;color:#4b5563}
 .mm-empty{padding:34px;text-align:center;color:#6b7280}
+.mm-split{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:12px;margin-bottom:12px}
+.mm-split .mm-chart{margin-bottom:0}
+@media(max-width:991px){.mm-split{grid-template-columns:1fr}}
+.mm-bar{display:grid;grid-template-columns:minmax(0,40%) minmax(0,1fr) auto;align-items:center;gap:10px;padding:4px 6px;border-radius:6px;font-size:.78rem}
+.mm-bar.click{cursor:pointer}.mm-bar.click:hover{background:#f1f5f9}
+.mm-bar.sel{background:#eef2ff;outline:1px solid #c7d2fe}
+.mm-bar .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#374151}
+.mm-bar .nm b{font-family:ui-monospace,Consolas,monospace;font-size:.72rem;color:#1e3a5f;margin-right:6px}
+.mm-bar .tk{height:16px;background:#f1f5f9;border-radius:4px;overflow:hidden}
+.mm-bar .fl{height:100%;border-radius:4px;min-width:2px}
+.mm-bar .vl{font-variant-numeric:tabular-nums;font-weight:700;color:#1e3a5f;white-space:nowrap;text-align:right;min-width:78px}
+.mm-bar .vl small{font-weight:500;color:#6b7280;margin-left:4px}
+.mm-bar-empty{padding:26px;text-align:center;color:#6b7280;font-size:.82rem}
+.mm-rank{display:inline-block;width:18px;color:#9ca3af;font-weight:700;font-size:.7rem}
 </style>
 </head>
 <body>
@@ -126,6 +140,11 @@ table.mm th.cur{background:#fff7ed}
 
   <div class="mm-kpis" id="mmKpis"></div>
   <div class="mm-chart"><div class="t"><span id="mmChartTitle">Monthly totals</span><span class="small fw-normal text-muted" id="mmChartSub"></span></div><div id="mmChart"></div></div>
+
+  <div class="mm-split">
+    <div class="mm-chart"><div class="t"><span id="mmTopTitle">Top 10 items</span><span class="small fw-normal text-muted" id="mmTopSub"></span></div><div id="mmTop"></div></div>
+    <div class="mm-chart"><div class="t"><span id="mmCatTitle">By category</span><span class="small fw-normal text-muted" id="mmCatSub">click a category to filter</span></div><div id="mmCatBox"></div></div>
+  </div>
 
   <div class="mm-tcard">
     <div class="mm-thead"><div class="fw-bold" style="color:#1e3a5f"><i class="bi bi-table me-2"></i><span id="mmTableTitle">Item detail</span></div><span class="text-muted small" id="mmCount"></span></div>
