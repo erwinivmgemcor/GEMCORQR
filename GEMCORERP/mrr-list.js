@@ -41,7 +41,7 @@ async function mrrCheckHealth() {
 async function mrrListLoad() {
   var tbody = document.getElementById('mrrTableBody');
   if (tbody) {
-    tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
       '<div class="erp-spinner"></div>' +
       '<div class="mt-2">Loading MRR documents...</div></td></tr>';
   }
@@ -71,7 +71,7 @@ async function mrrListLoad() {
   } catch(err) {
     console.error('[mrrListLoad]', err);
     if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="8" class="erp-empty text-danger">' +
+      tbody.innerHTML = '<tr><td colspan="9" class="erp-empty text-danger">' +
         '<i class="bi bi-exclamation-triangle-fill"></i> Failed: ' + erpEsc(err.message) + '</td></tr>';
     }
   }
@@ -116,6 +116,7 @@ function mrrListComputeKPIs() {
 function mrrListRender() {
   var tbody = document.getElementById('mrrTableBody');
   if (!tbody) return;
+  erpBulkInit({ docType: 'MRR', tbodyId: 'mrrTableBody', getFiltered: function() { return _mrrFilteredDocs; }, getPage: function() { return _mrrFilteredDocs.slice((_mrrCurrentPage - 1) * _mrrPageSize, _mrrCurrentPage * _mrrPageSize); } });
   
   // ═══ ROLE CHECK — Only warehouse can discuss MRR ═══
   var userRole = localStorage.getItem('ivm_userRole') || '';
@@ -159,9 +160,10 @@ function mrrListRender() {
   if (elBtnNext) elBtnNext.disabled = (end >= total);
   
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No MRR documents found.</td></tr>';
+    erpBulkSync();
     return;
   }
   
@@ -177,7 +179,8 @@ function mrrListRender() {
     
     var safeDoc = String(d.doc_no || '').replace(/'/g, "\\'");
     
-    html += '<tr' + (isCancelled ? ' style="opacity:.6;"' : '') + '>' +
+    html += '<tr' + (isCancelled ? ' style="opacity:.6;"' : '') + erpBulkRowClass(d) + '>' +
+      erpBulkCellHtml(d) +
       '<td><code>' + erpEsc(d.doc_no) + '</code></td>' +
       '<td>' + erpEsc(dateStr) + '</td>' +
       '<td>' + erpEsc(d.po_no || '—') + '</td>' +
@@ -209,6 +212,7 @@ function mrrListRender() {
       '</tr>';
   });
   tbody.innerHTML = html;
+  erpBulkSync();
 }
 
 function mrrListPrint(docNo) {
