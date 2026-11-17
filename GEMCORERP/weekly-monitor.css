@@ -1,0 +1,79 @@
+/* GEMCOR ERP — Weekly Monitoring v2 (theme-aware: uses erp-theme.css tokens) */
+.wk-page .wk-hint{font-size:11px;font-weight:400;color:var(--fg-muted,#64748b);margin-left:8px}
+.wk-updated{font-size:11px;color:var(--fg-muted,#64748b);margin-left:12px;white-space:nowrap}
+.wk-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin:16px 0}
+.wk-kpi{background:var(--bg-surface,#fff);border:1px solid var(--bd,#e2e8f0);border-radius:12px;padding:14px 16px;box-shadow:var(--sh-sm,none);position:relative;overflow:hidden}
+.wk-kpi:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--k,#3b82f6)}
+.wk-kpi .l{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--fg-muted,#64748b)}
+.wk-kpi .v{font-size:24px;font-weight:800;color:var(--fg,#0f172a);line-height:1.2;margin-top:2px}
+.wk-kpi .s{font-size:12px;color:var(--fg-muted,#64748b);margin-top:2px}
+.wk-kpi .d{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:99px;margin-top:6px;background:var(--bg-subtle,#f1f5f9);color:var(--fg-muted,#475569)}
+.wk-kpi .d.up{background:var(--success-soft,#ecfdf5);color:var(--success-fg,#047857)}
+.wk-kpi .d.down{background:var(--danger-soft,#fef2f2);color:var(--danger-fg,#b91c1c)}
+.wk-kpi.clickable{cursor:pointer}.wk-kpi.clickable:hover{border-color:var(--k,#3b82f6)}
+
+.wk-insights{padding:14px 16px;margin-bottom:16px}
+.wk-card-title{font-weight:700;color:var(--fg,#0f172a);margin-bottom:8px}
+.wk-card-title i{color:var(--gem-amber,#f59e0b);margin-right:6px}
+.wk-insight-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:8px}
+.wk-ins{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;border:1px solid var(--bd,#e2e8f0);background:var(--bg-subtle,#f8fafc);cursor:pointer;font-size:13px;color:var(--fg,#0f172a)}
+.wk-ins:hover{border-color:var(--bd-strong,#94a3b8)}
+.wk-ins .n{min-width:34px;text-align:center;font-weight:800;border-radius:7px;padding:2px 6px;color:#fff;background:var(--c,#64748b)}
+.wk-ins small{display:block;color:var(--fg-muted,#64748b);font-size:11px}
+.wk-ins.red{--c:#dc2626}.wk-ins.amber{--c:#d97706}.wk-ins.blue{--c:#3b82f6}.wk-ins.green{--c:#059669}
+.wk-allgood{padding:6px 2px;color:var(--success-fg,#047857);font-size:13px}
+
+.wk-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:991px){.wk-grid-2{grid-template-columns:1fr}}
+.wk-chart-h{height:300px}
+.erp-chart-body{position:relative}
+.wk-chart-empty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:var(--fg-muted,#94a3b8);font-size:13px}
+.wk-toggle-row{display:flex;align-items:center;gap:12px;margin:2px 0 10px;flex-wrap:wrap}
+.wk-toggle-label{font-weight:600;font-size:13px;color:var(--fg,#0f172a)}
+.wk-seg{display:inline-flex;border:1px solid var(--bd,#cbd5e1);border-radius:9px;overflow:hidden}
+.wk-seg button{border:0;background:var(--bg-surface,#fff);color:var(--fg,#0f172a);padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer}
+.wk-seg button.active{background:var(--gem-navy,#1e3a5f);color:#fff}
+
+.wk-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.wk-chip{border:1px solid var(--bd,#cbd5e1);background:var(--bg-surface,#fff);color:var(--fg,#0f172a);border-radius:99px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer}
+.wk-chip b{margin-left:5px;font-weight:700;color:var(--fg-muted,#64748b)}
+.wk-chip:hover{border-color:var(--bd-strong,#94a3b8)}
+.wk-chip.active{background:var(--gem-navy,#1e3a5f);border-color:var(--gem-navy,#1e3a5f);color:#fff}
+.wk-chip.active b{color:#cbd5e1}
+
+.wk-table-wrap{max-height:70vh;overflow:auto}
+.wk-table thead th{position:sticky;top:0;z-index:2;white-space:nowrap;cursor:pointer;user-select:none;background:var(--table-header-bg,#f1f5f9)}
+.wk-table thead th.nosort{cursor:default}
+.wk-table thead th .ar{font-size:10px;margin-left:3px;opacity:.7}
+.wk-table tbody tr{cursor:pointer}
+.wk-table tfoot td{position:sticky;bottom:0;background:var(--table-header-bg,#f1f5f9);font-weight:700;border-top:2px solid var(--bd-strong,#cbd5e1)}
+.wk-table td.desc{min-width:260px;max-width:380px}
+.wk-pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.wk-pill.OK{background:var(--success-soft,#ecfdf5);color:var(--success-fg,#047857)}
+.wk-pill.LOW{background:var(--warning-soft,#fffbeb);color:var(--warning-fg,#b45309)}
+.wk-pill.BELOW{background:#ffedd5;color:#c2410c}
+.wk-pill.OUT,.wk-pill.NEG{background:var(--danger-soft,#fef2f2);color:var(--danger-fg,#b91c1c)}
+.wk-doc{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:5px;margin-right:3px;color:#fff}
+.wk-doc.MRR{background:#059669}.wk-doc.MRIF{background:#dc2626}.wk-doc.MRS{background:#7c3aed}.wk-doc.ADJ{background:#d97706}.wk-doc.OTHER{background:#64748b}
+.wk-muted{color:var(--fg-muted,#94a3b8)}
+
+.wk-overlay{position:fixed;inset:0;background:var(--bg-overlay,rgba(15,23,42,.5));opacity:0;pointer-events:none;transition:.2s;z-index:1040}
+.wk-overlay.open{opacity:1;pointer-events:auto}
+.wk-drawer{position:fixed;top:0;right:0;height:100%;width:min(560px,100%);background:var(--bg-surface,#fff);border-left:1px solid var(--bd,#e2e8f0);box-shadow:var(--sh-xl,-8px 0 30px rgba(0,0,0,.2));transform:translateX(105%);transition:transform .25s;z-index:1050;overflow:auto;padding:20px}
+.wk-drawer.open{transform:none}
+.wk-drawer h5{margin:0;font-weight:800;color:var(--fg,#0f172a)}
+.wk-drawer .sub{color:var(--fg-muted,#64748b);font-size:13px;margin:2px 0 12px}
+.wk-drawer .x{position:absolute;top:14px;right:16px;border:0;background:none;font-size:20px;color:var(--fg-muted,#64748b);cursor:pointer}
+.wk-mini{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
+.wk-mini div{background:var(--bg-subtle,#f8fafc);border:1px solid var(--bd,#e2e8f0);border-radius:9px;padding:8px;text-align:center}
+.wk-mini b{display:block;font-size:16px;color:var(--fg,#0f172a)}.wk-mini span{font-size:10px;text-transform:uppercase;color:var(--fg-muted,#64748b);font-weight:700}
+.wk-tx{width:100%;font-size:12px;border-collapse:collapse}
+.wk-tx th,.wk-tx td{padding:6px 8px;border-bottom:1px solid var(--bd-light,#e2e8f0);color:var(--fg,#0f172a)}
+.wk-tx th{font-size:10px;text-transform:uppercase;color:var(--fg-muted,#64748b)}
+
+@media print{
+  .erp-topbar,#erpNavBar,.erp-week-actions,.wk-chips,.erp-filters-card,.wk-toggle-row,.wk-drawer,.wk-overlay,.erp-pagination,.wk-hint{display:none!important}
+  .wk-table-wrap{max-height:none;overflow:visible}
+  .wk-grid-2{grid-template-columns:1fr 1fr}.wk-chart-h{height:220px}
+  .wk-table td.desc{min-width:0}
+}
