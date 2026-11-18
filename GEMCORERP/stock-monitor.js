@@ -430,7 +430,7 @@ async function erpLoadItems() {
   var tbody = document.getElementById('erpTableBody');
   if (!tbody) { _erpRenderLock = false; return; }
   
-  tbody.innerHTML = '<tr><td colspan="22" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading inventory...</div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="24" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading inventory...</div></td></tr>';
   
   var filters = {
     category: document.getElementById('erpCategoryFilter').value,
@@ -444,7 +444,7 @@ async function erpLoadItems() {
   var result = await erpGetAllItems(filters);
   
   if (!result.success) {
-    tbody.innerHTML = '<tr><td colspan="22" class="erp-empty text-danger">' +
+    tbody.innerHTML = '<tr><td colspan="24" class="erp-empty text-danger">' +
       '<i class="bi bi-exclamation-triangle-fill"></i> ' + erpEsc(result.error) + '</td></tr>';
     _erpRenderLock = false;
     return;
@@ -522,7 +522,7 @@ function erpRenderTable() {
   document.getElementById('erpBtnNext').disabled = (end >= total);
 
   if (pageItems.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="22" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="24" class="erp-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>' +
       'No items match your filters.</td></tr>';
     return;
@@ -587,6 +587,10 @@ function erpRenderTable() {
     var safeCode = String(it.item_code || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     var unitCost = Number(it.unit_cost || 0);
     var onHandCost = onHand * unitCost;
+    // Hati ang cost: Allocated = SOF reserved (hindi lalagpas sa on-hand), Available = ang natitira. Sum = On-Hand Cost.
+    var allocQtyCapped = Math.min(sofAllocated, Math.max(onHand, 0));
+    var allocCost = allocQtyCapped * unitCost;
+    var availCost = onHandCost - allocCost;
 
     var sofDisplay = sofAllocated > 0 
       ? '<span class="fw-bold" style="color:#f59e0b;">' + erpNum(sofAllocated) + '</span>'
@@ -614,6 +618,8 @@ function erpRenderTable() {
       '<td class="text-center">' + erpEsc(it.base_unit || '') + '</td>' +
       '<td class="text-end" style="font-family:\'Courier New\',monospace;">₱' + erpNum(unitCost.toFixed(2)) + '</td>' +
       '<td class="text-end fw-bold" style="font-family:\'Courier New\',monospace;color:#1e3a5f;">₱' + erpNum(onHandCost.toFixed(2)) + '</td>' +
+      '<td class="text-end fw-bold" style="font-family:\'Courier New\',monospace;color:#059669;" title="Available ' + erpNum(available) + ' × ₱' + erpNum(unitCost.toFixed(2)) + '">₱' + erpNum(availCost.toFixed(2)) + '</td>' +
+      '<td class="text-end" style="font-family:\'Courier New\',monospace;color:#d97706;" title="SOF Allocated ' + erpNum(sofAllocated) + ' × ₱' + erpNum(unitCost.toFixed(2)) + '">' + (allocCost > 0 ? '₱' + erpNum(allocCost.toFixed(2)) : '<span class="text-muted">—</span>') + '</td>' +
       '<td class="text-center usage-cell">' + activeMo + '</td>' +
       '<td class="text-center">' + erpClassBadge(activeMo) + '</td>' +
       '<td class="text-end usage-cell">' + erpNum(aveMo) + '</td>' +
@@ -1629,6 +1635,8 @@ async function erpShowItemDetails(itemCode) {
       cell('Buffer Stock', erpNum(it.buffer_stock || 0) + (it.buffer_is_locked ? ' 🔒' : '')) +
       cell('Unit Cost', '₱' + erpNum(cost.toFixed(2))) +
       cell('On-Hand Cost', '₱' + erpNum((onHand * cost).toFixed(2))) +
+      cell('Available Cost', '₱' + erpNum(((onHand - Math.min(sof, Math.max(onHand, 0))) * cost).toFixed(2))) +
+      cell('Allocated Cost', sof > 0 ? '₱' + erpNum((Math.min(sof, Math.max(onHand, 0)) * cost).toFixed(2)) : '—') +
       cell('Ave / Month', erpNum(it.ave_monthly_consumption || 0)) +
       cell('Active Months', erpNum(it.active_consumption_months || 0)) +
       cell('Item Class', erpClassBadge(it.active_consumption_months)) +
