@@ -312,7 +312,9 @@
     <th data-cf="buffer" class="col-buffer text-end" title="Buffer Stock">Buffer</th>
     <th data-cf="unit" class="col-unit text-center">Unit</th>
     <th data-cf="unitcost" class="col-cost text-end">Unit Cost</th>
-    <th data-cf="onhandcost" class="col-value text-end">On-Hand Cost</th>
+    <th data-cf="onhandcost" class="col-value text-end" title="Total On-Hand Cost = On-Hand × Unit Cost">On-Hand Cost</th>
+    <th data-cf="availcost" class="col-value text-end" title="Available Cost = (On-Hand − SOF Allocated) × Unit Cost" style="color:#10b981;">Available Cost</th>
+    <th data-cf="alloccost" class="col-value text-end" title="Allocated Cost = SOF Allocated × Unit Cost (capped at On-Hand)" style="color:#f59e0b;">Allocated Cost</th>
     <th data-cf="activemo" class="col-usage text-center">Active Mo</th>
     <th data-cf="class" class="text-center" title="STD = Standard stock (usage in 5 or more months). PROJ = Project stock (usage in fewer than 5 months). Based on Active Mo.">Class</th>
     <th data-cf="avemo" class="col-usage text-end">Ave/Mo</th>
@@ -327,7 +329,7 @@
 </thead>
         <tbody id="erpTableBody">
           <tr>
-            <td colspan="15" class="erp-empty">
+            <td colspan="24" class="erp-empty">
               <div class="erp-spinner"></div>
               <div class="mt-2">Loading inventory...</div>
             </td>
