@@ -209,6 +209,15 @@ async function mdashLoadItems() {
     }
 
     var rows = await erpFetchAll('erp_items', query);
+    // SOF allocation (remaining = allocated − used) para mahati ang cost: Available vs Allocated
+    _mdash.allocMap = {};
+    try {
+      var al = await erpFetchAll('erp_sof_allocation_items', 'select=item_code,allocated_qty,used_qty');
+      (al || []).forEach(function(a) {
+        var rem = Number(a.allocated_qty || 0) - Number(a.used_qty || 0);
+        if (rem > 0) _mdash.allocMap[a.item_code] = (_mdash.allocMap[a.item_code] || 0) + rem;
+      });
+    } catch (e) { console.warn('[Dashboard] allocation fetch failed', e.message); }
     _mdash.allItems = rows || [];
     mdashApplySearchFilter();
     mdashRenderTable();
@@ -220,6 +229,12 @@ async function mdashLoadItems() {
 // ═══════════════════════════════════════════════════════════
 // RENDER KPIs
 // ═══════════════════════════════════════════════════════════
+// Allocated qty (SOF remaining) na hindi lalagpas sa on-hand — para ang Available + Allocated = On-Hand Cost
+function mdashAllocQty(it) {
+  var a = Number((_mdash.allocMap || {})[it.item_code] || 0);
+  return Math.min(a, Math.max(Number(it.on_hand || 0), 0));
+}
+
 function mdashRenderKPIs(data) {
   var s = data.summary || {};
   var t = data.turnover || {};
@@ -500,7 +515,7 @@ function mdashRenderTable() {
   mdashRenderPager(total, pages, startIdx, endIdx);
 
   if (total === 0) {
-    tbody.innerHTML = '<tr><td colspan="14" class="mdash-empty">' +
+    tbody.innerHTML = '<tr><td colspan="16" class="mdash-empty">' +
       '<i class="bi bi-inbox fs-2 d-block mb-2"></i>No items match your filters.</td></tr>';
     return;
   }
@@ -512,6 +527,7 @@ function mdashRenderTable() {
     var onHand = Number(it.on_hand || 0);
     var onHandCost = Number(it.on_hand_cost || 0);
     var unitCost = Number(it.unit_cost || 0);
+    var allocQty = mdashAllocQty(it), allocCost = allocQty * unitCost, availCost = onHandCost - allocCost;
 
     var qtyClass = 'qty-ok';
     if (onHand === 0) qtyClass = 'qty-zero';
@@ -549,6 +565,8 @@ function mdashRenderTable() {
       '<td>' + erpEsc(it.base_unit || '—') + '</td>' +
       '<td class="qty-cell">' + erpPeso(unitCost) + '</td>' +
       '<td class="value-cell">' + erpPeso(onHandCost) + '</td>' +
+      '<td class="value-cell" style="color:#059669;" title="On-Hand ' + erpNum(onHand) + ' − Allocated ' + erpNum(allocQty) + '">' + erpPeso(availCost) + '</td>' +
+      '<td class="value-cell" style="color:#d97706;" title="SOF Allocated ' + erpNum(allocQty) + ' × ' + erpPeso(unitCost) + '">' + (allocCost > 0 ? erpPeso(allocCost) : '—') + '</td>' +
       '<td style="text-align:center;">' + erpTurnoverBadge(onHand, it.ave_monthly_consumption) + '</td>' +
       '<td style="text-align:center;">' + erpInventoryRatioBadge(onHand, it.ave_monthly_consumption) + '</td>' +
       '<td style="text-align:center;">' + abcBadge + '</td>' +
@@ -764,7 +782,7 @@ function mdashExportCSV() {
 
   var headers = [
     'Item Code', 'Description', 'Category', 'Location', 'Unit',
-    'On-Hand', 'Unit Cost', 'On-Hand Cost', 'Ave Monthly Consumption', 'Turnover (x/year)', 'Inventory Ratio (days)', 'ABC', 'Movement', 'Stock Class'
+    'On-Hand', 'Unit Cost', 'On-Hand Cost', 'SOF Allocated Qty', 'Available Cost', 'Allocated Cost', 'Ave Monthly Consumption', 'Turnover (x/year)', 'Inventory Ratio (days)', 'ABC', 'Movement', 'Stock Class'
   ];
 
   var rows = _mdash.filteredItems.map(function(it) {
@@ -777,6 +795,9 @@ function mdashExportCSV() {
       Number(it.on_hand || 0),
       Number(it.unit_cost || 0),
       Number(it.on_hand_cost || 0),
+      mdashAllocQty(it),
+      Number(it.on_hand_cost || 0) - mdashAllocQty(it) * Number(it.unit_cost || 0),
+      mdashAllocQty(it) * Number(it.unit_cost || 0),
       Number(it.ave_monthly_consumption || 0),
       (function() { var t = erpItemTurnover(it.on_hand, it.ave_monthly_consumption); return t.ratio === null ? '' : Number(t.ratio.toFixed(2)); })(),
       (function() { var t = erpItemTurnover(it.on_hand, it.ave_monthly_consumption); return t.days === null ? '' : Math.round(t.days); })(),
