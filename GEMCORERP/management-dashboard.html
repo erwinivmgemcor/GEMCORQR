@@ -995,7 +995,9 @@
             <th style="width:7%;text-align:right;">On-Hand</th>
             <th style="width:4%">Unit</th>
             <th style="width:8%;text-align:right;">Unit Cost</th>
-            <th style="width:10%;text-align:right;">On-Hand Cost</th>
+            <th style="width:9%;text-align:right;" title="Total On-Hand Cost">On-Hand Cost</th>
+            <th style="width:9%;text-align:right;color:#059669;" title="Available Cost = (On-Hand − SOF Allocated) × Unit Cost">Available Cost</th>
+            <th style="width:9%;text-align:right;color:#d97706;" title="Allocated Cost = SOF Allocated × Unit Cost (capped at On-Hand)">Allocated Cost</th>
             <th style="width:7%;text-align:center;" title="Turnover Ratio per item (times per year) = (Ave monthly consumption × 12) ÷ On-Hand. Higher = moves faster. Hover a value for days of stock.">Turnover</th>
             <th style="width:7%;text-align:center;" title="Inventory Ratio = stock cover: how long the current On-Hand lasts at average monthly usage. Shown in days (under 2 months), months or years. Months match the &quot;Inventory Ratio&quot; column of the Google Sheet. Hover a value for details.">Inventory Ratio</th>
             <th style="width:6%;text-align:center;">ABC</th>
@@ -1005,7 +1007,7 @@
         </thead>
         <tbody id="mdashTableBody">
           <tr>
-            <td colspan="14" class="mdash-empty">
+            <td colspan="16" class="mdash-empty">
               <div class="mdash-spinner"></div>
               <div class="mt-2">Loading items...</div>
             </td>
