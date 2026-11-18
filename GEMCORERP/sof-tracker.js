@@ -46,7 +46,7 @@ async function sofTrackerCheckHealth() {
 async function sofTrackerLoad() {
   var tbody = document.getElementById('sofTableBody');
   if (tbody) {
-    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="10" class="erp-empty">' +
       '<div class="erp-spinner"></div>' +
       '<div class="mt-2">Loading SOF allocations...</div></td></tr>';
   }
@@ -65,6 +65,7 @@ async function sofTrackerLoad() {
     _sofTracker.allAllocations = (data && data.allocations) ? data.allocations : [];
     await sofTrackerMergeMissing(_sofTracker.allAllocations);
     await sofTrackerEnrich(_sofTracker.allAllocations);
+    await sofTrackerComputeCosts(_sofTracker.allAllocations);
     await sofTrackerLoadPending();
     console.log('[SOF Tracker] Loaded ' + _sofTracker.allAllocations.length + ' allocations in ' + (Date.now() - t0) + 'ms');
 
@@ -74,7 +75,7 @@ async function sofTrackerLoad() {
   } catch(err) {
     console.error('[sofTrackerLoad]', err);
     if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="9" class="erp-empty text-danger">' +
+      tbody.innerHTML = '<tr><td colspan="10" class="erp-empty text-danger">' +
         '<i class="bi bi-exclamation-triangle-fill me-2"></i>Failed: ' + erpEsc(err.message) + '</td></tr>';
     }
   }
@@ -95,6 +96,7 @@ async function sofTrackerMergeMissing(list) {
     heads.forEach(function(h) { var k = sofKey(h.sof_no); if (k) _sofTracker.headers[k] = h; });
 
     var items = await erpFetchAll('erp_sof_allocation_items', 'select=sof_no,item_code,allocated_qty,used_qty&order=sof_no.asc,item_code.asc') || [];
+    _sofTracker.allocItems = items;   // gagamitin sa SOF cost
     var have = {};
     list.forEach(function(a) { have[sofKey(a.sof_no)] = true; });
 
@@ -266,10 +268,57 @@ function sofIsReleased(a) {
   return String(a.status || '').toUpperCase() !== 'CANCELLED' && Number(a.total_allocated_qty || 0) <= 0;
 }
 
+// ═══════════════════════════════════════════════════════════
+// SOF COST — buong cost ng SOF = Σ (allocated qty × unit cost ng item)
+// Unit cost: erp_items.unit_cost (kasalukuyang presyo). Used / Remaining cost ay ganito rin.
+// ═══════════════════════════════════════════════════════════
+_sofTracker.cost = {};
+function sofPeso(n) { return (typeof erpPeso === 'function') ? erpPeso(Number(n || 0)) : '₱' + Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function sofUnitCost(code) { return Number(_sofTracker.cost[sofKey(code)] || 0); }
+
+async function sofTrackerComputeCosts(list) {
+  try {
+    var items = await erpFetchAll('erp_items', 'select=item_code,unit_cost&is_deleted=eq.false') || [];
+    _sofTracker.cost = {};
+    items.forEach(function(it) { _sofTracker.cost[sofKey(it.item_code)] = Number(it.unit_cost || 0); });
+
+    var rows = _sofTracker.allocItems;
+    if (!rows) rows = _sofTracker.allocItems = await erpFetchAll('erp_sof_allocation_items', 'select=sof_no,item_code,allocated_qty,used_qty') || [];
+
+    var agg = {};
+    rows.forEach(function(r) {
+      var k = sofKey(r.sof_no); if (!k) return;
+      var c = sofUnitCost(r.item_code), al = Number(r.allocated_qty || 0), us = Number(r.used_qty || 0);
+      var g = agg[k] || (agg[k] = { total: 0, used: 0, nocost: 0 });
+      g.total += al * c; g.used += us * c;
+      if (!c && al > 0) g.nocost++;
+    });
+    list.forEach(function(a) {
+      var g = agg[sofKey(a.sof_no)] || { total: 0, used: 0, nocost: 0 };
+      a.total_cost = g.total; a.used_cost = g.used; a.remaining_cost = Math.max(0, g.total - g.used); a.no_cost_items = g.nocost;
+    });
+  } catch (e) {
+    console.warn('[SOF Tracker] cost compute failed', e.message);
+    list.forEach(function(a) { a.total_cost = a.used_cost = a.remaining_cost = 0; a.no_cost_items = 0; });
+  }
+}
+
+function sofRenderCostStrip() {
+  var el = document.getElementById('sofCostStrip'); if (!el) return;
+  var t = 0, u = 0, r = 0, nc = 0, n = 0;
+  (_sofTracker.filteredAllocations || []).forEach(function(a) {
+    t += a.total_cost || 0; u += a.used_cost || 0; r += a.remaining_cost || 0; nc += a.no_cost_items || 0; n++;
+  });
+  el.innerHTML = '<span><i class="bi bi-cash-stack"></i> Total SOF cost ng <b>' + n + '</b> SOF na nakikita: <b class="tot">' + sofPeso(t) + '</b></span>' +
+    '<span>Used: <b>' + sofPeso(u) + '</b></span><span>Remaining: <b>' + sofPeso(r) + '</b></span>' +
+    (nc ? '<span class="warn" title="Walang unit cost ang ilang item kaya hindi sila kasama sa total"><i class="bi bi-exclamation-triangle-fill"></i> ' + nc + ' item(s) walang unit cost</span>' : '') +
+    '<span class="hint">Tip: i-type ang client / project (hal. Parklins) sa search para makita ang kabuuang cost nila.</span>';
+}
+
 function sofTrackerComputeKPIs() {
   var total = 0, released = 0;
   var active = 0, cancelled = 0;
-  var totalRemaining = 0;
+  var totalRemaining = 0, totalCost = 0, remCost = 0;
 
   _sofTracker.allAllocations.forEach(function(a) {
     var status = String(a.status || '').toUpperCase();
@@ -278,6 +327,7 @@ function sofTrackerComputeKPIs() {
     if (status === 'ACTIVE') active++;
     else if (status === 'CANCELLED') cancelled++;
     totalRemaining += Number(a.total_remaining_qty || 0);
+    if (status !== 'CANCELLED') { totalCost += a.total_cost || 0; remCost += a.remaining_cost || 0; }
   });
 
   var completed = 0;
@@ -293,6 +343,8 @@ function sofTrackerComputeKPIs() {
   el = document.getElementById('sofKpiTotal'); if (el) el.textContent = sofTrackerNum(total);
   el = document.getElementById('sofKpiActive'); if (el) el.textContent = sofTrackerNum(active);
   el = document.getElementById('sofKpiCancelled'); if (el) el.textContent = sofTrackerNum(cancelled);
+  el = document.getElementById('sofKpiCost'); if (el) el.textContent = sofPeso(totalCost);
+  el = document.getElementById('sofKpiCostSub'); if (el) el.textContent = 'Remaining ' + sofPeso(remCost);
   el = document.getElementById('sofKpiRemaining'); if (el) el.textContent = sofTrackerNum(totalRemaining);
 }
 
@@ -332,6 +384,7 @@ function sofTrackerApplyFilters() {
 
   sofSyncPills(statusFilter);
   sofTrackerRender();
+  sofRenderCostStrip();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -347,7 +400,7 @@ function sofTrackerRender() {
   if (elCount) elCount.textContent = total + ' items';
 
   if (total === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
+    tbody.innerHTML = '<tr><td colspan="10" class="erp-empty">' +
       '<div class="sof-empty"><i class="bi bi-inbox"></i>No SOF allocations found.</div></td></tr>';
     return;
   }
@@ -389,6 +442,9 @@ function sofTrackerRender() {
         '<div class="sof-usage-top"><span><b>' + sofTrackerNum(used) + '</b> / ' + sofTrackerNum(allocated) + ' used</span><b>' + pct + '%</b></div>' +
         '<div class="sof-bar ' + barCls + '"><span style="width:' + pct + '%"></span></div>' +
       '</div></td>' +
+      '<td class="text-end"><div class="fw-bold" style="font-variant-numeric:tabular-nums;">' + sofPeso(a.total_cost) + '</div>' +
+        '<div class="small text-muted" title="Cost ng natirang allocation">Rem. ' + sofPeso(a.remaining_cost) + '</div>' +
+        (a.no_cost_items ? '<div class="small text-warning" title="May item na walang unit cost"><i class="bi bi-exclamation-triangle-fill"></i> ' + a.no_cost_items + ' walang cost</div>' : '') + '</td>' +
       '<td class="text-center"><span class="sof-rem ' + (remaining > 0 ? 'has' : 'zero') + '">' + sofTrackerNum(remaining) + '</span></td>' +
       '<td class="text-center"><span class="sof-status ' + stCls + '">' + sofTrackerEsc(status) + '</span></td>' +
       '<td class="text-center" onclick="event.stopPropagation()">' + (sofCanProcess()
@@ -496,7 +552,10 @@ var _sofItemsView = { sofNo: '', items: [], PEND: { docs: {}, lines: {} }, statu
     '.sof-info .val.empty{color:#94a3b8;font-weight:500}' +
     '.sof-info .sof-avatar{flex:0 0 auto}' +
     '.sof-items-foot{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:center;width:100%;font-size:.85rem}' +
-    '.sof-items-foot b{font-variant-numeric:tabular-nums}';
+    '.sof-items-foot b{font-variant-numeric:tabular-nums}' +
+    '.sof-coststrip{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:center;padding:10px 16px;background:#f0f9ff;border-bottom:1px solid #bae6fd;font-size:.85rem;color:#0c4a6e}' +
+    '.sof-coststrip .tot{font-size:1rem;color:#075985}.sof-coststrip .warn{color:#b45309}.sof-coststrip .hint{margin-left:auto;font-size:.75rem;color:#64748b}' +
+    '.sof-info{grid-template-columns:2fr 2fr 2fr 1fr 1fr 1.6fr!important}@media(max-width:768px){.sof-info{grid-template-columns:1fr 1fr!important}}';
   document.head.appendChild(st);
 })();
 
@@ -506,8 +565,10 @@ function sofItemsCompute() {
     var alloc = Number(it.allocated_qty || 0);
     var used = Number(it.used_qty || 0);
     var rem = alloc - used;
+    var cost = sofUnitCost(it.item_code);
     return {
       it: it, alloc: alloc, used: used, rem: rem,
+      cost: cost, lineCost: alloc * cost, usedCost: used * cost, remCost: Math.max(0, rem) * cost,
       key: rem <= 0 ? 'FULL' : (used > 0 ? 'PARTIAL' : 'ACTIVE'),
       pl: (v.PEND.lines[sofKey(it.item_code)] || [])
     };
@@ -538,6 +599,7 @@ function sofItemsRender() {
   rows.sort(function(a, b) {
     if (v.sort === 'rem') return b.rem - a.rem;
     if (v.sort === 'used') return b.used - a.used;
+    if (v.sort === 'cost') return b.lineCost - a.lineCost;
     if (v.sort === 'status') return (order[a.key] - order[b.key]) || String(a.it.item_code).localeCompare(String(b.it.item_code));
     return String(a.it.item_code).localeCompare(String(b.it.item_code));
   });
@@ -556,7 +618,7 @@ function sofItemsRender() {
   var tb = document.getElementById('sofItemsTbody');
   if (tb) {
     if (!rows.length) {
-      tb.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-5">' +
+      tb.innerHTML = '<tr><td colspan="14" class="text-center text-muted py-5">' +
         '<i class="bi bi-funnel fs-3 d-block mb-2"></i>Walang item na tumutugma sa filter. ' +
         '<a href="#" onclick="sofItemsReset();return false;">I-reset ang filters</a></td></tr>';
     } else {
@@ -580,6 +642,9 @@ function sofItemsRender() {
           '<td class="text-end fw-bold">' + sofTrackerNum(r.alloc) + '</td>' +
           '<td class="text-end text-success fw-bold">' + sofTrackerNum(r.used) + '</td>' +
           '<td class="text-end text-danger fw-bold">' + sofTrackerNum(r.rem) + '</td>' +
+          '<td class="text-end">' + (r.cost ? sofPeso(r.cost) : '<span class="text-warning" title="Walang unit cost">—</span>') + '</td>' +
+          '<td class="text-end fw-bold">' + sofPeso(r.lineCost) + '</td>' +
+          '<td class="text-end text-danger">' + sofPeso(r.remCost) + '</td>' +
           '<td style="min-width:110px"><div class="sof-prog" title="' + pct + '% used"><div style="width:' + pct + '%"></div></div><div class="small text-muted mt-1">' + pct + '%</div></td>' +
           '<td>' + pendHtml + '</td>' +
           '<td class="text-center">' + badge + '</td>' +
@@ -592,8 +657,10 @@ function sofItemsRender() {
   }
 
   // footer totals (ng nakikitang rows)
-  var tA = 0, tU = 0, tR = 0;
-  rows.forEach(function(r) { tA += r.alloc; tU += r.used; tR += Math.max(0, r.rem); });
+  var tA = 0, tU = 0, tR = 0, cT = 0, cU = 0, cR = 0, cAll = 0;
+  rows.forEach(function(r) { tA += r.alloc; tU += r.used; tR += Math.max(0, r.rem); cT += r.lineCost; cU += r.usedCost; cR += r.remCost; });
+  sofItemsCompute().forEach(function(r) { cAll += r.lineCost; });
+  var ic = document.getElementById('sofInfoCost'); if (ic) ic.textContent = sofPeso(cAll);
   var foot = document.getElementById('sofItemsFooter');
   if (foot) {
     var filtered = (v.status !== 'ALL' || v.q.trim() || v.pend);
@@ -603,6 +670,9 @@ function sofItemsRender() {
       '<span class="text-success">Used: <b>' + sofTrackerNum(tU) + '</b></span>' +
       '<span class="text-danger">Remaining: <b>' + sofTrackerNum(tR) + '</b></span>' +
       '<span class="text-muted">' + (tA > 0 ? Math.round(tU / tA * 100) : 0) + '% used</span>' +
+      '<span style="margin-left:auto">SOF Cost: <b style="color:#075985">' + sofPeso(cT) + '</b></span>' +
+      '<span class="text-success">Used Cost: <b>' + sofPeso(cU) + '</b></span>' +
+      '<span class="text-danger">Remaining Cost: <b>' + sofPeso(cR) + '</b></span>' +
     '</div>';
   }
   window._sofItemsVisible = rows;
@@ -632,10 +702,10 @@ window.sofItemsExport = function() {
   if (!rows.length) return erpShowToast('Walang i-e-export', 'warning');
   function q(x) { return '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"'; }
   var inf = _sofItemsView.info || {};
-  var lines = [['SOF No', 'Client', 'Vendor', 'Project', 'JO No', 'Item Code', 'Description', 'Unit', 'Allocated', 'Used', 'Remaining', 'Status', 'Pending MRIF'].map(q).join(',')];
+  var lines = [['SOF No', 'Client', 'Vendor', 'Project', 'JO No', 'Item Code', 'Description', 'Unit', 'Allocated', 'Used', 'Remaining', 'Unit Cost', 'SOF Cost', 'Used Cost', 'Remaining Cost', 'Status', 'Pending MRIF'].map(q).join(',')];
   rows.forEach(function(r) {
     var pend = r.pl.map(function(x) { return x.doc_no + ' ' + (x.requestor || '') + ' (' + x.need + ')'; }).join(' | ');
-    lines.push([_sofItemsView.sofNo, inf.client || '', inf.vendor || '', inf.project || '', inf.jo || '', r.it.item_code, r.it.description || '', r.it.unit || '', r.alloc, r.used, r.rem,
+    lines.push([_sofItemsView.sofNo, inf.client || '', inf.vendor || '', inf.project || '', inf.jo || '', r.it.item_code, r.it.description || '', r.it.unit || '', r.alloc, r.used, r.rem, r.cost, r.lineCost.toFixed(2), r.usedCost.toFixed(2), r.remCost.toFixed(2),
       r.key === 'FULL' ? 'FULLY SERVED' : (r.key === 'ACTIVE' ? 'AVAILABLE' : r.key), pend].map(q).join(','));
   });
   var blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
@@ -671,7 +741,8 @@ function sofItemsFillInfo(sofNo) {
     cell('Project', a.project_name || '', '<i class="bi bi-folder2-open me-1 text-muted"></i>') +
     '<div><div class="lbl">JO No.</div><div class="val' + (a.jo_no ? '' : ' empty') + '">' +
       (a.jo_no ? '<span class="sof-jo">' + sofTrackerEsc(a.jo_no) + '</span>' : '—') + '</div></div>' +
-    cell('SOF Date', dateStr);
+    cell('SOF Date', dateStr) +
+    '<div><div class="lbl">Total SOF Cost</div><div class="val" id="sofInfoCost" style="color:#075985;">—</div></div>';
 }
 
 window.sofViewItems = async function(sofNo) {
@@ -709,6 +780,7 @@ window.sofViewItems = async function(sofNo) {
               '<option value="code">Sort: Item code</option>' +
               '<option value="rem">Sort: Remaining (pinakamarami)</option>' +
               '<option value="used">Sort: Used (pinakamarami)</option>' +
+              '<option value="cost">Sort: SOF Cost (pinakamataas)</option>' +
               '<option value="status">Sort: Status</option>' +
             '</select>' +
             '<div class="form-check form-switch mb-0 ms-1">' +
@@ -760,6 +832,7 @@ window.sofViewItems = async function(sofNo) {
           '<th>#</th><th>Item Code</th><th>Description</th>' +
           '<th class="text-center">Unit</th>' +
           '<th class="text-end">Allocated Qty</th><th class="text-end">Used Qty</th><th class="text-end">Remaining Qty</th>' +
+          '<th class="text-end">Unit Cost</th><th class="text-end">SOF Cost</th><th class="text-end">Remaining Cost</th>' +
           '<th>Usage</th>' +
           '<th>Pending MRIF (kanino ibibigay)</th>' +
           '<th class="text-center">Status</th><th class="text-center">Action</th>' +
