@@ -18,6 +18,8 @@
     { k: 'unit',       t: 'pick', get: function (it) { return String(it.base_unit || ''); } },
     { k: 'unitcost',   t: 'num',  get: function (it) { return Number(it.unit_cost || 0); } },
     { k: 'onhandcost', t: 'num',  get: function (it) { return Number(it.on_hand || 0) * Number(it.unit_cost || 0); } },
+    { k: 'availcost',  t: 'num',  get: function (it) { var oh = Number(it.on_hand || 0), a = Math.min(Number((_erpSofAllocatedMap || {})[it.item_code] || 0), Math.max(oh, 0)); return (oh - a) * Number(it.unit_cost || 0); } },
+    { k: 'alloccost',  t: 'num',  get: function (it) { var oh = Number(it.on_hand || 0); return Math.min(Number((_erpSofAllocatedMap || {})[it.item_code] || 0), Math.max(oh, 0)) * Number(it.unit_cost || 0); } },
     { k: 'activemo',   t: 'num',  get: function (it) { return Number(it.active_consumption_months || 0); } },
     { k: 'class',      t: 'pick', get: function (it) { return (typeof erpItemClass === 'function') ? erpItemClass(it.active_consumption_months) : ''; } },
     { k: 'avemo',      t: 'num',  get: function (it) { return Number(it.ave_monthly_consumption || 0); } },
@@ -117,6 +119,7 @@
         return true;
       });
     }
+    if (typeof erpMatchesSearch === 'function') items = items.filter(erpMatchesSearch);   // isama ang search box
     _erpFilteredItems = window.erpApplyColFilters(items, _erpAllItems);
     _erpCurrentPage = 1;
     erpRenderTable();
