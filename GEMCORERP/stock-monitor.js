@@ -437,7 +437,7 @@ async function erpLoadItems() {
     location: document.getElementById('erpLocationFilter').value,
     movement: document.getElementById('erpMovementFilter').value,
     abc: document.getElementById('erpAbcFilter').value,
-    search: document.getElementById('erpSearchInput').value.trim(),
+    search: '',   // client-side ang search (tingnan erpMatchesSearch) para hindi mawala ang ibang items kapag binura ang search
     limit: 5000
   };
   
@@ -496,6 +496,9 @@ async function erpLoadItems() {
     });
   }
   
+  // Search box (client-side)
+  if ((document.getElementById('erpSearchInput').value || '').trim()) _erpFilteredItems = _erpFilteredItems.filter(erpMatchesSearch);
+
   // Header (per-column) filters from stock-colfilters.js
   if (typeof erpApplyColFilters === 'function') _erpFilteredItems = erpApplyColFilters(_erpFilteredItems, _erpAllItems);
 
@@ -1549,6 +1552,12 @@ async function erpLoadFilterOptions() {
 }
 
 // ─── Search (client-side, walang bagong fetch bawat type) ───
+function erpMatchesSearch(it) {
+  var q = ((document.getElementById('erpSearchInput') || {}).value || '').trim().toLowerCase();
+  if (!q) return true;
+  return ((it.item_code || '') + ' ' + (it.description || '')).toLowerCase().indexOf(q) !== -1;
+}
+
 function erpOnSearchInput() {
   clearTimeout(_erpSearchTimer);
   _erpSearchTimer = setTimeout(function() {
@@ -1568,6 +1577,7 @@ function erpOnSearchInput() {
       }
       return true;
     });
+    if (typeof erpApplyColFilters === 'function') _erpFilteredItems = erpApplyColFilters(_erpFilteredItems, _erpAllItems);
     _erpCurrentPage = 1;
     erpRenderTable();
   }, 250);
