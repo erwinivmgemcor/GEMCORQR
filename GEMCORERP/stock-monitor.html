@@ -133,7 +133,7 @@
       <div class="kpi-content">
         <div class="kpi-label">Needs PRF (Below Reorder)</div>
         <div class="kpi-value" id="kpiBelowReorder">—</div>
-        <div class="kpi-sub">Zero/low stock with buffer — replenish</div>
+        <div class="kpi-sub" id="kpiBelowReorderSub">Zero/low stock with buffer — replenish</div>
       </div>
     </div>
 
@@ -148,12 +148,12 @@
     </div>
 
     <!-- CARD 5: Out of Stock -->
-    <div class="erp-kpi-card kpi-red kpi-clickable" onclick="erpShowOutOfStockModal()" title="Click to view ALL zero-stock items (with or without buffer)">
+    <div class="erp-kpi-card kpi-red kpi-clickable" onclick="erpShowOutOfStockModal()" title="Click to view zero-stock items (STD / PROJ)">
       <div class="kpi-icon"><i class="bi bi-x-circle-fill"></i></div>
       <div class="kpi-content">
         <div class="kpi-label">Out of Stock</div>
         <div class="kpi-value" id="kpiZeroStock">—</div>
-        <div class="kpi-sub">Zero on-hand — click to view</div>
+        <div class="kpi-sub" id="kpiZeroStockSub">Zero on-hand — click to view</div>
       </div>
     </div>
        <!-- CARD 6: Inventory Variances -->
@@ -457,9 +457,9 @@
       <div class="modal-body">
         <div class="erp-filters-row mb-3">
           <select id="outOfStockFilter" class="erp-select" onchange="erpFilterOutOfStock()">
-            <option value="all">All Zero-Stock Items</option>
-            <option value="standard">Standard Stock Only (has usage)</option>
-            <option value="no-usage">No Usage Items</option>
+            <option value="std">STD — standard stock</option>
+            <option value="proj">PROJ — project stock</option>
+            <option value="all">All zero-stock items</option>
           </select>
           <div class="erp-search-wrap" style="flex:1;">
             <i class="bi bi-search"></i>
