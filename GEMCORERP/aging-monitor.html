@@ -25,6 +25,7 @@
 <script defer src="erp-config.js"></script>
 <script defer src="erp-supabase.js"></script>
 <script defer src="erp-nav.js"></script>
+<script defer src="aging-mrr-data.js"></script>
 <script defer src="aging-monitor.js"></script>
 <script defer src="notif-alerts.js"></script>
 <script defer src="notifications.js"></script>
@@ -58,7 +59,7 @@
     <div>
       <div class="erp-page-title">
         <i class="bi bi-hourglass-split"></i>
-        <span>Inventory Aging</span>
+        <span>Stock Aging</span>
       </div>
       <div class="erp-breadcrumb">
         <a href="stock-monitor.html">Home</a>
@@ -86,27 +87,27 @@
       </div>
     </div>
     <div class="erp-kpi-card kpi-green">
-      <div class="kpi-icon"><i class="bi bi-arrow-repeat"></i></div>
+      <div class="kpi-icon"><i class="bi bi-calendar-event"></i></div>
       <div class="kpi-content">
-        <div class="kpi-label">Active Stock</div>
-        <div class="kpi-value" id="agKpiActive">—</div>
-        <div class="kpi-sub" id="agKpiActiveSub">Issued this month or last month</div>
+        <div class="kpi-label">Average Stock Age</div>
+        <div class="kpi-value" id="agKpiAvg">—</div>
+        <div class="kpi-sub" id="agKpiAvgSub">&nbsp;</div>
+      </div>
+    </div>
+    <div class="erp-kpi-card kpi-amber">
+      <div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Over 90 Days</div>
+        <div class="kpi-value" id="agKpiAged">—</div>
+        <div class="kpi-sub" id="agKpiAgedSub">&nbsp;</div>
       </div>
     </div>
     <div class="erp-kpi-card kpi-red">
       <div class="kpi-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
       <div class="kpi-content">
-        <div class="kpi-label">Idle 4+ Months</div>
-        <div class="kpi-value" id="agKpiIdle">—</div>
-        <div class="kpi-sub" id="agKpiIdleSub">&nbsp;</div>
-      </div>
-    </div>
-    <div class="erp-kpi-card kpi-amber">
-      <div class="kpi-icon"><i class="bi bi-slash-circle"></i></div>
-      <div class="kpi-content">
-        <div class="kpi-label">No Usage This Year</div>
-        <div class="kpi-value" id="agKpiNone">—</div>
-        <div class="kpi-sub" id="agKpiNoneSub">&nbsp;</div>
+        <div class="kpi-label">Over 180 Days</div>
+        <div class="kpi-value" id="agKpiOld">—</div>
+        <div class="kpi-sub" id="agKpiOldSub">&nbsp;</div>
       </div>
     </div>
   </div>
@@ -114,7 +115,7 @@
   <!-- AGING BREAKDOWN -->
   <div class="erp-card ag-card">
     <div class="ag-card-h">
-      <div><b>Stock value by age</b> <span class="text-muted small">— click a box to filter the list below</span></div>
+      <div><b>Stock value by age since received</b> <span class="text-muted small">— click a box to filter the list below</span></div>
     </div>
     <div class="ag-stack" id="agStack"></div>
     <div class="ag-buckets" id="agBuckets"></div>
@@ -123,7 +124,7 @@
   <!-- WHERE IS THE IDLE STOCK -->
   <div class="erp-card ag-card">
     <div class="ag-card-h">
-      <div><b>Where is the idle stock?</b> <span class="text-muted small">— value idle 4+ months, by category (click to filter)</span></div>
+      <div><b>Where is the aged stock?</b> <span class="text-muted small">— value older than 90 days, by category (click to filter)</span></div>
     </div>
     <div id="agCats" class="ag-cats"></div>
   </div>
@@ -135,8 +136,8 @@
         <i class="bi bi-search"></i>
         <input type="text" id="agSearch" class="erp-search" placeholder="Search item code or description..." oninput="agOnSearch()">
       </div>
-      <select id="agStatus" class="erp-select" onchange="agSetStatusFromSelect()">
-        <option value="">All Statuses</option>
+      <select id="agBucketSel" class="erp-select" onchange="agSetBucketFromSelect()">
+        <option value="">All Ages</option>
       </select>
       <select id="agCategory" class="erp-select" onchange="agApply()"><option value="">All Categories</option></select>
       <select id="agLocation" class="erp-select" onchange="agApply()"><option value="">All Locations</option></select>
@@ -153,8 +154,8 @@
     <div class="erp-table-header">
       <div>
         <i class="bi bi-list-ul me-2"></i>
-        <strong>Item Aging Detail</strong>
-        <span class="erp-table-subtitle" id="agSubtitle">Oldest first, then highest value</span>
+        <strong>Item Aging Detail</strong> <span class="text-muted small ms-2">click a row to see its receipts</span>
+        <span class="erp-table-subtitle" id="agSubtitle">Highest aged value first</span>
       </div>
       <span class="erp-badge" id="agCount">0 items</span>
     </div>
@@ -165,18 +166,19 @@
           <tr>
             <th style="width:3%">#</th>
             <th style="width:11%" class="ag-sort" onclick="agSort('code')">Item Code <i class="bi" data-s="code"></i></th>
-            <th style="width:25%">Description</th>
-            <th style="width:10%">Category</th>
+            <th style="width:21%">Description</th>
             <th style="width:8%" class="text-end ag-sort" onclick="agSort('onhand')">On-Hand <i class="bi" data-s="onhand"></i></th>
-            <th style="width:10%" class="text-end ag-sort" onclick="agSort('value')">Stock Value <i class="bi" data-s="value"></i></th>
-            <th style="width:8%">Last Issued</th>
-            <th style="width:8%">Last Received</th>
-            <th style="width:7%" class="text-center ag-sort" onclick="agSort('idle')" title="Whole months since the item was last issued">Months Idle <i class="bi" data-s="idle"></i></th>
-            <th style="width:10%" class="text-center ag-sort" onclick="agSort('risk')">Status <i class="bi" data-s="risk"></i></th>
+            <th style="width:9%" class="text-end ag-sort" onclick="agSort('value')">Stock Value <i class="bi" data-s="value"></i></th>
+            <th style="width:11%" title="Share of the item's stock value in each age bucket">Age Mix</th>
+            <th style="width:9%" class="text-end ag-sort" onclick="agSort('focus')"><span id="agFocusHead">Aged Value (90+ d)</span> <i class="bi" data-s="focus"></i></th>
+            <th style="width:7%" class="text-center ag-sort" onclick="agSort('oldest')" title="Age in days of the oldest stock still on hand">Oldest <i class="bi" data-s="oldest"></i></th>
+            <th style="width:9%" class="ag-sort" onclick="agSort('recv')">Last Received <i class="bi" data-s="recv"></i></th>
+            <th style="width:7%" title="Month of the last issuance (MRIF)">Last Issued</th>
+            <th style="width:8%" class="text-center" title="Age bucket of the oldest stock on hand">Status</th>
           </tr>
         </thead>
         <tbody id="agBody">
-          <tr><td colspan="10" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading...</div></td></tr>
+          <tr><td colspan="11" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading...</div></td></tr>
         </tbody>
       </table>
     </div>
@@ -186,17 +188,20 @@
   <details class="ag-note">
     <summary><i class="bi bi-info-circle me-1"></i><b>How is this calculated?</b></summary>
     <ul>
-      <li><b>Aging</b> is the number of whole months since an item was last <b>issued</b> (MRIF). The current month counts as 0.</li>
-      <li><b>Source:</b> the same monthly data used by <a href="monthly-movement.html">Monthly Movement</a> — the legacy sheet for Jan–Oct 2026, plus the live system from Nov 2026. Data starts in <b id="agStartLbl">Jan 2026</b>, so the oldest age that can be shown is about 10–11 months.</li>
-      <li><b>Active:</b> issued this month or last month. <b>Slow:</b> 2–3 months ago. <b>Aging:</b> 4–6 months ago. <b>Dormant:</b> 7 or more months ago. <b>No Usage:</b> never issued since the data starts.</li>
-      <li><b>New Stock:</b> received in the last 2 months and not issued recently, so it is not counted as idle yet.</li>
+      <li><b>Age</b> = number of days from the <b>MRR (receipt) date</b> until today. It answers: <i>how long has the stock we hold now been in the warehouse?</i></li>
+      <li><b>FIFO:</b> the oldest stock is assumed to be used first. So the stock on hand is taken from the <b>newest receipts</b>, counted back until it adds up to the on-hand quantity. Each receipt “layer” gets its own age and value.</li>
+      <li><b>Example:</b> on-hand 10. Received 6 on Oct 20 and 8 on Aug 5 → 6 units are aged from Oct 20 and 4 units from Aug 5.</li>
+      <li><b>Receipt data:</b> Jan–Oct 2026 from the MRR sheet (exact dates); Nov 2026 onward from live MRR transactions in the system.</li>
+      <li><b>Pre-2026:</b> if the on-hand is more than everything received in 2026, the extra was already in stock before the sheet starts. Its exact age is unknown, but it is at least as old as the first 2026 receipt, so it is counted as the oldest group.</li>
+      <li><b>Age buckets:</b> Fresh 0–30 days • Normal 31–90 • Aging 91–180 • Old 181+ • Pre-2026. <b>“Over 90 Days”</b> = Aging + Old + Pre-2026.</li>
+      <li><b>Status</b> of an item = the age bucket of its oldest stock still on hand. <b>Aged Value</b> shows how much of the item's value is older than 90 days. <b>Age Mix</b> shows the split.</li>
       <li><b>Stock Value</b> = on-hand × unit cost. Items with no stock are hidden unless you tick “Include items with no stock”.</li>
-      <li>Months are whole months, so “Last Issued: Oct 2026” means sometime in October.</li>
+      <li><b>Last Issued</b> comes from Monthly Movement (month only) and is for reference — it is not used to compute age.</li>
     </ul>
   </details>
 
   <div class="erp-footer">
-    <div>GEMCOR ERP — Aging Monitor v2.0.0</div>
+    <div>GEMCOR ERP — Aging Monitor v3.0.0</div>
     <div>Read-only • Does not change any data</div>
   </div>
 </div>
