@@ -905,7 +905,7 @@ async function mdashLoadRepData(force) {
     try {
       var res = await Promise.all([
         erpFetch('erp_v_reorder_list', 'select=item_code,urgency,on_hand,buffer_stock&limit=5000'),
-        erpFetchAll('erp_items', 'select=item_code,description,base_unit,category,location,stock_classification,unit_cost,on_hand,buffer_stock,active_consumption_months&is_active=eq.true&is_deleted=eq.false')
+        erpFetchAll('erp_items', 'select=item_code,description,base_unit,category,location,stock_classification,unit_cost,on_hand,buffer_stock,active_consumption_months&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false')
       ]);
       _mdashRep.rows = res[0] || [];
       _mdashRep.items = res[1] || [];
