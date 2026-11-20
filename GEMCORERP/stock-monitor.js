@@ -72,6 +72,51 @@ async function erpLoadSummary() {
   document.getElementById('kpiZeroStock').textContent = erpNum(s.zero_stock_items);
   var subEl = document.getElementById('kpiTotalItemsSub');
   if (subEl) subEl.textContent = (s.active_items || 0) + ' with stock';
+  erpLoadStdKpis();   // STD-only Out of Stock at Needs PRF — kapareho ng Management Dashboard
+}
+
+// ═══════════════════════════════════════════════════════════
+// STD-ONLY KPIs (Out of Stock + Needs PRF) — kapareho ng Management Dashboard
+// STD = Active Months ≥ ERP_STD_MIN_MONTHS (erpItemClass). Ang PROJ ay hindi binibilang sa card pero makikita sa popup (tab).
+// Hindi sumusunod sa filters ng table — palaging buong warehouse.
+// ═══════════════════════════════════════════════════════════
+var _erpStd = { items: null, byCode: {}, zeroStd: [], zeroProj: [], repStd: [], repProj: [], reorderRows: [], at: 0, pending: null };
+
+async function erpLoadStdKpis(force) {
+  if (!force && _erpStd.items && Date.now() - _erpStd.at < 20000) return;
+  if (_erpStd.pending) return _erpStd.pending;
+  _erpStd.pending = (async function() {
+    try {
+      var res = await Promise.all([
+        erpFetchAll('erp_items', 'select=item_code,description,category,location,stock_classification,unit_cost,on_hand,buffer_stock,ave_monthly_consumption,active_consumption_months&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false'),
+        erpFetch('erp_v_reorder_list', 'select=*&limit=5000')
+      ]);
+      var items = res[0] || [], rows = res[1] || [], by = {};
+      items.forEach(function(it) { by[it.item_code] = it; });
+      var zs = [], zp = [], rs = [], rp = [];
+      items.forEach(function(it) {
+        if (Number(it.on_hand || 0) > 0) return;
+        (erpItemClass(it.active_consumption_months) === 'STD' ? zs : zp).push(it);
+      });
+      rows.forEach(function(r) {
+        var it = by[r.item_code]; if (!it) return;          // deactivated / wala sa active items
+        var row = Object.assign({}, it, r, { active_consumption_months: it.active_consumption_months });
+        (erpItemClass(it.active_consumption_months) === 'STD' ? rs : rp).push(row);
+      });
+      _erpStd.items = items; _erpStd.byCode = by; _erpStd.zeroStd = zs; _erpStd.zeroProj = zp;
+      _erpStd.repStd = rs; _erpStd.repProj = rp; _erpStd.reorderRows = rows; _erpStd.at = Date.now();
+
+      var z = document.getElementById('kpiZeroStock'), zSub = document.getElementById('kpiZeroStockSub');
+      if (z) z.textContent = erpNum(zs.length);
+      if (zSub) zSub.textContent = 'STD zero stock' + (zp.length ? ' · +' + erpNum(zp.length) + ' PROJ hidden' : '') + ' — click to view';
+      var b = document.getElementById('kpiBelowReorder'), bSub = document.getElementById('kpiBelowReorderSub');
+      if (b) b.textContent = erpNum(rs.length);
+      if (bSub) bSub.textContent = 'STD below buffer — replenish' + (rp.length ? ' · +' + erpNum(rp.length) + ' PROJ not counted' : '');
+    } catch (e) {
+      console.warn('[Stock Monitor] STD KPIs unavailable, keeping database numbers:', e.message);
+    } finally { _erpStd.pending = null; }
+  })();
+  return _erpStd.pending;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -504,6 +549,7 @@ async function erpLoadItems() {
 
   erpRenderTable();
   _erpRenderLock = false;
+  erpLoadStdKpis();   // i-refresh ang KPI pagkatapos ng edit / reload (naka-cache ng 20s)
 }
 
 function erpRenderTable() {
@@ -652,7 +698,7 @@ function erpExportOutOfStock() {
     return;
   }
   
-  var headers = ['Item Code', 'Description', 'Category', 'Location', 'On-Hand', 'Buffer Stock', 'Ave Monthly', 'Active Months', 'Status'];
+  var headers = ['Item Code', 'Description', 'Category', 'Location', 'On-Hand', 'Buffer Stock', 'Ave Monthly', 'Active Months', 'Class', 'Status'];
   var rows = _outOfStockFiltered.map(function(it) {
     var buffer = Number(it.buffer_stock || 0);
     var status = buffer > 0 ? 'FOR REPLENISHMENT' : 'NO USAGE';
@@ -665,6 +711,7 @@ function erpExportOutOfStock() {
       buffer,
       Number(it.ave_monthly_consumption || 0),
       Number(it.active_consumption_months || 0),
+      erpItemClass(it.active_consumption_months),
       status
     ];
   });
@@ -1742,9 +1789,11 @@ function erpShowNewItemsModal() {
   bootstrap.Modal.getOrCreateInstance(document.getElementById('erpNewItemsModal')).show();
 }
 
-function erpShowOutOfStockModal() {
-  _outOfStockAll = _erpAllItems.filter(function(it) { return Number(it.on_hand || 0) <= 0; });
-  document.getElementById('outOfStockFilter').value = 'all';
+async function erpShowOutOfStockModal() {
+  if (!_erpStd.items) await erpLoadStdKpis(true);
+  var src = _erpStd.items || _erpAllItems;
+  _outOfStockAll = src.filter(function(it) { return Number(it.on_hand || 0) <= 0; });
+  document.getElementById('outOfStockFilter').value = 'std';
   document.getElementById('outOfStockSearch').value = '';
   erpFilterOutOfStock();
   bootstrap.Modal.getOrCreateInstance(document.getElementById('erpOutOfStockModal')).show();
@@ -1754,44 +1803,56 @@ function erpFilterOutOfStock() {
   var mode = document.getElementById('outOfStockFilter').value;
   var q = (document.getElementById('outOfStockSearch').value || '').trim().toLowerCase();
   _outOfStockFiltered = _outOfStockAll.filter(function(it) {
-    var b = Number(it.buffer_stock || 0);
-    if (mode === 'standard' && !(b > 0)) return false;
-    if (mode === 'no-usage' && b > 0) return false;
+    var cls = erpItemClass(it.active_consumption_months);
+    if (mode === 'std' && cls !== 'STD') return false;
+    if (mode === 'proj' && cls !== 'PROJ') return false;
     if (q && ((it.item_code || '') + ' ' + (it.description || '')).toLowerCase().indexOf(q) === -1) return false;
     return true;
   });
   document.getElementById('outOfStockCount').textContent = _outOfStockFiltered.length;
   document.getElementById('outOfStockBody').innerHTML = _erpMiniRows(_outOfStockFiltered, function(it) {
-    return Number(it.buffer_stock || 0) > 0
-      ? '<span class="reorder-badge reorder-critical">FOR REPLENISHMENT</span>'
-      : '<span class="reorder-badge reorder-none">NO USAGE</span>';
+    var cls = erpItemClass(it.active_consumption_months);
+    return '<span class="badge" style="background:' + (cls === 'STD' ? '#d1fae5;color:#065f46' : '#fef3c7;color:#92400e') + ';margin-right:4px;">' + cls + '</span>' +
+      (Number(it.buffer_stock || 0) > 0
+        ? '<span class="reorder-badge reorder-critical">FOR REPLENISHMENT</span>'
+        : '<span class="reorder-badge reorder-none">NO USAGE</span>');
   });
 }
 
+var _erpReorderTab = 'STD';
 async function erpShowReorderModal() {
   var modalEl = document.getElementById('erpReorderModal');
   var body = document.getElementById('erpReorderBody');
   body.innerHTML = '<div class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading reorder list...</div></div>';
   bootstrap.Modal.getOrCreateInstance(modalEl).show();
-  var res = await erpGetReorderList(true);
-  if (!res.success) {
-    body.innerHTML = '<div class="text-center text-danger py-4">' + erpEsc(res.error) + '</div>';
-    return;
+  try { await erpLoadStdKpis(true); } catch (e) {}
+  if (!_erpStd.items) { body.innerHTML = '<div class="text-center text-danger py-4">Failed to load the reorder list.</div>'; return; }
+  _erpReorderTab = 'STD';
+  erpRenderReorderModal();
+}
+function erpReorderSetTab(t) { _erpReorderTab = t; erpRenderReorderModal(); }
+function erpRenderReorderModal() {
+  var body = document.getElementById('erpReorderBody'); if (!body) return;
+  var std = _erpStd.repStd, proj = _erpStd.repProj;
+  var items = _erpReorderTab === 'STD' ? std : _erpReorderTab === 'PROJ' ? proj : std.concat(proj);
+  items = items.slice().sort(function(a, b) { return (Number(b.buffer_stock || 0) - Number(b.on_hand || 0)) * Number(b.unit_cost || 0) - (Number(a.buffer_stock || 0) - Number(a.on_hand || 0)) * Number(a.unit_cost || 0); });
+  function tab(k, label, n) {
+    var on = _erpReorderTab === k;
+    return '<button type="button" onclick="erpReorderSetTab(\'' + k + '\')" style="border:1px solid ' + (on ? '#1e3a5f' : '#cbd5e1') + ';background:' + (on ? '#1e3a5f' : '#fff') + ';color:' + (on ? '#fff' : '#334155') + ';padding:5px 14px;border-radius:999px;font-weight:700;font-size:.8rem;cursor:pointer;margin-right:6px;">' + label + ' <span style="opacity:.75">' + erpNum(n) + '</span></button>';
   }
-  var items = res.items || [];
-  if (!items.length) {
-    body.innerHTML = '<div class="text-center text-muted py-4">Walang items na kailangang i-reorder.</div>';
-    return;
-  }
-  var html = '<div class="table-responsive"><table class="erp-table"><thead><tr>' +
+  var html = '<div class="mb-2">' + tab('STD', 'STD (standard)', std.length) + tab('PROJ', 'PROJ (project)', proj.length) + tab('ALL', 'All', std.length + proj.length) + '</div>' +
+    '<div class="text-muted small mb-2">Sorted by shortfall value (highest first). PROJ = project stock, not counted in the Needs PRF card.</div>';
+  if (!items.length) { body.innerHTML = html + '<div class="text-center text-muted py-4">Walang items na kailangang i-reorder.</div>'; return; }
+  html += '<div class="table-responsive"><table class="erp-table"><thead><tr>' +
     '<th>Item Code</th><th>Description</th><th>Category</th><th class="text-end">On-Hand</th>' +
-    '<th class="text-end">Buffer</th><th class="text-end">Shortfall</th><th class="text-end">Ave/Mo</th></tr></thead><tbody>';
+    '<th class="text-end">Buffer</th><th class="text-end">Shortfall</th><th class="text-end">Ave/Mo</th><th class="text-end">Shortfall ₱</th></tr></thead><tbody>';
   items.forEach(function(it) {
-    var oh = Number(it.on_hand || 0), bf = Number(it.buffer_stock || 0);
+    var oh = Number(it.on_hand || 0), bf = Number(it.buffer_stock || 0), sh = Math.max(bf - oh, 0);
     html += '<tr><td><code>' + erpEsc(it.item_code) + '</code></td><td>' + erpEsc(it.description || '—') + '</td>' +
       '<td>' + erpEsc(it.category || '—') + '</td><td class="text-end">' + erpNum(oh) + '</td>' +
-      '<td class="text-end">' + erpNum(bf) + '</td><td class="text-end fw-bold">' + erpNum(Math.max(bf - oh, 0)) + '</td>' +
-      '<td class="text-end">' + erpNum(it.ave_monthly_consumption || 0) + '</td></tr>';
+      '<td class="text-end">' + erpNum(bf) + '</td><td class="text-end fw-bold">' + erpNum(sh) + '</td>' +
+      '<td class="text-end">' + erpNum(it.ave_monthly_consumption || 0) + '</td>' +
+      '<td class="text-end">₱' + erpNum((sh * Number(it.unit_cost || 0)).toFixed(2)) + '</td></tr>';
   });
   body.innerHTML = html + '</tbody></table></div>';
 }
