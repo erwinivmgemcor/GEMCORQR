@@ -1,47 +1,65 @@
 // ============================================================
-// GEMCOR ERP — Aging Monitor (v2.0)
-// Shows how long stock has been sitting without being issued.
-// Data : erp_items + erp_v_item_monthly (same source as Monthly Movement:
-//        legacy sheet Jan–Oct 2026 + live system from Nov 2026).
-// Read-only — writes nothing.
+// GEMCOR ERP — Aging Monitor (v3.0)  —  Stock age by RECEIPT date (FIFO)
 //
-// Aging = whole months since the item was last ISSUED (MRIF). Current month = 0.
-//   ACTIVE   issued this month or last month            (0–1)
-//   NEW      received in the last 2 months, not used yet (so it is not called idle)
-//   SLOW     last issued 2–3 months ago
-//   AGING    last issued 4–6 months ago
-//   DORMANT  last issued 7+ months ago
-//   NONE     never issued since the data starts (Jan 2026)
-// "Idle" = AGING + DORMANT + NONE (4+ months).
+// Question answered: "How long has the stock we are holding now been sitting in the warehouse?"
+//
+// Method (FIFO layers):
+//   1. On-hand quantity comes from erp_items.
+//   2. Every receipt (MRR) of that item is listed with its real date:
+//        • Jan–Oct 2026 : aging-mrr-data.js  (from MRR_DATA_2026.xlsx, day-level dates)
+//        • Nov 2026 on  : erp_stock_ledger   (live MRR transactions)
+//   3. FIFO: the oldest stock is used first, so what is still on the shelf must come from the NEWEST
+//      receipts. We walk receipts newest → oldest and "fill" the on-hand quantity.
+//   4. Each filled layer has an age in days (today − MRR date) and a peso value (qty × unit cost).
+//   5. On-hand that is larger than all 2026 receipts must have been in stock before the sheet starts
+//      (Jan 2026) → bucket "Before 2026 / No Record" (always older than every dated bucket).
+//
+// Read-only — writes nothing.
 // ============================================================
 
-var AG_START = { y: 2026, m: 1 };
-var AG_MN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-var AG_T = { activeMax: 1, slowMax: 3, agingMax: 6, newRecv: 2 };   // thresholds in months
-var AG_STATUS = [
-  { k: 'ACTIVE',  t: 'Active',    d: 'Issued this month or last month',        c: '#16a34a', r: 0 },
-  { k: 'NEW',     t: 'New Stock', d: 'Received in the last 2 months, not used yet', c: '#3b82f6', r: 1 },
-  { k: 'SLOW',    t: 'Slow',      d: 'Last issued 2–3 months ago',             c: '#eab308', r: 2, dark: true },
-  { k: 'AGING',   t: 'Aging',     d: 'Last issued 4–6 months ago',             c: '#f97316', r: 3 },
-  { k: 'DORMANT', t: 'Dormant',   d: 'Last issued 7+ months ago',              c: '#ef4444', r: 4 },
-  { k: 'NONE',    t: 'No Usage',  d: 'Never issued since ' + AG_MN[AG_START.m - 1] + ' ' + AG_START.y, c: '#991b1b', r: 5 }
+var AG_LIVE_FROM = '2026-11-01';          // receipts on/after this date come from the live ledger; earlier ones from the sheet
+var AG_BUCKETS = [                          // age buckets in DAYS since MRR date (edit "max" to change thresholds)
+  { k: 'B1', t: 'Fresh',   r: '0–30 days',    max: 30,       c: '#16a34a', d: 'Received within the last 30 days' },
+  { k: 'B2', t: 'Normal',  r: '31–90 days',   max: 90,       c: '#3b82f6', d: 'Received 1 to 3 months ago' },
+  { k: 'B3', t: 'Aging',   r: '91–180 days',  max: 180,      c: '#eab308', d: 'Received 3 to 6 months ago', dark: true },
+  { k: 'B4', t: 'Old',     r: '181+ days',    max: Infinity, c: '#f97316', d: 'Received 6+ months ago (in 2026)' },
+  { k: 'B5', t: 'Pre-2026', r: 'No receipt in 2026', max: null, c: '#dc2626', d: 'Stock older than the first 2026 receipt, or no receipt on record' }
 ];
-var AG_IDLE = { AGING: 1, DORMANT: 1, NONE: 1 };
+var AG_AGED_FROM = 2;                       // index of first "aged" bucket (B3 = 91+ days)
+var AG_OLD_FROM = 3;                        // index of first "old" bucket (B4 = 181+ days)
+var AG_MN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 var AG = {
-  items: [], recs: [], base: [], view: [],
-  status: '', cat: '', page: 1, pageSize: 100,
-  sortKey: 'risk', sortDir: -1, timer: null, loadId: 0, nowIdx: 0
+  items: [], recs: [], base: [], view: [], mv: {}, open: {},
+  bucket: '', cat: '', page: 1, pageSize: 100,
+  sortKey: 'risk', sortDir: -1, timer: null, loadId: 0,
+  todayN: 0, startN: 0, warn: [], stats: {}
 };
+
+// ── date helpers (all in whole days, timezone-safe) ──────────
+function agDayN(iso) {                       // 'YYYY-MM-DD' → day number
+  var s = String(iso || '').slice(0, 10), y = +s.slice(0, 4), m = +s.slice(5, 7), d = +s.slice(8, 10);
+  if (!y || !m || !d) return 0;
+  return Math.round(Date.UTC(y, m - 1, d) / 86400000);
+}
+function agNToLabel(n) {
+  if (!n) return '';
+  var d = new Date(n * 86400000);
+  return AG_MN[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + d.getUTCFullYear();
+}
+function agBucketOf(age, pre) {
+  if (pre) return 4;
+  for (var i = 0; i < 4; i++) if (age <= AG_BUCKETS[i].max) return i;
+  return 3;
+}
 
 // ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function() {
-  var sel = document.getElementById('agStatus');
-  if (sel) sel.innerHTML = '<option value="">All Statuses</option>' +
-    AG_STATUS.map(function(s) { return '<option value="' + s.k + '">' + s.t + '</option>'; }).join('');
-  var sl = document.getElementById('agStartLbl'); if (sl) sl.textContent = AG_MN[AG_START.m - 1] + ' ' + AG_START.y;
+  var sel = document.getElementById('agBucketSel');
+  if (sel) sel.innerHTML = '<option value="">All Ages</option>' +
+    AG_BUCKETS.map(function(b) { return '<option value="' + b.k + '">' + b.t + ' (' + b.r + ')</option>'; }).join('');
   agCheckHealth();
   agLoad();
 });
@@ -61,82 +79,114 @@ async function agCheckHealth() {
 // ═══════════════════════════════════════════════════════════
 // LOAD
 // ═══════════════════════════════════════════════════════════
-function agMonthIdx(s) {
-  s = String(s || '');
-  var y = parseInt(s.slice(0, 4), 10), m = parseInt(s.slice(5, 7), 10);
-  return (isNaN(y) || isNaN(m)) ? 0 : y * 12 + m;
-}
-function agIdxLabel(idx) {
-  if (!idx) return '';
-  var y = Math.floor((idx - 1) / 12), m = (idx - 1) % 12;
-  return AG_MN[m] + ' ' + y;
-}
-
 async function agLoad() {
   var myId = ++AG.loadId;
   var tbody = document.getElementById('agBody');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading aging data…</div></td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading aging data…</div></td></tr>';
+  AG.warn = [];
   try {
-    var res = await Promise.all([
-      erpFetchAll('erp_items',
-        'select=item_code,description,category,location,base_unit,on_hand,unit_cost' +
-        '&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false&order=item_code.asc'),
-      erpFetchAll('erp_v_item_monthly', 'select=item_code,month_start,mrif_qty,mrr_qty&order=item_code.asc,month_start.asc')
-    ]);
+    var legacy = window.AG_MRR_LEGACY;
+    if (!legacy || !legacy.items) throw new Error('aging-mrr-data.js is missing — copy it next to aging-monitor.html');
+
+    var items = await erpFetchAll('erp_items',
+      'select=item_code,description,category,location,base_unit,on_hand,unit_cost' +
+      '&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false&order=item_code.asc');
+
+    // Live receipts (Nov 2026 →). Failure here must not break the page.
+    var live = [];
+    try {
+      live = await erpFetchAll('erp_stock_ledger',
+        'select=item_code,qty_in,transaction_type,reference_doc,transaction_date' +
+        '&qty_in=gt.0&transaction_date=gte.' + encodeURIComponent(AG_LIVE_FROM) + '&order=transaction_date.asc');
+    } catch (e) {
+      console.warn('[Aging] live receipts unavailable', e);
+      AG.warn.push('Live receipts from ' + agNToLabel(agDayN(AG_LIVE_FROM)) + ' onward could not be loaded, so newer receipts are missing from the ages below.');
+    }
+
+    // Last issued month per item (Monthly Movement source). Optional.
+    var mv = {};
+    try {
+      var hist = await erpFetchAll('erp_v_item_monthly', 'select=item_code,month_start,mrif_qty&order=item_code.asc,month_start.asc');
+      (hist || []).forEach(function(r) {
+        if (!(Number(r.mrif_qty || 0) > 0)) return;
+        var k = String(r.month_start || '').slice(0, 7);
+        if (k > (mv[r.item_code] || '')) mv[r.item_code] = k;
+      });
+    } catch (e) { console.warn('[Aging] monthly history unavailable', e); }
+
     if (myId !== AG.loadId) return;
 
     var now = new Date();
-    AG.nowIdx = now.getFullYear() * 12 + now.getMonth() + 1;
-    AG.items = res[0] || [];
-
-    // last issued / last received month + total issued, per item
-    var mv = {};
-    (res[1] || []).forEach(function(r) {
-      var idx = agMonthIdx(r.month_start); if (!idx) return;
-      var o = mv[r.item_code] || (mv[r.item_code] = { li: 0, lr: 0, ytd: 0 });
-      var a = Number(r.mrif_qty || 0), b = Number(r.mrr_qty || 0);
-      if (a > 0) { if (idx > o.li) o.li = idx; o.ytd += a; }
-      if (b > 0 && idx > o.lr) o.lr = idx;
-    });
+    AG.todayN = Math.round(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86400000);
+    AG.startN = agDayN(legacy.from);
+    AG.items = items || [];
     AG.mv = mv;
+
+    // Merge receipts per item: [{n: dayNumber, q: qty, ref: doc}]
+    var rec = {}, liveN = 0;
+    Object.keys(legacy.items).forEach(function(code) {
+      rec[code] = legacy.items[code].map(function(x) { return { n: agDayN(x[0]), q: Number(x[1]), ref: x[2], src: 'Sheet' }; });
+    });
+    (live || []).forEach(function(tx) {
+      var tag = (String(tx.transaction_type || '') + ' ' + String(tx.reference_doc || '')).toUpperCase();
+      if (tag.indexOf('MRR') === -1 || tag.indexOf('MRIF') !== -1) return;
+      var n = agDayN(tx.transaction_date); if (!n || String(tx.transaction_date).slice(0, 10) < AG_LIVE_FROM) return;
+      (rec[tx.item_code] || (rec[tx.item_code] = [])).push({ n: n, q: Number(tx.qty_in || 0), ref: tx.reference_doc || 'MRR', src: 'System' });
+      liveN++;
+    });
+
+    var codes = {}; AG.items.forEach(function(it) { codes[it.item_code] = 1; });
+    var unmatched = Object.keys(legacy.items).filter(function(c) { return !codes[c]; }).length;
+    AG.stats = { legacyRows: legacy.rows, legacyTo: legacy.to, liveRows: liveN, unmatched: unmatched };
+    AG.rec = rec;
 
     var u = document.getElementById('agUpdated');
     if (u) u.textContent = 'Updated ' + now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) +
-      ' • data from ' + AG_MN[AG_START.m - 1] + ' ' + AG_START.y + ' to date';
+      ' • receipts: ' + agNToLabel(AG.startN) + ' – today';
 
     agPopulateFilters();
     agBuild();
     agApply();
   } catch (err) {
     console.error('[agLoad]', err);
-    var msg = 'Monthly history is not available (' + erpEsc(err.message || err) + '). Make sure erp-history-setup.sql and erp-history-import.sql were run in Supabase — the same data used by Monthly Movement.';
     var s = document.getElementById('agSummary');
-    if (s) { s.className = 'ag-summary bad'; s.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i><div>' + msg + '</div>'; }
-    if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="erp-empty text-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i>Failed to load.</td></tr>';
+    if (s) { s.className = 'ag-summary bad'; s.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i><div>Could not load aging data: ' + erpEsc(err.message || err) + '</div>'; }
+    if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="erp-empty text-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i>Failed to load.</td></tr>';
   }
 }
 
-function agStatusOf(idle, recAgo) {
-  if (idle !== null && idle <= AG_T.activeMax) return 'ACTIVE';
-  if (recAgo !== null && recAgo <= AG_T.newRecv) return 'NEW';
-  if (idle === null) return 'NONE';
-  if (idle <= AG_T.slowMax) return 'SLOW';
-  if (idle <= AG_T.agingMax) return 'AGING';
-  return 'DORMANT';
-}
-function agDef(k) { return AG_STATUS.filter(function(s) { return s.k === k; })[0]; }
-
+// ═══════════════════════════════════════════════════════════
+// BUILD — FIFO layers per item
+// ═══════════════════════════════════════════════════════════
 function agBuild() {
   AG.recs = AG.items.map(function(it) {
-    var m = AG.mv[it.item_code] || { li: 0, lr: 0, ytd: 0 };
-    var oh = Number(it.on_hand || 0), cost = Number(it.unit_cost || 0);
-    var idle = m.li ? Math.max(0, AG.nowIdx - m.li) : null;
-    var recAgo = m.lr ? Math.max(0, AG.nowIdx - m.lr) : null;
-    var st = agStatusOf(idle, recAgo);
+    var oh = Math.max(0, Number(it.on_hand || 0)), cost = Number(it.unit_cost || 0);
+    var list = (AG.rec[it.item_code] || []).slice().sort(function(a, b) { return b.n - a.n; });   // newest first
+    var left = oh, layers = [], lastRecv = list.length ? list[0].n : 0;
+    for (var i = 0; i < list.length && left > 1e-9; i++) {
+      var take = Math.min(left, list[i].q);
+      if (take <= 0) continue;
+      layers.push({ n: list[i].n, ref: list[i].ref, src: list[i].src, recvQty: list[i].q, q: take, pre: false });
+      left -= take;
+    }
+    if (left > 1e-9) layers.push({ n: 0, ref: '', src: '', recvQty: 0, q: left, pre: true });     // before the first 2026 receipt
+
+    var bq = [0, 0, 0, 0, 0], bv = [0, 0, 0, 0, 0], wAge = 0, oldest = 0;
+    layers.forEach(function(L) {
+      L.age = L.pre ? (AG.todayN - AG.startN + 1) : Math.max(0, AG.todayN - L.n);   // pre-2026: at least this old
+      L.b = agBucketOf(L.age, L.pre);
+      L.v = L.q * cost;
+      bq[L.b] += L.q; bv[L.b] += L.v;
+      wAge += L.age * L.q;
+      if (L.age > oldest) oldest = L.age;
+    });
+    var topB = -1; for (var b = 4; b >= 0; b--) if (bq[b] > 0) { topB = b; break; }
+    var lm = AG.mv[it.item_code] || '';
     return {
-      code: it.item_code, desc: it.description || '', cat: it.category || '', loc: it.location || '',
-      unit: it.base_unit || '', oh: oh, cost: cost, val: Math.max(0, oh) * cost,
-      li: m.li, lr: m.lr, ytd: m.ytd, idle: idle, st: st, rank: agDef(st).r
+      code: it.item_code, desc: it.description || '', cat: it.category || '', loc: it.location || '', unit: it.base_unit || '',
+      oh: oh, cost: cost, val: oh * cost, layers: layers, bq: bq, bv: bv,
+      oldest: oldest, avg: oh > 0 ? wAge / oh : 0, pre: bq[4] > 0, top: topB,
+      lastRecv: lastRecv, lastIss: lm, hasRec: list.length > 0
     };
   });
 }
@@ -155,8 +205,10 @@ function agPopulateFilters() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// FILTER + COMPUTE
+// FILTER
 // ═══════════════════════════════════════════════════════════
+function agBIdx(k) { for (var i = 0; i < AG_BUCKETS.length; i++) if (AG_BUCKETS[i].k === k) return i; return -1; }
+
 function agApply() {
   var q = (document.getElementById('agSearch').value || '').toLowerCase().trim();
   var cat = document.getElementById('agCategory').value;
@@ -170,10 +222,11 @@ function agApply() {
     if (q && (r.code + ' ' + r.desc).toLowerCase().indexOf(q) === -1) return false;
     return true;
   });
-  AG.view = AG.status ? AG.base.filter(function(r) { return r.st === AG.status; }) : AG.base.slice();
+  var bi = AG.bucket ? agBIdx(AG.bucket) : -1;
+  AG.view = bi < 0 ? AG.base.slice() : AG.base.filter(function(r) { return r.bq[bi] > 0; });
   AG.page = 1;
 
-  var ss = document.getElementById('agStatus'); if (ss) ss.value = AG.status;
+  var ss = document.getElementById('agBucketSel'); if (ss) ss.value = AG.bucket;
   agRenderSummary();
   agRenderBuckets();
   agRenderCats();
@@ -182,24 +235,29 @@ function agApply() {
 }
 
 function agOnSearch() { clearTimeout(AG.timer); AG.timer = setTimeout(agApply, 250); }
-function agSetStatus(k) { AG.status = (AG.status === k) ? '' : k; agApply(); }
-function agSetStatusFromSelect() { AG.status = document.getElementById('agStatus').value; agApply(); }
+function agSetBucket(k) { AG.bucket = (AG.bucket === k) ? '' : k; agApply(); }
+function agSetBucketFromSelect() { AG.bucket = document.getElementById('agBucketSel').value; agApply(); }
 function agSetCat(c) {
   var sel = document.getElementById('agCategory');
   sel.value = (sel.value === c) ? '' : c;
   agApply();
 }
-
 function agClear() {
   document.getElementById('agSearch').value = '';
   document.getElementById('agCategory').value = '';
   document.getElementById('agLocation').value = '';
   document.getElementById('agZero').checked = false;
-  AG.status = ''; AG.sortKey = 'risk'; AG.sortDir = -1;
+  AG.bucket = ''; AG.sortKey = 'risk'; AG.sortDir = -1;
   agApply();
 }
-
 function agRefresh() { agToast('Refreshing…'); agLoad(); }
+
+// "value in focus": value in selected bucket, otherwise value aged 90+ days
+function agFocusVal(r) {
+  var bi = AG.bucket ? agBIdx(AG.bucket) : -1;
+  if (bi >= 0) return r.bv[bi];
+  var s = 0; for (var i = AG_AGED_FROM; i < 5; i++) s += r.bv[i]; return s;
+}
 
 function agSort(key) {
   if (AG.sortKey === key) AG.sortDir = -AG.sortDir;
@@ -210,16 +268,18 @@ function agSort(key) {
 function agSortView() {
   var k = AG.sortKey, d = AG.sortDir;
   var sub = document.getElementById('agSubtitle');
-  if (sub) sub.textContent = k === 'risk' ? 'Worst status first, then highest value' :
-    k === 'idle' ? 'Sorted by months idle' : k === 'value' ? 'Sorted by stock value' : k === 'onhand' ? 'Sorted by on-hand quantity' : 'Sorted by item code';
+  if (sub) sub.textContent = k === 'risk' ? 'Highest aged value first' :
+    k === 'oldest' ? 'Sorted by oldest stock age' : k === 'value' ? 'Sorted by stock value' : k === 'onhand' ? 'Sorted by on-hand quantity' :
+    k === 'recv' ? 'Sorted by last received date' : k === 'focus' ? 'Sorted by aged value' : 'Sorted by item code';
   AG.view.sort(function(a, b) {
     var r;
     if (k === 'code') r = String(a.code).localeCompare(String(b.code));
     else if (k === 'onhand') r = a.oh - b.oh;
     else if (k === 'value') r = a.val - b.val;
-    else if (k === 'idle') r = (a.idle === null ? 99 : a.idle) - (b.idle === null ? 99 : b.idle);
-    else r = a.rank - b.rank;
-    if (r === 0) r = a.val - b.val;   // tie-break: higher value first when sorting descending
+    else if (k === 'oldest') r = a.oldest - b.oldest;
+    else if (k === 'recv') r = a.lastRecv - b.lastRecv;
+    else r = agFocusVal(a) - agFocusVal(b);          // 'risk' / 'focus'
+    if (r === 0) r = a.oldest - b.oldest;
     return r * d;
   });
 }
@@ -236,74 +296,88 @@ function agPesoShort(n) {
 }
 function agPct(a, b) { return b > 0 ? Math.round(a / b * 100) : 0; }
 function agSet(id, v) { var e = document.getElementById(id); if (e) e.textContent = v; }
+function agDays(n) { return Math.round(n).toLocaleString('en-US') + ' day' + (Math.round(n) === 1 ? '' : 's'); }
+function agPl(n, w) { return n.toLocaleString('en-US') + ' ' + w + (n === 1 ? '' : 's'); }
 
 function agTotals() {
-  var t = { value: 0, items: AG.base.length, by: {} };
-  AG_STATUS.forEach(function(s) { t.by[s.k] = { n: 0, v: 0 }; });
-  AG.base.forEach(function(r) { t.value += r.val; t.by[r.st].n++; t.by[r.st].v += r.val; });
-  t.idleN = t.by.AGING.n + t.by.DORMANT.n + t.by.NONE.n;
-  t.idleV = t.by.AGING.v + t.by.DORMANT.v + t.by.NONE.v;
+  var t = { value: 0, items: AG.base.length, bv: [0, 0, 0, 0, 0], bn: [0, 0, 0, 0, 0], wAge: 0, qtyV: 0 };
+  AG.base.forEach(function(r) {
+    t.value += r.val;
+    var seen = {};
+    r.layers.forEach(function(L) { t.bv[L.b] += L.v; t.wAge += L.age * L.v; t.qtyV += L.v; seen[L.b] = 1; });
+    Object.keys(seen).forEach(function(b) { t.bn[b]++; });
+  });
+  t.avg = t.qtyV > 0 ? t.wAge / t.qtyV : 0;
+  t.agedV = 0; t.oldV = 0;
+  for (var i = AG_AGED_FROM; i < 5; i++) t.agedV += t.bv[i];
+  for (var j = AG_OLD_FROM; j < 5; j++) t.oldV += t.bv[j];
+  t.agedN = 0; AG.base.forEach(function(r) { for (var i = AG_AGED_FROM; i < 5; i++) if (r.bq[i] > 0) { t.agedN++; break; } });
   return t;
 }
 
 function agRenderSummary() {
   var t = agTotals(), box = document.getElementById('agSummary');
+  var noCost = AG.base.filter(function(r) { return r.oh > 0 && !r.cost; }).length;
 
   agSet('agKpiTotal', agPesoShort(t.value));
-  agSet('agKpiTotalSub', t.items.toLocaleString('en-US') + ' item' + (t.items === 1 ? '' : 's') + (document.getElementById('agZero').checked ? '' : ' with stock'));
-  agSet('agKpiActive', agPesoShort(t.by.ACTIVE.v));
-  agSet('agKpiActiveSub', agPct(t.by.ACTIVE.v, t.value) + '% of value • ' + t.by.ACTIVE.n.toLocaleString('en-US') + (t.by.ACTIVE.n === 1 ? ' item' : ' items'));
-  agSet('agKpiIdle', agPesoShort(t.idleV));
-  agSet('agKpiIdleSub', agPct(t.idleV, t.value) + '% of value • ' + t.idleN.toLocaleString('en-US') + (t.idleN === 1 ? ' item' : ' items'));
-  agSet('agKpiNone', agPesoShort(t.by.NONE.v));
-  agSet('agKpiNoneSub', t.by.NONE.n.toLocaleString('en-US') + (t.by.NONE.n === 1 ? ' item' : ' items') + ' never issued');
+  agSet('agKpiTotalSub', agPl(t.items, 'item') + (document.getElementById('agZero').checked ? '' : ' with stock'));
+  agSet('agKpiAvg', t.items ? Math.round(t.avg) + ' days' : '—');
+  agSet('agKpiAvgSub', 'Average age of stock on hand, weighted by peso value');
+  agSet('agKpiAged', agPesoShort(t.agedV));
+  agSet('agKpiAgedSub', agPct(t.agedV, t.value) + '% of value • ' + agPl(t.agedN, 'item'));
+  agSet('agKpiOld', agPesoShort(t.oldV));
+  agSet('agKpiOldSub', agPct(t.oldV, t.value) + '% of value • received 6+ months ago');
 
   if (!t.items) { box.className = 'ag-summary'; box.innerHTML = '<i class="bi bi-inbox"></i><div>No items match the current filters.</div>'; return; }
 
-  var pct = agPct(t.idleV, t.value), cls, icon, html;
-  if (t.idleN === 0) {
+  var pct = agPct(t.agedV, t.value), cls, icon, html;
+  if (t.agedV <= 0) {
     cls = 'good'; icon = 'bi-check-circle-fill';
-    html = '<b>All stock is moving.</b> Nothing in this view has been idle for 4 months or more.';
+    html = '<b>No aged stock.</b> Everything in this view was received within the last 90 days.';
   } else {
-    cls = pct >= 20 ? 'bad' : pct >= 8 ? 'warn' : 'good';
+    cls = pct >= 30 ? 'bad' : pct >= 15 ? 'warn' : 'good';
     icon = cls === 'good' ? 'bi-info-circle-fill' : 'bi-exclamation-triangle-fill';
-    html = '<b>' + agPesoShort(t.idleV) + ' (' + pct + '%)</b> of stock value — <b>' + t.idleN.toLocaleString('en-US') + ' item' + (t.idleN === 1 ? '' : 's') +
-      '</b> — has not been issued in 4 or more months.';
+    html = '<b>' + agPesoShort(t.agedV) + ' (' + pct + '%)</b> of stock value — <b>' + agPl(t.agedN, 'item') +
+      '</b> — has been in the warehouse for more than 90 days since it was received.';
     var sub = [];
-    if (t.by.NONE.n) sub.push(agPesoShort(t.by.NONE.v) + ' of it (' + t.by.NONE.n.toLocaleString('en-US') + (t.by.NONE.n === 1 ? ' item' : ' items') + ') has had no issuance at all since ' + AG_MN[AG_START.m - 1] + ' ' + AG_START.y + '.');
-    var top = agIdleCats()[0];
-    if (top) sub.push('Largest idle category: ' + erpEsc(top.name) + ' (' + agPesoShort(top.v) + ').');
+    if (t.bv[4] > 0) sub.push(agPesoShort(t.bv[4]) + ' of it was already in stock before the first 2026 receipt.');
+    var top = agAgedCats()[0];
+    if (top) sub.push('Largest aged category: ' + erpEsc(top.name) + ' (' + agPesoShort(top.v) + ').');
     if (sub.length) html += '<span class="sub">' + sub.join(' ') + '</span>';
   }
+  if (noCost) html += '<span class="sub">' + agPl(noCost, 'item') + ' with stock have no unit cost, so they are counted as ₱0.</span>';
+  AG.warn.forEach(function(w) { html += '<span class="sub text-danger">⚠ ' + erpEsc(w) + '</span>'; });
   box.className = 'ag-summary ' + cls;
   box.innerHTML = '<i class="bi ' + icon + '"></i><div>' + html + '</div>';
 }
 
 function agRenderBuckets() {
   var t = agTotals();
-  document.getElementById('agStack').innerHTML = AG_STATUS.map(function(s) {
-    var w = t.value > 0 ? (t.by[s.k].v / t.value * 100) : 0;
-    return '<span style="width:' + w.toFixed(2) + '%;background:' + s.c + '" title="' + s.t + ' — ' + agPesoShort(t.by[s.k].v) + ' (' + Math.round(w) + '%)"></span>';
+  document.getElementById('agStack').innerHTML = AG_BUCKETS.map(function(s, i) {
+    var w = t.value > 0 ? (t.bv[i] / t.value * 100) : 0;
+    return '<span style="width:' + w.toFixed(2) + '%;background:' + s.c + '" title="' + s.t + ' — ' + agPesoShort(t.bv[i]) + ' (' + Math.round(w) + '%)"></span>';
   }).join('');
-  document.getElementById('agBuckets').innerHTML = AG_STATUS.map(function(s) {
-    var b = t.by[s.k];
-    return '<div class="ag-bucket' + (AG.status === s.k ? ' on' : '') + '" style="--c:' + s.c + '" onclick="agSetStatus(\'' + s.k + '\')" title="Click to filter">' +
-      '<div class="t">' + s.t + '</div><div class="d">' + s.d + '</div>' +
-      '<div class="v">' + agPesoShort(b.v) + '</div>' +
-      '<div class="n">' + b.n.toLocaleString('en-US') + ' item' + (b.n === 1 ? '' : 's') + '</div>' +
-      '<div class="p">' + agPct(b.v, t.value) + '% of stock value</div></div>';
+  document.getElementById('agBuckets').innerHTML = AG_BUCKETS.map(function(s, i) {
+    return '<div class="ag-bucket' + (AG.bucket === s.k ? ' on' : '') + '" style="--c:' + s.c + '" onclick="agSetBucket(\'' + s.k + '\')" title="Click to filter">' +
+      '<div class="t">' + s.t + '</div><div class="r">' + s.r + '</div><div class="d">' + s.d + '</div>' +
+      '<div class="v">' + agPesoShort(t.bv[i]) + '</div>' +
+      '<div class="n">' + agPl(t.bn[i], 'item') + '</div>' +
+      '<div class="p">' + agPct(t.bv[i], t.value) + '% of stock value</div></div>';
   }).join('');
 }
 
-function agIdleCats() {
+function agAgedCats() {
   var m = {};
-  AG.base.forEach(function(r) { if (AG_IDLE[r.st] && r.val > 0) { var c = r.cat || '(No category)'; m[c] = (m[c] || 0) + r.val; } });
+  AG.base.forEach(function(r) {
+    var v = 0; for (var i = AG_AGED_FROM; i < 5; i++) v += r.bv[i];
+    if (v > 0) { var c = r.cat || '(No category)'; m[c] = (m[c] || 0) + v; }
+  });
   return Object.keys(m).map(function(k) { return { name: k, v: m[k] }; }).sort(function(a, b) { return b.v - a.v; });
 }
 
 function agRenderCats() {
-  var list = agIdleCats(), host = document.getElementById('agCats');
-  if (!list.length) { host.innerHTML = '<div class="ag-empty">No idle stock (4+ months) in this view.</div>'; return; }
+  var list = agAgedCats(), host = document.getElementById('agCats');
+  if (!list.length) { host.innerHTML = '<div class="ag-empty">No stock older than 90 days in this view.</div>'; return; }
   var total = list.reduce(function(s, x) { return s + x.v; }, 0), max = list[0].v, cur = document.getElementById('agCategory').value;
   host.innerHTML = list.slice(0, 8).map(function(x) {
     var real = x.name === '(No category)' ? '' : x.name;
@@ -317,17 +391,52 @@ function agRenderCats() {
   });
 }
 
+function agMix(r) {
+  if (r.oh <= 0) return '<span class="text-muted">—</span>';
+  var tot = r.val > 0 ? r.val : r.oh, use = r.val > 0 ? r.bv : r.bq;
+  return '<div class="ag-mix">' + AG_BUCKETS.map(function(b, i) {
+    var w = use[i] / tot * 100; if (w <= 0) return '';
+    return '<span style="width:' + w.toFixed(1) + '%;background:' + b.c + '" title="' + b.t + ': ' + erpNum(r.bq[i]) + ' ' + erpEsc(r.unit) + (r.val > 0 ? ' • ' + agPeso(r.bv[i]) : '') + '"></span>';
+  }).join('') + '</div>';
+}
+
+function agBadge(r) {
+  if (r.top < 0) return '<span class="text-muted">—</span>';
+  var b = AG_BUCKETS[r.top];
+  return '<span class="ag-badge' + (b.dark ? ' dark-text' : '') + '" style="--c:' + b.c + '" title="Oldest stock on hand: ' + erpEsc(b.d) + '">' + b.t + '</span>';
+}
+
+function agLayerRows(r) {
+  var h = '<table class="ag-lay"><thead><tr><th>Received</th><th>MRR No.</th><th class="text-end">Received Qty</th><th class="text-end">Still On Hand</th><th class="text-end">Age</th><th class="text-end">Value</th><th>Bucket</th></tr></thead><tbody>';
+  r.layers.slice().sort(function(a, b) { return b.age - a.age; }).forEach(function(L) {
+    var b = AG_BUCKETS[L.b];
+    h += '<tr><td>' + (L.pre ? 'Before ' + agNToLabel(AG.startN) : agNToLabel(L.n)) + '</td>' +
+      '<td>' + (L.pre ? '<span class="text-muted">No MRR on record</span>' : erpEsc(L.ref)) + '</td>' +
+      '<td class="text-end">' + (L.pre ? '—' : erpNum(L.recvQty)) + '</td>' +
+      '<td class="text-end fw-bold">' + erpNum(L.q) + '</td>' +
+      '<td class="text-end">' + (L.pre ? '≥ ' : '') + agDays(L.age) + '</td>' +
+      '<td class="text-end">' + (r.cost ? agPeso(L.v) : '—') + '</td>' +
+      '<td><span class="ag-dot" style="background:' + b.c + '"></span>' + b.t + '</td></tr>';
+  });
+  return h + '</tbody></table>';
+}
+
+function agToggle(code) { AG.open[code] = !AG.open[code]; agRender(); }
+
 function agRender() {
   var tbody = document.getElementById('agBody');
   var total = AG.view.length;
-  agSet('agCount', total.toLocaleString('en-US') + ' item' + (total === 1 ? '' : 's'));
+  agSet('agCount', agPl(total, 'item'));
+  var bi = AG.bucket ? agBIdx(AG.bucket) : -1;
+  agSet('agFocusHead', bi >= 0 ? 'Value in ' + AG_BUCKETS[bi].t : 'Aged Value (90+ d)');
 
   document.querySelectorAll('#ag-page th i[data-s]').forEach(function(i) {
-    i.className = 'bi' + (i.getAttribute('data-s') === AG.sortKey ? (AG.sortDir === 1 ? ' bi-caret-up-fill' : ' bi-caret-down-fill') : '');
+    var s = i.getAttribute('data-s');
+    i.className = 'bi' + ((s === AG.sortKey || (s === 'focus' && AG.sortKey === 'risk')) ? (AG.sortDir === 1 ? ' bi-caret-up-fill' : ' bi-caret-down-fill') : '');
   });
 
   if (!total) {
-    tbody.innerHTML = '<tr><td colspan="10" class="erp-empty"><i class="bi bi-inbox fs-3 d-block mb-2"></i>No items match the current filters.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="erp-empty"><i class="bi bi-inbox fs-3 d-block mb-2"></i>No items match the current filters.</td></tr>';
     document.getElementById('agPager').innerHTML = '';
     return;
   }
@@ -338,21 +447,22 @@ function agRender() {
 
   var html = '';
   for (var i = from; i < to; i++) {
-    var r = AG.view[i], d = agDef(r.st);
-    var idleTxt = r.idle === null ? '—' : (r.idle === 0 ? 'This month' : r.idle + (r.idle === 1 ? ' month' : ' months'));
-    var li = agIdxLabel(r.li), lr = agIdxLabel(r.lr);
-    html += '<tr>' +
+    var r = AG.view[i], fv = agFocusVal(r), open = !!AG.open[r.code];
+    html += '<tr class="ag-row' + (open ? ' open' : '') + '" onclick="agToggle(\'' + erpEsc(r.code).replace(/'/g, "\\'") + '\')" title="Click to see receipt layers">' +
       '<td class="text-muted">' + (i + 1) + '</td>' +
-      '<td><a class="ag-item-link" href="item-in-out.html?code=' + encodeURIComponent(r.code) + '" title="View Item In &amp; Out">' + erpEsc(r.code) + '</a></td>' +
-      '<td><div class="ag-desc" title="' + erpEsc(r.desc) + '">' + erpEsc(r.desc || '—') + '</div></td>' +
-      '<td>' + erpEsc(r.cat || '—') + '</td>' +
+      '<td><i class="bi bi-chevron-' + (open ? 'down' : 'right') + ' ag-chev"></i><a class="ag-item-link" href="item-in-out.html?code=' + encodeURIComponent(r.code) + '" onclick="event.stopPropagation()" title="View Item In &amp; Out">' + erpEsc(r.code) + '</a></td>' +
+      '<td><div class="ag-desc" title="' + erpEsc(r.desc) + '">' + erpEsc(r.desc || '—') + '</div><div class="ag-cat-s">' + erpEsc(r.cat || '') + '</div></td>' +
       '<td class="text-end fw-bold">' + erpNum(r.oh) + ' <span class="text-muted fw-normal small">' + erpEsc(r.unit) + '</span></td>' +
       '<td class="text-end fw-bold">' + (r.cost ? agPeso(r.val) : '<span class="text-warning" title="No unit cost">—</span>') + '</td>' +
-      '<td class="ag-date' + (li ? '' : ' none') + '">' + (li || '—') + '</td>' +
-      '<td class="ag-date' + (lr ? '' : ' none') + '">' + (lr || '—') + '</td>' +
-      '<td class="text-center ag-idle"' + (r.idle === null ? ' title="Never issued since ' + AG_MN[AG_START.m - 1] + ' ' + AG_START.y + '"' : '') + '>' + idleTxt + '</td>' +
-      '<td class="text-center"><span class="ag-badge' + (d.dark ? ' dark-text' : '') + '" style="--c:' + d.c + '" title="' + erpEsc(d.d) + '">' + d.t + '</span></td>' +
+      '<td>' + agMix(r) + '</td>' +
+      '<td class="text-end fw-bold">' + (r.cost ? (fv > 0 ? agPeso(fv) : '<span class="text-muted fw-normal">–</span>') : '—') + '</td>' +
+      '<td class="text-center ag-idle">' + (r.oh > 0 ? (r.pre ? '≥ ' : '') + Math.round(r.oldest) + ' d' : '—') + '</td>' +
+      '<td class="ag-date' + (r.lastRecv ? '' : ' none') + '">' + (r.lastRecv ? agNToLabel(r.lastRecv) : '—') + '</td>' +
+      '<td class="ag-date' + (r.lastIss ? '' : ' none') + '">' + (r.lastIss ? AG_MN[+r.lastIss.slice(5, 7) - 1] + ' ' + r.lastIss.slice(0, 4) : '—') + '</td>' +
+      '<td class="text-center">' + agBadge(r) + '</td>' +
     '</tr>';
+    if (open) html += '<tr class="ag-detail"><td></td><td colspan="10">' + agLayerRows(r) +
+      '<div class="ag-lay-note">FIFO: the oldest receipts are assumed used first, so the stock on hand is taken from the newest receipts.</div></td></tr>';
   }
   tbody.innerHTML = html;
 
@@ -375,15 +485,21 @@ function agExport() {
   var rows = AG.view;
   if (!rows.length) return agToast('Nothing to export');
   function q(x) { return '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"'; }
-  function ym(idx) { return idx ? (Math.floor((idx - 1) / 12) + '-' + String((idx - 1) % 12 + 1).padStart(2, '0')) : ''; }
-  var lines = [['Item Code', 'Description', 'Category', 'Location', 'Unit', 'On-Hand', 'Unit Cost', 'Stock Value', 'Last Issued (YYYY-MM)', 'Last Received (YYYY-MM)', 'Months Idle', 'Status', 'Total Issued Since ' + AG_MN[AG_START.m - 1] + ' ' + AG_START.y].map(q).join(',')];
+  function iso(n) { return n ? new Date(n * 86400000).toISOString().slice(0, 10) : ''; }
+  var head = ['Item Code', 'Description', 'Category', 'Location', 'Unit', 'On-Hand', 'Unit Cost', 'Stock Value',
+    'Oldest Stock (days)', 'Avg Age (days)', 'Last Received', 'Last Issued (YYYY-MM)', 'Status (oldest stock)'];
+  AG_BUCKETS.forEach(function(b) { head.push(b.t + ' Qty'); head.push(b.t + ' Value'); });
+  var lines = [head.map(q).join(',')];
   rows.forEach(function(r) {
-    lines.push([r.code, r.desc, r.cat, r.loc, r.unit, r.oh, r.cost, r.val.toFixed(2), ym(r.li), ym(r.lr), r.idle === null ? '' : r.idle, agDef(r.st).t, r.ytd].map(q).join(','));
+    var line = [r.code, r.desc, r.cat, r.loc, r.unit, r.oh, r.cost, r.val.toFixed(2),
+      r.oh > 0 ? Math.round(r.oldest) : '', r.oh > 0 ? Math.round(r.avg) : '', iso(r.lastRecv), r.lastIss, r.top >= 0 ? AG_BUCKETS[r.top].t : ''];
+    for (var i = 0; i < 5; i++) { line.push(r.bq[i]); line.push(r.bv[i].toFixed(2)); }
+    lines.push(line.map(q).join(','));
   });
-  var blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'Inventory_Aging_' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.download = 'Stock_Aging_' + new Date().toISOString().slice(0, 10) + '.csv';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(function() { URL.revokeObjectURL(a.href); }, 1000);
   agToast('✅ Exported ' + rows.length + ' items');
@@ -397,6 +513,6 @@ function agToast(msg) {
 }
 
 window.agRefresh = agRefresh; window.agApply = agApply; window.agClear = agClear; window.agOnSearch = agOnSearch;
-window.agSort = agSort; window.agSetStatus = agSetStatus; window.agSetStatusFromSelect = agSetStatusFromSelect;
-window.agPage = agPage; window.agExport = agExport;
-console.log('✅ aging-monitor.js v2.0 loaded');
+window.agSort = agSort; window.agSetBucket = agSetBucket; window.agSetBucketFromSelect = agSetBucketFromSelect;
+window.agPage = agPage; window.agExport = agExport; window.agToggle = agToggle;
+console.log('✅ aging-monitor.js v3.0 loaded');
