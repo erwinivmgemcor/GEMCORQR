@@ -1141,7 +1141,7 @@ function mdashRenderTurnoverCard(data) {
   _mdash.turnoverFacts = f;
   animateValue(toEl, 0, f.ratio, 1200, false);
   toEl.classList.toggle('has-x', f.ratio > 0);
-  subEl.textContent = 'times per year · based on ' + f.days + ' days (' + mdashPeriodLabel() + ')';
+  subEl.textContent = 'times per year';
   if (f.ratio > 0) {
     var st = erpTurnoverTargetStatus(f.ratio);
     pill.innerHTML = '<span class="tp tp-' + st.cls + '">' + st.label + '</span>' +
@@ -1176,10 +1176,10 @@ function mdashRenderInvRatioCard(f) {
     vEl.setAttribute('data-unit', months ? 'months' : 'days');
     if (months) {
       vEl.textContent = (f.daysOfStock / 30.4).toFixed(1);
-      sEl.textContent = '≈ ' + Math.round(f.daysOfStock).toLocaleString() + ' days · ' + src;
+      sEl.textContent = '≈ ' + Math.round(f.daysOfStock).toLocaleString() + ' days of stock';
     } else {
       animateValue(vEl, 0, Math.round(f.daysOfStock), 1200, false);
-      sEl.textContent = '≈ ' + (f.daysOfStock / 30.4).toFixed(1) + ' months · ' + src;
+      sEl.textContent = '≈ ' + (f.daysOfStock / 30.4).toFixed(1) + ' months of stock';
     }
     vEl.classList.add('has-days');
     // Status follows the DAYS of stock (same scale as the explainer), not only the turnover
@@ -1246,6 +1246,12 @@ function mdashFormulaSection(kind, f) {
     '<div class="to-step result mt-2"><div class="num"><i class="bi bi-check-lg"></i></div><div><div class="tt">Result on the dashboard</div><div class="vv">' + res + '</div></div></div></div>';
 }
 
+// Mga detalyeng dating nasa loob ng card (stock above target, complete history, % items > 12 months) — ngayon nasa popup na
+function mdashCardSummary(refId, title) {
+  var r = document.getElementById(refId);
+  return (r && r.innerHTML) ? '<div class="to-sec"><h6>' + title + '</h6><div class="mdash-to-ref" style="border:0;padding:0;margin:0;font-size:.85rem;line-height:1.6;">' + r.innerHTML + '</div></div>' : '';
+}
+
 function mdashShowInventoryRatioInfo() {
   var f = _mdash.turnoverFacts;
   if (!f) return;
@@ -1267,6 +1273,7 @@ function mdashShowInventoryRatioInfo() {
       : 'Not enough issuance data in this period to compute the Inventory Ratio.') + '</div></div>';
 
   if (f.preGoLive) html += '<div class="to-sec"><div class="to-callout" style="border-left-color:#f59e0b;background:#fffbeb">' + mdashGoLiveNote(f) + '</div></div>';
+  html += mdashCardSummary('mdashInvRatioRef', 'Quick summary');
   html += mdashTargetSection(f);
   html += '<div class="to-sec"><h6>The idea in 20 seconds</h6><div class="to-analogy">' +
     'Think of the <b>fuel gauge</b> in a car. If the tank has <b>100 liters</b> and the car uses <b>2 liters a day</b>, the fuel lasts <b>50 days</b>.' +
