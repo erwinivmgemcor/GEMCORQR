@@ -269,6 +269,27 @@ function sofIsReleased(a) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// EFFECTIVE STATUS — kinukuwenta mula sa actual na qty, hindi umaasa sa status column ng DB
+//   CANCELLED  → nanatiling cancelled
+//   COMPLETED  → may allocation at wala nang remaining (hal. 5 / 5 used) = FULLY SERVED
+//   ACTIVE     → may natitira pang remaining na pwedeng i-issue
+// (Ang 'RELEASED' ay hiwalay na — 0 / 0 allocated, tingnan ang sofIsReleased)
+// ═══════════════════════════════════════════════════════════
+function sofEffStatus(a) {
+  var st = String(a.status || '').toUpperCase();
+  if (st === 'CANCELLED') return 'CANCELLED';
+  var alloc = Number(a.total_allocated_qty || 0);
+  var used = Number(a.total_used_qty || 0);
+  var rem = (a.total_remaining_qty === null || a.total_remaining_qty === undefined)
+    ? alloc - used : Number(a.total_remaining_qty || 0);
+  if (alloc > 0 && (rem <= 0.0001 || used >= alloc - 0.0001)) return 'COMPLETED';
+  if (st === 'COMPLETED') return 'ACTIVE';   // sinabi ng DB na tapos na pero may natitira pa → ACTIVE talaga
+  return st || 'ACTIVE';
+}
+// Label na ipapakita sa badge
+function sofStatusLabel(st) { return st === 'COMPLETED' ? 'FULLY SERVED' : st; }
+
+// ═══════════════════════════════════════════════════════════
 // SOF COST — buong cost ng SOF = Σ (allocated qty × unit cost ng item)
 // Unit cost: erp_items.unit_cost (kasalukuyang presyo). Used / Remaining cost ay ganito rin.
 // ═══════════════════════════════════════════════════════════
@@ -321,7 +342,7 @@ function sofTrackerComputeKPIs() {
   var totalRemaining = 0, totalCost = 0, remCost = 0;
 
   _sofTracker.allAllocations.forEach(function(a) {
-    var status = String(a.status || '').toUpperCase();
+    var status = sofEffStatus(a);
     if (sofIsReleased(a)) { released++; return; }
     total++;
     if (status === 'ACTIVE') active++;
@@ -331,7 +352,7 @@ function sofTrackerComputeKPIs() {
   });
 
   var completed = 0;
-  _sofTracker.allAllocations.forEach(function(a) { if (!sofIsReleased(a) && String(a.status || '').toUpperCase() === 'COMPLETED') completed++; });
+  _sofTracker.allAllocations.forEach(function(a) { if (!sofIsReleased(a) && sofEffStatus(a) === 'COMPLETED') completed++; });
   var pe;
   pe = document.getElementById('sofPillAll'); if (pe) pe.textContent = total;
   pe = document.getElementById('sofPillActive'); if (pe) pe.textContent = active;
@@ -363,7 +384,7 @@ function sofTrackerApplyFilters() {
       if (rel || !(Number(a.total_remaining_qty || 0) > 0 && sofPendingDocs(a.sof_no) > 0)) return false;
     } else {
       if (rel && !search) return false;
-      if (statusFilter && String(a.status || '').toUpperCase() !== statusFilter) return false;
+      if (statusFilter && sofEffStatus(a) !== statusFilter) return false;
     }
 
     if (search) {
@@ -407,7 +428,7 @@ function sofTrackerRender() {
 
   var html = '';
   _sofTracker.filteredAllocations.forEach(function(a) {
-    var status = sofIsReleased(a) ? 'RELEASED' : String(a.status || 'ACTIVE').toUpperCase();
+    var status = sofIsReleased(a) ? 'RELEASED' : sofEffStatus(a);
     var dateStr = a.sof_date ? new Date(a.sof_date).toLocaleDateString('en-US', {
       month: 'short', day: 'numeric', year: 'numeric'
     }) : '—';
@@ -446,7 +467,7 @@ function sofTrackerRender() {
         '<div class="small text-muted" title="Cost ng natirang allocation">Rem. ' + sofPeso(a.remaining_cost) + '</div>' +
         (a.no_cost_items ? '<div class="small text-warning" title="May item na walang unit cost"><i class="bi bi-exclamation-triangle-fill"></i> ' + a.no_cost_items + ' walang cost</div>' : '') + '</td>' +
       '<td class="text-center"><span class="sof-rem ' + (remaining > 0 ? 'has' : 'zero') + '">' + sofTrackerNum(remaining) + '</span></td>' +
-      '<td class="text-center"><span class="sof-status ' + stCls + '">' + sofTrackerEsc(status) + '</span></td>' +
+      '<td class="text-center"><span class="sof-status ' + stCls + '"' + (status === 'COMPLETED' ? ' title="Lahat ng allocated qty ay na-issue na"' : '') + '>' + sofTrackerEsc(sofStatusLabel(status)) + '</span></td>' +
       '<td class="text-center" onclick="event.stopPropagation()">' + (sofCanProcess()
         ? '<button type="button" class="btn btn-sm btn-outline-secondary" title="Edit Client / Vendor" onclick="event.stopPropagation();sofEditParties(\'' + sofJs + '\')"><i class="bi bi-pencil-square"></i></button>'
         : '') + '</td>' +
