@@ -226,6 +226,13 @@
           roles: ['warehouse']
         },
         {
+          id: 'aging-monitor',
+          label: 'Aging Monitor',
+          icon: 'bi-hourglass-split',
+          href: 'aging-monitor.html',
+          roles: ['warehouse']
+        },
+        {
           id: 'process-history',
           label: 'Process History',
           icon: 'bi-clock-history',
@@ -360,6 +367,7 @@
     'item-in-out': 'Item In & Out',
     'weekly-monitor': 'Weekly Monitoring',
     'monthly-movement': 'Monthly Movement',
+    'aging-monitor': 'Aging Monitor',
     'usage-entry': 'Usage Entry',
     'process-history': 'Process History',
     'warehouse-kpi': 'Warehouse KPI',
