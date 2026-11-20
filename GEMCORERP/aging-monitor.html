@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEMCOR ERP — Aging Monitor</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1e3a5f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="erp-design-system.css">
+<link rel="stylesheet" href="erp-styles.css">
+<link rel="stylesheet" href="erp-nav.css">
+<link rel="stylesheet" href="erp-notif.css">
+<link rel="stylesheet" href="aging-monitor.css">
+
+<script src="erp-theme.js"></script>
+<script src="erp-guard.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script defer src="erp-config.js"></script>
+<script defer src="erp-supabase.js"></script>
+<script defer src="erp-nav.js"></script>
+<script defer src="aging-monitor.js"></script>
+<script defer src="notif-alerts.js"></script>
+<script defer src="notifications.js"></script>
+<script defer src="js/update.js"></script>
+</head>
+<body>
+
+<nav class="erp-topbar">
+  <div class="erp-topbar-left">
+    <img src="../gemcor-logo.png" alt="GEMCOR" class="erp-logo" onerror="this.style.display='none'">
+    <div>
+      <div class="erp-brand">GEMCOR ERP</div>
+      <div class="erp-brand-sub">Aging Monitor <span class="badge-live">LIVE</span></div>
+    </div>
+  </div>
+  <div id="erpNavBar"></div>
+  <div class="erp-topbar-right">
+    <div class="erp-health" id="erpHealthBadge">
+      <span class="dot dot-pending"></span>
+      <span id="erpHealthText">Checking...</span>
+    </div>
+    <button class="erp-btn-icon" onclick="agRefresh()" title="Refresh (kukuha ulit ng bagong data)">
+      <i class="bi bi-arrow-clockwise"></i>
+    </button>
+    <a href="stock-monitor.html" class="erp-btn-outline">
+      <i class="bi bi-arrow-left"></i> <span>Stock Monitor</span>
+    </a>
+  </div>
+</nav>
+
+<div class="erp-container" id="ag-page">
+
+  <!-- PAGE HEADER -->
+  <div class="erp-page-header">
+    <div>
+      <div class="erp-page-title">
+        <i class="bi bi-hourglass-split"></i>
+        <span>Inventory Aging Monitor</span>
+      </div>
+      <div class="erp-breadcrumb">
+        <a href="stock-monitor.html">Home</a>
+        <i class="bi bi-chevron-right"></i>
+        <span>Aging Monitor</span>
+      </div>
+    </div>
+    <div class="ag-updated" id="agUpdated"></div>
+  </div>
+
+  <!-- KPI CARDS -->
+  <div class="erp-kpi-row" style="grid-template-columns: repeat(5, 1fr);margin-bottom:20px;">
+    <div class="erp-kpi-card kpi-blue">
+      <div class="kpi-icon"><i class="bi bi-boxes"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Items in View</div>
+        <div class="kpi-value" id="agKpiItems">—</div>
+        <div class="kpi-sub" id="agKpiItemsSub">Items na may stock</div>
+      </div>
+    </div>
+    <div class="erp-kpi-card kpi-blue">
+      <div class="kpi-icon"><i class="bi bi-cash-stack"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Stock Value</div>
+        <div class="kpi-value" id="agKpiValue">—</div>
+        <div class="kpi-sub">On-hand × unit cost</div>
+      </div>
+    </div>
+    <div class="erp-kpi-card kpi-amber">
+      <div class="kpi-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Aged &gt; 90 Days</div>
+        <div class="kpi-value" id="agKpiAged">—</div>
+        <div class="kpi-sub" id="agKpiAgedSub">&nbsp;</div>
+      </div>
+    </div>
+    <div class="erp-kpi-card kpi-red">
+      <div class="kpi-icon"><i class="bi bi-slash-circle"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label" id="agKpiNeverLbl">Never Issued</div>
+        <div class="kpi-value" id="agKpiNever">—</div>
+        <div class="kpi-sub" id="agKpiNeverSub">Walang MRIF kailanman</div>
+      </div>
+    </div>
+    <div class="erp-kpi-card kpi-green">
+      <div class="kpi-icon"><i class="bi bi-calendar-x"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Oldest Idle</div>
+        <div class="kpi-value" id="agKpiOldest">—</div>
+        <div class="kpi-sub" id="agKpiOldestSub">&nbsp;</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AGING BUCKETS (click to filter) -->
+  <div class="ag-buckets" id="agBuckets"></div>
+
+  <!-- FILTERS -->
+  <div class="erp-card erp-filters-card" style="padding:16px 18px;margin-bottom:20px;">
+    <div class="erp-filters-row">
+      <div class="erp-search-wrap">
+        <i class="bi bi-search"></i>
+        <input type="text" id="agSearch" class="erp-search" placeholder="Search item code or description..." oninput="agOnSearch()">
+      </div>
+      <select id="agBasis" class="erp-select" onchange="agApply()" title="Paano bibilangin ang aging">
+        <option value="ISSUE">Aging: since last ISSUED</option>
+        <option value="MOVE">Aging: since last MOVEMENT (in/out)</option>
+      </select>
+      <select id="agCategory" class="erp-select" onchange="agApply()"><option value="">All Categories</option></select>
+      <select id="agLocation" class="erp-select" onchange="agApply()"><option value="">All Locations</option></select>
+      <button class="erp-btn-clear" onclick="agClear()"><i class="bi bi-x-lg"></i> Clear</button>
+      <button class="erp-btn-outline-dark" onclick="agExport()" title="I-download ang nakikitang listahan"><i class="bi bi-file-earmark-excel"></i> Export CSV</button>
+    </div>
+    <div class="ag-opts">
+      <label class="ag-check"><input type="checkbox" id="agNever" onchange="agApply()"><span id="agNeverLbl"> Never issued lang</span></label>
+      <label class="ag-check"><input type="checkbox" id="agZero" onchange="agApply()"> Isama ang items na walang stock (on-hand ≤ 0)</label>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="erp-card erp-table-card">
+    <div class="erp-table-header">
+      <div>
+        <i class="bi bi-list-ul me-2"></i>
+        <strong>Item Aging</strong>
+        <span class="erp-table-subtitle" id="agSubtitle">Pinakamatagal na walang labas, una</span>
+      </div>
+      <span class="erp-badge" id="agCount">0 items</span>
+    </div>
+
+    <div class="erp-table-wrap" style="max-height:65vh;">
+      <table class="erp-table ag-table" style="font-size:0.85rem;">
+        <thead>
+          <tr>
+            <th style="width:3%">#</th>
+            <th style="width:10%" class="ag-sort" onclick="agSort('code')">Item Code <i class="bi" data-s="code"></i></th>
+            <th style="width:23%">Description</th>
+            <th style="width:9%">Category</th>
+            <th style="width:7%">Location</th>
+            <th style="width:8%" class="text-end ag-sort" onclick="agSort('onhand')">On-Hand <i class="bi" data-s="onhand"></i></th>
+            <th style="width:9%" class="text-end ag-sort" onclick="agSort('value')">Stock Value <i class="bi" data-s="value"></i></th>
+            <th style="width:8%">Last Received</th>
+            <th style="width:8%">Last Issued</th>
+            <th style="width:8%" class="text-center ag-sort" onclick="agSort('days')" title="Ilang araw mula sa petsa ng aging basis">Days Idle <i class="bi" data-s="days"></i></th>
+            <th style="width:7%" class="text-center">Aging</th>
+          </tr>
+        </thead>
+        <tbody id="agBody">
+          <tr><td colspan="11" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading...</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="ag-pager" id="agPager"></div>
+  </div>
+
+  <div class="ag-note">
+    <i class="bi bi-info-circle me-1"></i>
+    <b>Paano ito kinukuwenta:</b> Galing sa <code>erp_stock_ledger</code>. <b>Last Issued</b> = huling MRIF na may labas.
+    <b>Last Received</b> = huling MRR na may pasok. <b>Last Movement</b> = pinakabago sa MRIF / MRR / MRS (hindi kasama ang manual adjustment).
+    Kung ang item ay <b>hindi pa kailanman na-issue</b>, ang bilang ng araw ay mula sa huling receive nito (o sa unang record kung wala), at may markang <span class="ag-tag">NEVER ISSUED</span>.
+  </div>
+
+  <div class="erp-footer">
+    <div>GEMCOR ERP — Aging Monitor v1.0.0</div>
+    <div>Read-only • Walang binabago sa data</div>
+  </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="erpToast" class="toast erp-toast">
+    <div class="toast-body" id="erpToastBody">Message</div>
+  </div>
+</div>
+
+</body>
+</html>
