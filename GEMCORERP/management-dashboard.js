@@ -295,6 +295,9 @@ function mdashRenderKPIs(data) {
   // 8. Out of Stock
   // STD lang ang binibilang; ang PROJ ay makikita sa pag-click ng card (tab na PROJ)
   mdashRenderOosCard(s);
+
+  // 9. Beginning Inventory (Nov 1) — async, hindi hinaharang ang ibang cards
+  mdashRenderBegCard();
 }
 // ═══════════════════════════════════════════════════════════
 // RENDER CHARTS
@@ -829,7 +832,7 @@ function _mdashCsvEsc(val) {
 // ═══════════════════════════════════════════════════════════
 function mdashShowLoading() {
   var ids = ['mdashKpiTotalItems', 'mdashKpiValue', 'mdashKpiAccuracy', 'mdashKpiTurnover', 'mdashKpiInvRatio',
-             'mdashKpiMrr', 'mdashKpiMrif', 'mdashKpiReplenish', 'mdashKpiOutOfStock'];
+             'mdashKpiMrr', 'mdashKpiMrif', 'mdashKpiReplenish', 'mdashKpiOutOfStock', 'mdashKpiBeg'];
   ids.forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.textContent = '...';
@@ -1029,6 +1032,170 @@ function mdashOosExport() {
   });
   var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
   a.download = 'Out_of_Stock_' + _mdashOos.tab + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// ═══════════════════════════════════════════════════════════
+// BEGINNING INVENTORY (Nov 1, 2026 = closing ng October)
+// Beginning qty ng bawat item = On-Hand ngayon − (net ng lahat ng ledger movement mula Nov 1).
+// Halaga = qty × kasalukuyang unit cost. Click ang card para sa breakdown at bridge papuntang kasalukuyang inventory.
+// Palitan ang MDASH_BEG_DATE kung ibang buwan ang gusto.
+// ═══════════════════════════════════════════════════════════
+var MDASH_BEG_DATE = '2026-11-01';
+var MDASH_BEG_LABEL = 'Nov 1, 2026';
+var _mdashBeg = { raw: null, at: 0, pending: null, calc: null, tab: 'CAT', q: '' };
+
+function mdashBegType(tx) {
+  var t = (String(tx.transaction_type || '') + ' ' + String(tx.reference_doc || '')).toUpperCase();
+  if (t.indexOf('MRIF') > -1) return 'MRIF';
+  if (t.indexOf('MRR') > -1) return 'MRR';
+  if (t.indexOf('MRS') > -1) return 'MRS';
+  if (t.indexOf('ADJ') > -1) return 'ADJ';
+  return 'OTHER';
+}
+function mdashSigned(v) { return (v > 0.005 ? '+' : v < -0.005 ? '−' : '') + mdashPesoFmt(Math.abs(v)); }
+
+async function mdashLoadBegData(force) {
+  if (!force && _mdashBeg.raw && Date.now() - _mdashBeg.at < 300000) return _mdashBeg.raw;
+  if (_mdashBeg.pending) return _mdashBeg.pending;
+  _mdashBeg.pending = (async function() {
+    try {
+      var res = await Promise.all([
+        mdashLoadRepData(),
+        erpFetchAll('erp_stock_ledger', 'select=item_code,transaction_type,reference_doc,qty_in,qty_out' +
+          '&transaction_date=gte.' + encodeURIComponent(MDASH_BEG_DATE + 'T00:00:00') + '&order=transaction_date.asc,item_code.asc,reference_doc.asc')
+      ]);
+      _mdashBeg.raw = res[1] || []; _mdashBeg.at = Date.now();
+      return _mdashBeg.raw;
+    } finally { _mdashBeg.pending = null; }
+  })();
+  return _mdashBeg.pending;
+}
+
+function mdashCalcBeg() {
+  var f = _mdash.filters || {}, items = _mdashRep.items || [], by = {}, net = {};
+  function pass(it) {
+    return !((f.category && it.category !== f.category) || (f.location && it.location !== f.location) || (f.stockClass && it.stock_classification !== f.stockClass));
+  }
+  items.forEach(function(it) { by[it.item_code] = it; });
+  var br = { MRR: 0, MRS: 0, MRIF: 0, ADJ: 0, OTHER: 0 }, tx = 0;
+  (_mdashBeg.raw || []).forEach(function(r) {
+    var it = by[r.item_code]; if (!it || !pass(it)) return;
+    var q = Number(r.qty_in || 0) - Number(r.qty_out || 0);
+    net[r.item_code] = (net[r.item_code] || 0) + q;
+    br[mdashBegType(r)] += q * Number(it.unit_cost || 0); tx++;
+  });
+  var rows = [], begTotal = 0, nowTotal = 0, nBeg = 0;
+  items.forEach(function(it) {
+    if (!pass(it)) return;
+    var now = Number(it.on_hand || 0), open = now - (net[it.item_code] || 0), cost = Number(it.unit_cost || 0);
+    if (!open && !now) return;
+    var r = { code: it.item_code, desc: it.description || '', cat: it.category || 'Uncategorized', cls: erpItemClass(it.active_consumption_months), unit: it.base_unit || '',
+      cost: cost, openQty: open, nowQty: now, begVal: open * cost, nowVal: now * cost };
+    begTotal += r.begVal; nowTotal += r.nowVal; if (open > 0) nBeg++;
+    rows.push(r);
+  });
+  return { rows: rows, begTotal: begTotal, nowTotal: nowTotal, nBeg: nBeg, bridge: br, tx: tx };
+}
+
+async function mdashRenderBegCard() {
+  var el = document.getElementById('mdashKpiBeg'); if (!el) return;
+  var dEl = document.getElementById('mdashBegDelta');
+  try {
+    await mdashLoadBegData();
+    var c = _mdashBeg.calc = mdashCalcBeg();
+    animateValue(el, 0, c.begTotal, 1200, true);
+    mdashSetSibSub(el, 'As of ' + MDASH_BEG_LABEL + ' · closing of previous month');
+    if (dEl) {
+      var d = c.nowTotal - c.begTotal, pct = c.begTotal ? Math.abs(d / c.begTotal * 100) : 0;
+      dEl.className = 'mdash-kpi-delta ' + (d >= 0 ? 'up' : 'down');
+      dEl.textContent = (d >= 0 ? '▲ ' : '▼ ') + pct.toFixed(1) + '% to now';
+      dEl.style.display = '';
+    }
+  } catch (e) {
+    console.warn('[Dashboard] Beginning inventory unavailable:', e.message);
+    el.textContent = '—'; mdashSetSibSub(el, 'Unavailable — ledger not loaded');
+  }
+}
+
+function mdashShowBegInfo() {
+  var c = _mdashBeg.calc;
+  if (!c) { erpShowToast('Beginning inventory is still loading…', 'info'); return; }
+  var d = c.nowTotal - c.begTotal, b = c.bridge;
+  var adjOther = b.ADJ + b.OTHER;
+  function line(lbl, v, strong, col) {
+    return '<tr' + (strong ? ' style="font-weight:800;background:#f1f5f9;"' : '') + '><td>' + lbl + '</td><td class="text-end"' + (col ? ' style="color:' + col + '"' : '') + '>' + (strong ? mdashPesoFmt(v) : mdashSigned(v)) + '</td></tr>';
+  }
+  var html =
+    '<div class="to-big">' +
+      '<div><div class="l">Beginning · ' + MDASH_BEG_LABEL + '</div><div class="n">' + mdashPesoFmt(c.begTotal) + '</div><div class="to-note">' + c.nBeg.toLocaleString() + ' items with stock</div></div>' +
+      '<div><div class="l">Inventory now</div><div class="n">' + mdashPesoFmt(c.nowTotal) + '</div><div class="to-note">as of now</div></div>' +
+      '<div><div class="l">Change</div><div class="n" style="color:' + (d >= 0 ? '#166534' : '#b91c1c') + '">' + mdashSigned(d) + '</div><div class="to-note">' + (c.begTotal ? (d / c.begTotal * 100).toFixed(1) + '%' : '—') + ' since ' + MDASH_BEG_LABEL + '</div></div>' +
+    '</div>' +
+    '<div class="to-sec"><h6>How it got from then to now</h6><table class="table table-sm" style="max-width:520px;font-size:.85rem;"><tbody>' +
+      line('Beginning inventory (' + MDASH_BEG_LABEL + ')', c.begTotal, true) +
+      line('+ Received (MRR)', b.MRR, false, '#166534') + line('+ Returned to stock (MRS)', b.MRS, false, '#166534') +
+      line('− Issued (MRIF)', b.MRIF, false, '#b91c1c') + line('± Adjustments / other', adjOther, false) +
+      line('Inventory now', c.nowTotal, true) +
+    '</tbody></table><div class="to-note">' + c.tx.toLocaleString() + ' ledger transactions since ' + MDASH_BEG_LABEL + '. Values use the current unit cost of each item, so a price update changes the figure.</div></div>' +
+    '<div class="to-sec"><div id="mdashBegTabs"></div><div id="mdashBegList"></div></div>';
+  _mdashBeg.tab = 'CAT'; _mdashBeg.q = '';
+  mdashOpenInfoModal('mdashBegModal', 'Beginning Inventory · ' + MDASH_BEG_LABEL, 'bi-archive-fill', html);
+  mdashBegRender();
+}
+function mdashBegTab(t) { _mdashBeg.tab = t; mdashBegRender(); }
+function mdashBegSearch(v) { _mdashBeg.q = v; mdashBegList(); }
+
+function mdashBegRender() {
+  var host = document.getElementById('mdashBegTabs'); if (!host) return;
+  function tab(k, label) {
+    var on = _mdashBeg.tab === k;
+    return '<button type="button" onclick="mdashBegTab(\'' + k + '\')" style="border:1px solid ' + (on ? '#1e3a5f' : '#cbd5e1') + ';background:' + (on ? '#1e3a5f' : '#fff') + ';color:' + (on ? '#fff' : '#334155') + ';padding:5px 14px;border-radius:999px;font-weight:700;font-size:.8rem;cursor:pointer;">' + label + '</button>';
+  }
+  host.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">' + tab('CAT', 'By category') + tab('CLS', 'STD vs PROJ') + tab('ITEM', 'By item') +
+    (_mdashBeg.tab === 'ITEM' ? '<input type="text" class="form-control form-control-sm" style="max-width:240px;margin-left:auto;" placeholder="Search code or description..." value="' + erpEsc(_mdashBeg.q) + '" oninput="mdashBegSearch(this.value)">' : '') +
+    (_mdashBeg.tab === 'ITEM' ? '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="mdashBegExport()"><i class="bi bi-download"></i> CSV</button>' : '') + '</div>';
+  mdashBegList();
+}
+
+function mdashBegGroup(keyFn) {
+  var g = {};
+  (_mdashBeg.calc.rows || []).forEach(function(r) {
+    var k = keyFn(r), o = g[k] || (g[k] = { k: k, n: 0, beg: 0, now: 0 });
+    if (r.openQty > 0) o.n++; o.beg += r.begVal; o.now += r.nowVal;
+  });
+  return Object.keys(g).map(function(k) { return g[k]; }).sort(function(a, b) { return b.beg - a.beg; });
+}
+
+function mdashBegList() {
+  var host = document.getElementById('mdashBegList'); if (!host || !_mdashBeg.calc) return;
+  var c = _mdashBeg.calc, html;
+  if (_mdashBeg.tab === 'ITEM') {
+    var q = (_mdashBeg.q || '').trim().toLowerCase(), MAX = 200;
+    var rows = c.rows.filter(function(r) { return !q || (r.code + ' ' + r.desc).toLowerCase().indexOf(q) !== -1; }).sort(function(a, b) { return b.begVal - a.begVal; });
+    html = '<div style="max-height:45vh;overflow:auto;"><table class="table table-sm align-middle" style="font-size:.8rem;"><thead style="position:sticky;top:0;background:#f1f5f9;"><tr><th>Item Code</th><th>Description</th><th>Class</th><th class="text-end">Beg. Qty</th><th class="text-end">Qty Now</th><th class="text-end">Beg. Value</th><th class="text-end">Value Now</th></tr></thead><tbody>' +
+      rows.slice(0, MAX).map(function(r) {
+        return '<tr><td><code>' + erpEsc(r.code) + '</code></td><td>' + erpEsc(r.desc) + '</td><td>' + r.cls + '</td><td class="text-end">' + erpNum(r.openQty) + ' ' + erpEsc(r.unit) + '</td><td class="text-end">' + erpNum(r.nowQty) + '</td><td class="text-end fw-bold">' + mdashPesoFmt(r.begVal) + '</td><td class="text-end">' + mdashPesoFmt(r.nowVal) + '</td></tr>';
+      }).join('') + '</tbody></table></div><div class="to-note">Showing ' + Math.min(MAX, rows.length).toLocaleString() + ' of ' + rows.length.toLocaleString() + ' (highest beginning value first) — CSV has the full list.</div>';
+  } else {
+    var grp = _mdashBeg.tab === 'CLS' ? mdashBegGroup(function(r) { return r.cls === 'STD' ? 'STD (standard)' : 'PROJ (project)'; }) : mdashBegGroup(function(r) { return r.cat; });
+    html = '<table class="table table-sm align-middle" style="font-size:.85rem;"><thead style="background:#f1f5f9;"><tr><th>' + (_mdashBeg.tab === 'CLS' ? 'Class' : 'Category') + '</th><th class="text-end">Items</th><th class="text-end">Beginning</th><th class="text-end">Now</th><th class="text-end">Change</th><th class="text-end">%</th></tr></thead><tbody>' +
+      grp.map(function(o) {
+        var d = o.now - o.beg;
+        return '<tr><td>' + erpEsc(o.k) + '</td><td class="text-end">' + o.n.toLocaleString() + '</td><td class="text-end fw-bold">' + mdashPesoFmt(o.beg) + '</td><td class="text-end">' + mdashPesoFmt(o.now) + '</td><td class="text-end" style="color:' + (d >= 0 ? '#166534' : '#b91c1c') + '">' + mdashSigned(d) + '</td><td class="text-end">' + (o.beg ? (d / o.beg * 100).toFixed(1) + '%' : '—') + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+  host.innerHTML = html;
+}
+
+function mdashBegExport() {
+  var c = _mdashBeg.calc; if (!c) return;
+  var csv = '\uFEFF' + ['Item Code', 'Description', 'Category', 'Class', 'Unit', 'Unit Cost', 'Beginning Qty (' + MDASH_BEG_LABEL + ')', 'Qty Now', 'Beginning Value', 'Value Now', 'Change'].map(_mdashCsvEsc).join(',') + '\n';
+  c.rows.slice().sort(function(a, b) { return b.begVal - a.begVal; }).forEach(function(r) {
+    csv += [r.code, r.desc, r.cat, r.cls, r.unit, r.cost, r.openQty, r.nowQty, r.begVal.toFixed(2), r.nowVal.toFixed(2), (r.nowVal - r.begVal).toFixed(2)].map(_mdashCsvEsc).join(',') + '\n';
+  });
+  var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  a.download = 'Beginning_Inventory_' + MDASH_BEG_DATE + '.csv';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
