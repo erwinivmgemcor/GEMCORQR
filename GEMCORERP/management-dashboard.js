@@ -293,14 +293,8 @@ function mdashRenderKPIs(data) {
   mdashRenderReplenishCard(s);
 
   // 8. Out of Stock
-  var elOos = document.getElementById('mdashKpiOutOfStock');
-  animateValue(elOos, 0, s.out_of_stock_count || 0, 1000, false);
-  mdashSetSibSub(elOos, 'Zero on-hand items · as of now');
-  
-  // Add pulse to out of stock if > 0
-  if ((s.out_of_stock_count || 0) > 0) {
-    elOos.parentElement.classList.add('alert-pulse');
-  }
+  // STD lang ang binibilang; ang PROJ ay makikita sa pag-click ng card (tab na PROJ)
+  mdashRenderOosCard(s);
 }
 // ═══════════════════════════════════════════════════════════
 // RENDER CHARTS
@@ -908,7 +902,7 @@ async function mdashLoadRepData(force) {
     try {
       var res = await Promise.all([
         erpFetch('erp_v_reorder_list', 'select=item_code,urgency,on_hand,buffer_stock&limit=5000'),
-        erpFetchAll('erp_items', 'select=item_code,category,location,stock_classification,unit_cost,on_hand,buffer_stock,active_consumption_months&is_active=eq.true&is_deleted=eq.false')
+        erpFetchAll('erp_items', 'select=item_code,description,base_unit,category,location,stock_classification,unit_cost,on_hand,buffer_stock,active_consumption_months&is_active=eq.true&is_deleted=eq.false')
       ]);
       _mdashRep.rows = res[0] || [];
       _mdashRep.items = res[1] || [];
@@ -943,6 +937,99 @@ function mdashCalcRep(filters) {
     }
   });
   return out;
+}
+
+// ═══════════════════════════════════════════════════════════
+// OUT OF STOCK — STD lang sa card. Click ang card para makita ang listahan;
+// may tab na STD / PROJ / All kung kailangang ipakita ang project items.
+// ═══════════════════════════════════════════════════════════
+var _mdashOos = { std: [], proj: [], tab: 'STD', q: '' };
+
+async function mdashRenderOosCard(s) {
+  var el = document.getElementById('mdashKpiOutOfStock');
+  if (!el) return;
+  var card = el.parentElement;
+  try {
+    await mdashLoadRepData();
+    var f = _mdash.filters || {}, std = [], proj = [];
+    (_mdashRep.items || []).forEach(function(it) {
+      if (f.category && it.category !== f.category) return;
+      if (f.location && it.location !== f.location) return;
+      if (f.stockClass && it.stock_classification !== f.stockClass) return;
+      if (Number(it.on_hand || 0) > 0) return;
+      (erpItemClass(it.active_consumption_months) === 'STD' ? std : proj).push(it);
+    });
+    _mdashOos.std = std; _mdashOos.proj = proj;
+    animateValue(el, 0, std.length, 1000, false);
+    mdashSetSibSub(el, 'STD items with zero stock · as of now' + (proj.length ? ' · +' + proj.length.toLocaleString() + ' PROJ hidden' : ''));
+    card.classList.toggle('alert-pulse', std.length > 0);
+    card.setAttribute('title', 'Click to see the list (STD / PROJ)');
+  } catch (e) {
+    console.warn('[Dashboard] STD out-of-stock unavailable, using database numbers:', e.message);
+    animateValue(el, 0, s.out_of_stock_count || 0, 1000, false);
+    mdashSetSibSub(el, 'Zero on-hand items · as of now');
+  }
+}
+
+function mdashOosRows() {
+  var t = _mdashOos.tab, rows = t === 'STD' ? _mdashOos.std : t === 'PROJ' ? _mdashOos.proj : _mdashOos.std.concat(_mdashOos.proj);
+  var q = (_mdashOos.q || '').trim().toLowerCase();
+  if (q) rows = rows.filter(function(it) { return ((it.item_code || '') + ' ' + (it.description || '')).toLowerCase().indexOf(q) !== -1; });
+  return rows.slice().sort(function(a, b) { return String(a.item_code).localeCompare(String(b.item_code)); });
+}
+
+function mdashShowOosList(tab) {
+  _mdashOos.tab = tab || 'STD'; _mdashOos.q = '';
+  mdashOpenInfoModal('mdashOosModal', 'Out of Stock items', 'bi-x-circle-fill', '<div id="mdashOosBody"></div>');
+  mdashOosShell();
+}
+function mdashOosSetTab(t) { _mdashOos.tab = t; mdashOosShell(); }
+function mdashOosSearch(v) { _mdashOos.q = v; mdashOosTable(); }
+
+function mdashOosShell() {
+  var host = document.getElementById('mdashOosBody'); if (!host) return;
+  var n = { STD: _mdashOos.std.length, PROJ: _mdashOos.proj.length };
+  function tab(k, label, cnt) {
+    var on = _mdashOos.tab === k;
+    return '<button type="button" onclick="mdashOosSetTab(\'' + k + '\')" style="border:1px solid ' + (on ? '#1e3a5f' : '#cbd5e1') + ';background:' + (on ? '#1e3a5f' : '#fff') + ';color:' + (on ? '#fff' : '#334155') +
+      ';padding:5px 14px;border-radius:999px;font-weight:700;font-size:.8rem;cursor:pointer;">' + label + ' <span style="opacity:.75">' + cnt.toLocaleString() + '</span></button>';
+  }
+  host.innerHTML =
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">' +
+      tab('STD', 'STD (standard)', n.STD) + tab('PROJ', 'PROJ (project)', n.PROJ) + tab('ALL', 'All', n.STD + n.PROJ) +
+      '<input type="text" class="form-control form-control-sm" style="max-width:240px;margin-left:auto;" placeholder="Search code or description..." value="' + erpEsc(_mdashOos.q) + '" oninput="mdashOosSearch(this.value)">' +
+      '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="mdashOosExport()"><i class="bi bi-download"></i> CSV</button>' +
+    '</div>' +
+    '<div class="to-note" style="margin:0 0 8px;">STD = items with enough active months of usage (regular stock). PROJ = project stock, not replenished — hidden from the card.</div>' +
+    '<div id="mdashOosTable"></div>';
+  mdashOosTable();
+}
+
+function mdashOosTable() {
+  var host = document.getElementById('mdashOosTable'); if (!host) return;
+  var rows = mdashOosRows(), MAX = 300;
+  if (!rows.length) { host.innerHTML = '<div class="text-center text-muted py-4">No items.</div>'; return; }
+  var html = '<div style="max-height:55vh;overflow:auto;"><table class="table table-sm align-middle" style="font-size:.82rem;"><thead style="position:sticky;top:0;background:#f1f5f9;"><tr>' +
+    '<th>Item Code</th><th>Description</th><th>Category</th><th>Location</th><th>Class</th><th class="text-end">Buffer</th><th class="text-end">Unit Cost</th></tr></thead><tbody>';
+  rows.slice(0, MAX).forEach(function(it) {
+    var cls = erpItemClass(it.active_consumption_months);
+    html += '<tr><td><code>' + erpEsc(it.item_code) + '</code></td><td>' + erpEsc(it.description || '') + '</td><td>' + erpEsc(it.category || '') + '</td><td>' + erpEsc(it.location || '') + '</td>' +
+      '<td><span class="badge" style="background:' + (cls === 'STD' ? '#d1fae5;color:#065f46' : '#fef3c7;color:#92400e') + '">' + cls + '</span></td>' +
+      '<td class="text-end">' + (Number(it.buffer_stock) > 0 ? Number(it.buffer_stock).toLocaleString() : '—') + '</td><td class="text-end">' + mdashPesoFmt(Number(it.unit_cost || 0)) + '</td></tr>';
+  });
+  html += '</tbody></table></div><div class="to-note">Showing ' + Math.min(MAX, rows.length).toLocaleString() + ' of ' + rows.length.toLocaleString() + (rows.length > MAX ? ' — gamitin ang search o CSV para sa buong listahan' : '') + '</div>';
+  host.innerHTML = html;
+}
+
+function mdashOosExport() {
+  var rows = mdashOosRows(); if (!rows.length) return;
+  var csv = '\uFEFF' + ['Item Code', 'Description', 'Category', 'Location', 'Class', 'On-Hand', 'Buffer', 'Unit Cost', 'Unit'].map(_mdashCsvEsc).join(',') + '\n';
+  rows.forEach(function(it) {
+    csv += [it.item_code, it.description, it.category, it.location, erpItemClass(it.active_consumption_months), it.on_hand, it.buffer_stock, it.unit_cost, it.base_unit].map(_mdashCsvEsc).join(',') + '\n';
+  });
+  var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  a.download = 'Out_of_Stock_' + _mdashOos.tab + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
 async function mdashRenderReplenishCard(s) {
