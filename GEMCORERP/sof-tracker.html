@@ -88,7 +88,7 @@
       <div class="kpi-content">
         <div class="kpi-label">Active</div>
         <div class="kpi-value" id="sofKpiActive">—</div>
-        <div class="kpi-sub">Currently in use</div>
+        <div class="kpi-sub">May natitira pang i-issue</div>
       </div>
     </div>
     <div class="erp-kpi-card kpi-amber">
@@ -129,7 +129,7 @@
       <select id="sofStatusFilter" class="erp-select" onchange="sofTrackerLoad()">
         <option value="">All Status</option>
         <option value="ACTIVE">Active</option>
-        <option value="COMPLETED">Completed</option>
+        <option value="COMPLETED">Fully Served</option>
         <option value="CANCELLED">Cancelled</option>
         <option value="RELEASED">Released</option>
         <option value="PENDINGMRIF">May pending MRIF</option>
@@ -141,7 +141,7 @@
     <div class="sof-pills" id="sofPills">
       <span class="sof-pill active" data-status="" onclick="sofSetStatus('')">All <span class="sof-pill-n" id="sofPillAll">0</span></span>
       <span class="sof-pill" data-status="ACTIVE" onclick="sofSetStatus('ACTIVE')"><span class="sof-dot"></span>Active <span class="sof-pill-n" id="sofPillActive">0</span></span>
-      <span class="sof-pill" data-status="COMPLETED" onclick="sofSetStatus('COMPLETED')"><span class="sof-dot"></span>Completed <span class="sof-pill-n" id="sofPillCompleted">0</span></span>
+      <span class="sof-pill" data-status="COMPLETED" onclick="sofSetStatus('COMPLETED')"><span class="sof-dot"></span>Fully Served <span class="sof-pill-n" id="sofPillCompleted" title="Lahat ng allocated qty ay na-issue na">0</span></span>
       <span class="sof-pill" data-status="CANCELLED" onclick="sofSetStatus('CANCELLED')"><span class="sof-dot"></span>Cancelled <span class="sof-pill-n" id="sofPillCancelled">0</span></span>
       <span class="sof-pill" data-status="RELEASED" onclick="sofSetStatus('RELEASED')" title="Mga SOF na na-release na ang lahat ng item (0 / 0)"><span class="sof-dot"></span>Released <span class="sof-pill-n" id="sofPillReleased">0</span></span>
       <span class="sof-pill" data-status="PENDINGMRIF" onclick="sofSetStatus('PENDINGMRIF')" title="SOF na may natirang allocation at may MRIF na naghihintay"><span class="sof-dot" style="background:#ea580c"></span>May pending MRIF <span class="sof-pill-n" id="sofPillPending">0</span></span>
