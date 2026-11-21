@@ -181,7 +181,7 @@ function mrrListRender() {
     
     html += '<tr' + (isCancelled ? ' style="opacity:.6;"' : '') + erpBulkRowClass(d) + '>' +
       erpBulkCellHtml(d) +
-      '<td><code>' + erpEsc(d.doc_no) + '</code></td>' +
+      '<td><code>' + erpEsc(d.doc_no) + '</code>' + (d.is_transmitted ? ' <span class="badge bg-secondary" style="font-size:.62rem;" title="Na-transmit na. Puwede pa ring i-edit / i-void (ire-release muna sa transmittal).">' + erpEsc(d.transmittal_no || 'TRANSMITTED') + '</span>' : '') + '</td>' +
       '<td>' + erpEsc(dateStr) + '</td>' +
       '<td>' + erpEsc(d.po_no || '—') + '</td>' +
       '<td>' + erpEsc(d.vendor || '—') + '</td>' +
