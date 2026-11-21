@@ -124,6 +124,7 @@ tr.cancelled-row td code { text-decoration: line-through; }
 <script defer src="erp-config.js"></script>
 <script defer src="erp-supabase.js"></script>
 <script defer src="erp-nav.js"></script>
+<script defer src="js/mrr-trn.js"></script>
 <script defer src="mrr-monitoring.js"></script>
 <script defer src="notif-alerts.js"></script>
 <script defer src="notifications.js"></script>
@@ -484,18 +485,20 @@ tr.cancelled-row td code { text-decoration: line-through; }
           <table class="erp-table" style="font-size: 0.85rem;">
             <thead class="table-light sticky-top">
               <tr>
-                <th style="width: 25%;">TRN No.</th>
-                <th style="width: 20%;">Date</th>
-                <th style="width: 25%;">Prepared By</th>
+                <th style="width: 22%;">TRN No.</th>
+                <th style="width: 16%;">Date</th>
+                <th style="width: 22%;">Prepared By</th>
+                <th style="width: 10%;" class="text-center">MRRs</th>
                 <th style="width: 30%;" class="text-center">Action</th>
               </tr>
             </thead>
             <tbody id="transmittalHistoryBody">
-              <tr><td colspan="4" class="text-center py-3"><div class="erp-spinner" style="margin:0 auto;"></div></td></tr>
+              <tr><td colspan="6" class="text-center py-3"><div class="erp-spinner" style="margin:0 auto;"></div></td></tr>
             </tbody>
           </table>
         </div>
       </div>
+      <div class="modal-footer py-2"><small class="text-muted me-auto"><i class="bi bi-info-circle me-1"></i>Naka-transmit na ang MRR at kailangang i-edit / i-cancel? Buksan ang <b>View</b> at i-<b>Release</b> ito, o i-cancel ang buong TRN.</small></div>
     </div>
   </div>
 </div>
@@ -519,6 +522,7 @@ tr.cancelled-row td code { text-decoration: line-through; }
                 <th>Supplier</th>
                 <th>PO No.</th>
                 <th>Date Received</th>
+                <th class="text-center" style="width:110px;"></th>
               </tr>
             </thead>
             <tbody id="viewTrnMRRsBody">
@@ -526,6 +530,13 @@ tr.cancelled-row td code { text-decoration: line-through; }
             </tbody>
           </table>
         </div>
+      </div>
+      <div class="modal-footer py-2 justify-content-between">
+        <div id="trnAddBox" class="input-group input-group-sm" style="max-width:340px;">
+          <input type="text" id="trnAddInput" class="form-control" placeholder="Add MRR No. (e.g. MRR0005400)" onkeydown="if(event.key==='Enter')trnAddMrr()">
+          <button class="btn btn-outline-primary" onclick="trnAddMrr()"><i class="bi bi-plus-circle me-1"></i>Add</button>
+        </div>
+        <button class="btn btn-sm btn-outline-dark" onclick="trnReprint()"><i class="bi bi-printer me-1"></i>Reprint</button>
       </div>
     </div>
   </div>
