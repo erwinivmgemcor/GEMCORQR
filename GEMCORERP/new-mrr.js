@@ -481,7 +481,7 @@ function renderItems() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// UNIT COST — required per received item; updates erp_items (Inventory Master / Stock Monitor)
+// UNIT COST — optional per received item; updates erp_items (Inventory Master / Stock Monitor)
 // after the MRR is saved. NOT stored on the MRR document and NOT printed.
 // ═══════════════════════════════════════════════════════════
 function _mrrParseCost(v) {
@@ -534,7 +534,7 @@ function _mrrCostHint(idx) {
   if (!it || !el) return;
   if (!String(it.itemCode || '').trim() || it.currentCost === undefined) { el.textContent = ''; return; }
   var cur = Number(it.currentCost || 0), nw = _mrrParseCost(it.unitCost);
-  var html = cur > 0 ? 'Current: ' + _mrrPeso(cur) : '<span class="text-primary">No cost yet — will be set</span>';
+  var html = cur > 0 ? 'Current: ' + _mrrPeso(cur) : '<span class="text-primary">No cost on file — optional</span>';
   if (cur > 0 && nw > 0 && Math.abs(nw - cur) / cur >= 0.5) {
     var pct = Math.round((nw - cur) / cur * 100);
     html += ' <span class="text-danger fw-bold">' + (pct > 0 ? '▲ +' : '▼ ') + pct + '%</span>';
@@ -986,13 +986,12 @@ async function submitMrr() {
 
   if (!_mrrState.vendor) { erpShowToast('Vendor / Client is required', 'warning'); return; }
 
-  // Unit Cost is required for every item that is actually received (ATL Qty > 0)
+  // Unit Cost is OPTIONAL — an MRR can be saved without it (the item keeps its current cost in the Inventory Master).
+  // Only a cost that is typed in (> 0) updates the master; an invalid/negative entry is rejected.
   for (var ci = 0; ci < _mrrState.items.length; ci++) {
-    var cit = _mrrState.items[ci];
-    if (!(Number(cit.issuedQty) > 0)) continue;
-    var cv = _mrrParseCost(cit.unitCost);
-    if (!(cv > 0)) {
-      erpShowToast('Item #' + (ci + 1) + (cit.itemCode ? ' (' + cit.itemCode + ')' : '') + ': Unit Cost is required (must be more than 0)', 'warning');
+    var cit = _mrrState.items[ci], raw = String(cit.unitCost == null ? '' : cit.unitCost).trim();
+    if (raw && !(_mrrParseCost(cit.unitCost) > 0)) {
+      erpShowToast('Item #' + (ci + 1) + (cit.itemCode ? ' (' + cit.itemCode + ')' : '') + ': Unit Cost must be more than 0, or leave it blank', 'warning');
       var cEl = document.getElementById('mrrItemCost' + ci);
       if (cEl) { cEl.focus(); cEl.classList.add('is-invalid'); setTimeout(function() { cEl.classList.remove('is-invalid'); }, 2500); }
       return;
@@ -1025,7 +1024,7 @@ async function submitMrr() {
   });
   Object.keys(costMap).forEach(function(code, k) { costRows.push({ row: k + 1, item_code: code, unit_cost: costMap[code] }); });
 
-  if (!confirm('Create MRR with ' + validItems.length + ' item(s)?\n\nThe unit cost of ' + costRows.length + ' item(s) will also be updated in the Inventory Master / Stock Monitor.')) return;
+  if (!confirm('Create MRR with ' + validItems.length + ' item(s)?' + (costRows.length ? '\n\nThe unit cost of ' + costRows.length + ' item(s) will also be updated in the Inventory Master / Stock Monitor.' : '\n\nNo unit cost entered — the Inventory Master costs will not be changed.'))) return;
 
   _mrrState.isSubmitting = true;
   var btn = document.getElementById('btnSubmitMrr');
@@ -1084,11 +1083,11 @@ async function submitMrr() {
     erpShowToast('✅ MRR created: ' + docNo, 'success');
 
     // Update Inventory Master / Stock Monitor unit cost (latest cost; sets it if the item had none)
-    var costRes = await _mrrApplyCosts(docNo, costRows, false);
-    _mrrPendingCost = costRes.ok ? null : { docNo: docNo, rows: costRows };
-    if (!costRes.ok) erpShowToast(costRes.msg, 'danger');
+    var costRes = costRows.length ? await _mrrApplyCosts(docNo, costRows, false) : null;   // no cost typed → nothing to update
+    _mrrPendingCost = (!costRes || costRes.ok) ? null : { docNo: docNo, rows: costRows };
+    if (costRes && !costRes.ok) erpShowToast(costRes.msg, 'danger');
 
-    var prfSummaryHtml = _mrrCostResultHtml(costRes) + (await _mrrPrfSummary(_mrrState.prfNo, _mrrState.poNo));
+    var prfSummaryHtml = (costRes ? _mrrCostResultHtml(costRes) : '') + (await _mrrPrfSummary(_mrrState.prfNo, _mrrState.poNo));
     showSuccessModal(docNo, prfSummaryHtml);
 
   } catch(err) {
