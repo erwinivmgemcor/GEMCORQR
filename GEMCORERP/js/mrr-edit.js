@@ -16,7 +16,7 @@
   document.head.appendChild(st);
 })();
 
-var _mrrEd = { docNo: null, doc: null, items: [], busy: false, catalog: null, catLoading: null };
+var _mrrEd = { docNo: null, doc: null, items: [], busy: false, catalog: null, catLoading: null, releasedFrom: null };
 
 function _mrrEdToast(msg, type) {
   if (typeof erpShowToast === 'function') erpShowToast(msg, type || 'info');
@@ -93,6 +93,14 @@ function _mrrEdEnsureModal() {
 function mrrEdClose() {
   var el = document.getElementById('mrrEditModal');
   if (el) bootstrap.Modal.getOrCreateInstance(el).hide();
+  // Na-release sa transmittal para sa edit pero hindi na-save → ibalik sa transmittal
+  if (_mrrEd.releasedFrom && window.erpTrn) {
+    var rf = _mrrEd.releasedFrom; _mrrEd.releasedFrom = null;
+    erpTrn.attach([rf.docNo], rf.trnNo, 'Edit cancelled — restored').then(function() {
+      _mrrEdToast(rf.docNo + ' ibinalik sa ' + rf.trnNo + ' (walang binago).', 'info');
+      if (typeof mrrListRefresh === 'function') setTimeout(mrrListRefresh, 300);
+    }).catch(function(e) { _mrrEdToast('Hindi naibalik ang ' + rf.docNo + ' sa ' + rf.trnNo + ': ' + e.message, 'danger'); });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -117,7 +125,15 @@ async function openMrrEdit(docNo) {
     var doc = docs[0];
     var st = String(doc.status || '').toUpperCase();
     if (st === 'CANCELLED') throw new Error(docNo + ' ay CANCELLED na at hindi na puwedeng i-edit.');
-    if (doc.is_transmitted) throw new Error(docNo + ' ay na-transmit na (' + (doc.transmittal_no || '') + ').');
+    if (doc.is_transmitted) {
+      // Dati: bawal. Ngayon: i-release muna sa transmittal (may reason), tapos edit.
+      if (!window.erpTrn) throw new Error(docNo + ' ay na-transmit na (' + (doc.transmittal_no || '') + ').');
+      var trn = doc.transmittal_no || '';
+      var why = await erpTrn.releaseFlow(docNo, trn, 'edit');
+      if (why === null) { mrrEdClose(); return; }
+      _mrrEd.releasedFrom = { docNo: docNo, trnNo: trn };
+      doc.is_transmitted = false;
+    }
 
     var items = await erpFetch('doc_items',
       'select=*&doc_no=eq.' + encodeURIComponent(docNo) + '&order=line_no.asc');
@@ -522,7 +538,10 @@ async function mrrEdSave() {
       } else { throw e1; }
     }
     if (!res || !res.success) throw new Error(_mrrEdFriendly(res && res.error));
+    var wasTrn = _mrrEd.releasedFrom && _mrrEd.releasedFrom.trnNo;
+    _mrrEd.releasedFrom = null;        // na-save na → hindi na ibabalik sa lumang TRN
     mrrEdClose();
+    if (wasTrn) _mrrEdToast(_mrrEd.docNo + ' ay inalis sa ' + wasTrn + '. I-transmit ulit sa MRR Monitoring (o Add MRR sa transmittal).', 'warning');
     _mrrEdToast('✅ ' + _mrrEd.docNo + ' updated (' + res.status + ')' +
       (res.line_changes ? ' · ' + res.line_changes + ' line change(s)' : '') +
       (res.sof_lines_moved ? ' · SOF allocation: ' + res.sof_lines_moved + ' line(s) inilipat' : ''), 'success');
@@ -551,12 +570,27 @@ async function mrrVoid(docNo) {
   if (reason === null) return;
   reason = reason.trim();
   if (!reason) { _mrrEdToast('Reason is required', 'warning'); return; }
-  if (!confirm('Sigurado ka bang i-void ang ' + docNo + '?\n\nReason: ' + reason)) return;
+  // Na-transmit na? Aalisin muna sa transmittal para matuloy ang void.
+  var trnNo = '', wasTransmitted = false;
+  try {
+    var dd = await erpFetch('documents', 'select=is_transmitted,transmittal_no&doc_type=eq.MRR&doc_no=eq.' + encodeURIComponent(docNo) + '&limit=1');
+    if (dd && dd[0] && dd[0].is_transmitted) { wasTransmitted = true; trnNo = dd[0].transmittal_no || ''; }
+  } catch (e) {}
+  if (!confirm('Sigurado ka bang i-void ang ' + docNo + '?\n\nReason: ' + reason +
+      (wasTransmitted ? '\n\nNOTE: Nasa transmittal na ito (' + (trnNo || 'TRN') + '). Aalisin ito sa transmittal bago i-void.' : ''))) return;
 
   _mrrEd.busy = true;
   try {
-    var res = await _mrrEdRpc('erp_void_mrr', { p_doc_no: docNo, p_reason: reason, p_user: _mrrEdUser() });
-    if (!res || !res.success) throw new Error(_mrrEdFriendly(res && res.error));
+    if (wasTransmitted) await erpTrn.release([docNo], 'Released to void: ' + reason, trnNo);
+    var res;
+    try {
+      res = await _mrrEdRpc('erp_void_mrr', { p_doc_no: docNo, p_reason: reason, p_user: _mrrEdUser() });
+      if (!res || !res.success) throw new Error(_mrrEdFriendly(res && res.error));
+    } catch (voidErr) {
+      // hindi natuloy ang void → ibalik sa transmittal para hindi magbago ang dati
+      if (wasTransmitted) { try { await erpTrn.attach([docNo], trnNo, 'Void failed — restored'); } catch (e2) {} }
+      throw voidErr;
+    }
     _mrrEdToast('✅ ' + docNo + ' voided (' + res.lines_reversed + ' line(s) ibinalik sa ledger)', 'success');
     if (typeof mrrListRefresh === 'function') setTimeout(mrrListRefresh, 400);
   } catch (err) {
