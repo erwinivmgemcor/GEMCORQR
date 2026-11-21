@@ -35,7 +35,7 @@
 
   // Write-actions hidden for read-only roles (matched by onclick text)
   var READONLY_WRITE_FNS = [
-    'openTransmittalModal', 'openEditPrfItems', 'openEditPrfNo', 'bulkUpdateStatus',
+    'openTransmittalModal', 'trnReleaseMrr', 'trnReleaseAll', 'trnAddMrr', 'openEditPrfItems', 'openEditPrfNo', 'bulkUpdateStatus',
     'prfSyncAndRecompute', 'savePoEdit', 'openPoEditModal', 'saveEditPrfItems', 'saveEditedPrfNo',
     'prfCancel', 'addEditPrfItem', 'editPrfRemoveItem', 'sofOpenManual', 'sofReleaseItem', 'sofManualSubmit'
   ];
