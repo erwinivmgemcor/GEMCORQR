@@ -769,39 +769,51 @@ window.openTransmittalModal = async function() {
   tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3"><div class="erp-spinner" style="margin:0 auto;"></div></td></tr>';
   
   try {
-    // 1. Kunin ang unique MRRs mula sa currently filtered items
+    // 1. Kunin ang unique MRRs mula sa currently filtered items (+ item signature para sa duplicate check)
     var uniqueMRRs = {};
     _mrrMon.filteredItems.forEach(function(it) {
       var mrrNo = it.mrr_no;
       if (!mrrNo) return;
-      if (!uniqueMRRs[mrrNo]) {
-        uniqueMRRs[mrrNo] = {
+      var m = uniqueMRRs[mrrNo];
+      if (!m) {
+        m = uniqueMRRs[mrrNo] = {
           mrrNo: mrrNo,
           date: it.mrr_date || it.processed_at || it.created_at,
           supplier: it.vendor || '—',
-          poNo: it.po_no || it.ref_no || '—'
+          poNo: it.po_no || it.ref_no || '—',
+          cancelled: String(it.item_status || '').toUpperCase() === 'CANCELLED',
+          sig: []
         };
       }
+      m.sig.push(String(it.item_code || '') + ':' + Number(it.received_qty || 0));
     });
     
     var mrrList = Object.values(uniqueMRRs);
     mrrList.sort(function(a, b) { return String(b.mrrNo).localeCompare(String(a.mrrNo)); });
     
-    // 2. Kunin ang is_transmitted status sa DB para maiwasan ang doble
+    // 2. Kunin ang transmitted / cancelled status sa DB para maiwasan ang doble
     if (mrrList.length > 0) {
       var mrrNosStr = mrrList.map(function(m) { return m.mrrNo; }).join(',');
-      var docsRes = await erpFetch('documents', 'select=doc_no,is_transmitted&doc_no=in.(' + encodeURIComponent(mrrNosStr) + ')');
+      var docsRes = await erpFetch('documents', 'select=doc_no,is_transmitted,transmittal_no,status&doc_no=in.(' + encodeURIComponent(mrrNosStr) + ')&limit=5000');
       
-      var transmitStatusMap = {};
-      (docsRes || []).forEach(function(d) {
-        transmitStatusMap[d.doc_no] = d.is_transmitted === true;
-      });
+      var dmap = {};
+      (docsRes || []).forEach(function(d) { dmap[d.doc_no] = d; });
       
-      // 3. I-merge ang status
-      _transmitMRRList = mrrList.map(function(m) {
-        m.isTransmitted = transmitStatusMap[m.mrrNo] === true;
-        return m;
+      // 3. I-merge ang status + hanapin ang posibleng duplicate (parehong vendor + PO + petsa + items)
+      var dupKey = {};
+      mrrList.forEach(function(m) {
+        var d = dmap[m.mrrNo] || {};
+        m.isTransmitted = d.is_transmitted === true;
+        m.trn = d.transmittal_no || '';
+        if (String(d.status || '').toUpperCase() === 'CANCELLED') m.cancelled = true;
+        m.key = [m.supplier, m.poNo, String(m.date || '').slice(0, 10), m.sig.slice().sort().join('|')].join('~');
+        if (!m.cancelled) (dupKey[m.key] = dupKey[m.key] || []).push(m.mrrNo);
       });
+      mrrList.forEach(function(m) {
+        var same = m.cancelled ? [] : (dupKey[m.key] || []).filter(function(n) { return n !== m.mrrNo; });
+        m.dupOf = same;
+      });
+      _transmitMRRList = mrrList;
     } else {
       _transmitMRRList = [];
     }
@@ -824,13 +836,17 @@ function renderTransmittalSelection() {
   }
   
   _transmitMRRList.forEach(function(m, idx) {
-    // Auto-check kung HINDI PA naka-transmit
-    var isChecked = !m.isTransmitted; 
-    var rowClass = m.isTransmitted ? ' style="background:#f8fafc;opacity:0.7;"' : '';
+    // Auto-check kung HINDI PA naka-transmit, hindi cancelled, at hindi posibleng duplicate
+    var isDup = m.dupOf && m.dupOf.length > 0;
+    var isChecked = !m.isTransmitted && !m.cancelled;
+    var rowStyle = m.cancelled ? ' style="background:#fef2f2;opacity:0.65;"' : (m.isTransmitted ? ' style="background:#f8fafc;opacity:0.8;"' : (isDup ? ' style="background:#fffbeb;"' : ''));
     
-    var statusBadge = m.isTransmitted 
-      ? '<span class="badge bg-secondary">TRANSMITTED</span>'
-      : '<span class="badge bg-success">READY</span>';
+    var statusBadge = m.cancelled
+      ? '<span class="badge bg-danger">CANCELLED</span>'
+      : m.isTransmitted
+        ? '<span class="badge bg-secondary" title="Kapag pinili ulit, ililipat sa bagong transmittal">' + erpEsc(m.trn || 'TRANSMITTED') + '</span>'
+        : '<span class="badge bg-success">READY</span>';
+    if (isDup) statusBadge += '<div><span class="badge bg-warning text-dark mt-1" title="Parehong vendor, PO, petsa at items: ' + erpEsc(m.dupOf.join(', ')) + '"><i class="bi bi-exclamation-triangle-fill me-1"></i>POSSIBLE DUPLICATE of ' + erpEsc(m.dupOf.join(', ')) + '</span></div>';
       
     var dateStr = '—';
     if (m.date) {
@@ -839,10 +855,10 @@ function renderTransmittalSelection() {
       } catch(e) {}
     }
     
-    html += '<tr' + rowClass + '>' +
+    html += '<tr' + rowStyle + '>' +
       '<td class="text-center align-middle">' +
         '<input type="checkbox" class="transmit-mrr-chk" data-idx="' + idx + '" ' +
-        (isChecked ? 'checked' : '') + '>' +
+        (isChecked ? 'checked' : '') + (m.cancelled ? ' disabled' : '') + '>' +
       '</td>' +
       '<td class="align-middle"><strong>' + erpEsc(m.mrrNo) + '</strong></td>' +
       '<td class="align-middle">' + erpEsc(dateStr) + '</td>' +
@@ -856,7 +872,7 @@ function renderTransmittalSelection() {
 
 function toggleAllTransmittalMRRs(checked) {
   document.querySelectorAll('.transmit-mrr-chk').forEach(function(chk) {
-    chk.checked = checked; 
+    if (!chk.disabled) chk.checked = checked; 
   });
 }
 
@@ -1057,52 +1073,69 @@ window.buildTransmittalPreview = async function() {
 // ═══════════════════════════════════════════════════════════
 // Hanapin ang existing printTransmittal at palitan:
 window.printTransmittal = async function() {
+  if (_trnBusy) return;                      // iwas double-click → double TRN
   var printContents = document.getElementById('transmittalSheet').innerHTML;
   
-  var selectedMRRs = [];
+  var selected = [];
   document.querySelectorAll('.transmit-mrr-chk').forEach(function(chk) {
     if (chk.checked) {
       var idx = parseInt(chk.getAttribute('data-idx'), 10);
-      selectedMRRs.push(_transmitMRRList[idx].mrrNo);
+      selected.push(_transmitMRRList[idx]);
     }
   });
-  
-  if (selectedMRRs.length > 0) {
-    try {
-      var currentUser = localStorage.getItem('ivm_userFullname') || 'ADMIN';
-      
-      // 1. Insert sa mrr_transmittals table
-      await fetch(erpUrl('mrr_transmittals'), {
-        method: 'POST',
-        headers: erpHeaders({ 'Prefer': 'return=minimal' }),
-        body: JSON.stringify({
-          transmittal_no: _currentTransmittalNo,
-          transmittal_date: new Date().toISOString().split('T')[0],
-          prepared_by: currentUser
-        })
-      });
+  if (!selected.length) { erpShowToast('Pumili ng kahit isang MRR.', 'warning'); return; }
 
-      // 2. Update ang documents table para ma-link sa TRN
-      var mrrNosStr = selectedMRRs.join(',');
-      await fetch(erpUrl('documents?doc_no=in.(' + encodeURIComponent(mrrNosStr) + ')'), {
-        method: 'PATCH',
-        headers: erpHeaders(),
-        body: JSON.stringify({
-          is_transmitted: true,
-          transmittal_no: _currentTransmittalNo,
-          transmitted_at: new Date().toISOString()
-        })
-      });
-      
-      console.log('Transmittal saved:', _currentTransmittalNo);
-      erpShowToast('✅ Transmittal ' + _currentTransmittalNo + ' saved!', 'success');
-    } catch(err) {
-      console.warn('Failed to save transmittal:', err);
-      erpShowToast('⚠️ Warning: Na-print pero hindi na-save sa DB.', 'warning');
-    }
+  var moved = selected.filter(function(m) { return m.isTransmitted && m.trn; });
+  if (moved.length && !confirm(moved.length + ' MRR ang nasa ibang transmittal na (' +
+      moved.map(function(m) { return m.mrrNo + ' → ' + m.trn; }).join(', ') +
+      ').\n\nIlilipat sila sa ' + _currentTransmittalNo + '. Tuloy?')) return;
+  var dups = selected.filter(function(m) { return m.dupOf && m.dupOf.length; });
+  if (dups.length && !confirm('Possible duplicate ang: ' + dups.map(function(m) { return m.mrrNo + ' (kapareho ng ' + m.dupOf.join(', ') + ')'; }).join('; ') +
+      '\n\nSigurado ka bang isasama sa transmittal?\n(Kung duplicate, i-Cancel muna ang sobra sa MRR List.)')) return;
+
+  _trnBusy = true;
+  var btn = document.getElementById('btnPrintTransmittal'), btnHtml = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...'; }
+  try {
+    var currentUser = localStorage.getItem('ivm_userFullname') || 'ADMIN';
+    
+    // 1. Insert sa mrr_transmittals table
+    var r1 = await fetch(erpUrl('mrr_transmittals'), {
+      method: 'POST',
+      headers: erpHeaders({ 'Prefer': 'return=minimal' }),
+      body: JSON.stringify({
+        transmittal_no: _currentTransmittalNo,
+        transmittal_date: new Date().toISOString().split('T')[0],
+        prepared_by: currentUser
+      })
+    });
+    if (!r1.ok) throw new Error('Hindi na-save ang transmittal (HTTP ' + r1.status + ')');
+
+    // 2. I-link ang mga MRR sa TRN (may check na talagang na-update)
+    var nos = selected.map(function(m) { return m.mrrNo; });
+    await erpTrn.attach(nos, _currentTransmittalNo, 'Created');
+    erpShowToast('✅ Transmittal ' + _currentTransmittalNo + ' saved (' + nos.length + ' MRR)!', 'success');
+  } catch(err) {
+    console.warn('Failed to save transmittal:', err);
+    erpShowToast('❌ ' + err.message + '. Hindi pa naka-print — subukan ulit.', 'danger');
+    _trnBusy = false;
+    if (btn) { btn.disabled = false; btn.innerHTML = btnHtml; }
+    return;
   }
-  
+  _trnBusy = false;
+  if (btn) { btn.disabled = false; btn.innerHTML = btnHtml; }
+
+  _trnOpenPrint(printContents);
+  setTimeout(function() {
+    if (typeof mrrMonLoad === 'function') mrrMonLoad(); 
+    var m = bootstrap.Modal.getInstance(document.getElementById('transmittalModal')); if (m) m.hide();
+  }, 300);
+};
+
+var _trnBusy = false;
+function _trnOpenPrint(printContents) {
   var printWindow = window.open('', '_blank');
+  if (!printWindow) { erpShowToast('Na-block ng browser ang print window. Payagan ang pop-up, tapos gamitin ang Reprint sa Transmittal History.', 'warning'); return; }
   printWindow.document.write(
     '<html><head><title>MRR Transmittal</title>' +
     '<style>' +
@@ -1115,89 +1148,190 @@ window.printTransmittal = async function() {
     '  @media print { @page { size: portrait; margin: 0.5in; } body { padding: 0; } }' +
     '</style></head><body>' + printContents + '</body></html>'
   );
-  
   printWindow.document.close();
   printWindow.focus();
-  
-  setTimeout(function() {
-    printWindow.print();
-    printWindow.close();
-    if (typeof mrrMonLoad === 'function') mrrMonLoad(); 
-    bootstrap.Modal.getInstance(document.getElementById('transmittalModal')).hide();
-  }, 250);
-};
+  setTimeout(function() { printWindow.print(); printWindow.close(); }, 250);
+}
 
 // ═══════════════════════════════════════════════════════════
-// TRANSMITTAL HISTORY LOGIC
+// TRANSMITTAL HISTORY LOGIC  (view • reprint • release • add MRR • cancel TRN)
 // ═══════════════════════════════════════════════════════════
+function _trnCanWrite() {
+  var r = localStorage.getItem('ivm_userRole') || '';
+  return r !== 'procurement' && r !== 'finance';
+}
+function _trnJs(s) { return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+function _trnDate(d) { try { return d ? new Date(d).toLocaleDateString() : '—'; } catch (e) { return '—'; } }
+
 window.openTransmittalHistoryModal = async function() {
   var modalEl = document.getElementById('transmittalHistoryModal');
   var tbody = document.getElementById('transmittalHistoryBody');
   
   bootstrap.Modal.getOrCreateInstance(modalEl).show();
-  tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3"><div class="erp-spinner" style="margin:0 auto;"></div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3"><div class="erp-spinner" style="margin:0 auto;"></div></td></tr>';
   
   try {
     var rows = await erpFetch('mrr_transmittals', 'select=*&order=created_at.desc&limit=100');
     
     if (!rows || rows.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted">No transmittals generated yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">No transmittals generated yet.</td></tr>';
       return;
     }
+
+    // bilang ng MRR bawat TRN
+    var counts = {};
+    try {
+      var docs = await erpFetch('documents', 'select=doc_no,transmittal_no&transmittal_no=in.(' +
+        encodeURIComponent(rows.map(function(r) { return r.transmittal_no; }).join(',')) + ')&limit=5000');
+      (docs || []).forEach(function(d) { counts[d.transmittal_no] = (counts[d.transmittal_no] || 0) + 1; });
+    } catch (e) { counts = null; }
     
-    var html = '';
+    var canW = _trnCanWrite(), html = '';
     rows.forEach(function(r) {
-      var dateStr = r.transmittal_date ? new Date(r.transmittal_date).toLocaleDateString() : '—';
-      var safeTrn = String(r.transmittal_no).replace(/'/g, "\\'");
+      var safeTrn = _trnJs(r.transmittal_no);
+      var n = counts ? (counts[r.transmittal_no] || 0) : null;
+      var badge = n === null ? '—' : (n === 0 ? '<span class="badge bg-secondary" title="Lahat ng MRR ay na-release">EMPTY</span>' : '<span class="badge bg-primary">' + n + '</span>');
       
       html += '<tr>' +
         '<td><strong style="color:#dc2626;">' + erpEsc(r.transmittal_no) + '</strong></td>' +
-        '<td>' + erpEsc(dateStr) + '</td>' +
+        '<td>' + erpEsc(_trnDate(r.transmittal_date)) + '</td>' +
         '<td>' + erpEsc(r.prepared_by) + '</td>' +
-        '<td class="text-center">' +
-          '<button class="btn btn-sm btn-outline-primary" onclick="viewTransmittalMRRs(\'' + safeTrn + '\')">' +
-            '<i class="bi bi-eye me-1"></i>View MRRs' +
+        '<td class="text-center">' + badge + '</td>' +
+        '<td class="text-center" style="white-space:nowrap;">' +
+          '<button class="btn btn-sm btn-outline-primary me-1" onclick="viewTransmittalMRRs(\'' + safeTrn + '\')" title="View / manage MRRs">' +
+            '<i class="bi bi-eye"></i>' +
           '</button>' +
+          '<button class="btn btn-sm btn-outline-dark me-1" onclick="trnReprint(\'' + safeTrn + '\')" title="Reprint"' + (n === 0 ? ' disabled' : '') + '>' +
+            '<i class="bi bi-printer"></i>' +
+          '</button>' +
+          (canW ? '<button class="btn btn-sm btn-outline-danger" onclick="trnReleaseAll(\'' + safeTrn + '\')" title="Cancel transmittal — release all MRRs"' + (n === 0 ? ' disabled' : '') + '>' +
+            '<i class="bi bi-x-octagon"></i>' +
+          '</button>' : '') +
         '</td>' +
       '</tr>';
     });
     tbody.innerHTML = html;
   } catch(err) {
     console.error('[openTransmittalHistoryModal]', err);
-    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger py-3">Failed to load history.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Failed to load history.</td></tr>';
   }
 };
 
+var _trnViewing = '';
 window.viewTransmittalMRRs = async function(trnNo) {
   var modalEl = document.getElementById('viewTrnMRRsModal');
   var tbody = document.getElementById('viewTrnMRRsBody');
   var titleEl = document.getElementById('viewTrnTitle');
   
+  _trnViewing = trnNo;
   titleEl.textContent = trnNo;
+  var add = document.getElementById('trnAddBox'); if (add) add.style.display = _trnCanWrite() ? '' : 'none';
   bootstrap.Modal.getOrCreateInstance(modalEl).show();
-  tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3"><div class="erp-spinner" style="margin:0 auto;"></div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3"><div class="erp-spinner" style="margin:0 auto;"></div></td></tr>';
   
   try {
-    var rows = await erpFetch('documents', 'select=doc_no,vendor,po_no,receiving_date&transmittal_no=eq.' + encodeURIComponent(trnNo) + '&order=doc_no.asc');
+    var rows = await erpFetch('documents', 'select=doc_no,vendor,po_no,receiving_date,status&transmittal_no=eq.' + encodeURIComponent(trnNo) + '&order=doc_no.asc');
     
     if (!rows || rows.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted">No MRRs found for this transmittal.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted">No MRRs in this transmittal (all released).</td></tr>';
       return;
     }
     
-    var html = '';
+    var canW = _trnCanWrite(), html = '';
     rows.forEach(function(r) {
-      var dateStr = r.receiving_date ? new Date(r.receiving_date).toLocaleDateString() : '—';
+      var st = String(r.status || '').toUpperCase();
       html += '<tr>' +
-        '<td><strong>' + erpEsc(r.doc_no) + '</strong></td>' +
+        '<td><strong>' + erpEsc(r.doc_no) + '</strong>' + (st === 'CANCELLED' ? ' <span class="badge bg-danger">CANCELLED</span>' : '') + '</td>' +
         '<td>' + erpEsc(r.vendor || '—') + '</td>' +
         '<td>' + erpEsc(r.po_no || '—') + '</td>' +
-        '<td>' + erpEsc(dateStr) + '</td>' +
+        '<td>' + erpEsc(_trnDate(r.receiving_date)) + '</td>' +
+        '<td class="text-center">' + (canW ? '<button class="btn btn-sm btn-outline-danger py-0" onclick="trnReleaseMrr(\'' + _trnJs(trnNo) + '\',\'' + _trnJs(r.doc_no) + '\')" title="Alisin sa transmittal para ma-edit / ma-void">' +
+          '<i class="bi bi-box-arrow-left me-1"></i>Release</button>' : '') + '</td>' +
       '</tr>';
     });
     tbody.innerHTML = html;
   } catch(err) {
     console.error('[viewTransmittalMRRs]', err);
-    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger py-3">Failed to load MRRs.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Failed to load MRRs.</td></tr>';
   }
+};
+
+function _trnAfterChange() {
+  if (_trnViewing) window.viewTransmittalMRRs(_trnViewing);
+  if (document.getElementById('transmittalHistoryModal').classList.contains('show')) window.openTransmittalHistoryModal();
+  if (typeof mrrMonLoad === 'function') mrrMonLoad();
+}
+
+// Alisin ang isang MRR sa transmittal (para ma-edit / ma-cancel)
+window.trnReleaseMrr = async function(trnNo, docNo) {
+  var reason = prompt('Release ' + docNo + ' mula sa ' + trnNo + '?\n\nMagiging puwede na itong i-edit o i-cancel sa MRR List. Ang naka-print na ' + trnNo + ' ay hindi na tugma.\n\nReason (required):');
+  if (reason === null) return;
+  reason = reason.trim();
+  if (!reason) { erpShowToast('Reason is required', 'warning'); return; }
+  try {
+    await erpTrn.release([docNo], reason, trnNo);
+    erpShowToast('✅ ' + docNo + ' released from ' + trnNo + '. Puwede na itong i-edit / i-cancel.', 'success');
+    _trnAfterChange();
+  } catch (e) { erpShowToast('❌ ' + e.message, 'danger'); }
+};
+
+// I-cancel ang buong transmittal — ilalabas lahat ng MRR
+window.trnReleaseAll = async function(trnNo) {
+  var reason = prompt('Cancel ang ' + trnNo + '?\n\nLahat ng MRR sa loob nito ay ire-release at puwede nang i-transmit ulit sa bagong transmittal o i-edit.\n\nReason (required):');
+  if (reason === null) return;
+  reason = reason.trim();
+  if (!reason) { erpShowToast('Reason is required', 'warning'); return; }
+  try {
+    var rows = await erpFetch('documents', 'select=doc_no&transmittal_no=eq.' + encodeURIComponent(trnNo) + '&limit=5000');
+    var nos = (rows || []).map(function(r) { return r.doc_no; });
+    if (!nos.length) { erpShowToast('Walang MRR sa transmittal na ito.', 'info'); return; }
+    if (!confirm('I-release ang ' + nos.length + ' MRR mula sa ' + trnNo + '?')) return;
+    await erpTrn.release(nos, 'TRN cancelled: ' + reason, trnNo);
+    erpTrn.log('CANCEL_TRN', trnNo, null, reason);
+    erpShowToast('✅ ' + trnNo + ' cancelled — ' + nos.length + ' MRR released.', 'success');
+    _trnAfterChange();
+  } catch (e) { erpShowToast('❌ ' + e.message, 'danger'); }
+};
+
+// Magdagdag ng MRR sa existing transmittal (hal. nakalimutang isama)
+window.trnAddMrr = async function() {
+  var inp = document.getElementById('trnAddInput'), trnNo = _trnViewing;
+  var no = String((inp && inp.value) || '').trim().toUpperCase();
+  if (!no) { erpShowToast('I-type ang MRR No. (hal. MRR0005400)', 'warning'); return; }
+  try {
+    var rows = await erpFetch('documents', 'select=doc_no,status,is_transmitted,transmittal_no&doc_type=eq.MRR&doc_no=eq.' + encodeURIComponent(no) + '&limit=1');
+    var d = rows && rows[0];
+    if (!d) throw new Error(no + ' ay hindi nakita.');
+    if (String(d.status || '').toUpperCase() === 'CANCELLED') throw new Error(no + ' ay CANCELLED — hindi puwedeng i-transmit.');
+    if (d.is_transmitted && d.transmittal_no === trnNo) throw new Error(no + ' ay nasa ' + trnNo + ' na.');
+    if (d.is_transmitted && !confirm(no + ' ay nasa ' + d.transmittal_no + ' na.\nIlipat sa ' + trnNo + '?')) return;
+    await erpTrn.attach([no], trnNo, 'Added to existing TRN' + (d.transmittal_no ? ' (from ' + d.transmittal_no + ')' : ''));
+    if (inp) inp.value = '';
+    erpShowToast('✅ ' + no + ' added to ' + trnNo + '. (Mag-Reprint para updated ang kopya.)', 'success');
+    _trnAfterChange();
+  } catch (e) { erpShowToast('❌ ' + e.message, 'danger'); }
+};
+
+// I-print ulit ang naka-save na transmittal (kasalukuyang laman nito)
+window.trnReprint = async function(trnNo) {
+  trnNo = trnNo || _trnViewing;
+  try {
+    var t = await erpFetch('mrr_transmittals', 'select=*&transmittal_no=eq.' + encodeURIComponent(trnNo) + '&limit=1');
+    var rows = await erpFetch('documents', 'select=doc_no,vendor,po_no,receiving_date,status&transmittal_no=eq.' + encodeURIComponent(trnNo) + '&order=doc_no.asc');
+    rows = (rows || []).filter(function(r) { return String(r.status || '').toUpperCase() !== 'CANCELLED'; });
+    if (!rows.length) { erpShowToast('Walang MRR sa ' + trnNo + ' na ipi-print.', 'warning'); return; }
+    var h = (t && t[0]) || {};
+    document.getElementById('transmittalNo').textContent = trnNo;
+    document.getElementById('transmittalDate').textContent = new Date(h.transmittal_date || Date.now()).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    document.getElementById('transmittalPreparedBy').textContent = h.prepared_by || '—';
+    document.getElementById('transmittalBody').innerHTML = rows.map(function(m) {
+      return '<tr style="border-bottom: 1px solid #e2e8f0;">' +
+        '<td style="padding: 10px 8px; text-align: center; font-weight: 600;">' + erpEsc(m.doc_no) + '</td>' +
+        '<td style="padding: 10px 8px; text-align: center;">' + erpEsc(_trnDate(m.receiving_date)) + '</td>' +
+        '<td style="padding: 10px 8px;">' + erpEsc(m.vendor || '—') + '</td>' +
+        '<td style="padding: 10px 8px; text-align: center;">' + erpEsc(m.po_no || '—') + '</td>' +
+      '</tr>';
+    }).join('');
+    _trnOpenPrint(document.getElementById('transmittalSheet').innerHTML);
+  } catch (e) { erpShowToast('❌ Reprint failed: ' + e.message, 'danger'); }
 };
