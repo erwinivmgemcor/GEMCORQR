@@ -20,7 +20,7 @@
   var SLOW_MS = 3500;
   var VERY_SLOW_MS = 6000;
   var TIMEOUT_MS = 8000;
-  var PROBE_EVERY = 45000;
+  var PROBE_EVERY = 180000;
   var DISMISS_KEY = 'erp_netchip_dismissed_at';
   var DISMISS_COOLDOWN = 15 * 60 * 1000;
   var GAME_HREF = 'block-blast.html';
