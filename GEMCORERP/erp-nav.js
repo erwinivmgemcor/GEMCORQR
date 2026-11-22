@@ -637,7 +637,7 @@
     }
 
     refresh();
-    setInterval(refresh, 60000);
+    setInterval(refresh, 120000);
     document.addEventListener('visibilitychange', function() { if (!document.hidden) refresh(); });
     // Pages can call: window.dispatchEvent(new Event('erp-requests-changed')) after processing a request
     window.addEventListener('erp-requests-changed', refresh);
@@ -707,7 +707,7 @@
     }
 
     refresh();
-    setInterval(refresh, 30000);
+    setInterval(refresh, 60000);
     document.addEventListener('visibilitychange', function() { if (!document.hidden) refresh(); });
     // edit-requests.js fires this after approve / reject / reload
     window.addEventListener('erp-edit-requests-changed', refresh);
