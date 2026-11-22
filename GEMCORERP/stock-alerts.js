@@ -10,7 +10,7 @@
   'use strict';
   if (window.erpStockAlerts) return;
 
-  var POLL_MS = 60000;
+  var POLL_MS = 180000;
   var KIND = {
     OUT:           { type: 'stock_out',      icon: 'bi-box-seam',                  color: '#dc2626', label: 'Out of stock',        group: 'stock' },
     NEGATIVE:      { type: 'stock_out',      icon: 'bi-exclamation-octagon-fill',  color: '#dc2626', label: 'Negative on-hand',    group: 'conflict' },
