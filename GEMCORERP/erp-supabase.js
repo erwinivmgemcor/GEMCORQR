@@ -754,7 +754,7 @@ function _erpStartInventoryAutoSync() {
     if (count !== null && count !== _inventoryListCache.length) erpRefreshInventoryList();
   }
 
-  setInterval(function() { tick(false); }, 60 * 1000);                       // kada 1 minuto (kung bukas ang tab)
+  setInterval(function() { tick(false); }, 180 * 1000);                      // kada 3 minuto (dati 1 min) (kung bukas ang tab)
   document.addEventListener('visibilitychange', function() { if (!document.hidden) tick(true); });
   window.addEventListener('focus', function() { tick(true); });
 }
