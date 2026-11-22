@@ -23,7 +23,7 @@
   if (!ME || typeof window.erpUrl !== 'function') return;
 
   var PING_MS    = 30 * 1000;        // heartbeat
-  var FETCH_MS   = 15 * 1000;        // how often a watching page re-reads everyone
+  var FETCH_MS   = 60 * 1000;        // how often a watching page re-reads everyone
   var IDLE_MS    = 10 * 60 * 1000;   // no activity for this long → stop heartbeat
   var ONLINE_MS  = 90 * 1000;        // seen within this window = online (3 missed beats of slack)
 
