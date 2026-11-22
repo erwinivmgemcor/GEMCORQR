@@ -24,8 +24,8 @@ var _notifState = {
 
 var NOTIF_MAX_PER_CAT = 100;      // kept in memory per category; the bell dropdown only lists the newest NOTIF_DROPDOWN_MAX
 var NOTIF_DROPDOWN_MAX = 20;
-var NOTIF_REFRESH_MS = 15000;        // while the tab is visible
-var NOTIF_REFRESH_HIDDEN_MS = 30000; // background tabs keep polling so sound alerts still arrive
+var NOTIF_REFRESH_MS = 60000;        // while the tab is visible (was 15 s — bawas egress)
+var NOTIF_REFRESH_HIDDEN_MS = 120000; // background tabs keep polling so sound alerts still arrive
 
 // ═══════════════════════════════════════════════════════════
 // INIT
