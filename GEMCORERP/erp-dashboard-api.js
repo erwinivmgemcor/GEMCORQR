@@ -52,6 +52,17 @@ async function erpGetManagementDashboard(opts) {
     }
     
     var data = await res.json();
+
+    // Fixed assets are not inventory: subtract them from the headline totals the DB function still counts.
+    try {
+      if (data && data.summary && typeof erpGetFixedAssetTotals === 'function') {
+        var fa = await erpGetFixedAssetTotals({ category: category, stockClass: stockClass, location: location });
+        if (fa.count > 0) {
+          data.summary.total_items = Math.max(0, Number(data.summary.total_items || 0) - fa.count);
+          data.summary.total_value = Number(data.summary.total_value || 0) - fa.value;
+        }
+      }
+    } catch (e) { console.warn('[Dashboard] fixed-asset adjust skipped', e.message); }
     
     console.log('[Dashboard] Loaded in ' + (Date.now() - t0) + 'ms');
     
