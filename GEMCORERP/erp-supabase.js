@@ -87,6 +87,34 @@ async function erpFetchAll(table, query, opts) {
 }
 window.erpFetchAll = erpFetchAll;
 
+
+// ═══════════════════════════════════════════════════════════
+// FIXED ASSETS — items tagged with erp_items.asset_type are NOT inventory.
+// Returns what the DB stock view / dashboard RPC still count, so callers can subtract it.
+// Never throws (returns zeros if the asset_type column is not created yet).
+// ═══════════════════════════════════════════════════════════
+var _erpFaCache = { key: '', at: 0, data: null };
+async function erpGetFixedAssetTotals(f) {
+  f = f || {};
+  var key = [f.category || '', f.stockClass || '', f.location || ''].join('|');
+  if (_erpFaCache.data && _erpFaCache.key === key && Date.now() - _erpFaCache.at < 60000) return _erpFaCache.data;
+  var out = { count: 0, value: 0, withStock: 0 };
+  try {
+    var q = 'select=item_code,on_hand,unit_cost&asset_type=not.is.null&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false';
+    if (f.category)   q += '&category=eq.' + encodeURIComponent(f.category);
+    if (f.stockClass) q += '&stock_classification=eq.' + encodeURIComponent(f.stockClass);
+    if (f.location)   q += '&location=eq.' + encodeURIComponent(f.location);
+    var rows = await erpFetchAll('erp_items', q);
+    (rows || []).forEach(function (r) {
+      var oh = Number(r.on_hand || 0);
+      out.count++; out.value += oh * Number(r.unit_cost || 0); if (oh > 0) out.withStock++;
+    });
+  } catch (e) { console.warn('[erpGetFixedAssetTotals]', e.message); }
+  _erpFaCache = { key: key, at: Date.now(), data: out };
+  return out;
+}
+window.erpGetFixedAssetTotals = erpGetFixedAssetTotals;
+
 // ═══════════════════════════════════════════════════════════
 // STOCK SUMMARY
 // ═══════════════════════════════════════════════════════════
@@ -100,6 +128,15 @@ async function erpGetStockSummary(force) {
   try {
     var rows = await erpFetch('erp_v_stock_summary', 'select=*&limit=1');
     var summary = rows[0] || {};
+    // Fixed assets are not warehouse inventory: take them out of the totals (the DB view still counts them).
+    try {
+      var fa = await erpGetFixedAssetTotals();
+      if (fa.count > 0) {
+        if (summary.total_items != null)       summary.total_items       = Math.max(0, Number(summary.total_items) - fa.count);
+        if (summary.total_stock_value != null) summary.total_stock_value = Number(summary.total_stock_value) - fa.value;
+        if (summary.active_items != null)      summary.active_items      = Math.max(0, Number(summary.active_items) - fa.withStock);
+      }
+    } catch (e) { console.warn('[erpGetStockSummary] fixed-asset adjust skipped', e.message); }
     erpSetCache(cacheKey, summary, ERP_CACHE_TTL.STOCK_SUMMARY);
     return { success: true, summary: summary };
   } catch(err) {
@@ -140,7 +177,7 @@ async function erpGetAllItems(filters) {
     // ═══ ALWAYS FILTER ═══
     query += '&is_active=eq.true';
     query += '&is_deleted=eq.false';
-    query += '&is_deprecated_2026=eq.false';
+    query += '&is_deprecated_2026=eq.false&asset_type=is.null';   // fixed assets are shown in Fixed Assets only
     
     // ═══ Optional filters ═══
     if (filters.category) {
@@ -346,6 +383,7 @@ async function erpGetWeeklyData(weekStartISO, weekEndISO) {
       '&is_active=eq.true' +
       '&is_deleted=eq.false' +
       '&is_deprecated_2026=eq.false' +
+      '&asset_type=is.null' +   // fixed assets are not warehouse stock
       '&order=item_code.asc');
     
     // 2. Fetch all ledger entries within the week
@@ -441,6 +479,7 @@ async function erpGetCategoryStats() {
       '&is_active=eq.true' +
       '&is_deleted=eq.false' +
       '&is_deprecated_2026=eq.false' +
+      '&asset_type=is.null' +   // fixed assets are not warehouse stock
       '&order=item_code.asc');
     
     var byCategory = {};
