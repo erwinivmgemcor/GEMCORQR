@@ -32,7 +32,7 @@
     $('mmScroll').innerHTML = '<div class="mm-empty"><div class="spinner-border spinner-border-sm me-2"></div>Loading monthly data…</div>';
     try {
       var res = await Promise.all([
-        erpFetchAll('erp_items', 'select=item_code,description,category,base_unit,unit_cost,on_hand,ave_monthly_consumption&is_deleted=eq.false&order=item_code.asc'),
+        erpFetchAll('erp_items', 'select=item_code,description,category,base_unit,unit_cost,on_hand,ave_monthly_consumption&is_deleted=eq.false&asset_type=is.null&order=item_code.asc'),
         erpFetchAll('erp_v_item_monthly', 'select=item_code,month_start,mrif_qty,mrr_qty&order=item_code.asc,month_start.asc')
       ]);
       S.items = res[0] || []; S.months = buildMonths(); S.mv = {};
