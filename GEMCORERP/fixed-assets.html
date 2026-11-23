@@ -107,6 +107,7 @@
     </div>
     <div class="fa-opts">
       <label class="fa-check"><input type="checkbox" id="faRecvOnly" onchange="faApply()"><span>Only items received in the selected period</span></label>
+      <label class="fa-check ms-4"><input type="checkbox" id="faShowInactive" onchange="faApply()"><span>Show deactivated items</span></label>
     </div>
   </div>
 
@@ -122,14 +123,14 @@
         <thead><tr>
           <th style="width:3%">#</th>
           <th style="width:11%">Item Code</th>
-          <th style="width:23%">Description</th>
+          <th style="width:21%">Description</th>
           <th style="width:14%">Type</th>
           <th style="width:9%" class="text-end">Unit Cost</th>
           <th style="width:8%" class="text-end">Received Qty</th>
           <th style="width:10%" class="text-end">Acquired Value</th>
           <th style="width:7%" class="text-end">On-Hand</th>
           <th style="width:9%">Last MRR</th>
-          <th style="width:6%" class="text-center fa-edit-col">Tag</th>
+          <th style="width:8%" class="text-center fa-edit-col">Actions</th>
         </tr></thead>
         <tbody id="faBody"><tr><td colspan="10" class="erp-empty"><div class="erp-spinner"></div></td></tr></tbody>
       </table>
