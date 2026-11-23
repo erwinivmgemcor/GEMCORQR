@@ -130,7 +130,7 @@ async function erpGetStockSummary(force) {
     var summary = rows[0] || {};
     // Fixed assets are not warehouse inventory: take them out of the totals (the DB view still counts them).
     try {
-      var fa = await erpGetFixedAssetTotals();
+      var fa = summary.fixed_assets_excluded ? { count: 0 } : await erpGetFixedAssetTotals();   // DB view already excludes them once step-2 SQL is run
       if (fa.count > 0) {
         if (summary.total_items != null)       summary.total_items       = Math.max(0, Number(summary.total_items) - fa.count);
         if (summary.total_stock_value != null) summary.total_stock_value = Number(summary.total_stock_value) - fa.value;
