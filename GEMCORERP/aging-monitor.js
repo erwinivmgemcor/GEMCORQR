@@ -79,7 +79,16 @@ async function agCheckHealth() {
 // ═══════════════════════════════════════════════════════════
 // LOAD
 // ═══════════════════════════════════════════════════════════
-async function agLoad() {
+var AG_CACHE_KEY = 'ag_cache_v3', AG_CACHE_MS = 10 * 60 * 1000;   // cache 10 min — para hindi paulit-ulit na basahin ang buong erp_items / history (egress)
+function agCacheGet() {
+  try { var o = JSON.parse(sessionStorage.getItem(AG_CACHE_KEY) || 'null'); if (o && Date.now() - o.t < AG_CACHE_MS) return o; } catch (e) {}
+  return null;
+}
+function agCacheSet(items, live, mv, warn) {
+  try { sessionStorage.setItem(AG_CACHE_KEY, JSON.stringify({ t: Date.now(), items: items, live: live, mv: mv, warn: warn })); } catch (e) {}
+}
+
+async function agLoad(force) {
   var myId = ++AG.loadId;
   var tbody = document.getElementById('agBody');
   if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading aging data…</div></td></tr>';
@@ -88,23 +97,28 @@ async function agLoad() {
     var legacy = window.AG_MRR_LEGACY;
     if (!legacy || !legacy.items) throw new Error('aging-mrr-data.js is missing — copy it next to aging-monitor.html');
 
-    var items = await erpFetchAll('erp_items',
+    var cached = force ? null : agCacheGet(), items, live = [], mv = {};
+    if (cached) { items = cached.items; live = cached.live; mv = cached.mv; AG.warn = cached.warn || []; }
+    else {
+    items = await erpFetchAll('erp_items',
       'select=item_code,description,category,location,base_unit,on_hand,unit_cost' +
       '&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false&order=item_code.asc');
 
-    // Live receipts (Nov 2026 →). Failure here must not break the page.
-    var live = [];
+    // Live receipts (Nov 2026 →): MRR lines lang ang itinatabi. Failure here must not break the page.
     try {
       live = await erpFetchAll('erp_stock_ledger',
         'select=item_code,qty_in,transaction_type,reference_doc,transaction_date' +
         '&qty_in=gt.0&transaction_date=gte.' + encodeURIComponent(AG_LIVE_FROM) + '&order=transaction_date.asc');
+      live = (live || []).filter(function(tx) {
+        var tag = (String(tx.transaction_type || '') + ' ' + String(tx.reference_doc || '')).toUpperCase();
+        return tag.indexOf('MRR') !== -1 && tag.indexOf('MRIF') === -1;
+      });
     } catch (e) {
       console.warn('[Aging] live receipts unavailable', e);
       AG.warn.push('Live receipts from ' + agNToLabel(agDayN(AG_LIVE_FROM)) + ' onward could not be loaded, so newer receipts are missing from the ages below.');
     }
 
     // Last issued month per item (Monthly Movement source). Optional.
-    var mv = {};
     try {
       var hist = await erpFetchAll('erp_v_item_monthly', 'select=item_code,month_start,mrif_qty&order=item_code.asc,month_start.asc');
       (hist || []).forEach(function(r) {
@@ -113,6 +127,8 @@ async function agLoad() {
         if (k > (mv[r.item_code] || '')) mv[r.item_code] = k;
       });
     } catch (e) { console.warn('[Aging] monthly history unavailable', e); }
+    agCacheSet(items, live, mv, AG.warn);
+    }
 
     if (myId !== AG.loadId) return;
 
@@ -250,7 +266,7 @@ function agClear() {
   AG.bucket = ''; AG.sortKey = 'risk'; AG.sortDir = -1;
   agApply();
 }
-function agRefresh() { agToast('Refreshing…'); agLoad(); }
+function agRefresh() { agToast('Refreshing…'); agLoad(true); }
 
 // "value in focus": value in selected bucket, otherwise value aged 90+ days
 function agFocusVal(r) {
@@ -515,4 +531,4 @@ function agToast(msg) {
 window.agRefresh = agRefresh; window.agApply = agApply; window.agClear = agClear; window.agOnSearch = agOnSearch;
 window.agSort = agSort; window.agSetBucket = agSetBucket; window.agSetBucketFromSelect = agSetBucketFromSelect;
 window.agPage = agPage; window.agExport = agExport; window.agToggle = agToggle;
-console.log('✅ aging-monitor.js v3.0 loaded');
+console.log('✅ aging-monitor.js v3.1 loaded');
