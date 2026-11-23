@@ -1,0 +1,55 @@
+/* GEMCOR ERP — Fixed Assets (scoped to #fa-page) */
+:root { --fa-ink:#0f172a; --fa-muted:#64748b; --fa-line:#e5eaf2; }
+#fa-page .erp-kpi-card { position:relative; overflow:hidden; border:1px solid var(--fa-line); border-radius:16px; background:#fff;
+  box-shadow:0 1px 2px rgba(15,23,42,.04),0 8px 24px -12px rgba(30,58,95,.18); }
+#fa-page .erp-kpi-card::before { content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:#2563eb; }
+#fa-page .erp-kpi-card.kpi-green::before { background:#059669; }
+#fa-page .erp-kpi-card.kpi-amber::before { background:#f59e0b; }
+#fa-page .erp-kpi-card.kpi-red::before   { background:#dc2626; }
+#fa-page .erp-kpi-card .kpi-value { font-size:1.6rem; font-weight:800; letter-spacing:-.02em; color:var(--fa-ink); }
+#fa-page .erp-kpi-card .kpi-label { font-weight:700; letter-spacing:.06em; }
+.fa-kpis { grid-template-columns:repeat(4,1fr) !important; margin-bottom:20px; }
+@media (max-width:900px) { .fa-kpis { grid-template-columns:repeat(2,1fr) !important; } }
+.fa-period { margin:2px 0; max-width:100%; }
+
+.fa-summary { display:flex; align-items:center; gap:14px; margin-bottom:18px; padding:16px 20px; border-radius:14px; background:#fff;
+  border:1px solid var(--fa-line); border-left:6px solid #2563eb; font-size:1rem; line-height:1.5; color:#1e293b;
+  box-shadow:0 1px 2px rgba(15,23,42,.04),0 8px 24px -14px rgba(30,58,95,.2); }
+.fa-summary i { font-size:1.6rem; color:#2563eb; }
+.fa-summary b { color:var(--fa-ink); }
+.fa-summary .sub { display:block; font-size:.85rem; color:var(--fa-muted); margin-top:2px; }
+.fa-summary.warn { border-left-color:#f59e0b; background:#fffdf7; } .fa-summary.warn i { color:#d97706; }
+
+.fa-card { padding:16px 18px; margin-bottom:20px; border-radius:16px; }
+.fa-card-h { margin-bottom:12px; font-size:.95rem; color:var(--fa-ink); }
+.fa-types { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+@media (max-width:1100px) { .fa-types { grid-template-columns:repeat(2,1fr); } }
+@media (max-width:640px)  { .fa-types { grid-template-columns:1fr; } }
+.fa-type { --c:#2563eb; background:#fff; border:1px solid var(--fa-line); border-top:5px solid var(--c); border-radius:14px; padding:12px 14px 14px;
+  cursor:pointer; transition:transform .15s,box-shadow .15s,background .15s; }
+.fa-type:hover { transform:translateY(-2px); box-shadow:0 10px 22px -12px rgba(30,58,95,.35); }
+.fa-type.on { background:#f1f5f9; box-shadow:inset 0 0 0 2px var(--c); }
+.fa-type .h { display:flex; align-items:center; gap:8px; font-size:.82rem; font-weight:800; color:var(--c); text-transform:uppercase; letter-spacing:.04em; }
+.fa-type .h i { font-size:1.15rem; }
+.fa-type .v { font-size:1.5rem; font-weight:800; color:var(--fa-ink); letter-spacing:-.02em; margin-top:6px; }
+.fa-type .s { font-size:.78rem; color:var(--fa-muted); margin-top:2px; line-height:1.4; }
+.fa-type .s b { color:#334155; }
+.fa-type .split { display:flex; gap:8px; margin-top:8px; font-size:.74rem; }
+.fa-type .split span { flex:1; padding:5px 8px; border-radius:8px; background:#f8fafc; border:1px solid var(--fa-line); }
+.fa-type .split .cap { border-color:#bbf7d0; background:#f0fdf4; } .fa-type .split .exp { border-color:#fde68a; background:#fffbeb; }
+
+.fa-opts { margin-top:10px; } .fa-check { display:inline-flex; gap:8px; align-items:center; font-size:.85rem; color:#334155; cursor:pointer; }
+.fa-badge { display:inline-block; padding:2px 9px; border-radius:99px; font-size:.72rem; font-weight:700; color:#fff; background:var(--c,#64748b); white-space:nowrap; }
+.fa-tre { display:inline-block; margin-left:4px; padding:1px 7px; border-radius:99px; font-size:.68rem; font-weight:800; }
+.fa-tre.cap { background:#dcfce7; color:#166534; } .fa-tre.exp { background:#fef3c7; color:#92400e; }
+.fa-table tbody tr:hover { background:#f8fafc; }
+.fa-code { font-family:'Courier New',monospace; font-weight:700; color:#be185d; font-size:.8rem; }
+.fa-pager { padding:10px 14px; text-align:center; }
+.fa-note { margin:0 0 20px; padding:12px 16px; background:#fff; border:1px solid var(--fa-line); border-radius:12px; font-size:.85rem; color:#334155; }
+.fa-note ul { margin:10px 0 0; padding-left:20px; } .fa-note li { margin-bottom:6px; }
+.fa-find { max-height:300px; overflow:auto; border:1px solid var(--fa-line); border-radius:10px; }
+.fa-find .row-it { display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid var(--fa-line); font-size:.85rem; }
+.fa-find .row-it:last-child { border-bottom:0; } .fa-find .row-it .d { flex:1; min-width:0; }
+.fa-find .row-it .d small { display:block; color:var(--fa-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fa-tabs .nav-link { font-size:.85rem; font-weight:600; }
+.fa-head-actions { align-self:flex-end; }
