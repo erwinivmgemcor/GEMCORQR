@@ -121,9 +121,11 @@
     <div class="erp-table-wrap" style="max-height:65vh;">
       <table class="erp-table fa-table" style="font-size:0.85rem;">
         <thead><tr>
+          <th style="width:3%" class="text-center fa-sel-col" title="Select to issue (MRIF)"><i class="bi bi-box-arrow-up-right"></i></th>
+          <th style="width:7%" class="text-end fa-sel-col">Issue Qty</th>
           <th style="width:3%">#</th>
-          <th style="width:11%">Item Code</th>
-          <th style="width:21%">Description</th>
+          <th style="width:10%">Item Code</th>
+          <th style="width:17%">Description</th>
           <th style="width:14%">Type</th>
           <th style="width:9%" class="text-end">Unit Cost</th>
           <th style="width:8%" class="text-end">Received Qty</th>
@@ -132,7 +134,7 @@
           <th style="width:9%">Last MRR</th>
           <th style="width:8%" class="text-center fa-edit-col">Actions</th>
         </tr></thead>
-        <tbody id="faBody"><tr><td colspan="10" class="erp-empty"><div class="erp-spinner"></div></td></tr></tbody>
+        <tbody id="faBody"><tr><td colspan="12" class="erp-empty"><div class="erp-spinner"></div></td></tr></tbody>
       </table>
     </div>
   </div>
@@ -147,6 +149,14 @@
       <li>MRR history before November 2026 is not item-level in the live ledger, so Acquired Value covers live MRRs from Nov 2026.</li>
     </ul>
   </details>
+
+  <div class="fa-selbar" id="faSelBar" style="display:none">
+    <div><b id="faSelCount">0</b> item(s) selected for issuance</div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-light btn-sm" onclick="faSelClear()"><i class="bi bi-x-lg"></i> Clear</button>
+      <button class="btn btn-warning btn-sm fw-bold" onclick="faGoMrif()"><i class="bi bi-box-arrow-up-right"></i> Create MRIF (Manual)</button>
+    </div>
+  </div>
 
   <div class="erp-footer">
     <div>GEMCOR ERP — Fixed Assets v1.0.0</div>
