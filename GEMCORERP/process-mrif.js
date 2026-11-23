@@ -791,7 +791,7 @@ async function loadStockInfo() {
 
   // keep it fresh while the page stays open (someone else may issue the same item)
   if (!_stockTimer) {
-    _stockTimer = setInterval(function() { if (!document.hidden) loadStockInfo(); }, 60000);
+    _stockTimer = setInterval(function() { if (!document.hidden) loadStockInfo(); }, 120000);
   }
 }
 
