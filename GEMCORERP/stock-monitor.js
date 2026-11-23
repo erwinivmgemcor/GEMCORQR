@@ -765,6 +765,7 @@ function erpOpenAddItemModal() {
   document.getElementById('addItemLocation').value = 'PROJECT STOCK';
   document.getElementById('addItemUnit').value = 'PIECE';
   document.getElementById('addItemCost').value = '';
+  var _at = document.getElementById('addItemAssetType'); if (_at) { _at.value = ''; erpAddItemAssetChanged(); }
   document.getElementById('addItemCodeStatus').innerHTML = '';
   
   _addItemLastCheckCode = '';
@@ -813,6 +814,17 @@ function erpCheckAddItemCode() {
   }, 500);
 }
 
+// Fixed Asset type on the Add New Item form (tag is applied right after the item is created)
+function erpAddItemAssetChanged() {
+  var t = document.getElementById('addItemAssetType'); if (!t) return;
+  var rm = t.value === 'REPAIRS_MAINTENANCE';
+  var w = document.getElementById('addItemTreatWrap'); if (w) w.style.display = rm ? '' : 'none';
+  var h = document.getElementById('addItemAssetHint'); if (h) h.style.display = t.value ? '' : 'none';
+  var cap = document.querySelector('#addItemAssetTreat option[value="CAPITAL"]');
+  var role = (localStorage.getItem('ivm_userRole') || '').toLowerCase();
+  if (cap) cap.disabled = (role !== 'warehouse' && role !== 'finance');   // same rule as Fixed Assets page (FA_CAPITAL_ROLES)
+}
+
 async function erpSubmitNewItem() {
   if (_isSubmittingAddItem) return;
   
@@ -823,6 +835,8 @@ async function erpSubmitNewItem() {
   var unit = (document.getElementById('addItemUnit').value || '').trim();
   var costRaw = (document.getElementById('addItemCost').value || '').trim();
   var cost = costRaw ? parseFloat(costRaw) : 0;
+  var assetType = (document.getElementById('addItemAssetType') || {}).value || '';
+  var assetTreat = assetType === 'REPAIRS_MAINTENANCE' ? ((document.getElementById('addItemAssetTreat') || {}).value || 'EXPENSE') : null;
   
   if (!code) { erpShowToast('Item Code is required', 'warning'); return; }
   if (!desc) { erpShowToast('Description is required', 'warning'); return; }
@@ -863,6 +877,21 @@ async function erpSubmitNewItem() {
     
     var data = await res.json();
     if (!data || !data.success) throw new Error((data && data.error) || 'Failed to add item');
+
+    // Fixed asset? Tag it now so it never counts as inventory (writes asset_type only).
+    if (assetType) {
+      try {
+        var tagRes = await fetch(erpUrl('erp_items?item_code=eq.' + encodeURIComponent(data.item_code || code)), {
+          method: 'PATCH', headers: erpHeaders(),
+          body: JSON.stringify({ asset_type: assetType, asset_treatment: assetTreat, updated_at: new Date().toISOString(), updated_by: createdBy })
+        });
+        if (!tagRes.ok) throw new Error('HTTP ' + tagRes.status);
+        erpShowToast('Added as Fixed Asset — see Reports → Fixed Assets', 'success');
+      } catch (tagErr) {
+        console.error('[erpSubmitNewItem] tag failed', tagErr);
+        erpShowToast('Item added, but tagging as fixed asset failed. Tag it in Reports → Fixed Assets.', 'warning');
+      }
+    }
     
     if (_addItemModal) _addItemModal.hide();
     
