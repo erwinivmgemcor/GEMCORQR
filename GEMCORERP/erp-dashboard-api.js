@@ -55,7 +55,7 @@ async function erpGetManagementDashboard(opts) {
 
     // Fixed assets are not inventory: subtract them from the headline totals the DB function still counts.
     try {
-      if (data && data.summary && typeof erpGetFixedAssetTotals === 'function') {
+      if (data && data.summary && !data.summary.fixed_assets_excluded && typeof erpGetFixedAssetTotals === 'function') {
         var fa = await erpGetFixedAssetTotals({ category: category, stockClass: stockClass, location: location });
         if (fa.count > 0) {
           data.summary.total_items = Math.max(0, Number(data.summary.total_items || 0) - fa.count);
