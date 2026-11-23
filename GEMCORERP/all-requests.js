@@ -65,9 +65,9 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   // who is processing what: refresh every 20 s while the tab is visible
   arRefreshPrints(false);
-  setInterval(function() { if (!document.hidden) { arRefreshLocks(true); arRefreshPrints(true); } }, 20000);
+  setInterval(function() { if (!document.hidden) { arRefreshLocks(true); arRefreshPrints(true); } }, 45000);
   // stock availability: bagong MRR natanggap? i-check kada 1 minuto at kapag bumalik sa tab
-  setInterval(function() { if (!document.hidden) arAvailRefresh(); }, 60000);
+  setInterval(function() { if (!document.hidden) arAvailRefresh(); }, 180000);
   document.addEventListener('visibilitychange', function() { if (!document.hidden) arAvailRefresh(); });
 });
 
