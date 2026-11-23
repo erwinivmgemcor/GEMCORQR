@@ -93,7 +93,7 @@ async function erpWeeklyLoad() {
       WK.items = await erpFetchAll('erp_items',
         'select=item_code,description,category,location,base_unit,on_hand,unit_cost,abc_classification,inventory_movement,' +
         'buffer_stock,reorder_point,ave_daily_consumption,ave_monthly_consumption' +
-        '&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false&order=item_code.asc');
+        '&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false&asset_type=is.null&order=item_code.asc');
     }
     // Ledger: current week + previous week (para sa week-over-week)
     var ledger = await erpFetchAll('erp_stock_ledger',
