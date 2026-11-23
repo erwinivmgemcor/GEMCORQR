@@ -233,6 +233,13 @@
           roles: ['warehouse']
         },
         {
+          id: 'fixed-assets',
+          label: 'Fixed Assets',
+          icon: 'bi-building-gear',
+          href: 'fixed-assets.html',
+          roles: ['warehouse', 'finance']
+        },
+        {
           id: 'process-history',
           label: 'Process History',
           icon: 'bi-clock-history',
@@ -368,6 +375,7 @@
     'weekly-monitor': 'Weekly Monitoring',
     'monthly-movement': 'Monthly Movement',
     'aging-monitor': 'Aging Monitor',
+    'fixed-assets': 'Fixed Assets',
     'usage-entry': 'Usage Entry',
     'process-history': 'Process History',
     'warehouse-kpi': 'Warehouse KPI',
