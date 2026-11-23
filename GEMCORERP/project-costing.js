@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', function () {
   if (back && role === 'production') back.setAttribute('href', 'my-requests.html');
   pcHealth();
   pcLoad();
-  _pc.timer = setInterval(function () { if (!document.hidden) pcLoad(true); }, 60000);
+  _pc.timer = setInterval(function () { if (!document.hidden) pcLoad(true); }, 180000);
 });
 
 async function pcHealth() {
