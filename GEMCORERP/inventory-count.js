@@ -674,7 +674,7 @@ async function icBuildSpotSuggestions(term, dropdown, input) {
   try {
     var t = encodeURIComponent(term.replace(/[*,()]/g, ' ').trim());
     rows = await erpFetch('erp_items',
-      'select=item_code,description,unit:base_unit,on_hand&is_deleted=not.is.true' +
+      'select=item_code,description,unit:base_unit,on_hand&is_deleted=not.is.true&asset_type=is.null' +
       '&or=(item_code.ilike.*' + t + '*,description.ilike.*' + t + '*)&order=item_code.asc&limit=30') || [];
   } catch (e) {
     console.warn('[IC] spot search failed', e);
