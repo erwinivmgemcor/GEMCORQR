@@ -196,7 +196,7 @@ async function mdashLoad() {
 async function mdashLoadItems() {
   try {
     var query = 'select=item_code,description,category,location,base_unit,unit_cost,on_hand,on_hand_cost,abc_classification,inventory_movement,stock_classification,buffer_stock,ave_monthly_consumption,active_consumption_months,is_active' +
-                '&is_active=eq.true&is_deleted=eq.false&order=on_hand_cost.desc,item_code.asc';
+                '&is_active=eq.true&is_deleted=eq.false&asset_type=is.null&order=on_hand_cost.desc,item_code.asc';
 
     if (_mdash.filters.category) {
       query += '&category=eq.' + encodeURIComponent(_mdash.filters.category);
@@ -905,7 +905,7 @@ async function mdashLoadRepData(force) {
     try {
       var res = await Promise.all([
         erpFetch('erp_v_reorder_list', 'select=item_code,urgency,on_hand,buffer_stock&limit=5000'),
-        erpFetchAll('erp_items', 'select=item_code,description,base_unit,category,location,stock_classification,unit_cost,on_hand,buffer_stock,active_consumption_months&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false')
+        erpFetchAll('erp_items', 'select=item_code,description,base_unit,category,location,stock_classification,unit_cost,on_hand,buffer_stock,active_consumption_months&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false&asset_type=is.null')
       ]);
       _mdashRep.rows = res[0] || [];
       _mdashRep.items = res[1] || [];
