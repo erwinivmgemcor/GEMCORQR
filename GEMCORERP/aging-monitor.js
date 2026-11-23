@@ -79,7 +79,7 @@ async function agCheckHealth() {
 // ═══════════════════════════════════════════════════════════
 // LOAD
 // ═══════════════════════════════════════════════════════════
-var AG_CACHE_KEY = 'ag_cache_v3', AG_CACHE_MS = 10 * 60 * 1000;   // cache 10 min — para hindi paulit-ulit na basahin ang buong erp_items / history (egress)
+var AG_CACHE_KEY = 'ag_cache_v4', AG_CACHE_MS = 10 * 60 * 1000;   // cache 10 min — para hindi paulit-ulit na basahin ang buong erp_items / history (egress)
 function agCacheGet() {
   try { var o = JSON.parse(sessionStorage.getItem(AG_CACHE_KEY) || 'null'); if (o && Date.now() - o.t < AG_CACHE_MS) return o; } catch (e) {}
   return null;
@@ -102,7 +102,7 @@ async function agLoad(force) {
     else {
     items = await erpFetchAll('erp_items',
       'select=item_code,description,category,location,base_unit,on_hand,unit_cost' +
-      '&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false&order=item_code.asc');
+      '&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false&asset_type=is.null&order=item_code.asc');
 
     // Live receipts (Nov 2026 →): MRR lines lang ang itinatabi. Failure here must not break the page.
     try {
