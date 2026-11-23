@@ -617,6 +617,35 @@
           </div>
         </div>
 
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label fw-bold">
+              Fixed Asset Type <span class="text-muted small">(optional)</span>
+            </label>
+            <select id="addItemAssetType" class="form-select form-select-lg" onchange="erpAddItemAssetChanged()">
+              <option value="">— Regular stock item —</option>
+              <option value="TOOLS">Tools</option>
+              <option value="MACHINERIES_EQUIPMENT">Machineries and Equipment</option>
+              <option value="OFFICE_EQUIPMENT">Office Equipment</option>
+              <option value="OFFICE_FURNITURE">Office Furniture</option>
+              <option value="OFFICE_FIXTURES">Office Fixtures</option>
+              <option value="REPAIRS_MAINTENANCE">Repairs and Maintenance</option>
+            </select>
+          </div>
+          <div class="col-md-6" id="addItemTreatWrap" style="display:none">
+            <label class="form-label fw-bold">Repair treatment</label>
+            <select id="addItemAssetTreat" class="form-select form-select-lg">
+              <option value="EXPENSE">Expense (minor repair)</option>
+              <option value="CAPITAL">Capital (major / adds to useful life)</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <div class="form-text" id="addItemAssetHint" style="display:none">
+              <i class="bi bi-building-gear"></i> Fixed assets are kept <b>out of Inventory Value</b> and the stock reports. They appear in <b>Reports → Fixed Assets</b>.
+            </div>
+          </div>
+        </div>
+
         <div class="alert alert-secondary small mb-0 py-2">
           <strong>📌 Auto-computed:</strong>
           <ul class="mb-0 mt-1 small">
