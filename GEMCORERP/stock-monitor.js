@@ -88,7 +88,7 @@ async function erpLoadStdKpis(force) {
   _erpStd.pending = (async function() {
     try {
       var res = await Promise.all([
-        erpFetchAll('erp_items', 'select=item_code,description,category,location,stock_classification,unit_cost,on_hand,buffer_stock,ave_monthly_consumption,active_consumption_months&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false'),
+        erpFetchAll('erp_items', 'select=item_code,description,category,location,stock_classification,unit_cost,on_hand,buffer_stock,ave_monthly_consumption,active_consumption_months&is_active=eq.true&is_deleted=eq.false&is_deprecated_2026=eq.false&asset_type=is.null'),
         erpFetch('erp_v_reorder_list', 'select=*&limit=5000')
       ]);
       var items = res[0] || [], rows = res[1] || [], by = {};
