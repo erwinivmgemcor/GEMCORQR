@@ -34,6 +34,7 @@ function faToast(msg) {
   try { bootstrap.Toast.getOrCreateInstance(el, { delay: 3500 }).show(); } catch (e) { alert(msg); }
 }
 // R&M counts as an asset only when CAPITAL. Everything else tagged counts.
+function faIsActive(it) { return it.is_active !== false; }
 function faIsCounted(it) { return it.asset_type !== 'REPAIRS_MAINTENANCE' || it.asset_treatment === 'CAPITAL'; }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -121,6 +122,7 @@ function faApply() {
   document.getElementById('faPeriodSub').textContent = 'Acquisitions by MRR date · ' + rg.label;
   var terms = document.getElementById('faSearch').value.toLowerCase().trim().split(/\s+/).filter(Boolean);
   var recvOnly = document.getElementById('faRecvOnly').checked;
+  var showInactive = document.getElementById('faShowInactive').checked;
 
   // Per-item aggregates for the period
   FA.items.forEach(function (it) { it._a = faAgg(it, rg.from); });
@@ -129,6 +131,7 @@ function faApply() {
 
   FA.view = FA.items.filter(function (it) {
     if (FA.type && it.asset_type !== FA.type) return false;
+    if (!showInactive && !faIsActive(it)) return false;
     if (recvOnly && !(it._a.qty > 0)) return false;
     if (!terms.length) return true;
     var hay = (it.item_code + ' ' + (it.description || '')).toLowerCase();
@@ -142,7 +145,8 @@ function faApply() {
 function faRenderTop(rg) {
   var tot = 0, cnt = 0, exp = 0, by = {};
   FA_TYPES.forEach(function (t) { by[t.k] = { n: 0, val: 0, oh: 0, cap: 0, exp: 0, nCap: 0, nExp: 0 }; });
-  FA.items.forEach(function (it) {
+  var actItems = FA.items.filter(faIsActive);
+  actItems.forEach(function (it) {
     var b = by[it.asset_type]; if (!b) return;
     b.n++; b.val += it._a.val; b.oh += it._a.onhandVal;
     if (it.asset_type === 'REPAIRS_MAINTENANCE') {
@@ -152,12 +156,12 @@ function faRenderTop(rg) {
   });
   document.getElementById('faKpiTotal').textContent = faPeso(tot);
   document.getElementById('faKpiTotalSub').textContent = 'Acquired via MRR · ' + rg.label;
-  document.getElementById('faKpiItems').textContent = FA.items.length.toLocaleString();
+  document.getElementById('faKpiItems').textContent = actItems.length.toLocaleString();
   document.getElementById('faKpiItemsSub').textContent = cnt.toLocaleString() + ' counted as assets';
   document.getElementById('faKpiExp').textContent = faPeso(exp);
 
-  var counted = FA.items.filter(faIsCounted).length;
-  document.getElementById('faSummary').innerHTML = FA.items.length
+  var counted = actItems.filter(faIsCounted).length;
+  document.getElementById('faSummary').innerHTML = actItems.length
     ? '<i class="bi bi-building-gear"></i><div><b>' + faPeso(tot) + '</b> in fixed assets acquired (' + rg.label.toLowerCase() + ') across <b>' + counted + '</b> items. ' +
       'These are kept out of the warehouse Inventory Value.<span class="sub">' + (exp > 0 ? faPeso(exp) + ' of minor Repairs and Maintenance is expensed, not counted as an asset.' : 'Repairs and Maintenance is counted only when tagged Capital.') + '</span></div>'
     : '<i class="bi bi-info-circle"></i><div><b>No items tagged yet.</b><span class="sub">Use “Tag Items” to mark which items are fixed assets and what type they are.</span></div>';
@@ -177,7 +181,7 @@ function faRenderTop(rg) {
 function faPickType(k) { FA.type = (FA.type === k ? '' : k); document.getElementById('faTypeSel').value = FA.type; faApply(); }
 function faSetTypeFromSelect() { FA.type = document.getElementById('faTypeSel').value; faApply(); }
 function faOnSearch() { clearTimeout(FA.timer); FA.timer = setTimeout(faApply, 150); }
-function faClear() { document.getElementById('faSearch').value = ''; document.getElementById('faRecvOnly').checked = false; FA.type = ''; document.getElementById('faTypeSel').value = ''; faApply(); }
+function faClear() { document.getElementById('faSearch').value = ''; document.getElementById('faRecvOnly').checked = false; document.getElementById('faShowInactive').checked = false; FA.type = ''; document.getElementById('faTypeSel').value = ''; faApply(); }
 
 function faBadge(it) {
   var t = FA_BY[it.asset_type]; if (!t) return '';
@@ -188,13 +192,13 @@ function faBadge(it) {
 
 function faRenderTable() {
   var body = document.getElementById('faBody'), canEdit = faCan(FA_EDIT_ROLES);
-  document.getElementById('faCount').textContent = FA.view.length.toLocaleString() + ' of ' + FA.items.length.toLocaleString() + ' items';
+  document.getElementById('faCount').textContent = FA.view.length.toLocaleString() + ' of ' + (document.getElementById('faShowInactive').checked ? FA.items.length : FA.items.filter(faIsActive).length).toLocaleString() + ' items';
   document.getElementById('faSubtitle').textContent = 'Highest acquired value first';
   if (!FA.view.length) { body.innerHTML = '<tr><td colspan="10" class="erp-empty text-muted">No fixed asset items match.</td></tr>'; return; }
   var slice = FA.view.slice(0, FA.page * FA.pageSize);
   body.innerHTML = slice.map(function (it, i) {
     var a = it._a;
-    return '<tr><td>' + (i + 1) + '</td>' +
+    return '<tr' + (faIsActive(it) ? '' : ' class="fa-off"') + '><td>' + (i + 1) + '</td>' +
       '<td><span class="fa-code">' + faEsc(it.item_code) + '</span></td>' +
       '<td>' + faEsc(it.description) + (it.is_active === false ? ' <span class="badge bg-secondary">inactive</span>' : '') + '</td>' +
       '<td>' + faBadge(it) + '</td>' +
@@ -203,7 +207,10 @@ function faRenderTable() {
       '<td class="text-end fw-bold">' + faPeso(a.val) + '</td>' +
       '<td class="text-end">' + faNum(it.on_hand) + '</td>' +
       '<td title="' + faEsc(a.refs.join(', ')) + '">' + (a.last || '—') + '</td>' +
-      (canEdit ? '<td class="text-center"><button class="btn btn-sm btn-outline-secondary" title="Change or remove tag" onclick="faEditTag(\'' + faEsc(String(it.item_code).replace(/'/g, '')) + '\')"><i class="bi bi-pencil"></i></button></td>' : '') +
+      (canEdit ? '<td class="text-center text-nowrap"><button class="btn btn-sm btn-outline-secondary" title="Change or remove tag" onclick="faEditTag(\'' + faEsc(String(it.item_code).replace(/'/g, '')) + '\')"><i class="bi bi-pencil"></i></button> ' +
+        (faIsActive(it)
+          ? '<button class="btn btn-sm btn-outline-danger" title="Deactivate item" onclick="faSetActive(\'' + faEsc(String(it.item_code).replace(/'/g, '')) + '\',false)"><i class="bi bi-archive"></i></button>'
+          : '<button class="btn btn-sm btn-outline-success" title="Reactivate item" onclick="faSetActive(\'' + faEsc(String(it.item_code).replace(/'/g, '')) + '\',true)"><i class="bi bi-arrow-counterclockwise"></i></button>') + '</td>' : '') +
       '</tr>';
   }).join('') + (FA.view.length > slice.length ? '<tr><td colspan="10" class="fa-pager"><button class="erp-btn-outline-dark" onclick="FA.page++;faRenderTable()">Show more</button></td></tr>' : '');
 }
@@ -283,6 +290,26 @@ async function faBulkApply() {
     msg.textContent = done + ' item(s) tagged as ' + FA_BY[tag.asset_type].t + (missing.length ? '. Not found: ' + missing.slice(0, 15).join(', ') + (missing.length > 15 ? '…' : '') : '.');
     await faLoad();
   } catch (e) { msg.className = 'small mt-2 text-danger'; msg.textContent = 'Failed: ' + e.message; }
+}
+
+// Deactivate / reactivate (is_active only — nothing is deleted; fully reversible)
+async function faSetActive(code, active) {
+  var it = FA.items.filter(function (x) { return x.item_code === code; })[0]; if (!it) return;
+  var msg = active
+    ? 'Reactivate ' + code + ' — ' + (it.description || '') + '?\n\nIt will count in Fixed Assets again.'
+    : 'Deactivate ' + code + ' — ' + (it.description || '') + '?\n\n' +
+      (Number(it.on_hand || 0) > 0 ? '⚠ It still has ' + faNum(it.on_hand) + ' ' + (it.base_unit || '') + ' on hand.\n\n' : '') +
+      'It will be removed from the Fixed Assets totals and hidden from this list. You can bring it back with "Show deactivated items" → Reactivate.';
+  if (!confirm(msg)) return;
+  try {
+    var res = await fetch(erpUrl('erp_items?item_code=eq.' + encodeURIComponent(code)), {
+      method: 'PATCH', headers: erpHeaders(),
+      body: JSON.stringify({ is_active: !!active, updated_at: new Date().toISOString(), updated_by: faUser() })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + (await res.text()).slice(0, 200));
+    faToast(code + (active ? ' reactivated' : ' deactivated'));
+    await faLoad();
+  } catch (e) { faToast('Failed: ' + e.message); }
 }
 
 // Edit / remove the tag of an item already in the list
