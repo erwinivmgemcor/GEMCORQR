@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!document.hidden) {
       erLoadEditRequests();
     }
-  }, 60000);
+  }, 120000);
 });
 
 async function erCheckHealth() {
