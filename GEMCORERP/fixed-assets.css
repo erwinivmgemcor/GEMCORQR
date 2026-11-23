@@ -53,3 +53,6 @@
 .fa-find .row-it .d small { display:block; color:var(--fa-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .fa-tabs .nav-link { font-size:.85rem; font-weight:600; }
 .fa-head-actions { align-self:flex-end; }
+
+.fa-table tr.fa-off td { opacity:.5; }
+.fa-table tr.fa-off td:last-child { opacity:1; }
