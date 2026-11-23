@@ -11,7 +11,7 @@ var _mrrMon = {
   searchTimer: null,
   autoRefreshTimer: null,
   autoRefreshEnabled: true,
-  REFRESH_INTERVAL: 30000,  // 30 seconds
+  REFRESH_INTERVAL: 180000,  // 3 minutes (dati 30 s — bawas egress)
   activeStatusFilter: ''
 };
 
