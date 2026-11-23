@@ -84,7 +84,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   _chatState.listTimer = setInterval(function() {
     if (!document.hidden) loadConversations(true);
-  }, 12000);
+  }, 30000);
 
   document.addEventListener('visibilitychange', function() {
     if (document.hidden) return;
