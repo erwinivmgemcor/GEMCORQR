@@ -1316,6 +1316,52 @@ function mdashCoverStats() {
   ratios.sort(function(x, y) { return x - y; });
   return { bands: b, totalValue: tot, totalItems: totN, median: ratios.length ? ratios[Math.floor(ratios.length / 2)] : 0 };
 }
+// Reconcile the dashboard card with the Google Sheet: the same item data, four different ways of getting "one number"
+function mdashReconcileStats() {
+  var items = _mdash.allItems || [];
+  var r = { withStock: 0, withUsage: 0, noUsage: 0, zeroStockUsed: 0, ratios: [], ratiosAll: [], inv: 0, invUsed: 0, usageMo: 0, over60: 0, top: [] };
+  items.forEach(function(it) {
+    var oh = Number(it.on_hand || 0), ave = Number(it.ave_monthly_consumption || 0), uc = Number(it.unit_cost || 0);
+    var val = Number(it.on_hand_cost != null ? it.on_hand_cost : oh * uc) || 0;
+    r.inv += Math.max(val, 0);
+    r.usageMo += ave * uc;
+    if (oh > 0) r.withStock++;
+    if (ave > 0) {
+      r.withUsage++;
+      if (oh > 0) { var mo = oh / ave; r.ratios.push(mo); r.ratiosAll.push(mo); r.invUsed += val; if (mo > 60) r.over60++; r.top.push({ code: it.item_code, mo: mo, val: val }); }
+      else { r.ratiosAll.push(0); r.zeroStockUsed++; }
+    } else if (oh > 0) r.noUsage++;
+  });
+  function mean(a) { return a.length ? a.reduce(function(x, y) { return x + y; }, 0) / a.length : null; }
+  function median(a) { if (!a.length) return null; var b = a.slice().sort(function(x, y) { return x - y; }); return b[Math.floor(b.length / 2)]; }
+  r.meanItems = mean(r.ratios); r.meanAll = mean(r.ratiosAll); r.median = median(r.ratios);
+  r.weighted = r.usageMo > 0 ? r.inv / r.usageMo : null;            // Σ on-hand ₱ ÷ Σ monthly usage ₱ (all stock)
+  r.weightedUsed = r.usageMo > 0 ? r.invUsed / r.usageMo : null;    // same, only stock of items that have usage
+  r.top.sort(function(a, b) { return b.mo - a.mo; });
+  return r;
+}
+function mdashReconcileSection(f) {
+  var c = mdashReconcileStats(); if (!c.withUsage) return '';
+  var fm = function(x) { return x === null ? '—' : x.toFixed(1) + ' mo'; };
+  var cardMo = (f && f.daysOfStock) ? f.daysOfStock / 30.4 : null;
+  var rows = [
+    ['Card on the dashboard (this page)', cardMo, 'Stock-out in the stock ledger for the selected period × (365 ÷ days) ÷ current inventory, in pesos. Only sees ledger movements since Nov 1, 2026.'],
+    ['Google Sheet style: simple average of the item ratios', c.meanItems, 'Every item counts the same, a ₱20 item and a ₱500,000 item alike. Items with stock and usage: ' + c.ratios.length.toLocaleString() + '.'],
+    ['Same average, also counting items with usage but 0 stock', c.meanAll, 'Zero-stock items count as 0 months, which pulls the average down. Use this one if your Sheet column shows 0 for them.'],
+    ['Typical item (median)', c.median, 'Half of the items have less cover than this, half have more.'],
+    ['Whole warehouse by value, item averages', c.weighted, 'Total inventory ₱ ÷ total monthly usage ₱, using the same Ave/Mo as the Sheet. This is the fair “overall” number.'],
+    ['Same, only items that have usage', c.weightedUsed, 'Leaves out stock that has never been used (dead stock).']
+  ].map(function(x) {
+    return '<tr><td>' + x[0] + '<div style="font-size:.7rem;color:#64748b;font-weight:400;">' + x[2] + '</div></td><td style="text-align:right;white-space:nowrap;"><b>' + fm(x[1]) + '</b></td></tr>';
+  }).join('');
+  var top = c.top.slice(0, 5).map(function(t) { return erpEsc(t.code) + ' (' + Math.round(t.mo).toLocaleString() + ' mo)'; }).join(', ');
+  return '<div class="to-sec"><h6>Why the Google Sheet shows a different overall number</h6>' +
+    '<div class="to-callout">Per item, this system and the Sheet use the <b>same formula</b>: On-Hand ÷ average monthly usage. The difference is only in how <b>one overall number</b> is made from thousands of item ratios. The table below uses the same items and Ave/Mo, but four different ways of combining them.</div>' +
+    '<table class="table table-sm" style="font-size:.8rem;margin:8px 0 4px"><thead><tr><th>Method</th><th style="text-align:right">Months of stock</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<div class="to-note">' + c.withStock.toLocaleString() + ' items have stock: ' + c.withUsage.toLocaleString() + ' have recorded usage, ' + c.noUsage.toLocaleString() + ' have none. ' +
+    c.over60.toLocaleString() + ' items have more than 60 months of cover' + (top ? ' (highest: ' + top + ')' : '') + ' — a few of these can pull a simple average up a lot while the total in pesos barely moves.</div></div>';
+}
+
 function mdashCoverSection() {
   var c = mdashCoverStats(); if (!c.totalItems) return '';
   var peso = mdashPesoFmt, pc = function(v) { return c.totalValue > 0 ? Math.round(v / c.totalValue * 100) : 0; };
@@ -1556,6 +1602,7 @@ function mdashShowInventoryRatioInfo() {
     'Example: if a supplier takes 45 days to deliver but we only have 30 days of stock, production may stop. ' +
     'The goal is a healthy middle: not too many days (cash stuck), not too few (risk of stock-out).</div></div>';
 
+  html += mdashReconcileSection(f);
   html += mdashCoverSection();
   html += '<div class="to-sec"><h6>See it per item</h6>Stock Monitor and the Inventory Master table below have an <b>Inventory Ratio</b> column for every item. ' +
     'Per item it is: <b>On-Hand ÷ average monthly usage</b>, shown in days (under 2 months), months or years. The months value is the same as the Inventory Ratio in the Google Sheet. Hover over a value to see the exact figures.</div>';
