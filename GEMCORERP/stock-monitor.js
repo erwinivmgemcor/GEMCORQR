@@ -2440,3 +2440,124 @@ document.addEventListener('DOMContentLoaded', function () {
   try { open = localStorage.getItem('erp_im_actions_open') === '1'; } catch (e) {}
   imApplyActions(open);   // default: collapsed
 });
+
+
+// ═══════════════════════════════════════════════════════════
+// EXPORT — Inventory Master → Excel (.xlsx)
+// Ine-export ang LAHAT ng items na pasok sa kasalukuyang filters (hindi lang ang nakikita sa page).
+// Walang filter = buong Inventory Master. Hindi kasama ang fixed assets (nasa Fixed Assets page sila).
+// ═══════════════════════════════════════════════════════════
+function erpLoadXlsxLib() {
+  return new Promise(function(resolve, reject) {
+    if (window.XLSX) { resolve(window.XLSX); return; }
+    var sc = document.createElement('script');
+    sc.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    sc.onload = function() { window.XLSX ? resolve(window.XLSX) : reject(new Error('XLSX missing')); };
+    sc.onerror = function() { reject(new Error('Excel library did not load')); };
+    document.head.appendChild(sc);
+  });
+}
+
+function erpDescribeActiveFilters() {
+  var out = [];
+  function val(id) { var el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; }
+  function selText(id) { var el = document.getElementById(id); return el && el.selectedIndex >= 0 && el.options[el.selectedIndex] ? el.options[el.selectedIndex].text : ''; }
+  if (val('erpSearchInput')) out.push(['Search', val('erpSearchInput')]);
+  if (val('erpCategoryFilter')) out.push(['Category', val('erpCategoryFilter')]);
+  if (val('erpLocationFilter')) out.push(['Location', val('erpLocationFilter')]);
+  if (val('erpMovementFilter')) out.push(['Movement', selText('erpMovementFilter')]);
+  if (val('erpAbcFilter')) out.push(['ABC', selText('erpAbcFilter')]);
+  if (val('erpVarianceFilter')) out.push(['Variance', selText('erpVarianceFilter')]);
+  document.querySelectorAll('.erp-table-card .erp-cf.erp-cf-on').forEach(function(el) {
+    var th = el.closest('th');
+    var label = th ? th.childNodes[0].textContent.trim() : el.id;
+    var v = el.tagName === 'SELECT' ? (el.options[el.selectedIndex] ? el.options[el.selectedIndex].text : el.value) : el.value;
+    out.push(['Column filter · ' + label, v]);
+  });
+  return out;
+}
+
+async function erpExportInventoryMaster() {
+  var btn = document.getElementById('erpExportBtn');
+  var items = (_erpFilteredItems || []).slice();
+  if (!items.length) { erpShowToast('No items to export', 'warning'); return; }
+  if (btn) { btn.disabled = true; btn.dataset.html = btn.innerHTML; btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Exporting…'; }
+  try {
+    var X = await erpLoadXlsxLib();
+    var sof = _erpSofAllocatedMap || {}, vmap = window._erpVarianceMap || {};
+    var header = ['Item Code', 'Description', 'Category', 'Location', 'Unit',
+      'On-Hand', 'Variance', 'SOF Allocated', 'Available', 'Buffer', 'Buffer Locked',
+      'Unit Cost', 'On-Hand Cost', 'Available Cost', 'Allocated Cost',
+      'Active Mo', 'Class', 'Ave/Mo', 'Ave/Day', 'Turnover (x/yr)', 'Inventory Ratio (months)',
+      'Reorder Status', 'ABC', 'Movement'];
+    var rows = [], totOnHand = 0, totAvail = 0, totAlloc = 0;
+    items.forEach(function(it) {
+      var oh = Number(it.on_hand || 0), bf = Number(it.buffer_stock || 0), uc = Number(it.unit_cost || 0);
+      var aveMo = Number(it.ave_monthly_consumption || 0), aveDay = Number(it.ave_daily_consumption || 0);
+      var act = Number(it.active_consumption_months || 0);
+      var alloc = Number(sof[it.item_code] || 0);
+      var available = oh - alloc;
+      var onHandCost = oh * uc;
+      var allocCost = Math.min(alloc, Math.max(oh, 0)) * uc;
+      var availCost = onHandCost - allocCost;
+      var t = erpItemTurnover(oh, aveMo);
+      var status = (bf > 0 && oh <= bf) ? 'FOR REPLENISHMENT' : (bf > 0 && oh <= bf * 1.25) ? 'LOW STOCK' : (bf > 0) ? 'OK' : (act >= 1) ? 'NEW' : 'NO USAGE';
+      var mov = String(it.inventory_movement || '').toUpperCase();
+      totOnHand += onHandCost; totAvail += availCost; totAlloc += allocCost;
+      rows.push([
+        it.item_code || '', it.description || '', it.category || '', it.location || '', it.base_unit || '',
+        oh, Number(vmap[it.item_code] || 0), alloc, available, bf, it.buffer_is_locked === true ? 'Yes' : '',
+        uc, onHandCost, availCost, allocCost,
+        act, erpItemClass(act), aveMo, aveDay,
+        (t.ratio === null || t.ratio === undefined) ? '' : Number(t.ratio.toFixed(2)),
+        (t.days === null || t.days === undefined) ? '' : Number((t.days * 12 / _erpRatio.cur.dpy).toFixed(1)),
+        status, it.abc_classification || '', mov
+      ]);
+    });
+    var totalRow = new Array(header.length).fill('');
+    totalRow[0] = 'TOTAL'; totalRow[1] = rows.length.toLocaleString() + ' items';
+    totalRow[12] = totOnHand; totalRow[13] = totAvail; totalRow[14] = totAlloc;
+
+    var data = [header].concat(rows, [totalRow]);
+    var ws = X.utils.aoa_to_sheet(data);
+    // number formats (0-based column index)
+    var qtyCols = [5, 6, 7, 8, 9, 17, 18, 19, 20], costCols = [11, 12, 13, 14];
+    for (var r = 1; r < data.length; r++) {
+      qtyCols.forEach(function(c) { var cell = ws[X.utils.encode_cell({ r: r, c: c })]; if (cell && typeof cell.v === 'number') cell.z = '#,##0.##'; });
+      costCols.forEach(function(c) { var cell = ws[X.utils.encode_cell({ r: r, c: c })]; if (cell && typeof cell.v === 'number') cell.z = '#,##0.00'; });
+      var ac = ws[X.utils.encode_cell({ r: r, c: 15 })]; if (ac && typeof ac.v === 'number') ac.z = '0';
+    }
+    ws['!cols'] = [14, 52, 18, 14, 8, 11, 10, 13, 11, 10, 9, 13, 15, 15, 15, 9, 8, 10, 10, 14, 18, 20, 7, 18].map(function(w) { return { wch: w }; });
+    ws['!autofilter'] = { ref: X.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: data.length - 2, c: header.length - 1 } }) };
+
+    var filters = erpDescribeActiveFilters();
+    var now = new Date();
+    var pad = function(n) { return String(n).padStart(2, '0'); };
+    var stamp = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+    var info = [
+      ['Inventory Master export'], [],
+      ['Exported on', stamp + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes())],
+      ['Exported by', _erpUser()],
+      ['Items exported', rows.length],
+      ['Total On-Hand Cost', totOnHand],
+      ['Total Available Cost', totAvail],
+      ['Total Allocated Cost (SOF)', totAlloc], [],
+      ['Filters applied', filters.length ? '' : 'None (whole Inventory Master)']
+    ].concat(filters);
+    var wsInfo = X.utils.aoa_to_sheet(info);
+    wsInfo['!cols'] = [{ wch: 28 }, { wch: 46 }];
+    ['B6', 'B7', 'B8'].forEach(function(a) { if (wsInfo[a]) wsInfo[a].z = '#,##0.00'; });
+
+    var wb = X.utils.book_new();
+    X.utils.book_append_sheet(wb, ws, 'Inventory Master');
+    X.utils.book_append_sheet(wb, wsInfo, 'Export Info');
+    X.writeFile(wb, 'Inventory-Master_' + (filters.length ? 'Filtered' : 'All') + '_' + stamp + '.xlsx');
+    erpShowToast('✅ Exported ' + rows.length.toLocaleString() + ' items');
+  } catch (e) {
+    console.error('[Export Inventory Master]', e);
+    erpShowToast('Export failed: ' + e.message + '. Check your internet connection and try again.', 'warning');
+  } finally {
+    if (btn) { btn.disabled = false; if (btn.dataset.html) btn.innerHTML = btn.dataset.html; }
+  }
+}
+window.erpExportInventoryMaster = erpExportInventoryMaster;
