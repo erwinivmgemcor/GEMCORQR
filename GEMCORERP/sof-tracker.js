@@ -1139,6 +1139,7 @@ function sofSetView(v) {
   document.getElementById('sofListWrap').style.display = items ? 'none' : '';
   document.getElementById('sofAllItemsWrap').style.display = items ? '' : 'none';
   var hint = document.getElementById('sofListHint'); if (hint) hint.style.display = items ? 'none' : '';
+  var xb = document.getElementById('sofItemsExportBtn'); if (xb) xb.style.display = items ? '' : 'none';
   if (items) sofAllItemsRender(); else sofTrackerRender();
 }
 
@@ -1147,23 +1148,23 @@ function sofAllItemsRender() {
   var search = sofCurrentSearch(), html = '', nSof = 0, nItems = 0;
   _sofTracker.filteredAllocations.forEach(function(a) {
     var rows = sofVisibleItems(a, search); if (!rows.length) return;
-    nSof++; nItems += rows.length;
+    nSof++;
     var sofJs = sofTrackerEsc(a.sof_no).replace(/'/g, "\\'");
-    var tot = rows.reduce(function(s, r) { return s + r.line; }, 0);
-    var st = sofStatusOf(a);
-    var meta = [a.client_name, a.project_name, a.jo_no ? 'JO ' + a.jo_no : ''].filter(Boolean).map(sofTrackerEsc).join(' · ');
-    html += '<tr class="sofai-head" onclick="sofViewItems(\'' + sofJs + '\')" title="I-click para buksan ang SOF"><td colspan="9">' +
-      '<span class="sofno"><i class="bi bi-file-earmark-text me-1"></i>' + sofTrackerEsc(a.sof_no) + '</span>' +
-      '<span class="meta">' + meta + '</span> <span class="sof-status ' + ((st === 'ACTIVE' || st === 'COMPLETED' || st === 'CANCELLED') ? st : 'OTHER') + ' ms-2">' + sofTrackerEsc(sofStatusLabel(st)) + '</span>' +
-      '<span class="tot">' + rows.length + ' item' + (rows.length === 1 ? '' : 's') + ' · ' + sofPeso(tot) + '</span></td></tr>';
-    rows.forEach(function(r) {
-      html += '<tr><td><code>' + sofTrackerEsc(r.code) + '</code></td><td>' + sofTrackerEsc(r.desc) + '</td><td>' + sofTrackerEsc(r.unit) + '</td>' +
+    var alt = (nSof % 2 === 0) ? ' sofai-alt' : '';
+    rows.forEach(function(r, idx) {
+      nItems++;
+      html += '<tr class="' + (idx === 0 ? 'sofai-first' : '') + alt + '">' +
+        '<td><a href="javascript:void(0)" class="sofai-sof" onclick="sofViewItems(\'' + sofJs + '\')" title="Buksan ang SOF">' + sofTrackerEsc(a.sof_no) + '</a></td>' +
+        '<td>' + (a.jo_no ? '<span class="sofai-jo">' + sofTrackerEsc(a.jo_no) + '</span>' : '<span class="text-muted">—</span>') + '</td>' +
+        '<td>' + sofTrackerEsc(a.client_name || '') + '</td>' +
+        '<td>' + sofTrackerEsc(a.project_name || '') + '</td>' +
+        '<td><code>' + sofTrackerEsc(r.code) + '</code></td><td>' + sofTrackerEsc(r.desc) + '</td><td>' + sofTrackerEsc(r.unit) + '</td>' +
         '<td class="num">' + sofTrackerNum(r.alloc) + '</td><td class="num">' + sofTrackerNum(r.used) + '</td><td class="num"><b>' + sofTrackerNum(Math.max(0, r.rem)) + '</b></td>' +
         '<td class="num">' + (r.cost ? sofPeso(r.cost) : '<span class="text-warning" title="Walang unit cost">—</span>') + '</td><td class="num">' + sofPeso(r.line) + '</td>' +
         '<td class="text-center"><span class="sofai-st ' + r.key + '">' + SOF_ITEM_LBL[r.key] + '</span></td></tr>';
     });
   });
-  body.innerHTML = html || '<tr><td colspan="9" class="erp-empty"><div class="sof-empty"><i class="bi bi-inbox"></i>No items found for the current filters.</div></td></tr>';
+  body.innerHTML = html || '<tr><td colspan="13" class="erp-empty"><div class="sof-empty"><i class="bi bi-inbox"></i>No items found for the current filters.</div></td></tr>';
   var c = document.getElementById('sofTableCount'); if (c) c.textContent = nItems + ' items · ' + nSof + ' SOFs';
 }
 
@@ -1184,7 +1185,7 @@ function sofSheet(header, rows, totalRow, fmt, widths) {
   ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(dataEnd - 1, 0), c: header.length - 1 } }) };
   return ws;
 }
-function sofExportExcel() {
+function sofExportExcel(mode) {
   if (typeof XLSX === 'undefined') { erpShowToast('Excel library did not load. Check your internet and refresh the page.', 'warning'); return; }
   var list = _sofTracker.filteredAllocations || [];
   if (!list.length) { erpShowToast('Nothing to export for the current filters.', 'warning'); return; }
@@ -1208,21 +1209,25 @@ function sofExportExcel() {
   var itRows = [];
   list.forEach(function(a) {
     sofVisibleItems(a, search).forEach(function(r) {
-      itRows.push([a.sof_no, a.client_name || '', a.project_name || '', a.jo_no || '', sofIso(a.sof_date), sofStatusLabel(sofStatusOf(a)),
+      itRows.push([a.sof_no, a.jo_no || '', a.client_name || '', a.project_name || '', sofIso(a.sof_date), sofStatusLabel(sofStatusOf(a)),
         r.code, r.desc, r.unit, r.alloc, r.used, Math.max(0, r.rem), r.cost, r.line, r.usedCost, r.remCost, SOF_ITEM_LBL[r.key]]);
     });
   });
   var itTot = ['TOTAL', '', '', '', '', '', '', '', '', 0, 0, 0, '', 0, 0, 0, ''];
   itRows.forEach(function(r) { [9, 10, 11, 13, 14, 15].forEach(function(i) { itTot[i] += Number(r[i] || 0); }); });
-  var ws2 = sofSheet(['SOF No.', 'Client', 'Project', 'JO No.', 'SOF Date', 'SOF Status', 'Item Code', 'Description', 'Unit', 'Allocated Qty', 'Used Qty', 'Remaining Qty', 'Unit Cost (PHP)', 'Line Cost (PHP)', 'Used Cost (PHP)', 'Remaining Cost (PHP)', 'Item Status'],
-    itRows, itTot, { 9: QTY, 10: QTY, 11: QTY, 12: PHP, 13: PHP, 14: PHP, 15: PHP }, [12, 30, 28, 12, 12, 14, 16, 48, 8, 13, 11, 14, 15, 16, 16, 18, 14]);
+  var ws2 = sofSheet(['SOF No.', 'JO No.', 'Client', 'Project', 'SOF Date', 'SOF Status', 'Item Code', 'Description', 'Unit', 'Allocated Qty', 'Used Qty', 'Remaining Qty', 'Unit Cost (PHP)', 'Line Cost (PHP)', 'Used Cost (PHP)', 'Remaining Cost (PHP)', 'Item Status'],
+    itRows, itTot, { 9: QTY, 10: QTY, 11: QTY, 12: PHP, 13: PHP, 14: PHP, 15: PHP }, [12, 12, 30, 28, 12, 14, 16, 48, 8, 13, 11, 14, 15, 16, 16, 18, 14]);
 
   var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws1, 'SOF Summary');
-  XLSX.utils.book_append_sheet(wb, ws2, 'Items by SOF');
+  if (mode === 'items') {
+    XLSX.utils.book_append_sheet(wb, ws2, 'Items by SOF');
+  } else {
+    XLSX.utils.book_append_sheet(wb, ws1, 'SOF Summary');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Items by SOF');
+  }
   var st = (document.getElementById('sofStatusFilter').value || 'ALL').toString();
   var d = new Date(), stamp = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-  XLSX.writeFile(wb, 'SOF-Tracker_' + (st || 'ALL') + '_' + stamp + '.xlsx');
+  XLSX.writeFile(wb, (mode === 'items' ? 'SOF-Items_' : 'SOF-Tracker_') + (st || 'ALL') + '_' + stamp + '.xlsx');
   erpShowToast('Exported ' + list.length + ' SOF(s) and ' + itRows.length + ' item line(s) to Excel.', 'success');
 }
 window.sofExportExcel = sofExportExcel; window.sofSetView = sofSetView;
