@@ -57,43 +57,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
   
-  // ═══ PREFILL — items picked on the Fixed Assets page (code + qty) ═══
-  try {
-    var pre = sessionStorage.getItem('erp_mrif_prefill');
-    if (pre) {
-      sessionStorage.removeItem('erp_mrif_prefill');   // one-time: refresh won't duplicate rows
-      mrifApplyPrefill(JSON.parse(pre));
-    }
-  } catch (e) { console.warn('[Manual MRIF] prefill failed', e); }
-
   console.log('[Manual MRIF] Ready. Requestor:', userFullname);
 });
-
-function mrifApplyPrefill(payload) {
-  var list = (payload && payload.items) || [];
-  var added = 0;
-  list.forEach(function (it) {
-    if (!it || !it.code || !(Number(it.qty) > 0)) return;
-    addItemRow({ noFocus: true });
-    var idx = _mrifState.items.length - 1;
-    var row = document.querySelector('.erp-item-row[data-item-idx="' + idx + '"]');
-    if (!row) return;
-    row.querySelector('.item-code-input').value = it.code;
-    row.querySelector('.item-desc-input').value = it.description || '';
-    row.querySelector('.item-qty-input').value = it.qty;
-    var sel = row.querySelector('.item-unit-input'), unit = it.unit || 'PIECE';
-    if (sel) {
-      var has = Array.prototype.some.call(sel.options, function (o) { return o.value === unit; });
-      if (!has) { var o = document.createElement('option'); o.value = unit; o.textContent = unit; sel.appendChild(o); }
-      sel.value = unit;
-    }
-    if (row.querySelector('.item-remarks-input') && it.remarks) row.querySelector('.item-remarks-input').value = it.remarks;
-    _mrifState.items[idx] = { code: it.code, description: it.description || '', qty: Number(it.qty), atlQty: 0, unit: unit, remarks: it.remarks || '' };
-    if (window.erpStockAlerts && erpStockAlerts.noteRow) { try { erpStockAlerts.noteRow(row); } catch (e) {} }
-    added++;
-  });
-  if (added) erpShowToast(added + ' item(s) loaded from ' + ((payload && payload.source) || 'another page') + ' — complete the details and submit.', 'success');
-}
 
 async function mrifCheckHealth() {
   var badge = document.getElementById('erpHealthBadge');
