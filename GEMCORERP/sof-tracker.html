@@ -163,6 +163,7 @@
           <button type="button" id="sofViewBtnSof" class="on" onclick="sofSetView('sof')"><i class="bi bi-list-ul"></i> By SOF</button>
           <button type="button" id="sofViewBtnItems" onclick="sofSetView('items')"><i class="bi bi-boxes"></i> All Items by SOF</button>
         </div>
+        <button type="button" class="erp-btn-outline-dark" id="sofItemsExportBtn" style="display:none" onclick="sofExportExcel('items')" title="Export this item list to Excel"><i class="bi bi-file-earmark-excel"></i> Export Excel</button>
         <span class="erp-badge" id="sofTableCount">0 items</span>
       </div>
     </div>
@@ -196,19 +197,23 @@
       </table>
     </div>
     <div class="erp-table-wrap" id="sofAllItemsWrap" style="max-height:65vh; display:none;">
-      <table class="erp-table sof-table sofai-table" style="font-size:0.85rem;">
+      <table class="erp-table sof-table sofai-table" style="font-size:0.82rem;">
         <thead><tr>
-          <th style="width:13%">Item Code</th>
-          <th style="width:33%">Description</th>
-          <th style="width:6%">Unit</th>
-          <th style="width:8%" class="text-end">Allocated</th>
-          <th style="width:8%" class="text-end">Used</th>
-          <th style="width:8%" class="text-end">Remaining</th>
-          <th style="width:9%" class="text-end">Unit Cost ₱</th>
-          <th style="width:10%" class="text-end">Line Cost ₱</th>
-          <th style="width:9%" class="text-center">Status</th>
+          <th style="width:7%">SOF No.</th>
+          <th style="width:7%">JO No.</th>
+          <th style="width:13%">Client</th>
+          <th style="width:12%">Project</th>
+          <th style="width:11%">Item Code</th>
+          <th style="width:21%">Description</th>
+          <th style="width:4%">Unit</th>
+          <th style="width:5%" class="text-end">Alloc.</th>
+          <th style="width:4%" class="text-end">Used</th>
+          <th style="width:5%" class="text-end">Remain</th>
+          <th style="width:6%" class="text-end">Unit Cost ₱</th>
+          <th style="width:7%" class="text-end">Line Cost ₱</th>
+          <th style="width:6%" class="text-center">Status</th>
         </tr></thead>
-        <tbody id="sofAllItemsBody"><tr><td colspan="9" class="erp-empty">Loading…</td></tr></tbody>
+        <tbody id="sofAllItemsBody"><tr><td colspan="13" class="erp-empty">Loading…</td></tr></tbody>
       </table>
     </div>
   </div>
