@@ -6,6 +6,7 @@
 // ============================================================
 
 var _sofTracker = {
+  view: 'sof',
   allAllocations: [],
   filteredAllocations: [],
   searchTimer: null
@@ -299,12 +300,13 @@ function sofUnitCost(code) { return Number(_sofTracker.cost[sofKey(code)] || 0);
 
 async function sofTrackerComputeCosts(list) {
   try {
-    var items = await erpFetchAll('erp_items', 'select=item_code,unit_cost&is_deleted=eq.false') || [];
-    _sofTracker.cost = {};
-    items.forEach(function(it) { _sofTracker.cost[sofKey(it.item_code)] = Number(it.unit_cost || 0); });
+    var items = await erpFetchAll('erp_items', 'select=item_code,description,base_unit,unit_cost&is_deleted=eq.false') || [];
+    _sofTracker.cost = {}; _sofTracker.itemInfo = {};
+    items.forEach(function(it) { _sofTracker.cost[sofKey(it.item_code)] = Number(it.unit_cost || 0); _sofTracker.itemInfo[sofKey(it.item_code)] = { desc: it.description || '', unit: it.base_unit || '' }; });
 
     var rows = _sofTracker.allocItems;
-    if (!rows) rows = _sofTracker.allocItems = await erpFetchAll('erp_sof_allocation_items', 'select=sof_no,item_code,allocated_qty,used_qty') || [];
+    if (!rows) rows = _sofTracker.allocItems = await erpFetchAll('erp_sof_allocation_items', 'select=*&order=sof_no.asc,item_code.asc') || [];
+    sofBuildItemIndex();
 
     var agg = {};
     rows.forEach(function(r) {
@@ -398,7 +400,8 @@ function sofTrackerApplyFilters() {
           client.indexOf(search) === -1 &&
           vendor.indexOf(search) === -1 &&
           project.indexOf(search) === -1 &&
-          joNo.indexOf(search) === -1) return false;
+          joNo.indexOf(search) === -1 &&
+          !sofItemHit(a.sof_no, search)) return false;   // may item na tumutugma (code / description)
     }
     return true;
   });
@@ -406,6 +409,7 @@ function sofTrackerApplyFilters() {
   sofSyncPills(statusFilter);
   sofTrackerRender();
   sofRenderCostStrip();
+  if (_sofTracker.view === 'items') sofAllItemsRender();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1091,3 +1095,134 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 250);
   } catch (e) {}
 });
+
+
+// ═══════════════════════════════════════════════════════════
+// ITEMS INDEX + "ALL ITEMS BY SOF" VIEW + EXCEL EXPORT
+// ═══════════════════════════════════════════════════════════
+function sofBuildItemIndex() {
+  var by = {}, hay = {}, info = _sofTracker.itemInfo || {};
+  (_sofTracker.allocItems || []).forEach(function(r) {
+    var k = sofKey(r.sof_no); if (!k) return;
+    var inf = info[sofKey(r.item_code)] || {};
+    var desc = r.description || inf.desc || '';
+    var alloc = Number(r.allocated_qty || 0), used = Number(r.used_qty || 0), rem = alloc - used, cost = sofUnitCost(r.item_code);
+    (by[k] = by[k] || []).push({
+      code: r.item_code, desc: desc, unit: r.unit || r.base_unit || inf.unit || '',
+      alloc: alloc, used: used, rem: rem, cost: cost,
+      line: alloc * cost, usedCost: used * cost, remCost: Math.max(0, rem) * cost,
+      key: rem <= 0 ? 'FULL' : (used > 0 ? 'PARTIAL' : 'ACTIVE')
+    });
+    hay[k] = (hay[k] || '') + ' ' + String(r.item_code || '').toLowerCase() + ' ' + String(desc).toLowerCase();
+  });
+  _sofTracker.itemsBySof = by; _sofTracker.itemHay = hay;
+}
+function sofItemHit(sofNo, search) { return ((_sofTracker.itemHay || {})[sofKey(sofNo)] || '').indexOf(search) !== -1; }
+function sofHeaderHit(a, s) {
+  return [a.sof_no, a.client_name, a.supplier_name, a.project_name, a.jo_no].some(function(v) { return String(v || '').toLowerCase().indexOf(s) !== -1; });
+}
+// Items of one SOF that should show for the current search (all of them if the SOF itself matched)
+function sofVisibleItems(a, search) {
+  var rows = (_sofTracker.itemsBySof || {})[sofKey(a.sof_no)] || [];
+  if (!search || sofHeaderHit(a, search)) return rows;
+  return rows.filter(function(r) { return (String(r.code || '') + ' ' + String(r.desc || '')).toLowerCase().indexOf(search) !== -1; });
+}
+function sofCurrentSearch() { return (document.getElementById('sofSearchInput').value || '').toLowerCase().trim(); }
+function sofStatusOf(a) { return sofIsReleased(a) ? 'RELEASED' : sofEffStatus(a); }
+var SOF_ITEM_LBL = { ACTIVE: 'Active', PARTIAL: 'Partial', FULL: 'Fully served' };
+
+function sofSetView(v) {
+  _sofTracker.view = v === 'items' ? 'items' : 'sof';
+  var items = _sofTracker.view === 'items';
+  document.getElementById('sofViewBtnSof').classList.toggle('on', !items);
+  document.getElementById('sofViewBtnItems').classList.toggle('on', items);
+  document.getElementById('sofListWrap').style.display = items ? 'none' : '';
+  document.getElementById('sofAllItemsWrap').style.display = items ? '' : 'none';
+  var hint = document.getElementById('sofListHint'); if (hint) hint.style.display = items ? 'none' : '';
+  if (items) sofAllItemsRender(); else sofTrackerRender();
+}
+
+function sofAllItemsRender() {
+  var body = document.getElementById('sofAllItemsBody'); if (!body) return;
+  var search = sofCurrentSearch(), html = '', nSof = 0, nItems = 0;
+  _sofTracker.filteredAllocations.forEach(function(a) {
+    var rows = sofVisibleItems(a, search); if (!rows.length) return;
+    nSof++; nItems += rows.length;
+    var sofJs = sofTrackerEsc(a.sof_no).replace(/'/g, "\\'");
+    var tot = rows.reduce(function(s, r) { return s + r.line; }, 0);
+    var st = sofStatusOf(a);
+    var meta = [a.client_name, a.project_name, a.jo_no ? 'JO ' + a.jo_no : ''].filter(Boolean).map(sofTrackerEsc).join(' · ');
+    html += '<tr class="sofai-head" onclick="sofViewItems(\'' + sofJs + '\')" title="I-click para buksan ang SOF"><td colspan="9">' +
+      '<span class="sofno"><i class="bi bi-file-earmark-text me-1"></i>' + sofTrackerEsc(a.sof_no) + '</span>' +
+      '<span class="meta">' + meta + '</span> <span class="sof-status ' + ((st === 'ACTIVE' || st === 'COMPLETED' || st === 'CANCELLED') ? st : 'OTHER') + ' ms-2">' + sofTrackerEsc(sofStatusLabel(st)) + '</span>' +
+      '<span class="tot">' + rows.length + ' item' + (rows.length === 1 ? '' : 's') + ' · ' + sofPeso(tot) + '</span></td></tr>';
+    rows.forEach(function(r) {
+      html += '<tr><td><code>' + sofTrackerEsc(r.code) + '</code></td><td>' + sofTrackerEsc(r.desc) + '</td><td>' + sofTrackerEsc(r.unit) + '</td>' +
+        '<td class="num">' + sofTrackerNum(r.alloc) + '</td><td class="num">' + sofTrackerNum(r.used) + '</td><td class="num"><b>' + sofTrackerNum(Math.max(0, r.rem)) + '</b></td>' +
+        '<td class="num">' + (r.cost ? sofPeso(r.cost) : '<span class="text-warning" title="Walang unit cost">—</span>') + '</td><td class="num">' + sofPeso(r.line) + '</td>' +
+        '<td class="text-center"><span class="sofai-st ' + r.key + '">' + SOF_ITEM_LBL[r.key] + '</span></td></tr>';
+    });
+  });
+  body.innerHTML = html || '<tr><td colspan="9" class="erp-empty"><div class="sof-empty"><i class="bi bi-inbox"></i>No items found for the current filters.</div></td></tr>';
+  var c = document.getElementById('sofTableCount'); if (c) c.textContent = nItems + ' items · ' + nSof + ' SOFs';
+}
+
+// ── EXCEL ──────────────────────────────────────────────────
+function sofIso(d) {
+  if (!d) return '';
+  var s = String(d); if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  var t = new Date(d); return isNaN(t) ? s : t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+}
+function sofSheet(header, rows, totalRow, fmt, widths) {
+  var data = [header].concat(rows); if (totalRow) data.push(totalRow);
+  var ws = XLSX.utils.aoa_to_sheet(data);
+  var dataEnd = rows.length + 1;                        // header + rows (excludes TOTAL row)
+  Object.keys(fmt).forEach(function(col) {
+    for (var r = 1; r <= data.length; r++) { var cell = ws[XLSX.utils.encode_cell({ r: r - 1 + 0, c: Number(col) })]; if (cell && r > 1 && typeof cell.v === 'number') cell.z = fmt[col]; }
+  });
+  ws['!cols'] = widths.map(function(w) { return { wch: w }; });
+  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(dataEnd - 1, 0), c: header.length - 1 } }) };
+  return ws;
+}
+function sofExportExcel() {
+  if (typeof XLSX === 'undefined') { erpShowToast('Excel library did not load. Check your internet and refresh the page.', 'warning'); return; }
+  var list = _sofTracker.filteredAllocations || [];
+  if (!list.length) { erpShowToast('Nothing to export for the current filters.', 'warning'); return; }
+  var search = sofCurrentSearch();
+  var QTY = '#,##0.##', PHP = '#,##0.00';
+
+  // Sheet 1 — one row per SOF
+  var sumRows = list.map(function(a) {
+    var alloc = Number(a.total_allocated_qty || 0), used = Number(a.total_used_qty || 0);
+    var rem = (a.total_remaining_qty == null) ? alloc - used : Number(a.total_remaining_qty || 0);
+    return [a.sof_no, a.client_name || '', a.project_name || '', sofVendorShown(a), a.jo_no || '', sofIso(a.sof_date), Number(a.total_items || 0),
+      alloc, used, rem, alloc > 0 ? Math.round(used / alloc * 1000) / 10 : 0,
+      Number(a.total_cost || 0), Number(a.used_cost || 0), Number(a.remaining_cost || 0), sofStatusLabel(sofStatusOf(a))];
+  });
+  var sumTot = ['TOTAL', '', '', '', '', '', 0, 0, 0, 0, '', 0, 0, 0, ''];
+  sumRows.forEach(function(r) { [6, 7, 8, 9, 11, 12, 13].forEach(function(i) { sumTot[i] += Number(r[i] || 0); }); });
+  var ws1 = sofSheet(['SOF No.', 'Client', 'Project', 'Vendor', 'JO No.', 'SOF Date', 'Items', 'Allocated Qty', 'Used Qty', 'Remaining Qty', '% Used', 'SOF Cost (PHP)', 'Used Cost (PHP)', 'Remaining Cost (PHP)', 'Status'],
+    sumRows, sumTot, { 7: QTY, 8: QTY, 9: QTY, 10: '0.0', 11: PHP, 12: PHP, 13: PHP }, [12, 34, 30, 26, 12, 12, 7, 13, 11, 14, 8, 16, 16, 18, 14]);
+
+  // Sheet 2 — every item of every SOF shown (flat, filterable)
+  var itRows = [];
+  list.forEach(function(a) {
+    sofVisibleItems(a, search).forEach(function(r) {
+      itRows.push([a.sof_no, a.client_name || '', a.project_name || '', a.jo_no || '', sofIso(a.sof_date), sofStatusLabel(sofStatusOf(a)),
+        r.code, r.desc, r.unit, r.alloc, r.used, Math.max(0, r.rem), r.cost, r.line, r.usedCost, r.remCost, SOF_ITEM_LBL[r.key]]);
+    });
+  });
+  var itTot = ['TOTAL', '', '', '', '', '', '', '', '', 0, 0, 0, '', 0, 0, 0, ''];
+  itRows.forEach(function(r) { [9, 10, 11, 13, 14, 15].forEach(function(i) { itTot[i] += Number(r[i] || 0); }); });
+  var ws2 = sofSheet(['SOF No.', 'Client', 'Project', 'JO No.', 'SOF Date', 'SOF Status', 'Item Code', 'Description', 'Unit', 'Allocated Qty', 'Used Qty', 'Remaining Qty', 'Unit Cost (PHP)', 'Line Cost (PHP)', 'Used Cost (PHP)', 'Remaining Cost (PHP)', 'Item Status'],
+    itRows, itTot, { 9: QTY, 10: QTY, 11: QTY, 12: PHP, 13: PHP, 14: PHP, 15: PHP }, [12, 30, 28, 12, 12, 14, 16, 48, 8, 13, 11, 14, 15, 16, 16, 18, 14]);
+
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws1, 'SOF Summary');
+  XLSX.utils.book_append_sheet(wb, ws2, 'Items by SOF');
+  var st = (document.getElementById('sofStatusFilter').value || 'ALL').toString();
+  var d = new Date(), stamp = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  XLSX.writeFile(wb, 'SOF-Tracker_' + (st || 'ALL') + '_' + stamp + '.xlsx');
+  erpShowToast('Exported ' + list.length + ' SOF(s) and ' + itRows.length + ' item line(s) to Excel.', 'success');
+}
+window.sofExportExcel = sofExportExcel; window.sofSetView = sofSetView;
