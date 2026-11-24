@@ -56,9 +56,3 @@
 
 .fa-table tr.fa-off td { opacity:.5; }
 .fa-table tr.fa-off td:last-child { opacity:1; }
-
-/* selection + issue bar */
-.fa-sel-col .form-check-input { width:1.1rem; height:1.1rem; cursor:pointer; }
-.fa-qty { width:96px; margin-left:auto; text-align:right; }
-.fa-selbar { position:sticky; bottom:12px; z-index:20; margin:0 0 16px; padding:12px 18px; border-radius:14px; background:#0f172a; color:#fff;
-  display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 12px 30px -10px rgba(15,23,42,.55); }
