@@ -56,22 +56,117 @@ async function erpLoadDashboard() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// FILTER-AWARE KPI CARDS
+// Walang filter  → ang cards ay whole-warehouse numbers galing sa database (gaya ng dati).
+// May filter     → ang cards ay kinukuwenta mula sa mga item na nakikita sa table
+//                  (search, Category, Location, Movement, ABC, Variance, at header column filters).
+// ═══════════════════════════════════════════════════════════
+var _erpKpiGlobal = {};   // card id → { v: text, s: subtext } (whole warehouse)
+var _erpKpiSubId = { kpiTotalItems: 'kpiTotalItemsSub', kpiBelowReorder: 'kpiBelowReorderSub', kpiNewBelowBuffer: 'kpiNewBelowBufferSub', kpiZeroStock: 'kpiZeroStockSub', kpiVariances: 'kpiVariancesSub' };
+var _erpKpiDefaultSub = {
+  kpiTotalItems: 'Active SKUs',
+  kpiBelowReorder: 'Zero/low stock with buffer — replenish',
+  kpiNewBelowBuffer: 'New items below buffer',
+  kpiZeroStock: 'Zero on-hand — click to view',
+  kpiVariances: 'Items with count discrepancies'
+};
+
+// True kapag may kahit anong filter na nakabukas
+function erpIsFiltered() {
+  var ids = ['erpSearchInput', 'erpCategoryFilter', 'erpLocationFilter', 'erpMovementFilter', 'erpAbcFilter', 'erpVarianceFilter'];
+  for (var i = 0; i < ids.length; i++) {
+    var el = document.getElementById(ids[i]);
+    if (el && String(el.value || '').trim() !== '') return true;
+  }
+  return !!document.querySelector('.erp-table-card .erp-cf.erp-cf-on');
+}
+
+// Para sa mga popup (Needs PRF, Out of Stock, NEW, Variances): itira lang ang items na pasok sa kasalukuyang filter
+function erpScope(list) {
+  if (!erpIsFiltered()) return list;
+  var ok = {};
+  (_erpFilteredItems || []).forEach(function(it) { ok[it.item_code] = 1; });
+  return (list || []).filter(function(it) { return ok[it.item_code]; });
+}
+
+function erpSetKpi(id, value, sub) {
+  _erpKpiGlobal[id] = { v: value, s: sub };
+  erpPaintKpis();
+}
+
+function erpComputeFilteredKpis() {
+  var items = _erpFilteredItems || [], sof = _erpSofAllocatedMap || {}, vmap = window._erpVarianceMap || {};
+  var withStock = 0, onhand = 0, alloc = 0, reserved = 0;
+  var stdBelow = 0, projBelow = 0, newBelow = 0, stdZero = 0, projZero = 0, vars = 0;
+  items.forEach(function(it) {
+    var oh = Number(it.on_hand || 0), bf = Number(it.buffer_stock || 0), uc = Number(it.unit_cost || 0);
+    var isStd = erpItemClass(it.active_consumption_months) === 'STD';
+    if (oh > 0) withStock++;
+    onhand += oh * uc;
+    var rem = Number(sof[it.item_code] || 0);
+    if (rem > 0) { alloc += rem * uc; reserved += Math.min(rem, Math.max(oh, 0)) * uc; }
+    if (bf > 0 && oh <= bf) {
+      if (isStd) stdBelow++; else projBelow++;
+      if (String(it.stock_classification || '').toUpperCase() === 'NEW') newBelow++;
+    }
+    if (oh <= 0) { if (isStd) stdZero++; else projZero++; }
+    if (Number(vmap[it.item_code] || 0) !== 0) vars++;
+  });
+  var g = _erpKpiGlobal.kpiTotalItems, totalTxt = g ? g.v : erpNum((_erpAllItems || []).length);
+  return {
+    kpiTotalItems: { v: erpNum(items.length), s: 'of ' + totalTxt + ' total · ' + erpNum(withStock) + ' with stock' },
+    kpiBelowReorder: { v: erpNum(stdBelow), s: 'STD below buffer (filtered)' + (projBelow ? ' · +' + erpNum(projBelow) + ' PROJ not counted' : '') },
+    kpiNewBelowBuffer: { v: erpNum(newBelow), s: 'New items below buffer (filtered)' },
+    kpiZeroStock: { v: erpNum(stdZero), s: 'STD zero stock (filtered)' + (projZero ? ' · +' + erpNum(projZero) + ' PROJ hidden' : '') + ' — click to view' },
+    kpiVariances: { v: erpNum(vars), s: 'In filtered items' },
+    value: { onhand: onhand, allocated: alloc, available: onhand - reserved }
+  };
+}
+
+function erpPaintKpis() {
+  var filtered = erpIsFiltered() && (_erpAllItems || []).length > 0;
+  var F = filtered ? erpComputeFilteredKpis() : null;
+  Object.keys(_erpKpiSubId).forEach(function(id) {
+    var el = document.getElementById(id); if (!el) return;
+    var src = F ? F[id] : _erpKpiGlobal[id];
+    if (!src) return;
+    el.textContent = src.v;
+    var sub = document.getElementById(_erpKpiSubId[id]);
+    if (sub) sub.textContent = (src.s !== undefined && src.s !== null) ? src.s : _erpKpiDefaultSub[id];
+  });
+  _erpValueKpi.filt = F ? F.value : null;
+  erpRenderValueKpi();
+
+  document.querySelectorAll('.erp-kpi-row .erp-kpi-card').forEach(function(c) { c.classList.toggle('kpi-filtered', !!F); });
+  var bar = document.getElementById('erpKpiFilterBar');
+  if (bar) {
+    bar.style.display = F ? 'flex' : 'none';
+    var txt = document.getElementById('erpKpiFilterText');
+    if (txt && F) {
+      var g = _erpKpiGlobal.kpiTotalItems;
+      txt.innerHTML = 'Cards show <b>' + erpNum((_erpFilteredItems || []).length) + '</b> filtered item' + ((_erpFilteredItems || []).length === 1 ? '' : 's') +
+        (g ? ' of <b>' + g.v + '</b>' : '') + ' — not the whole warehouse.';
+    }
+  }
+}
+window.erpPaintKpis = erpPaintKpis;
+window.erpIsFiltered = erpIsFiltered;
+
+// ═══════════════════════════════════════════════════════════
 // KPI SUMMARY
 // ═══════════════════════════════════════════════════════════
 async function erpLoadSummary() {
   var result = await erpGetStockSummary();
   if (!result.success) return;
   var s = result.summary || {};
-  document.getElementById('kpiTotalItems').textContent = erpNum(s.total_items);
+  erpSetKpi('kpiTotalItems', erpNum(s.total_items), (s.active_items || 0) + ' with stock');
   _erpValueKpi.onhand = Number(s.total_stock_value || 0);
   erpInitValueMode();
   erpRenderValueKpi();                 // ipakita agad ang on-hand habang kinukuha ang allocated/available
   erpLoadAllocatedValue();             // async: SOF allocated + available stock value
-  document.getElementById('kpiBelowReorder').textContent = erpNum(s.below_reorder);
-  document.getElementById('kpiNewBelowBuffer').textContent = erpNum(s.new_below_buffer || 0);
-  document.getElementById('kpiZeroStock').textContent = erpNum(s.zero_stock_items);
-  var subEl = document.getElementById('kpiTotalItemsSub');
-  if (subEl) subEl.textContent = (s.active_items || 0) + ' with stock';
+  erpSetKpi('kpiBelowReorder', erpNum(s.below_reorder));
+  erpSetKpi('kpiNewBelowBuffer', erpNum(s.new_below_buffer || 0));
+  erpSetKpi('kpiZeroStock', erpNum(s.zero_stock_items));
   erpLoadStdKpis();   // STD-only Out of Stock at Needs PRF — kapareho ng Management Dashboard
 }
 
@@ -106,12 +201,8 @@ async function erpLoadStdKpis(force) {
       _erpStd.items = items; _erpStd.byCode = by; _erpStd.zeroStd = zs; _erpStd.zeroProj = zp;
       _erpStd.repStd = rs; _erpStd.repProj = rp; _erpStd.reorderRows = rows; _erpStd.at = Date.now();
 
-      var z = document.getElementById('kpiZeroStock'), zSub = document.getElementById('kpiZeroStockSub');
-      if (z) z.textContent = erpNum(zs.length);
-      if (zSub) zSub.textContent = 'STD zero stock' + (zp.length ? ' · +' + erpNum(zp.length) + ' PROJ hidden' : '') + ' — click to view';
-      var b = document.getElementById('kpiBelowReorder'), bSub = document.getElementById('kpiBelowReorderSub');
-      if (b) b.textContent = erpNum(rs.length);
-      if (bSub) bSub.textContent = 'STD below buffer — replenish' + (rp.length ? ' · +' + erpNum(rp.length) + ' PROJ not counted' : '');
+      erpSetKpi('kpiZeroStock', erpNum(zs.length), 'STD zero stock' + (zp.length ? ' · +' + erpNum(zp.length) + ' PROJ hidden' : '') + ' — click to view');
+      erpSetKpi('kpiBelowReorder', erpNum(rs.length), 'STD below buffer — replenish' + (rp.length ? ' · +' + erpNum(rp.length) + ' PROJ not counted' : ''));
     } catch (e) {
       console.warn('[Stock Monitor] STD KPIs unavailable, keeping database numbers:', e.message);
     } finally { _erpStd.pending = null; }
@@ -188,20 +279,21 @@ function erpRenderValueKpi() {
   var el = document.getElementById('kpiStockValue');
   var sub = document.getElementById('kpiStockValueSub');
   if (!el) return;
-  var mode = _erpValueKpi.mode, val = _erpValueKpi[mode];
+  var mode = _erpValueKpi.mode, val = (_erpValueKpi.filt || _erpValueKpi)[mode];
   var labels = {
     onhand: 'Total on-hand value (lahat ng physical stock)',
     allocated: 'Value ng stock na naka-reserve sa SOF',
     available: 'On-hand − SOF allocated (libre pang magamit)'
   };
+  var fTag = _erpValueKpi.filt ? ' · filtered items only' : '';
   if (val === null || val === undefined) {
     el.textContent = '…';
-    if (sub) sub.textContent = labels[mode];
+    if (sub) sub.textContent = labels[mode] + fTag;
     return;
   }
   el.textContent = erpPeso(val);
   el.title = erpPeso(val);
-  if (sub) sub.textContent = labels[mode];
+  if (sub) sub.textContent = labels[mode] + fTag;
   el.style.fontSize = '';   // i-shrink ang font kung kulang pa rin ang lapad (para di maputol)
   var box = el.parentElement, size = parseFloat(getComputedStyle(el).fontSize);
   while (el.scrollWidth > box.clientWidth && size > 14) { size -= 1; el.style.fontSize = size + 'px'; }
@@ -521,8 +613,7 @@ async function erpLoadItems() {
     (varRes || []).forEach(function(v) {
       window._erpVarianceMap[v.item_code] = Number(v.variance_qty || 0);
     });
-    var varKpi = document.getElementById('kpiVariances');
-    if (varKpi) varKpi.textContent = Object.keys(window._erpVarianceMap).length;
+    erpSetKpi('kpiVariances', String(Object.keys(window._erpVarianceMap).length));
   } catch(e) { 
     console.warn('Variance fetch failed', e); 
   }
@@ -556,6 +647,7 @@ function erpRenderTable() {
   var tbody = document.getElementById('erpTableBody');
   if (!tbody) return;
   
+  erpPaintKpis();   // cards follow the filtered rows
   var total = _erpFilteredItems.length;
   var start = (_erpCurrentPage - 1) * _erpPageSize;
   var end = Math.min(start + _erpPageSize, total);
@@ -1500,9 +1592,9 @@ window.erpShowVariancesModal = function() {
   tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><div class="erp-spinner" style="margin:0 auto;"></div></td></tr>';
   modal.show();
   
-  var varianceItems = _erpAllItems.filter(function(it) {
+  var varianceItems = erpScope(_erpAllItems.filter(function(it) {
     return window._erpVarianceMap && (window._erpVarianceMap[it.item_code] || 0) !== 0;
-  });
+  }));
   
   window._variancesAll = varianceItems;
   window._variancesFiltered = varianceItems;
@@ -1811,6 +1903,7 @@ function erpShowNewItemsModal() {
     var b = Number(it.buffer_stock || 0);
     return String(it.stock_classification || '').toUpperCase() === 'NEW' && b > 0 && Number(it.on_hand || 0) <= b;
   });
+  items = erpScope(items);
   document.getElementById('newItemsCount').textContent = items.length;
   document.getElementById('newItemsBody').innerHTML = _erpMiniRows(items, function() {
     return '<span class="reorder-badge reorder-new">MONITOR</span>';
@@ -1821,7 +1914,7 @@ function erpShowNewItemsModal() {
 async function erpShowOutOfStockModal() {
   if (!_erpStd.items) await erpLoadStdKpis(true);
   var src = _erpStd.items || _erpAllItems;
-  _outOfStockAll = src.filter(function(it) { return Number(it.on_hand || 0) <= 0; });
+  _outOfStockAll = erpScope(src.filter(function(it) { return Number(it.on_hand || 0) <= 0; }));
   document.getElementById('outOfStockFilter').value = 'std';
   document.getElementById('outOfStockSearch').value = '';
   erpFilterOutOfStock();
@@ -1862,7 +1955,7 @@ async function erpShowReorderModal() {
 function erpReorderSetTab(t) { _erpReorderTab = t; erpRenderReorderModal(); }
 function erpRenderReorderModal() {
   var body = document.getElementById('erpReorderBody'); if (!body) return;
-  var std = _erpStd.repStd, proj = _erpStd.repProj;
+  var std = erpScope(_erpStd.repStd), proj = erpScope(_erpStd.repProj);
   var items = _erpReorderTab === 'STD' ? std : _erpReorderTab === 'PROJ' ? proj : std.concat(proj);
   items = items.slice().sort(function(a, b) { return (Number(b.buffer_stock || 0) - Number(b.on_hand || 0)) * Number(b.unit_cost || 0) - (Number(a.buffer_stock || 0) - Number(a.on_hand || 0)) * Number(a.unit_cost || 0); });
   function tab(k, label, n) {
@@ -1870,7 +1963,8 @@ function erpRenderReorderModal() {
     return '<button type="button" onclick="erpReorderSetTab(\'' + k + '\')" style="border:1px solid ' + (on ? '#1e3a5f' : '#cbd5e1') + ';background:' + (on ? '#1e3a5f' : '#fff') + ';color:' + (on ? '#fff' : '#334155') + ';padding:5px 14px;border-radius:999px;font-weight:700;font-size:.8rem;cursor:pointer;margin-right:6px;">' + label + ' <span style="opacity:.75">' + erpNum(n) + '</span></button>';
   }
   var html = '<div class="mb-2">' + tab('STD', 'STD (standard)', std.length) + tab('PROJ', 'PROJ (project)', proj.length) + tab('ALL', 'All', std.length + proj.length) + '</div>' +
-    '<div class="text-muted small mb-2">Sorted by shortfall value (highest first). PROJ = project stock, not counted in the Needs PRF card.</div>';
+    '<div class="text-muted small mb-2">Sorted by shortfall value (highest first). PROJ = project stock, not counted in the Needs PRF card.' +
+      (erpIsFiltered() ? ' <b style="color:#2563eb;">Showing only items that match your current filters.</b>' : '') + '</div>';
   if (!items.length) { body.innerHTML = html + '<div class="text-center text-muted py-4">Walang items na kailangang i-reorder.</div>'; return; }
   html += '<div class="table-responsive"><table class="erp-table"><thead><tr>' +
     '<th>Item Code</th><th>Description</th><th>Category</th><th class="text-end">On-Hand</th>' +
