@@ -38,6 +38,7 @@
 <script defer src="stock-allocate-import.js"></script>
 <script defer src="stock-colfilters.js"></script>
 <script defer src="js/bulk-price-update.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script defer src="notif-alerts.js"></script>
   <script defer src="notifications.js"></script>
   <script defer src="js/update.js"></script>
@@ -310,6 +311,9 @@
 
     <!-- Item count stays visible; the action buttons above can be collapsed to save space -->
     <span class="erp-badge ms-2" id="erpTableCount" style="margin-right: 8px;">0 items</span>
+    <button class="erp-btn-primary" id="erpExportBtn" onclick="erpExportInventoryMaster()" title="Export the Inventory Master to Excel. Follows your current search and filters (all matching rows, not just this page).">
+      <i class="bi bi-file-earmark-excel me-1"></i>Export Excel
+    </button>
     <button class="erp-btn-outline-dark" id="imActionsToggle" onclick="imToggleActions()" aria-expanded="false" aria-controls="imActions" title="Show / hide the Inventory Master action buttons">
       <i class="bi bi-three-dots me-1"></i>Actions <i class="bi bi-chevron-down ms-1" id="imActionsChev"></i>
     </button>
