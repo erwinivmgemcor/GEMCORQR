@@ -25,6 +25,7 @@
 <script defer src="erp-config.js"></script>
 <script defer src="erp-supabase.js"></script>
 <script defer src="erp-nav.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script defer src="sof-tracker.js"></script>
 <script defer src="notif-alerts.js"></script>
 <script defer src="notifications.js"></script>
@@ -46,6 +47,7 @@
       <span class="dot dot-pending"></span>
       <span id="erpHealthText">Checking...</span>
     </div>
+    <button class="erp-btn-outline" onclick="sofExportExcel()" title="Export the SOFs now shown (and their items) to Excel"><i class="bi bi-file-earmark-excel"></i> <span>Export Excel</span></button>
     <button class="erp-btn-outline" onclick="sofOpenManual()" title="Manual SOF allocation (walang MRR)"><i class="bi bi-plus-circle"></i> <span>Manual Allocate</span></button>
     <button class="erp-btn-icon" onclick="sofTrackerRefresh()" title="Refresh">
       <i class="bi bi-arrow-clockwise"></i>
@@ -123,7 +125,7 @@
       <div class="erp-search-wrap">
         <i class="bi bi-search"></i>
         <input type="text" id="sofSearchInput" class="erp-search" 
-          placeholder="Search SOF No., client, project, or JO No..." 
+          placeholder="Search SOF No., client, project, JO No., or item code / description..." 
           oninput="sofTrackerOnSearch()">
       </div>
       <select id="sofStatusFilter" class="erp-select" onchange="sofTrackerLoad()">
@@ -156,12 +158,18 @@
         <strong>SOF Allocations</strong>
         <span class="erp-table-subtitle" id="sofTableSubtitle">All SOFs</span>
       </div>
-      <span class="erp-badge" id="sofTableCount">0 items</span>
+      <div class="d-flex align-items-center gap-2">
+        <div class="sof-view-toggle" role="group" aria-label="View">
+          <button type="button" id="sofViewBtnSof" class="on" onclick="sofSetView('sof')"><i class="bi bi-list-ul"></i> By SOF</button>
+          <button type="button" id="sofViewBtnItems" onclick="sofSetView('items')"><i class="bi bi-boxes"></i> All Items by SOF</button>
+        </div>
+        <span class="erp-badge" id="sofTableCount">0 items</span>
+      </div>
     </div>
 
     <div class="sof-coststrip" id="sofCostStrip"></div>
-    <div class="sof-hint"><i class="bi bi-hand-index-thumb"></i><span>I-click ang <b>SOF No.</b> (o kahit anong row) para makita ang mga item at mag-release ng stock.</span></div>
-    <div class="erp-table-wrap" style="max-height:65vh;">
+    <div class="sof-hint" id="sofListHint"><i class="bi bi-hand-index-thumb"></i><span>I-click ang <b>SOF No.</b> (o kahit anong row) para makita ang mga item at mag-release ng stock.</span></div>
+    <div class="erp-table-wrap" id="sofListWrap" style="max-height:65vh;">
       <table class="erp-table sof-table" style="font-size:0.85rem;">
         <thead>
           <tr>
@@ -185,6 +193,22 @@
             </td>
           </tr>
         </tbody>
+      </table>
+    </div>
+    <div class="erp-table-wrap" id="sofAllItemsWrap" style="max-height:65vh; display:none;">
+      <table class="erp-table sof-table sofai-table" style="font-size:0.85rem;">
+        <thead><tr>
+          <th style="width:13%">Item Code</th>
+          <th style="width:33%">Description</th>
+          <th style="width:6%">Unit</th>
+          <th style="width:8%" class="text-end">Allocated</th>
+          <th style="width:8%" class="text-end">Used</th>
+          <th style="width:8%" class="text-end">Remaining</th>
+          <th style="width:9%" class="text-end">Unit Cost ₱</th>
+          <th style="width:10%" class="text-end">Line Cost ₱</th>
+          <th style="width:9%" class="text-center">Status</th>
+        </tr></thead>
+        <tbody id="sofAllItemsBody"><tr><td colspan="9" class="erp-empty">Loading…</td></tr></tbody>
       </table>
     </div>
   </div>
