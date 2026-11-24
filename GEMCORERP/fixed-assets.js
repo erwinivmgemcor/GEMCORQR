@@ -10,8 +10,6 @@
 var FA_EDIT_ROLES = ['warehouse', 'finance'];
 // Who may set an R&M item to CAPITAL (accounting decision). Narrow to ['finance'] if you want accounting only.
 var FA_CAPITAL_ROLES = ['warehouse', 'finance'];
-// Who may pick items to issue (opens Manual MRIF with the items + qty filled in).
-var FA_MRIF_ROLES = ['warehouse'];
 
 var FA_TYPES = [
   { k: 'TOOLS',                 t: 'Tools',                     i: 'bi-tools',                  c: '#2563eb' },
@@ -23,7 +21,7 @@ var FA_TYPES = [
 ];
 var FA_BY = {}; FA_TYPES.forEach(function (t) { FA_BY[t.k] = t; });
 
-var FA = { sel: {}, items: [], recv: {}, view: [], type: '', page: 1, pageSize: 100, timer: null, findTimer: null, loadId: 0, role: '' };
+var FA = { items: [], recv: {}, view: [], type: '', page: 1, pageSize: 100, timer: null, findTimer: null, loadId: 0, role: '' };
 
 function faEsc(s) { return (window.erpEsc ? erpEsc(s) : String(s == null ? '' : s)); }
 function faPeso(n) { return '₱' + Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -45,7 +43,6 @@ document.addEventListener('DOMContentLoaded', function () {
   sel.innerHTML = '<option value="">All Types</option>' + FA_TYPES.map(function (t) { return '<option value="' + t.k + '">' + t.t + '</option>'; }).join('');
   var tt = document.getElementById('faTagType');
   tt.innerHTML = FA_TYPES.map(function (t) { return '<option value="' + t.k + '">' + t.t + '</option>'; }).join('');
-  if (!faCan(FA_MRIF_ROLES)) { document.querySelectorAll('.fa-sel-col').forEach(function (e) { e.style.display = 'none'; }); }
   if (!faCan(FA_EDIT_ROLES)) { document.querySelectorAll('.fa-edit-col').forEach(function (e) { e.style.display = 'none'; }); }
   else document.getElementById('faTagBtn').style.display = '';
   faTagTypeChanged();
@@ -66,7 +63,7 @@ async function faHealth() {
 async function faLoad() {
   var myId = ++FA.loadId;
   var body = document.getElementById('faBody');
-  body.innerHTML = '<tr><td colspan="12" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading…</div></td></tr>';
+  body.innerHTML = '<tr><td colspan="10" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading…</div></td></tr>';
   try {
     var items = await erpFetchAll('erp_items',
       'select=item_code,description,category,location,base_unit,unit_cost,on_hand,asset_type,asset_treatment,is_active' +
@@ -98,7 +95,7 @@ async function faLoad() {
     document.getElementById('faSummary').className = 'fa-summary warn';
     document.getElementById('faSummary').innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i><div><b>' + (setup ? 'Setup needed' : 'Could not load') + '</b>' +
       '<span class="sub">' + (setup ? 'Run <code>fixed-assets.sql</code> once in the Supabase SQL Editor (it adds the asset_type column), then refresh.' : faEsc(msg)) + '</span></div>';
-    body.innerHTML = '<tr><td colspan="12" class="erp-empty text-danger">Could not load fixed assets.</td></tr>';
+    body.innerHTML = '<tr><td colspan="10" class="erp-empty text-danger">Could not load fixed assets.</td></tr>';
   }
 }
 
@@ -197,11 +194,11 @@ function faRenderTable() {
   var body = document.getElementById('faBody'), canEdit = faCan(FA_EDIT_ROLES);
   document.getElementById('faCount').textContent = FA.view.length.toLocaleString() + ' of ' + (document.getElementById('faShowInactive').checked ? FA.items.length : FA.items.filter(faIsActive).length).toLocaleString() + ' items';
   document.getElementById('faSubtitle').textContent = 'Highest acquired value first';
-  if (!FA.view.length) { body.innerHTML = '<tr><td colspan="12" class="erp-empty text-muted">No fixed asset items match.</td></tr>'; return; }
+  if (!FA.view.length) { body.innerHTML = '<tr><td colspan="10" class="erp-empty text-muted">No fixed asset items match.</td></tr>'; return; }
   var slice = FA.view.slice(0, FA.page * FA.pageSize);
   body.innerHTML = slice.map(function (it, i) {
     var a = it._a;
-    return '<tr' + (faIsActive(it) ? '' : ' class="fa-off"') + '>' + faSelCells(it) + '<td>' + (i + 1) + '</td>' +
+    return '<tr' + (faIsActive(it) ? '' : ' class="fa-off"') + '><td>' + (i + 1) + '</td>' +
       '<td><span class="fa-code">' + faEsc(it.item_code) + '</span></td>' +
       '<td>' + faEsc(it.description) + (it.is_active === false ? ' <span class="badge bg-secondary">inactive</span>' : '') + '</td>' +
       '<td>' + faBadge(it) + '</td>' +
@@ -215,7 +212,7 @@ function faRenderTable() {
           ? '<button class="btn btn-sm btn-outline-danger" title="Deactivate item" onclick="faSetActive(\'' + faEsc(String(it.item_code).replace(/'/g, '')) + '\',false)"><i class="bi bi-archive"></i></button>'
           : '<button class="btn btn-sm btn-outline-success" title="Reactivate item" onclick="faSetActive(\'' + faEsc(String(it.item_code).replace(/'/g, '')) + '\',true)"><i class="bi bi-arrow-counterclockwise"></i></button>') + '</td>' : '') +
       '</tr>';
-  }).join('') + (FA.view.length > slice.length ? '<tr><td colspan="12" class="fa-pager"><button class="erp-btn-outline-dark" onclick="FA.page++;faRenderTable()">Show more</button></td></tr>' : '');
+  }).join('') + (FA.view.length > slice.length ? '<tr><td colspan="10" class="fa-pager"><button class="erp-btn-outline-dark" onclick="FA.page++;faRenderTable()">Show more</button></td></tr>' : '');
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -293,57 +290,6 @@ async function faBulkApply() {
     msg.textContent = done + ' item(s) tagged as ' + FA_BY[tag.asset_type].t + (missing.length ? '. Not found: ' + missing.slice(0, 15).join(', ') + (missing.length > 15 ? '…' : '') : '.');
     await faLoad();
   } catch (e) { msg.className = 'small mt-2 text-danger'; msg.textContent = 'Failed: ' + e.message; }
-}
-
-// ═══════════════════════════════════════════════════════════
-// SELECT ITEMS + QTY  →  Manual MRIF (issuance)
-// Only passes code / description / unit / qty to the MRIF form via sessionStorage.
-// Nothing is issued here — the MRIF is still created and processed the normal way.
-// ═══════════════════════════════════════════════════════════
-function faSelCells(it) {
-  if (!faCan(FA_MRIF_ROLES)) return '<td class="fa-sel-col" style="display:none"></td><td class="fa-sel-col" style="display:none"></td>';
-  var code = String(it.item_code), key = faEsc(code.replace(/'/g, '').replace(/"/g, ''));
-  var oh = Number(it.on_hand || 0), ok = faIsActive(it) && oh > 0, on = FA.sel[code] != null;
-  return '<td class="text-center fa-sel-col"><input type="checkbox" class="form-check-input" ' + (ok ? '' : 'disabled title="' + (oh > 0 ? 'Inactive' : 'No stock on hand') + '"') +
-    (on ? ' checked' : '') + ' data-code="' + key + '" onchange="faSelToggle(this)"></td>' +
-    '<td class="text-end fa-sel-col"><input type="number" class="form-control form-control-sm fa-qty" min="0.01" max="' + oh + '" step="any" ' +
-    'value="' + (on ? FA.sel[code] : '') + '" placeholder="' + (ok ? 'max ' + faNum(oh) : '') + '" ' + (on ? '' : 'disabled') + ' data-code="' + key + '" oninput="faSelQty(this)"></td>';
-}
-function faItemByCode(code) { return FA.items.filter(function (x) { return String(x.item_code).replace(/['"]/g, '') === code; })[0]; }
-function faSelToggle(cb) {
-  var code = cb.getAttribute('data-code'), it = faItemByCode(code); if (!it) return;
-  var q = cb.closest('tr').querySelector('.fa-qty');
-  if (cb.checked) { FA.sel[it.item_code] = 1; q.disabled = false; q.value = 1; q.focus(); q.select(); }
-  else { delete FA.sel[it.item_code]; q.disabled = true; q.value = ''; }
-  faSelBar();
-}
-function faSelQty(inp) {
-  var it = faItemByCode(inp.getAttribute('data-code')); if (!it) return;
-  var v = parseFloat(inp.value), max = Number(it.on_hand || 0);
-  inp.classList.toggle('is-invalid', !(v > 0) || v > max);
-  FA.sel[it.item_code] = isNaN(v) ? 0 : v;
-  faSelBar();
-}
-function faSelBar() {
-  var n = Object.keys(FA.sel).length;
-  document.getElementById('faSelCount').textContent = n;
-  document.getElementById('faSelBar').style.display = n ? '' : 'none';
-}
-function faSelClear() { FA.sel = {}; faRenderTable(); faSelBar(); }
-function faGoMrif() {
-  var out = [], bad = [];
-  Object.keys(FA.sel).forEach(function (code) {
-    var it = FA.items.filter(function (x) { return x.item_code === code; })[0]; if (!it) return;
-    var q = Number(FA.sel[code]), max = Number(it.on_hand || 0);
-    if (!(q > 0)) { bad.push(code + ': enter a quantity'); return; }
-    if (q > max) { bad.push(code + ': only ' + faNum(max) + ' on hand'); return; }
-    out.push({ code: it.item_code, description: it.description || '', qty: q, unit: it.base_unit || 'PIECE', remarks: 'Fixed asset' });
-  });
-  if (bad.length) { faToast('Fix quantity — ' + bad[0] + (bad.length > 1 ? ' (+' + (bad.length - 1) + ' more)' : '')); return; }
-  if (!out.length) { faToast('Select at least one item.'); return; }
-  try { sessionStorage.setItem('erp_mrif_prefill', JSON.stringify({ source: 'Fixed Assets', items: out, ts: Date.now() })); }
-  catch (e) { faToast('Could not pass the items: ' + e.message); return; }
-  location.href = 'new-mrif-manual.html';
 }
 
 // Deactivate / reactivate (is_active only — nothing is deleted; fully reversible)
