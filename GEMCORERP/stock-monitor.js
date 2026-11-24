@@ -2325,3 +2325,24 @@ if (typeof window.erpShowToast !== 'function') {
 }
 
 console.log('✅ Variance functions loaded successfully!');
+
+
+// ═══════════════════════════════════════════════════════════
+// INVENTORY MASTER — collapsible action buttons (state is remembered per browser)
+// ═══════════════════════════════════════════════════════════
+function imApplyActions(open) {
+  var box = document.getElementById('imActions'); if (!box) return;
+  box.classList.toggle('d-none', !open);
+  var btn = document.getElementById('imActionsToggle'); if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  var chev = document.getElementById('imActionsChev'); if (chev) chev.className = 'bi ms-1 ' + (open ? 'bi-chevron-up' : 'bi-chevron-down');
+}
+function imToggleActions() {
+  var open = document.getElementById('imActions').classList.contains('d-none');   // currently hidden -> open it
+  imApplyActions(open);
+  try { localStorage.setItem('erp_im_actions_open', open ? '1' : '0'); } catch (e) {}
+}
+document.addEventListener('DOMContentLoaded', function () {
+  var open = false;
+  try { open = localStorage.getItem('erp_im_actions_open') === '1'; } catch (e) {}
+  imApplyActions(open);   // default: collapsed
+});
