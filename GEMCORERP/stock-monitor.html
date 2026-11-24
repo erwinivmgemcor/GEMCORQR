@@ -56,6 +56,14 @@
     }
     .kpi-mode-select:hover { background-color: #d3f3e4; border-color: #6ee7b7; }
     .kpi-mode-select:focus { outline: 0; box-shadow: 0 0 0 3px rgba(16,185,129,.25); }
+    /* Filtered cards */
+    .erp-kpi-filterbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; padding: 6px 12px;
+      background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; color: #1e3a8a; font-size: .8rem; }
+    .erp-kpi-filterbar button { margin-left: auto; border: 1px solid #ef4444; color: #ef4444; background: #fff; border-radius: 6px; padding: 2px 10px; font-size: .75rem; font-weight: 600; cursor: pointer; }
+    .erp-kpi-filterbar button:hover { background: #ef4444; color: #fff; }
+    .erp-kpi-card.kpi-filtered { outline: 2px dashed #2563eb; outline-offset: -2px; }
+    [data-theme="dark"] .erp-kpi-filterbar { background: #1e3a8a; border-color: #3b82f6; color: #dbeafe; }
+    [data-theme="dark"] .erp-kpi-filterbar button { background: transparent; }
     @media (max-width: 1400px) {
       body .erp-kpi-row.kpi-row-sm { grid-template-columns: repeat(3, 1fr) !important; }
     }
@@ -98,6 +106,12 @@
 <!-- KPI CARDS -->
 <!-- ═══════════════════════════════════════════════════════════ -->
 <div class="erp-container">
+  <!-- Shows only while a filter is active: tells the user the cards are for filtered items -->
+  <div id="erpKpiFilterBar" class="erp-kpi-filterbar" style="display:none;">
+    <i class="bi bi-funnel-fill"></i>
+    <span id="erpKpiFilterText"></span>
+    <button type="button" onclick="erpClearFilters()">✕ Clear filters</button>
+  </div>
   <div class="erp-kpi-row kpi-row-sm">
     <!-- CARD 1: Total Items -->
     <div class="erp-kpi-card kpi-blue">
@@ -143,7 +157,7 @@
       <div class="kpi-content">
         <div class="kpi-label">NEW (Monitor)</div>
         <div class="kpi-value" id="kpiNewBelowBuffer">—</div>
-        <div class="kpi-sub">New items below buffer</div>
+        <div class="kpi-sub" id="kpiNewBelowBufferSub">New items below buffer</div>
       </div>
     </div>
 
@@ -167,7 +181,7 @@
             <i class="bi bi-list-ul"></i> View
           </button>
         </div>
-        <div class="kpi-sub">Items with count discrepancies</div>
+        <div class="kpi-sub" id="kpiVariancesSub">Items with count discrepancies</div>
       </div>
     </div>
   </div>
