@@ -68,13 +68,21 @@
     </div>
   </div>
 
-  <div class="erp-kpi-row" style="grid-template-columns: repeat(4, 1fr);margin-bottom:20px;">
+  <div class="erp-kpi-row" style="grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));margin-bottom:20px;">
     <div class="erp-kpi-card kpi-blue">
       <div class="kpi-icon"><i class="bi bi-kanban"></i></div>
       <div class="kpi-content">
         <div class="kpi-label">Projects</div>
         <div class="kpi-value" id="pcKpiProjects">—</div>
         <div class="kpi-sub">May issued na materials</div>
+      </div>
+    </div>
+    <div class="erp-kpi-card kpi-blue">
+      <div class="kpi-icon"><i class="bi bi-receipt"></i></div>
+      <div class="kpi-content">
+        <div class="kpi-label">Total SOF Amount</div>
+        <div class="kpi-value" id="pcKpiSof">—</div>
+        <div class="kpi-sub" id="pcKpiSofSub">Galing sa SOF Monitoring sheet</div>
       </div>
     </div>
     <div class="erp-kpi-card kpi-green">
@@ -113,6 +121,7 @@
       <select id="pcSort" class="erp-select" onchange="pcRender()">
         <option value="activity">Latest activity</option>
         <option value="cost">Highest cost</option>
+        <option value="sof">Highest SOF amount</option>
         <option value="jo">JO No.</option>
       </select>
       <button class="erp-btn-clear" onclick="pcClear()">
@@ -137,6 +146,7 @@
             <th>JO No.</th>
             <th>SOF No.</th>
             <th>Project</th>
+            <th class="text-end">SOF Amount</th>
             <th>Client</th>
             <th class="text-center">Items</th>
             <th class="text-end">Issued</th>
@@ -146,7 +156,7 @@
           </tr>
         </thead>
         <tbody id="pcBody">
-          <tr><td colspan="9" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading projects...</div></td></tr>
+          <tr><td colspan="10" class="erp-empty"><div class="erp-spinner"></div><div class="mt-2">Loading projects...</div></td></tr>
         </tbody>
       </table>
     </div>
