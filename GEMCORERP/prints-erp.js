@@ -638,6 +638,15 @@ function erpShowPrintModal(html) {
             '<div id="erpPrintContent" style="padding:20px;">' + html + '</div>' +
           '</div>' +
           '<div class="modal-footer">' +
+            '<div class="me-auto d-flex align-items-center gap-2 flex-wrap" id="erpPrintFitBox">' +
+              '<label class="small fw-bold mb-0" for="erpPrintFit"><i class="bi bi-file-earmark-text me-1"></i>Paper</label>' +
+              '<select id="erpPrintFit" class="form-select form-select-sm" style="width:auto;" onchange="erpOnPrintFitChange()">' +
+                '<option value="auto">Auto — save paper (recommended)</option>' +
+                '<option value="one">Fit to 1 page (Letter)</option>' +
+                '<option value="normal">Normal (may use 2+ pages)</option>' +
+              '</select>' +
+              '<span id="erpPrintFitHint" class="small text-muted"></span>' +
+            '</div>' +
             '<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>' +
             '<button type="button" class="btn btn-primary" onclick="erpPrintNow()">' +
               '<i class="bi bi-printer me-2"></i>Print / Save PDF' +
@@ -654,6 +663,17 @@ function erpShowPrintModal(html) {
   var modalEl = document.getElementById('erpPrintModal');
   var modal = new bootstrap.Modal(modalEl);
   modal.show();
+
+  // Paper option: restore last choice, then show whether this document fits on one page
+  try {
+    var sel = document.getElementById('erpPrintFit');
+    var saved = localStorage.getItem('erp_print_fit');
+    if (sel && saved && /^(auto|one|normal)$/.test(saved)) sel.value = saved;
+  } catch (e) {}
+  modalEl.addEventListener('shown.bs.modal', function() { erpUpdatePrintFitHint(); });
+  modalEl.addEventListener('change', function(ev) {            // e.g. bulk "Save paper" checkbox
+    if (ev.target && ev.target.id === 'erpBulkCompact') erpUpdatePrintFitHint();
+  });
   
   // Clean up on hide
   modalEl.addEventListener('hidden.bs.modal', function() {
@@ -667,11 +687,21 @@ function erpPrintNow() {
   erpPrintHtml(content.innerHTML);
 }
 
-// Actual print worker — used by single print (erpPrintNow) and bulk print (bulk-print.js)
-function erpPrintHtml(html, opts) {
+// ═══════════════════════════════════════════════════════════
+// PAPER FIT — Letter size, one page when it can fit
+//   auto   : kapag lampas lang nang kaunti sa 1 pahina, paliliitin para magkasya (save paper)
+//   one    : pilitin sa 1 pahina (hanggang 70% lang ang pinakamaliit, para mabasa pa)
+//   normal : hindi gagalawin ang laki (puwedeng 2+ pahina)
+// Sa lahat ng mode: hindi pinuputol ang row ng table at ang signature block.
+// ═══════════════════════════════════════════════════════════
+var ERP_PRINT_AVAIL_PX = 1000;      // Letter 11in - 2 x 0.25in margin = 1008px (96dpi), minus 8px safety
+var ERP_PRINT_AUTO_MIN = 0.85;      // auto: huwag paliitin lampas dito
+var ERP_PRINT_ONE_MIN = 0.70;       // "Fit to 1 page": huwag paliitin lampas dito (mas maliit pa dito, hindi na mabasa)
+var ERP_FIT_SEL = '.bulk-print-page, .erp-fit-target';
+
+function erpPrintStyles(opts) {
   opts = opts || {};
-  var printStyles = 
-    '@page { size: letter portrait; margin: 0.25in; }' +
+  return '@page { size: letter portrait; margin: 0.25in; }' +
     '* { box-sizing: border-box; }' +
     'body { margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 9pt; color: #000; }' +
     '.mrif-print-sheet, .mrr-print-sheet { width: 100%; max-width: 8in; margin: 0 auto; background: #fff; padding: 0.15in; }' +
@@ -709,10 +739,130 @@ function erpPrintHtml(html, opts) {
     '.bulk-print-page:last-child { break-after: auto; page-break-after: auto; }' +
     // Bulk "save paper" mode: several documents per page, never split a document across pages
     (opts.compact ? '.bulk-print-page { break-after: auto; page-break-after: auto; break-inside: avoid; page-break-inside: avoid; border-bottom: 1px dashed #888; padding-bottom: 4px; margin-bottom: 4px; }' +
-                    '.bulk-print-page:last-child { border-bottom: 0; }' : '');
-  
-  var fullHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Print</title><style>' + printStyles + '</style></head><body>' + html + '</body></html>';
-  
+                    '.bulk-print-page:last-child { border-bottom: 0; }' : '') +
+    // Clean breaks: never split a row or the signature block, repeat the table header on the next page
+    '.mrif-items tr, .mrr-items tr { break-inside: avoid; page-break-inside: avoid; }' +
+    '.mrif-items thead, .mrr-items thead { display: table-header-group; }' +
+    '.mrif-sigs, .mrr-sigs { break-inside: avoid; page-break-inside: avoid; }';
+}
+
+function erpGetPrintFitMode() {
+  var sel = document.getElementById('erpPrintFit');
+  if (sel && sel.value) return sel.value;
+  try { var v = localStorage.getItem('erp_print_fit'); if (/^(auto|one|normal)$/.test(v)) return v; } catch (e) {}
+  return 'auto';
+}
+
+function erpOnPrintFitChange() {
+  try { localStorage.setItem('erp_print_fit', erpGetPrintFitMode()); } catch (e) {}
+  erpUpdatePrintFitHint();
+}
+
+// Single document → one fit target. Bulk → every .bulk-print-page is its own target.
+function erpFitWrap(html) {
+  return html.indexOf('bulk-print-page') !== -1 ? html : '<div class="erp-fit-target">' + html + '</div>';
+}
+
+// Measure each document on a Letter page (8in wide print area) and work out the scale to fit one page.
+// The result is verified on the real zoomed layout (borders and line heights do not shrink perfectly linearly).
+// Returns a Promise of one plan per document: { h, fits, scale, possible, pages }
+function erpFitPlan(html, opts, mode) {
+  return new Promise(function(resolve) {
+    var f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;top:-99999px;left:-99999px;width:768px;height:1400px;border:0;';
+    document.body.appendChild(f);
+    var d = f.contentWindow.document;
+    d.open();
+    d.write('<!DOCTYPE html><html><head><meta charset="utf-8"><style>' + erpPrintStyles(opts) + '</style></head><body>' + erpFitWrap(html) + '</body></html>');
+    d.close();
+    setTimeout(function() {
+      var min = mode === 'one' ? ERP_PRINT_ONE_MIN : ERP_PRINT_AUTO_MIN;
+      var plans = Array.prototype.map.call(d.querySelectorAll(ERP_FIT_SEL), function(el) {
+        var h = el.offsetHeight, pl = erpPlanScale(h, mode);
+        pl.h = h;
+        if (pl.scale < 1) {
+          var sc = pl.scale;
+          for (var k = 0; k < 8; k++) {
+            erpApplyFit(el, sc, h);
+            var real = el.getBoundingClientRect().height;
+            if (real <= ERP_PRINT_AVAIL_PX) break;
+            sc = Math.floor(sc * (ERP_PRINT_AVAIL_PX / real) * 100 - 1) / 100;
+            if (sc < min) { sc = 1; break; }
+          }
+          pl.scale = sc;
+        }
+        return pl;
+      });
+      if (f.parentNode) f.parentNode.removeChild(f);
+      resolve(plans);
+    }, 150);
+  });
+}
+
+function erpPlanScale(h, mode) {
+  if (!h || h <= ERP_PRINT_AVAIL_PX) return { scale: 1, fits: true, possible: 1 };
+  var s = Math.floor(ERP_PRINT_AVAIL_PX / h * 100) / 100;
+  var min = mode === 'one' ? ERP_PRINT_ONE_MIN : ERP_PRINT_AUTO_MIN;
+  return { scale: (mode === 'normal' || s < min) ? 1 : s, fits: false, possible: s, pages: Math.ceil(h / ERP_PRINT_AVAIL_PX) };
+}
+
+function erpUpdatePrintFitHint() {
+  var hint = document.getElementById('erpPrintFitHint'), content = document.getElementById('erpPrintContent');
+  if (!hint || !content) return;
+  var cmp = document.getElementById('erpBulkCompact');
+  if (cmp && cmp.checked) { hint.textContent = 'Save paper mode is on: several documents per page.'; return; }
+  var mode = erpGetPrintFitMode();
+  erpFitPlan(content.innerHTML, {}, mode).then(function(plans) {
+    if (!document.getElementById('erpPrintFitHint')) return;       // modal was closed meanwhile
+    var pct = function(x) { return Math.round(x * 100) + '%'; };
+    var txt = '', color = '#64748b';
+    if (plans.length <= 1) {
+      var p = plans[0] || { fits: true, scale: 1 };
+      if (p.fits) { txt = '✓ Fits on 1 page'; color = '#15803d'; }
+      else if (p.scale < 1) { txt = 'Will be shrunk to ' + pct(p.scale) + ' to fit on 1 page'; color = '#15803d'; }
+      else if (p.possible >= ERP_PRINT_ONE_MIN) { txt = 'Just over 1 page. “Fit to 1 page” = about ' + pct(p.possible) + ' size'; color = '#b45309'; }
+      else { txt = 'Too long for 1 page (about ' + p.pages + ' pages)'; color = '#b45309'; }
+    } else {
+      var over = plans.filter(function(p) { return !p.fits; }), shrunk = over.filter(function(p) { return p.scale < 1; }).length;
+      if (!over.length) { txt = '✓ All ' + plans.length + ' documents fit on 1 page each'; color = '#15803d'; }
+      else { txt = over.length + ' of ' + plans.length + ' documents are over 1 page' + (shrunk ? ' — ' + shrunk + ' will be shrunk to fit' : ''); color = '#b45309'; }
+    }
+    hint.textContent = txt; hint.style.color = color;
+  });
+}
+
+function erpApplyFit(el, s, h) {
+  el.style.marginBottom = '0';
+  if ('zoom' in el.style) {
+    el.style.zoom = s;
+    // wider layout inside the zoom, so the page is used fully (never taller than what was measured)
+    el.querySelectorAll('.mrif-print-sheet, .mrr-print-sheet').forEach(function(sh) { sh.style.maxWidth = (8 / s) + 'in'; });
+  } else {
+    el.style.transformOrigin = 'top left';
+    el.style.transform = 'scale(' + s + ')';
+    el.style.width = (100 / s) + '%';
+    el.style.height = Math.ceil(h * s) + 'px';
+    el.style.overflow = 'hidden';
+  }
+}
+
+// Actual print worker — used by single print (erpPrintNow) and bulk print (bulk-print.js)
+function erpPrintHtml(html, opts) {
+  opts = opts || {};
+  var mode = opts.fit || erpGetPrintFitMode();
+  if (opts.compact) mode = 'normal';           // "Save paper" bulk mode already packs documents together
+  if (mode === 'normal') { erpPrintFrame(html, opts, null, null); return; }
+  erpFitPlan(html, opts, mode).then(function(plans) {
+    erpPrintFrame(html, opts, plans.map(function(pl) { return pl.scale; }), plans.map(function(pl) { return pl.h; }));
+  }).catch(function(e) {
+    console.warn('[Print] fit measure failed, printing normally', e);
+    erpPrintFrame(html, opts, null, null);
+  });
+}
+
+function erpPrintFrame(html, opts, scales, heights) {
+  var fullHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Print</title><style>' + erpPrintStyles(opts) + '</style></head><body>' + (scales ? erpFitWrap(html) : html) + '</body></html>';
+
   var iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.top = '-9999px';
@@ -720,12 +870,19 @@ function erpPrintHtml(html, opts) {
   iframe.style.width = '0';
   iframe.style.height = '0';
   document.body.appendChild(iframe);
-  
+
   var doc = iframe.contentWindow.document;
   doc.open();
   doc.write(fullHtml);
   doc.close();
-  
+
+  if (scales) {
+    var targets = doc.querySelectorAll(ERP_FIT_SEL);
+    for (var i = 0; i < targets.length; i++) {
+      if (scales[i] && scales[i] < 1) erpApplyFit(targets[i], scales[i], heights ? heights[i] : 0);
+    }
+  }
+
   setTimeout(function() {
     try {
       iframe.contentWindow.focus();
