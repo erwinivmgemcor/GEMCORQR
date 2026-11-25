@@ -4,7 +4,7 @@
 // Read-only. Para sa warehouse at production.
 // ============================================================
 
-var _pc = { rows: [], timer: null, loading: false };
+var _pc = { rows: [], timer: null, loading: false, sof: {}, sofMissing: false };
 
 document.addEventListener('DOMContentLoaded', function () {
   var role = '';
@@ -44,6 +44,7 @@ async function pcLoad(silent) {
   _pc.loading = true;
   try {
     _pc.rows = await erpFetchAll('v_project_costing', 'select=*');
+    await pcLoadSofAmounts();
     pcRender();
     var up = document.getElementById('pcUpdated');
     if (up) up.textContent = 'Updated ' + new Date().toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila' }) + ' • auto-refresh 60s';
@@ -53,9 +54,38 @@ async function pcLoad(silent) {
     var hint = /v_project_costing|404|PGRST205|relation/i.test(msg)
       ? 'Hindi pa na-run ang PROJECT_COSTING.sql sa Supabase.' : msg;
     document.getElementById('pcBody').innerHTML =
-      '<tr><td colspan="9" class="erp-empty text-danger">' + erpEsc(hint) + '</td></tr>';
+      '<tr><td colspan="10" class="erp-empty text-danger">' + erpEsc(hint) + '</td></tr>';
     if (!silent && typeof erpShowToast === 'function') erpShowToast('Failed to load: ' + hint, 'danger');
   } finally { _pc.loading = false; }
+}
+
+// SOF Amount: galing sa Google Sheet (SOF MONITORING 2026 → column "SOF AMOUNT"), na naka-sync sa erp_sof_cache.
+// Kapag wala pa ang column na sof_amount sa database, hindi masisira ang page: "—" lang ang ipapakita.
+function pcSofKey(v) { return String(v == null ? '' : v).trim(); }
+function pcSofAmount(r) {
+  var k = pcSofKey(r && r.sof_no);
+  return k && _pc.sof.hasOwnProperty(k) ? _pc.sof[k] : null;
+}
+function pcMoney(v) { return v === null || v === undefined ? '—' : erpPeso(v); }
+
+async function pcLoadSofAmounts() {
+  try {
+    var rows = await erpFetchAll('erp_sof_cache', 'select=sof_no,sof_amount');
+    var map = {};
+    (rows || []).forEach(function (r) {
+      var k = pcSofKey(r.sof_no);
+      if (!k || r.sof_amount === null || r.sof_amount === undefined || r.sof_amount === '') return;
+      var n = Number(r.sof_amount);
+      if (isNaN(n)) return;
+      if (!map.hasOwnProperty(k) || n > map[k]) map[k] = n;   // kung may duplicate na SOF, kunin ang pinakamalaki
+    });
+    _pc.sof = map;
+    _pc.sofMissing = false;
+  } catch (err) {
+    console.warn('[ProjectCosting] SOF amount not available:', err);
+    _pc.sof = {};
+    _pc.sofMissing = true;
+  }
 }
 
 function pcFiltered() {
@@ -67,6 +97,7 @@ function pcFiltered() {
   var sort = document.getElementById('pcSort').value;
   rows.sort(function (a, b) {
     if (sort === 'cost') return pcNum(b.net_cost) - pcNum(a.net_cost);
+    if (sort === 'sof') return pcNum(pcSofAmount(b)) - pcNum(pcSofAmount(a));
     if (sort === 'jo') return String(a.jo_no || a.sof_no || '').localeCompare(String(b.jo_no || b.sof_no || ''), undefined, { numeric: true });
     return new Date(b.last_activity || 0) - new Date(a.last_activity || 0);
   });
@@ -78,6 +109,22 @@ function pcRender() {
   var all = _pc.rows;
   var sum = function (k) { return all.reduce(function (s, r) { return s + pcNum(r[k]); }, 0); };
   document.getElementById('pcKpiProjects').textContent = erpNum(all.length);
+  // Total SOF Amount: bawat SOF ay isang beses lang binibilang (maraming JO ang puwedeng may iisang SOF)
+  // Ang "Cost % ng SOF" ay para lang sa mga project na may SOF Amount na higit sa 0 (para pantay ang paghahambing)
+  var seen = {}, sofTotal = 0, withSof = 0, costVsSof = 0;
+  all.forEach(function (r) {
+    var k = pcSofKey(r.sof_no), a = pcSofAmount(r);
+    if (!k || a === null) return;
+    if (a > 0) costVsSof += pcNum(r.net_cost);
+    if (seen[k]) return;
+    seen[k] = 1; sofTotal += a; if (a > 0) withSof++;
+  });
+  var sofEl = document.getElementById('pcKpiSof'), sofSub = document.getElementById('pcKpiSofSub');
+  if (sofEl) sofEl.textContent = _pc.sofMissing ? '—' : erpPeso(sofTotal);
+  if (sofSub) sofSub.textContent = _pc.sofMissing
+    ? 'Wala pang SOF Amount sa database'
+    : withSof + ' SOF' + (withSof === 1 ? '' : 's') + ' na may amount • Cost ' +
+      (sofTotal > 0 ? (costVsSof / sofTotal * 100).toFixed(1) + '% ng SOF' : '—');
   document.getElementById('pcKpiNet').textContent = erpPeso(sum('net_cost'));
   document.getElementById('pcKpiIssued').textContent = erpPeso(sum('issued_cost'));
   document.getElementById('pcKpiReturned').textContent = erpPeso(sum('returned_cost'));
@@ -85,7 +132,7 @@ function pcRender() {
 
   var body = document.getElementById('pcBody');
   if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="9" class="erp-empty">' +
+    body.innerHTML = '<tr><td colspan="10" class="erp-empty">' +
       (all.length ? 'Walang tugma sa search.' : 'Wala pang MRIF na may JO# o SOF#.') + '</td></tr>';
     return;
   }
@@ -94,6 +141,7 @@ function pcRender() {
       '<td><strong>' + erpEsc(r.jo_no || '—') + '</strong></td>' +
       '<td>' + erpEsc(r.sof_no || '—') + '</td>' +
       '<td>' + erpEsc(r.project_name || '—') + '</td>' +
+      '<td class="text-end">' + pcMoney(pcSofAmount(r)) + '</td>' +
       '<td>' + erpEsc(r.client_name || '—') + '</td>' +
       '<td class="text-center">' + erpNum(r.item_count) + '</td>' +
       '<td class="text-end">' + erpPeso(r.issued_cost) + '</td>' +
@@ -116,14 +164,20 @@ async function pcOpen(encKey) {
     (proj.jo_no ? 'JO ' + proj.jo_no : '') + (proj.jo_no && proj.sof_no ? ' • ' : '') + (proj.sof_no ? 'SOF ' + proj.sof_no : '');
   document.getElementById('pcModalSub').textContent =
     [proj.project_name, proj.client_name].filter(Boolean).join(' — ');
+  var sofAmt = pcSofAmount(proj);
+  // kung may ibang JO sa parehong SOF, isinasama ang gastos nila para tama ang % ng SOF
+  var sofCost = _pc.rows.reduce(function (sm, r) { return sm + (pcSofKey(r.sof_no) && pcSofKey(r.sof_no) === pcSofKey(proj.sof_no) ? pcNum(r.net_cost) : 0); }, 0);
+  var sofPct = (sofAmt && sofAmt > 0) ? (sofCost / sofAmt * 100).toFixed(1) + '% ng SOF nagastos' : '';
   document.getElementById('pcModalTotals').innerHTML = [
+    ['SOF Amount', pcMoney(sofAmt), sofPct],
     ['Project Cost', erpPeso(proj.net_cost)],
     ['Issued', erpPeso(proj.issued_cost)],
     ['Returned', erpPeso(proj.returned_cost)],
     ['MRIF / MRS', erpNum(proj.mrif_count) + ' / ' + erpNum(proj.mrs_count)]
   ].map(function (t) {
-    return '<div class="col-6 col-md-3"><div class="border rounded p-2"><div class="small text-muted">' + t[0] +
-      '</div><div class="fw-bold fs-5">' + t[1] + '</div></div></div>';
+    return '<div class="col-6 col-md"><div class="border rounded p-2"><div class="small text-muted">' + t[0] +
+      '</div><div class="fw-bold fs-5">' + t[1] + '</div>' +
+      (t[2] ? '<div class="small text-muted">' + t[2] + '</div>' : '') + '</div></div>';
   }).join('');
   document.getElementById('pcItemsBody').innerHTML = '<tr><td colspan="8" class="erp-empty">Loading...</td></tr>';
   document.getElementById('pcDocsBody').innerHTML = '';
