@@ -27,14 +27,15 @@
 
   // Mga step na pare-pareho para sa lahat ng role
   function commonSteps() {
+    var inOut = role() === 'warehouse' ? [{ target: function () { return sidebarLink('item-in-out.html'); }, title: 'Item In & Out', body: 'Tingnan ang kasaysayan ng bawat item: kailan pumasok at kailan lumabas. Para lang ito sa warehouse.' }] : [];
     return [
-      { target: function () { return sidebarLink('chat.html'); }, title: 'Messages', body: 'Mag-chat sa ibang departamento kung may tanong, para hindi na kailangang pumunta o tumawag.' },
-      { target: function () { return sidebarLink('item-in-out.html'); }, title: 'Item In & Out', body: 'Tingnan ang kasaysayan ng bawat item: kailan pumasok at kailan lumabas. View-only ito para sa lahat.' },
+      { target: function () { return sidebarLink('chat.html'); }, title: 'Messages', body: 'Mag-chat sa ibang departamento kung may tanong, para hindi na kailangang pumunta o tumawag.' }
+    ].concat(inOut, [
       { target: function () { return q('.erp-search-bar'); }, title: 'Search', body: 'Hanapin agad ang kahit anong Doc No. o item. Shortcut: <b>Ctrl + K</b> (⌘K sa Mac).' },
       { target: function () { return q('#erpBellContainer') || q('#erpNotifContainer'); }, title: 'Notifications', body: 'Dito lalabas kapag may update ang request o dokumento. Tingnan ito kapag may pulang numero.' },
       { target: function () { return sidebarLink('block-blast.html'); }, title: 'Break Room', body: 'Pahinga muna! Dito ang <b>Crate Blast</b>, isang maikling laro para sa break time.' },
       { target: function () { return q('.erp-user-toggle'); }, title: 'Account menu', body: '<b>Refresh Data</b> kung hindi mo nakikita ang pinakabagong update, <b>Settings</b> para sa profile at larawan, at <b>Quick Guide</b> para ulitin ang tour na ito.' }
-    ];
+    ]);
   }
 
   function steps() {
@@ -57,7 +58,7 @@
     var intros = {
       warehouse: { target: function () { return q('#erpSidebar'); }, title: 'Menu', body: 'Nasa kaliwa ang lahat ng gamit mo: Stock Monitor, mga request (MRIF/MRS/MRR), Replenishment at PRF, at iba pa.' },
       procurement: { target: function () { return q('#erpSidebar'); }, title: 'Menu', body: 'Nasa kaliwa ang <b>MRR Monitoring</b>, <b>PRF Monitor</b>, <b>Replenishment</b> at <b>SOF Tracker</b>. View-only ang mga ito para sa procurement.' },
-      finance: { target: function () { return q('#erpSidebar'); }, title: 'Menu', body: 'Nasa kaliwa ang <b>MRIF Monitoring</b> at <b>Project Costing</b>. View-only ang mga ito para sa finance.' }
+      finance: { target: function () { return q('#erpSidebar'); }, title: 'Menu', body: 'Nasa kaliwa ang <b>MRIF Monitoring</b>, <b>Project Costing</b> at <b>Scrap Monitoring</b>. View-only ang mga ito para sa finance, maliban sa Scrap Monitoring kung saan ikaw ang naglalagay ng <b>AR No.</b>' }
     };
     return [welcome].concat(intros[r] ? [intros[r]] : [], commonSteps(), [
       { title: 'Handa ka na! ✅', body: 'Kung may tanong, gamitin ang <b>Messages</b>. Mabubuksan ulit ang gabay na ito anumang oras sa user menu → <b>Quick Guide</b>.' }
