@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEMCOR ERP — Scrap Monitoring</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1e3a5f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="erp-design-system.css">
+<link rel="stylesheet" href="erp-styles.css">
+<link rel="stylesheet" href="erp-nav.css">
+<link rel="stylesheet" href="erp-notif.css">
+<link rel="stylesheet" href="scrap-monitor.css">
+
+<script src="erp-theme.js"></script>
+<script src="erp-guard.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script defer src="erp-config.js"></script>
+<script defer src="erp-supabase.js"></script>
+<script defer src="erp-nav.js"></script>
+<script defer src="scrap-monitor.js"></script>
+<script defer src="notif-alerts.js"></script>
+<script defer src="notifications.js"></script>
+<script defer src="js/update.js"></script>
+</head>
+<body>
+
+<nav class="erp-topbar">
+  <div class="erp-topbar-left">
+    <img src="../gemcor-logo.png" alt="GEMCOR" class="erp-logo" onerror="this.style.display='none'">
+    <div>
+      <div class="erp-brand">GEMCOR ERP</div>
+      <div class="erp-brand-sub">Scrap Monitoring <span class="badge-live">LIVE</span></div>
+    </div>
+  </div>
+  <div id="erpNavBar"></div>
+  <div class="erp-topbar-right">
+    <div class="erp-health" id="erpHealthBadge">
+      <span class="dot dot-pending"></span>
+      <span id="erpHealthText">Checking...</span>
+    </div>
+    <button class="erp-btn-icon" onclick="scLoad()" title="Refresh"><i class="bi bi-arrow-clockwise"></i></button>
+    <a href="stock-monitor.html" class="erp-btn-outline"><i class="bi bi-arrow-left"></i> <span>Stock Monitor</span></a>
+  </div>
+</nav>
+
+<div class="erp-container" id="sc-page">
+
+  <div class="erp-page-header">
+    <div>
+      <div class="erp-page-title"><i class="bi bi-recycle"></i><span>Scrap Monitoring</span></div>
+      <div class="erp-breadcrumb">
+        <a href="stock-monitor.html">Home</a><i class="bi bi-chevron-right"></i><span>Reports</span><i class="bi bi-chevron-right"></i><span>Scrap Monitoring</span>
+      </div>
+    </div>
+    <div class="sc-head-actions">
+      <select id="scYear" class="erp-select" onchange="scSetYear()" title="Year"></select>
+      <button class="btn btn-primary" id="scNewBtn" onclick="scOpenForm()"><i class="bi bi-plus-lg"></i> New Scrap Selling Form</button>
+    </div>
+  </div>
+
+  <div class="alert alert-warning small py-2" id="scSetup" style="display:none"></div>
+
+  <!-- KPIs -->
+  <div class="erp-kpi-row sc-kpis">
+    <div class="erp-kpi-card kpi-green"><div class="kpi-icon"><i class="bi bi-cash-stack"></i></div><div class="kpi-content">
+      <div class="kpi-label">Total Amount</div><div class="kpi-value" id="scKpiAmt">—</div><div class="kpi-sub" id="scKpiAmtSub">&nbsp;</div></div></div>
+    <div class="erp-kpi-card kpi-blue"><div class="kpi-icon"><i class="bi bi-speedometer"></i></div><div class="kpi-content">
+      <div class="kpi-label">Total Weight</div><div class="kpi-value" id="scKpiKg">—</div><div class="kpi-sub" id="scKpiKgSub">&nbsp;</div></div></div>
+    <div class="erp-kpi-card kpi-amber"><div class="kpi-icon"><i class="bi bi-file-earmark-ruled"></i></div><div class="kpi-content">
+      <div class="kpi-label">Scrap Sales (SSF)</div><div class="kpi-value" id="scKpiSales">—</div><div class="kpi-sub" id="scKpiSalesSub">&nbsp;</div></div></div>
+    <div class="erp-kpi-card kpi-red"><div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div><div class="kpi-content">
+      <div class="kpi-label">Waiting for AR No.</div><div class="kpi-value" id="scKpiPend">—</div><div class="kpi-sub" id="scKpiPendSub">&nbsp;</div></div></div>
+  </div>
+
+  <ul class="nav nav-pills sc-tabs mb-3">
+    <li class="nav-item"><button class="nav-link active" id="scTab_summary" onclick="scSetTab('summary')"><i class="bi bi-table me-1"></i>Monthly Summary</button></li>
+    <li class="nav-item"><button class="nav-link" id="scTab_sales" onclick="scSetTab('sales')"><i class="bi bi-list-ul me-1"></i>Scrap Sales (SSF)</button></li>
+  </ul>
+
+  <!-- SUMMARY -->
+  <div id="scPane_summary">
+    <div class="erp-card erp-table-card">
+      <div class="erp-table-header">
+        <div><i class="bi bi-table me-2"></i><strong>Summary of Scrap</strong>
+          <span class="erp-table-subtitle">By month and scrap class — click a month to see its sales</span></div>
+        <div class="btn-group btn-group-sm">
+          <button class="btn btn-outline-primary active" id="scMetAmt" onclick="scSetMetric('amount')">Amount (₱)</button>
+          <button class="btn btn-outline-primary" id="scMetKg" onclick="scSetMetric('weight')">Weight (kg)</button>
+        </div>
+      </div>
+      <div class="erp-table-wrap" style="overflow:auto;">
+        <table class="erp-table sc-matrix" id="scMatrix" style="font-size:0.85rem;"></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- SALES -->
+  <div id="scPane_sales" style="display:none">
+    <div class="erp-card erp-filters-card" style="padding:16px 18px;margin-bottom:20px;">
+      <div class="erp-filters-row">
+        <div class="erp-search-wrap">
+          <i class="bi bi-search"></i>
+          <input type="text" id="scSearch" class="erp-search" placeholder="Search SSF no., AR no., buyer, scrap..." oninput="scRenderSales()">
+        </div>
+        <select id="scMonthSel" class="erp-select" onchange="scRenderSales()">
+          <option value="">All Months</option>
+          <option value="1">January</option><option value="2">February</option><option value="3">March</option>
+          <option value="4">April</option><option value="5">May</option><option value="6">June</option>
+          <option value="7">July</option><option value="8">August</option><option value="9">September</option>
+          <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+        </select>
+        <select id="scClassSel" class="erp-select" onchange="scRenderSales()"><option value="">All Classes</option></select>
+        <select id="scArSel" class="erp-select" onchange="scRenderSales()">
+          <option value="">All (AR status)</option><option value="pending">Waiting for AR No.</option><option value="paid">With AR No.</option>
+        </select>
+        <button class="erp-btn-clear" onclick="scClearFilters()"><i class="bi bi-x-lg"></i> Clear</button>
+        <button class="erp-btn-outline-dark" onclick="scExport()"><i class="bi bi-file-earmark-excel"></i> Export CSV</button>
+      </div>
+    </div>
+
+    <div class="erp-card erp-table-card">
+      <div class="erp-table-header">
+        <div><i class="bi bi-list-ul me-2"></i><strong>Scrap Selling Forms</strong>
+          <span class="erp-table-subtitle">Latest first</span></div>
+        <span class="erp-badge" id="scCount">0 sales</span>
+      </div>
+      <div class="erp-table-wrap" style="max-height:65vh;">
+        <table class="erp-table sc-table" style="font-size:0.85rem;">
+          <thead><tr>
+            <th style="width:8%">SSF No.</th>
+            <th style="width:11%">Date</th>
+            <th style="width:14%">Buyer</th>
+            <th style="width:29%">Scrap Sold</th>
+            <th style="width:9%" class="text-end">Weight (kg)</th>
+            <th style="width:11%" class="text-end">Amount</th>
+            <th style="width:10%">AR No.</th>
+            <th style="width:8%" class="text-center">Actions</th>
+          </tr></thead>
+          <tbody id="scSalesBody"><tr><td colspan="8" class="erp-empty"><div class="erp-spinner"></div></td></tr></tbody>
+          <tfoot id="scSalesFoot"></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="erp-footer">
+    <div>GEMCOR ERP — Scrap Monitoring v2.0.0</div>
+    <div>Based on the Scrap Selling Form — does not affect stock, cost, or transactions</div>
+  </div>
+</div>
+
+<!-- SCRAP SELLING FORM MODAL -->
+<div class="modal fade" id="scModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="scModalTitle">New Scrap Selling Form</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body sc-modal">
+        <datalist id="scClassList"></datalist>
+        <datalist id="scBuyerList"></datalist>
+        <div class="row g-3 mb-3">
+          <div class="col-md-3"><label class="form-label small fw-bold" for="fSsf">SSF No.</label><input type="number" id="fSsf" class="form-control" min="0" step="1"></div>
+          <div class="col-md-3"><label class="form-label small fw-bold" for="fDate">Date</label><input type="date" id="fDate" class="form-control"></div>
+          <div class="col-md-6"><label class="form-label small fw-bold" for="fBuyer">Buyer Name</label><input type="text" id="fBuyer" class="form-control" list="scBuyerList" maxlength="120" autocomplete="off"></div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm sc-lines mb-1">
+            <thead><tr>
+              <th style="width:32%">Scrap Description</th><th style="width:12%">Quantity</th><th style="width:17%">Weight (kg)</th>
+              <th style="width:17%">Price (₱/kg)</th><th style="width:19%">Amount (₱)</th><th style="width:3%"></th>
+            </tr></thead>
+            <tbody id="scLines"></tbody>
+            <tfoot><tr><td colspan="2"><b>Total</b></td><td><b id="fTotKg">0</b> kg</td><td></td><td colspan="2"><b id="fTotAmt">₱0.00</b></td></tr></tfoot>
+          </table>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-primary mb-1" onclick="scAddLine()"><i class="bi bi-plus-lg"></i> Add row</button>
+        <div class="form-text mb-3">Amount = weight × price. Para sa lump-sum (hal. Defective Breakers), i-type na lang ang Amount.</div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-6"><label class="form-label small fw-bold" for="fDisposed">Disposed By</label><input type="text" id="fDisposed" class="form-control" maxlength="80"></div>
+          <div class="col-md-6"><label class="form-label small fw-bold" for="fApproved">Approved By</label><input type="text" id="fApproved" class="form-control" maxlength="80"></div>
+        </div>
+        <div class="sc-finance">
+          <div class="small fw-bold mb-2">PAYMENT RECEIVED BY (FINANCE) <span class="text-muted fw-normal">— pwedeng i-fill in later kapag may AR na</span></div>
+          <div class="row g-3">
+            <div class="col-md-6"><label class="form-label small fw-bold" for="fReceived">Name</label><input type="text" id="fReceived" class="form-control" maxlength="80"></div>
+            <div class="col-md-6"><label class="form-label small fw-bold" for="fAr">AR No.</label><input type="text" id="fAr" class="form-control" maxlength="40" placeholder="e.g. 295"></div>
+          </div>
+        </div>
+        <div class="mt-3"><label class="form-label small fw-bold" for="fRemarks">Remarks (optional)</label><input type="text" id="fRemarks" class="form-control" maxlength="200"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="scSaveBtn" onclick="scSave()"><i class="bi bi-check2-circle"></i> Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="erpToast" class="toast erp-toast"><div class="toast-body" id="erpToastBody">Message</div></div>
+</div>
+
+</body>
+</html>
