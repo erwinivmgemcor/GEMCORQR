@@ -191,18 +191,36 @@
           <div class="col-md-6"><label class="form-label small fw-bold" for="fDisposed">Disposed By</label><input type="text" id="fDisposed" class="form-control" maxlength="80"></div>
           <div class="col-md-6"><label class="form-label small fw-bold" for="fApproved">Approved By</label><input type="text" id="fApproved" class="form-control" maxlength="80"></div>
         </div>
-        <div class="sc-finance">
-          <div class="small fw-bold mb-2">PAYMENT RECEIVED BY (FINANCE) <span class="text-muted fw-normal">— pwedeng i-fill in later kapag may AR na</span></div>
-          <div class="row g-3">
-            <div class="col-md-6"><label class="form-label small fw-bold" for="fReceived">Name</label><input type="text" id="fReceived" class="form-control" maxlength="80"></div>
-            <div class="col-md-6"><label class="form-label small fw-bold" for="fAr">AR No.</label><input type="text" id="fAr" class="form-control" maxlength="40" placeholder="e.g. 295"></div>
-          </div>
-        </div>
+        <div class="sc-finance small text-muted"><i class="bi bi-receipt me-1"></i>Ang <b>AR No.</b> ay ilalagay ng <b>Finance</b> — makakatanggap ka ng notification sa bell kapag nai-attach na.</div>
         <div class="mt-3"><label class="form-label small fw-bold" for="fRemarks">Remarks (optional)</label><input type="text" id="fRemarks" class="form-control" maxlength="200"></div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-primary" id="scSaveBtn" onclick="scSave()"><i class="bi bi-check2-circle"></i> Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FINANCE: ATTACH AR NO. -->
+<div class="modal fade" id="scArModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-receipt me-2"></i><span id="arTitle">Attach AR No.</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="sc-ar-summary" id="arSummary"></div>
+        <div class="row g-3 mt-1">
+          <div class="col-6"><label class="form-label small fw-bold" for="arNo">AR No.</label><input type="text" id="arNo" class="form-control form-control-lg" maxlength="40" placeholder="e.g. 295" autocomplete="off" onkeydown="if(event.key==='Enter')scSaveAr()"></div>
+          <div class="col-6"><label class="form-label small fw-bold" for="arBy">Payment received by (Finance)</label><input type="text" id="arBy" class="form-control form-control-lg" maxlength="80" autocomplete="off"></div>
+        </div>
+        <div class="form-text mt-2">Pagka-save, makikita agad ng warehouse ang AR No. at makakatanggap sila ng notification.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success" id="arSaveBtn" onclick="scSaveAr()"><i class="bi bi-check2-circle"></i> Save AR No.</button>
       </div>
     </div>
   </div>
