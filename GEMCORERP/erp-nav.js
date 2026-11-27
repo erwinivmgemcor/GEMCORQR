@@ -240,6 +240,13 @@
           roles: ['warehouse', 'finance']
         },
         {
+          id: 'scrap-monitor',
+          label: 'Scrap Monitoring',
+          icon: 'bi-recycle',
+          href: 'scrap-monitor.html',
+          roles: ['warehouse']
+        },
+        {
           id: 'process-history',
           label: 'Process History',
           icon: 'bi-clock-history',
@@ -376,6 +383,7 @@
     'monthly-movement': 'Monthly Movement',
     'aging-monitor': 'Aging Monitor',
     'fixed-assets': 'Fixed Assets',
+    'scrap-monitor': 'Scrap Monitoring',
     'usage-entry': 'Usage Entry',
     'process-history': 'Process History',
     'warehouse-kpi': 'Warehouse KPI',
