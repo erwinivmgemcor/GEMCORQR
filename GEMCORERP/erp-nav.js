@@ -216,7 +216,7 @@
           label: 'Item In & Out',
           icon: 'bi-arrow-left-right',
           href: 'item-in-out.html',
-          roles: ['warehouse', 'production', 'procurement', 'finance']
+          roles: ['warehouse']
         },
         {
           id: 'monthly-movement',
@@ -244,7 +244,7 @@
           label: 'Scrap Monitoring',
           icon: 'bi-recycle',
           href: 'scrap-monitor.html',
-          roles: ['warehouse']
+          roles: ['warehouse', 'finance']
         },
         {
           id: 'process-history',
