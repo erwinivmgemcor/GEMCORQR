@@ -53,3 +53,8 @@
 .sc-lines th { font-size:.78rem; text-transform:uppercase; letter-spacing:.03em; color:#475569; }
 .sc-lines tfoot td { border-top:2px solid #1e3a5f; font-size:1rem; }
 .sc-finance { border:1px dashed #94a3b8; border-radius:10px; padding:12px 14px; background:#f8fafc; }
+
+/* v3 — finance AR */
+.sc-new { display:inline-block; padding:1px 7px; border-radius:99px; font-size:.66rem; font-weight:800; color:#fff; background:#16a34a; letter-spacing:.04em; vertical-align:middle; }
+.sc-ar-summary { display:grid; grid-template-columns:repeat(2,1fr); gap:6px 16px; padding:10px 14px; background:#f1f5f9; border-radius:10px; font-size:.86rem; }
+.sc-ar-summary div { display:flex; flex-direction:column; } .sc-ar-summary span { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#64748b; }
