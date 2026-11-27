@@ -18,7 +18,7 @@
     // notification type (from notifications.js) -> sound name.
     // A type that is missing here never alerts; it stays bell-only (e.g. new_prf).
     sounds: { new_request: 'request', completed: 'done', partial: 'partial',
-             stock_out: 'alarm', stock_conflict: 'alarm', stock_low: 'low' },
+             stock_out: 'alarm', stock_conflict: 'alarm', stock_low: 'low', ar_attached: 'done' },
     summaryAbove: 3,     // more fresh items than this => one summary toast per type
     maxToasts: 4,
     toastMs: 9000,
@@ -269,6 +269,7 @@
       var label = type === 'stock_out'      ? c + ' item(s) out of stock / negative'
                 : type === 'stock_low'      ? c + ' item(s) below buffer'
                 : type === 'stock_conflict' ? c + ' stock conflict(s)'
+                : type === 'ar_attached'   ? c + ' scrap sales got an AR No.'
                 : type === 'new_request' ? c + ' new requests'
                 : type === 'completed'   ? c + ' requests served'
                 : c + ' requests partially served';
