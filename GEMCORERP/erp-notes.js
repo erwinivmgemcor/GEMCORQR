@@ -77,7 +77,7 @@
     re = /\bSOF\s?#?\s?(\d{4,6})\b/gi;
     while ((m = re.exec(text))) add('SOF ' + m[1], 'sof-tracker.html?q=' + encodeURIComponent(m[1]), 'bi-diagram-3');
     re = /\b(GEM-[A-Z0-9]{4,}|SUPP\d{3,})\b/g;
-    while ((m = re.exec(text))) add(m[0], 'item-in-out.html?code=' + encodeURIComponent(m[0]), 'bi-upc-scan');
+    while ((m = re.exec(text))) add(m[0], (localStorage.getItem('ivm_userRole') === 'warehouse') ? 'item-in-out.html?code=' + encodeURIComponent(m[0]) : 'item-catalog.html', 'bi-upc-scan');
     return out;
   }
 
