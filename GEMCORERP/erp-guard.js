@@ -20,7 +20,6 @@
     'new-mrs-manual.html',
     'project-costing.html',
     'block-blast.html',  // Break Room (laro)
-    'item-in-out.html',  // Item In & Out (view-only movement history)
     'about.html',        // About / FAQs / Process flow
     'sof-tracker.html',  // SOF Tracker (view-only for production)
     'item-catalog.html'  // Item Catalog (read-only: code, description, category, unit)
@@ -28,8 +27,8 @@
   
   // Procurement / Finance: read-only, specific pages only
   var VIEWER_PAGES = {
-    procurement: ['mrr-monitoring.html', 'prf-monitor.html', 'replenishment.html', 'sof-tracker.html', 'item-catalog.html', 'chat.html', 'about.html', 'item-in-out.html', 'block-blast.html'],
-    finance: ['management-dashboard.html', 'mrif-monitoring.html', 'project-costing.html', 'item-catalog.html', 'chat.html', 'about.html', 'item-in-out.html', 'block-blast.html']
+    procurement: ['mrr-monitoring.html', 'prf-monitor.html', 'replenishment.html', 'sof-tracker.html', 'item-catalog.html', 'chat.html', 'about.html', 'block-blast.html'],
+    finance: ['management-dashboard.html', 'mrif-monitoring.html', 'project-costing.html', 'scrap-monitor.html', 'item-catalog.html', 'chat.html', 'about.html', 'block-blast.html']
   };
   var VIEWER_HOME = { procurement: 'mrr-monitoring.html', finance: 'mrif-monitoring.html' };
 
@@ -65,7 +64,9 @@
         try {
           var url = (typeof input === 'string') ? input : (input && input.url) || '';
           var m = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
-          if (m !== 'GET' && m !== 'HEAD' && m !== 'OPTIONS' && url.indexOf('/rest/v1/') !== -1 && !SAFE.test(url)) {
+          // Scrap Monitoring: Finance may only PATCH a sale (to attach the AR No.) — no create / delete
+          var scrapAr = _getCurrentPage() === 'scrap-monitor.html' && m === 'PATCH' && /\/rest\/v1\/erp_scrap_sales\?id=eq\.\d+/.test(url);
+          if (m !== 'GET' && m !== 'HEAD' && m !== 'OPTIONS' && url.indexOf('/rest/v1/') !== -1 && !SAFE.test(url) && !scrapAr) {
             console.warn('[ERP Guard] Read-only role blocked ' + m + ' ' + url);
             return Promise.resolve(new Response(JSON.stringify({ error: 'Read-only access' }), { status: 403, headers: { 'Content-Type': 'application/json' } }));
           }
@@ -76,7 +77,7 @@
       document.addEventListener('DOMContentLoaded', function() {
         var b = document.createElement('div');
         b.className = 'erp-readonly-badge';
-        b.textContent = 'READ-ONLY · ' + role.toUpperCase();
+        b.textContent = _getCurrentPage() === 'scrap-monitor.html' ? role.toUpperCase() + ' · AR No. entry only' : 'READ-ONLY · ' + role.toUpperCase();
         document.body.appendChild(b);
       });
     } catch (e) {}
