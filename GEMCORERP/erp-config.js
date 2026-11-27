@@ -8,29 +8,29 @@ try { localStorage.setItem('erp_theme', 'light'); } catch(e) {}
 // ============================================================
 
 const ERP_SUPABASE_URL = 'https://tphstadcscquiezuxsis.supabase.co';
-// ─── API key — staged move to the NEW publishable key ───
-// Default (everyone): the legacy anon key, so nothing changes until we are sure.
-// To test the new key on ONE browser only: add ?newkey=1 to the address of any ERP page, e.g.
-//     .../GEMCORERP/management-dashboard.html?newkey=1
-// A small blue "NEW KEY TEST" badge then shows at the bottom-left. To go back on that browser: ?newkey=0
+// ─── API key ───
+// Default (everyone): the NEW publishable key (sb_publishable_...). The legacy anon key is kept only as an emergency fallback.
+// Emergency fallback on ONE browser: add ?legacykey=1 to the address of any ERP page. An amber "LEGACY KEY" badge then shows
+// at the bottom-left. To go back to the new key on that browser: ?legacykey=0
+// (To roll back for EVERYONE: swap the two names in the ERP_SUPABASE_ANON_KEY line below and upload the file again.)
 const ERP_LEGACY_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRwaHN0YWRjc2NxdWllenV4c2lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1OTI4NTksImV4cCI6MjEwNjE2ODg1OX0.7x7KCpcdGYkDsjs3RBdfhhhSamFP-xEfNY5prIkLWL8';
 const ERP_PUBLISHABLE_KEY = 'sb_publishable_r-DnnNoxKDnjvT6fZo_YsA_MN7Hrhrx';
-const ERP_USE_NEW_KEY = (function () {
+const ERP_USE_LEGACY_KEY = (function () {
   try {
     var q = String(location.search || '');
-    if (/[?&]newkey=1(&|$)/.test(q)) localStorage.setItem('erp_use_new_key', '1');
-    if (/[?&]newkey=0(&|$)/.test(q)) localStorage.removeItem('erp_use_new_key');
-    return localStorage.getItem('erp_use_new_key') === '1';
+    if (/[?&]legacykey=1(&|$)/.test(q)) localStorage.setItem('erp_use_legacy_key', '1');
+    if (/[?&]legacykey=0(&|$)/.test(q)) localStorage.removeItem('erp_use_legacy_key');
+    return localStorage.getItem('erp_use_legacy_key') === '1';
   } catch (e) { return false; }
 })();
-const ERP_SUPABASE_ANON_KEY = ERP_USE_NEW_KEY ? ERP_PUBLISHABLE_KEY : ERP_LEGACY_ANON_KEY;
-if (ERP_USE_NEW_KEY) {
-  console.info('[ERP] Using the NEW publishable API key (test mode on this browser)');
+const ERP_SUPABASE_ANON_KEY = ERP_USE_LEGACY_KEY ? ERP_LEGACY_ANON_KEY : ERP_PUBLISHABLE_KEY;
+if (ERP_USE_LEGACY_KEY) {
+  console.warn('[ERP] Using the LEGACY anon key on this browser (emergency fallback)');
   document.addEventListener('DOMContentLoaded', function () {
     var b = document.createElement('div');
-    b.textContent = 'NEW KEY TEST';
-    b.title = 'This browser uses the new publishable API key. Add ?newkey=0 to the address to go back.';
-    b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99999;background:#2563eb;color:#fff;font:700 11px/1 system-ui,sans-serif;padding:5px 8px;border-radius:6px;opacity:.9;pointer-events:none;';
+    b.textContent = 'LEGACY KEY';
+    b.title = 'This browser uses the legacy API key. Add ?legacykey=0 to the address to switch to the new key.';
+    b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99999;background:#d97706;color:#fff;font:700 11px/1 system-ui,sans-serif;padding:5px 8px;border-radius:6px;opacity:.9;pointer-events:none;';
     document.body.appendChild(b);
   });
 }
