@@ -197,6 +197,33 @@ async function fetchWarehouseNotifications() {
     console.warn('[Warehouse notif] PRF failed:', err.message);
   }
 
+  try {
+    // 3. Scrap sales where Finance just attached the AR No. (last 7 days)
+    var sevenDaysAgo3 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    var arRes = await erpFetch('erp_scrap_sales',
+      'select=id,ssf_no,sale_date,buyer_name,ar_no,ar_added_by,ar_added_at' +
+      '&is_deleted=eq.false&ar_added_at=gte.' + sevenDaysAgo3 + '&order=ar_added_at.desc&limit=30');
+
+    (arRes || []).forEach(function(s) {
+      if (!s.ar_no) return;
+      notifications.push({
+        id: 'scrap_ar_' + s.id + '_' + s.ar_no,
+        type: 'ar_attached',
+        icon: 'bi-receipt',
+        iconColor: '#16a34a',
+        title: 'AR No. ' + s.ar_no + ' attached',
+        subtitle: 'SSF-' + (s.ssf_no == null ? '?' : s.ssf_no) + ' · Scrap Sale',
+        meta: (s.ar_added_by ? 'By ' + s.ar_added_by + ' (Finance)' : 'Finance') + (s.buyer_name ? ' · ' + s.buyer_name : ''),
+        timestamp: s.ar_added_at,
+        link: 'scrap-monitor.html',
+        docNo: String(s.ssf_no || '')
+      });
+    });
+  } catch(err) {
+    // table / columns may not exist yet (SQL not run) — fail quietly so the other warehouse alerts keep working
+    console.warn('[Warehouse notif] Scrap AR failed:', err.message);
+  }
+
   return notifications;
 }
 
