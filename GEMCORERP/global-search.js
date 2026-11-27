@@ -750,7 +750,7 @@
         if (action === 'item') {
           var code = this.getAttribute('data-code');
           closeSearch();
-          window.location.href = 'item-in-out.html?code=' + encodeURIComponent(code);
+          window.location.href = (localStorage.getItem('ivm_userRole') === 'warehouse') ? 'item-in-out.html?code=' + encodeURIComponent(code) : 'item-catalog.html';   // Item In & Out is warehouse-only
           return;
         }
 
