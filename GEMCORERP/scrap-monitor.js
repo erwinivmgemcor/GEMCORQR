@@ -9,7 +9,8 @@
 
 var SC_SALES = 'erp_scrap_sales';
 var SC_LINES = 'erp_scrap_sale_lines';
-var SC_EDIT_ROLES = ['warehouse'];   // who may create / edit / delete (others: view only)
+var SC_EDIT_ROLES = ['warehouse'];   // who may create / edit / delete the Scrap Selling Form
+var SC_AR_ROLES = ['finance'];       // who attaches the AR No. (Finance issues the receipt, then warehouse is notified)
 
 // Standard classes (same names as the 2026 Excel log). Any other class typed in is kept and shows up too.
 var SC_CLASSES = ['BI/GI', 'Stainless Steel', 'Busbar', 'Busbar Drilling', 'Wire Scrap', 'Aluminum',
@@ -24,6 +25,8 @@ function scPesoS(n) { return Number(n || 0).toLocaleString('en-PH', { maximumFra
 function scKg(n) { return Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
 function scUser() { return localStorage.getItem('ivm_userFullname') || localStorage.getItem('ivm_username') || ''; }
 function scCanEdit() { return SC_EDIT_ROLES.indexOf(SC.role) !== -1; }
+function scCanAr() { return SC_AR_ROLES.indexOf(SC.role) !== -1; }
+function scIsNewAr(s) { return !!(s.ar_added_at && SC.role === 'warehouse' && Date.now() - new Date(s.ar_added_at).getTime() < 7 * 86400000); }
 function scIso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function scNorm(s) { return String(s || '').trim().replace(/\s+/g, ' '); }
 function scId(id) { return document.getElementById(id); }
@@ -46,6 +49,10 @@ function scSaleTotals(s) {
 document.addEventListener('DOMContentLoaded', function () {
   SC.role = (localStorage.getItem('ivm_userRole') || '').toLowerCase();
   if (!scCanEdit()) { var b = scId('scNewBtn'); if (b) b.style.display = 'none'; }
+  if (scCanAr()) {            // Finance lands on the list of sales still waiting for an AR No.
+    scId('scArSel').value = 'pending';
+    scSetTab('sales');
+  }
   scHealth();
   scLoad();
 });
@@ -81,7 +88,7 @@ async function scLoad() {
     var needSql = /erp_scrap|42P01|PGRST|404|relation/i.test(msg);
     setup.style.display = '';
     setup.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i><b>' + (needSql ? 'Setup needed' : 'Could not load') + '</b> — ' +
-      (needSql ? 'Run <code>scrap-monitor.sql</code> (then <code>scrap-monitor-import-2026.sql</code> for the Jan–Nov 2026 data) once in the Supabase SQL Editor, then refresh.' : scEsc(msg));
+      (needSql ? 'Run <code>scrap-monitor.sql</code> (then <code>scrap-monitor-import-2026.sql</code> for the Jan–Nov 2026 data, and <code>scrap-monitor-ar-notify.sql</code> if you ran an earlier version) once in the Supabase SQL Editor, then refresh.' : scEsc(msg));
     scId('scSalesBody').innerHTML = '<tr><td colspan="9" class="erp-empty text-danger">Could not load scrap sales.</td></tr>';
   }
 }
@@ -224,9 +231,10 @@ function scRenderSales() {
       '<td>' + items + '</td>' +
       '<td class="num">' + scKg(t.kg) + '</td>' +
       '<td class="num">' + scPeso(t.amt) + '</td>' +
-      '<td>' + (s.ar_no ? '<span class="sc-ar ok">AR No. ' + scEsc(s.ar_no) + '</span>' : '<span class="sc-ar pend">Pending</span>') + '</td>' +
+      '<td>' + (s.ar_no ? '<span class="sc-ar ok" title="' + scEsc(s.ar_added_by ? 'Attached by ' + s.ar_added_by + (s.ar_added_at ? ' · ' + scFmtDate(String(s.ar_added_at).slice(0, 10)) : '') : '') + '">AR No. ' + scEsc(s.ar_no) + '</span>' + (scIsNewAr(s) ? ' <span class="sc-new">NEW</span>' : '') : '<span class="sc-ar pend">Pending</span>') + '</td>' +
       '<td class="text-center text-nowrap">' +
         '<button class="btn btn-sm btn-outline-secondary py-0 px-1" title="View / Print form" onclick="scPrint(' + Number(s.id) + ')"><i class="bi bi-printer"></i></button>' +
+        (scCanAr() ? ' <button class="btn btn-sm ' + (s.ar_no ? 'btn-outline-success' : 'btn-success') + ' py-0 px-2" title="' + (s.ar_no ? 'Edit AR No.' : 'Attach AR No.') + '" onclick="scOpenAr(' + Number(s.id) + ')"><i class="bi bi-receipt"></i> ' + (s.ar_no ? 'Edit AR' : 'Attach AR') + '</button>' : '') +
         (can ? ' <button class="btn btn-sm btn-outline-primary py-0 px-1" title="Edit" onclick="scOpenForm(' + Number(s.id) + ')"><i class="bi bi-pencil"></i></button>' +
                ' <button class="btn btn-sm btn-outline-danger py-0 px-1" title="Delete" onclick="scDelete(' + Number(s.id) + ')"><i class="bi bi-trash"></i></button>' : '') +
       '</td></tr>';
@@ -255,8 +263,6 @@ function scOpenForm(id) {
   scId('fBuyer').value = s ? (s.buyer_name || '') : '';
   scId('fDisposed').value = s ? (s.disposed_by || '') : scUser();
   scId('fApproved').value = s ? (s.approved_by || '') : '';
-  scId('fReceived').value = s ? (s.received_by || '') : '';
-  scId('fAr').value = s ? (s.ar_no || '') : '';
   scId('fRemarks').value = s ? (s.remarks || '') : '';
   scId('scLines').innerHTML = '';
   if (s && s.erp_scrap_sale_lines.length) s.erp_scrap_sale_lines.forEach(function (l) { scAddLine(l); });
@@ -338,8 +344,7 @@ async function scSave() {
   var head = {
     ssf_no: ssf === '' ? null : parseInt(ssf, 10), sale_date: date,
     buyer_name: scNorm(scId('fBuyer').value) || null, disposed_by: scNorm(scId('fDisposed').value) || null,
-    approved_by: scNorm(scId('fApproved').value) || null, received_by: scNorm(scId('fReceived').value) || null,
-    ar_no: scNorm(scId('fAr').value).replace(/^AR\s*(No\.?)?\s*/i, '') || null, remarks: scNorm(scId('fRemarks').value) || null
+    approved_by: scNorm(scId('fApproved').value) || null, remarks: scNorm(scId('fRemarks').value) || null   // AR No. / received by belong to Finance (scSaveAr)
   };
   var btn = scId('scSaveBtn'); btn.disabled = true;
   try {
@@ -368,6 +373,51 @@ async function scSave() {
     console.error('[ScrapMonitor] save', e);
     scToast('Failed: ' + (e && e.message || e));
     if (SC.editId) scLoad();
+  } finally { btn.disabled = false; }
+}
+
+// ═══════════════════════════════════════════════════════════
+// FINANCE — attach the AR No. (warehouse gets a notification once it is saved)
+// ═══════════════════════════════════════════════════════════
+function scOpenAr(id) {
+  if (!scCanAr()) return;
+  var s = SC.sales.filter(function (x) { return Number(x.id) === Number(id); })[0]; if (!s) return;
+  var t = scSaleTotals(s);
+  SC.arId = s.id;
+  scId('arTitle').textContent = (s.ar_no ? 'Edit AR No. — ' : 'Attach AR No. — ') + 'SSF-' + (s.ssf_no == null ? '?' : s.ssf_no);
+  scId('arSummary').innerHTML =
+    '<div><span>Date</span><b>' + scEsc(scFmtDate(s.sale_date)) + '</b></div>' +
+    '<div><span>Buyer</span><b>' + scEsc(s.buyer_name || '—') + '</b></div>' +
+    '<div><span>Scrap</span><b>' + s.erp_scrap_sale_lines.map(function (l) { return scEsc(scNorm(l.scrap_class)); }).join(', ') + '</b></div>' +
+    '<div><span>Weight</span><b>' + scKg(t.kg) + ' kg</b></div>' +
+    '<div><span>Amount</span><b class="text-success">' + scPeso(t.amt) + '</b></div>';
+  scId('arNo').value = s.ar_no || '';
+  scId('arBy').value = s.received_by || scUser();
+  bootstrap.Modal.getOrCreateInstance(scId('scArModal')).show();
+  setTimeout(function () { scId('arNo').focus(); }, 300);
+}
+
+async function scSaveAr() {
+  if (!scCanAr()) return scToast('Finance lang ang makakapag-attach ng AR No.');
+  var s = SC.sales.filter(function (x) { return Number(x.id) === Number(SC.arId); })[0]; if (!s) return;
+  var ar = scNorm(scId('arNo').value).replace(/^AR\s*(No\.?)?\s*/i, '');
+  var by = scNorm(scId('arBy').value);
+  if (!ar) return scToast('Ilagay ang AR No.');
+  if (!by) return scToast('Ilagay ang pangalan ng nag-receive (Finance).');
+  var dup = SC.sales.filter(function (x) { return x.ar_no && String(x.ar_no).toLowerCase() === ar.toLowerCase() && Number(x.id) !== Number(s.id); })[0];
+  if (dup && !confirm('Ginamit na ang AR No. ' + ar + ' sa SSF-' + dup.ssf_no + '. Ituloy pa rin?')) return;
+  var now = new Date().toISOString();
+  var body = { ar_no: ar, received_by: by, updated_at: now };
+  if (String(s.ar_no || '') !== ar) { body.ar_added_by = by; body.ar_added_at = now; }   // a new / changed AR No. notifies warehouse again
+  var btn = scId('arSaveBtn'); btn.disabled = true;
+  try {
+    await erpFetch(SC_SALES, 'id=eq.' + encodeURIComponent(s.id), { method: 'PATCH', body: body });
+    bootstrap.Modal.getOrCreateInstance(scId('scArModal')).hide();
+    scToast('✅ AR No. ' + ar + ' attached — makikita ito ng warehouse');
+    await scLoad();
+  } catch (e) {
+    console.error('[ScrapMonitor] AR', e);
+    scToast('Failed: ' + (e && e.message || e));
   } finally { btn.disabled = false; }
 }
 
