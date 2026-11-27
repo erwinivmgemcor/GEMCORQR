@@ -386,32 +386,87 @@ async function scDelete(id) {
 // ═══════════════════════════════════════════════════════════
 // PRINT — same layout as the paper Scrap Selling Form
 // ═══════════════════════════════════════════════════════════
-function scPrint(id) {
-  var s = SC.sales.filter(function (x) { return Number(x.id) === Number(id); })[0]; if (!s) return;
-  var t = scSaleTotals(s), us = function (v) { return v ? scEsc(v) : '__________________________'; };
+function scAmountWords(n) {
+  n = Math.round(Number(n || 0) * 100) / 100;
+  var ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  var tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  function chunk(x) {
+    var s = '';
+    if (x >= 100) { s += ones[Math.floor(x / 100)] + ' Hundred '; x %= 100; }
+    if (x >= 20) { s += tens[Math.floor(x / 10)] + (x % 10 ? '-' + ones[x % 10] : '') + ' '; }
+    else if (x > 0) s += ones[x] + ' ';
+    return s;
+  }
+  var peso = Math.floor(n), cent = Math.round((n - peso) * 100);
+  if (peso === 0 && cent === 0) return 'Zero Pesos Only';
+  var words = '', scales = [[1000000000, 'Billion'], [1000000, 'Million'], [1000, 'Thousand'], [1, '']];
+  scales.forEach(function (sc) { var q = Math.floor(peso / sc[0]); if (q > 0) { words += chunk(q) + (sc[1] ? sc[1] + ' ' : ''); peso -= q * sc[0]; } });
+  words = words.trim() + ' Peso' + (Math.floor(n) === 1 ? '' : 's');
+  return words + (cent ? ' and ' + cent + '/100' : '') + ' Only';
+}
+
+function scBuildPrintHtml(s, logoUrl) {
+  var t = scSaleTotals(s), blank = '&nbsp;';
+  var val = function (v) { return v ? scEsc(v) : blank; };
   var rows = s.erp_scrap_sale_lines.map(function (l) {
     return '<tr><td>' + scEsc(scNorm(l.scrap_class)) + '</td><td class="n">' + (l.quantity == null ? '' : scKg(l.quantity)) + '</td><td class="n">' + (Number(l.weight_kg) ? scKg(l.weight_kg) : '') +
       '</td><td class="n">' + (Number(l.price_per_kg) ? scPeso(l.price_per_kg) : '') + '</td><td class="n">' + scPeso(l.amount) + '</td></tr>';
   }).join('');
-  for (var i = s.erp_scrap_sale_lines.length; i < 5; i++) rows += '<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>';
-  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>SSF-' + scEsc(s.ssf_no) + '</title><style>' +
-    'body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#000;margin:30px 40px;max-width:760px}' +
-    'h2{text-align:center;margin:0 0 18px;letter-spacing:.05em}.r{text-align:right;margin-bottom:10px}p{margin:8px 0}' +
-    'table{width:100%;border-collapse:collapse;margin-top:14px}th,td{border:1px solid #000;padding:6px 8px}th{background:#eee}td.n{text-align:right}' +
-    'tr.tot td{font-weight:bold}.sig{margin-top:26px}.box{margin-top:30px;border-top:2px solid #000;padding-top:8px}' +
-    '@media print{body{margin:10mm}}</style></head><body>' +
-    '<h2>SCRAP SELLING FORM</h2>' +
-    '<div class="r"><b>SSF No.</b> ' + (s.ssf_no == null ? '____' : scEsc(s.ssf_no)) + '</div>' +
-    '<p>Date: <b>' + scEsc(scFmtDate(s.sale_date)) + '</b></p>' +
-    '<p>Buyer Name: <b>' + (s.buyer_name ? scEsc(s.buyer_name) : '__________________________') + '</b></p>' +
-    '<table><thead><tr><th>Scrap Description</th><th>Quantity</th><th>Weight (kg)</th><th>Price</th><th>Amount</th></tr></thead><tbody>' + rows +
-    '<tr class="tot"><td>Total</td><td></td><td class="n">' + scKg(t.kg) + '</td><td></td><td class="n">' + scPeso(t.amt) + '</td></tr></tbody></table>' +
-    '<div class="sig"><p>Disposed By: ' + us(s.disposed_by) + '</p><p>Date: ' + scEsc(scFmtDate(s.sale_date)) + '</p><p>Approved By: ' + us(s.approved_by) + '</p></div>' +
-    '<div class="box"><b>PAYMENT RECEIVED BY (FINANCE)</b><p>Name: ' + us(s.received_by) + '</p><p>Signature/Date: ___________________</p><p>AR No. ' + (s.ar_no ? scEsc(s.ar_no) : '__________________________') + '</p></div>' +
-    '<script>window.onload=function(){setTimeout(function(){window.print();},300)}<\/script></body></html>';
+  for (var i = s.erp_scrap_sale_lines.length; i < 8; i++) rows += '<tr class="fill"><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>';
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Scrap Selling Form — SSF-' + scEsc(s.ssf_no == null ? '' : s.ssf_no) + '</title><style>' +
+    '@page{size:A4 portrait;margin:14mm}' +
+    '*{box-sizing:border-box}body{font-family:"Segoe UI",Arial,Helvetica,sans-serif;font-size:12.5px;color:#0f172a;margin:0;padding:26px 34px;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    '.page{max-width:780px;margin:0 auto}' +
+    '.hd{display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:4px solid #1e3a5f;position:relative}' +
+    '.hd:after{content:"";position:absolute;left:0;bottom:-8px;width:90px;height:4px;background:#16a34a}' +
+    '.hd img{height:54px;display:block}' +
+    '.ttl{text-align:right}.ttl h1{margin:0;font-size:22px;letter-spacing:.09em;color:#1e3a5f}' +
+    '.ssf{display:inline-block;margin-top:6px;padding:4px 14px;border:2px solid #1e3a5f;border-radius:6px;font-weight:800;font-size:14px;color:#1e3a5f}' +
+    '.info{display:flex;gap:28px;margin:26px 0 16px}.info .f{flex:1}.info .f.sm{flex:0 0 190px}' +
+    '.lbl{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#64748b;margin-bottom:3px}' +
+    '.line{border-bottom:1.5px solid #334155;padding:2px 2px 3px;min-height:22px;font-size:13.5px;font-weight:600}' +
+    'table{width:100%;border-collapse:collapse}' +
+    'th{background:#1e3a5f;color:#fff;font-size:11px;letter-spacing:.05em;text-transform:uppercase;padding:8px 10px;text-align:left}' +
+    'th.n,td.n{text-align:right}td{padding:7px 10px;border-bottom:1px solid #cbd5e1;font-size:12.5px;height:28px}' +
+    'tbody tr:nth-child(even){background:#f8fafc}' +
+    'td:first-child{font-weight:600}' +
+    'tr.tot td{background:#e8eef7;border-top:2px solid #1e3a5f;border-bottom:2px solid #1e3a5f;font-weight:800;font-size:13.5px}' +
+    '.words{margin-top:10px;padding:8px 12px;background:#f1f5f9;border-left:4px solid #16a34a;font-size:12px}.words b{color:#1e3a5f}' +
+    '.sigs{display:flex;gap:36px;margin-top:38px}.sig{flex:1}.sig .name{border-bottom:1.5px solid #334155;min-height:26px;padding:2px;font-weight:600;font-size:13px}' +
+    '.sig .cap{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#475569;margin-top:4px}' +
+    '.sig .dt{font-size:11px;color:#475569;margin-top:2px}' +
+    '.fin{margin-top:30px;border:1.5px solid #1e3a5f;border-radius:8px;overflow:hidden}' +
+    '.fin .h{background:#e8eef7;padding:7px 14px;font-weight:800;font-size:11.5px;letter-spacing:.07em;color:#1e3a5f}' +
+    '.fin .b{display:flex;gap:28px;padding:14px 14px 16px}.fin .b>div{flex:1}' +
+    '.ar{font-size:15px;font-weight:800;color:#1e3a5f}' +
+    '.ft{margin-top:22px;padding-top:8px;border-top:1px solid #cbd5e1;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8}' +
+    '@media print{body{padding:0}}</style></head><body><div class="page">' +
+    '<div class="hd"><img src="' + scEsc(logoUrl) + '" alt="GEMCOR"><div class="ttl"><h1>SCRAP SELLING FORM</h1><div class="ssf">SSF No. ' + (s.ssf_no == null ? '____' : scEsc(s.ssf_no)) + '</div></div></div>' +
+    '<div class="info"><div class="f sm"><div class="lbl">Date</div><div class="line">' + scEsc(scFmtDate(s.sale_date)) + '</div></div>' +
+    '<div class="f"><div class="lbl">Buyer Name</div><div class="line">' + val(s.buyer_name) + '</div></div></div>' +
+    '<table><thead><tr><th style="width:34%">Scrap Description</th><th class="n" style="width:12%">Quantity</th><th class="n" style="width:18%">Weight (kg)</th><th class="n" style="width:16%">Price</th><th class="n" style="width:20%">Amount</th></tr></thead><tbody>' + rows +
+    '<tr class="tot"><td>TOTAL</td><td></td><td class="n">' + scKg(t.kg) + '</td><td></td><td class="n">' + scPeso(t.amt) + '</td></tr></tbody></table>' +
+    '<div class="words"><b>Amount in words:</b> ' + scEsc(scAmountWords(t.amt)) + '</div>' +
+    (s.remarks ? '<div class="words" style="border-left-color:#f59e0b"><b>Remarks:</b> ' + scEsc(s.remarks) + '</div>' : '') +
+    '<div class="sigs"><div class="sig"><div class="name">' + val(s.disposed_by) + '</div><div class="cap">Disposed By</div><div class="dt">Date: ' + scEsc(scFmtDate(s.sale_date)) + '</div></div>' +
+    '<div class="sig"><div class="name">' + val(s.approved_by) + '</div><div class="cap">Approved By</div><div class="dt">Date: ________________</div></div></div>' +
+    '<div class="fin"><div class="h">PAYMENT RECEIVED BY (FINANCE)</div><div class="b">' +
+    '<div><div class="lbl">Name</div><div class="line">' + val(s.received_by) + '</div></div>' +
+    '<div><div class="lbl">Signature / Date</div><div class="line">' + blank + '</div></div>' +
+    '<div style="flex:0 0 150px"><div class="lbl">AR No.</div><div class="line ar">' + val(s.ar_no) + '</div></div></div></div>' +
+    '<div class="ft"><span>GEMCOR ERP — Scrap Monitoring</span><span>Printed ' + scEsc(scFmtDate(scIso(new Date()))) + '</span></div>' +
+    '</div></body></html>';
+}
+
+function scPrint(id) {
+  var s = SC.sales.filter(function (x) { return Number(x.id) === Number(id); })[0]; if (!s) return;
+  var logo = new URL('../gemcor-logo.png', window.location.href).href;     // absolute, so it loads inside the new window
   var w = window.open('', '_blank');
   if (!w) return scToast('I-allow ang pop-ups para ma-print ang form.');
-  w.document.open(); w.document.write(html); w.document.close();
+  w.document.open(); w.document.write(scBuildPrintHtml(s, logo)); w.document.close();
+  var go = function () { try { w.focus(); w.print(); } catch (e) {} };
+  var img = w.document.querySelector('img');
+  if (img && !img.complete) { img.onload = go; img.onerror = go; setTimeout(go, 2500); } else { setTimeout(go, 250); }
 }
 
 // ═══════════════════════════════════════════════════════════
