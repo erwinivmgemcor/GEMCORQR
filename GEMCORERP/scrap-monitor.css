@@ -1,0 +1,55 @@
+/* GEMCOR ERP — Scrap Monitoring (scoped to #sc-page) */
+:root { --sc-ink:#0f172a; --sc-muted:#64748b; --sc-line:#e5eaf2; }
+#sc-page .erp-kpi-card { position:relative; overflow:hidden; border:1px solid var(--sc-line); border-radius:16px; background:#fff;
+  box-shadow:0 1px 2px rgba(15,23,42,.04),0 8px 24px -12px rgba(30,58,95,.18); }
+#sc-page .erp-kpi-card::before { content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:#2563eb; }
+#sc-page .erp-kpi-card.kpi-green::before { background:#059669; }
+#sc-page .erp-kpi-card.kpi-amber::before { background:#f59e0b; }
+#sc-page .erp-kpi-card.kpi-red::before   { background:#dc2626; }
+#sc-page .erp-kpi-card .kpi-value { font-size:1.6rem; font-weight:800; letter-spacing:-.02em; color:var(--sc-ink); }
+#sc-page .erp-kpi-card .kpi-label { font-weight:700; letter-spacing:.06em; }
+.sc-kpis { grid-template-columns:repeat(4,1fr) !important; margin-bottom:20px; }
+@media (max-width:900px) { .sc-kpis { grid-template-columns:repeat(2,1fr) !important; } }
+
+.sc-card { padding:16px 18px; margin-bottom:20px; border-radius:16px; }
+.sc-card-h { margin-bottom:12px; font-size:.95rem; color:var(--sc-ink); }
+
+.sc-types { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+@media (max-width:1100px) { .sc-types { grid-template-columns:repeat(2,1fr); } }
+@media (max-width:640px)  { .sc-types { grid-template-columns:1fr; } }
+.sc-type { background:#fff; border:1px solid var(--sc-line); border-top:5px solid #2563eb; border-radius:14px; padding:12px 14px;
+  cursor:pointer; transition:transform .15s,box-shadow .15s,background .15s; }
+.sc-type:hover { transform:translateY(-2px); box-shadow:0 10px 22px -12px rgba(30,58,95,.35); }
+.sc-type.on { background:#f1f5f9; box-shadow:inset 0 0 0 2px #2563eb; }
+.sc-type .h { font-size:.82rem; font-weight:800; color:#2563eb; text-transform:uppercase; letter-spacing:.04em; }
+.sc-type .v { font-size:1.4rem; font-weight:800; color:var(--sc-ink); margin-top:4px; }
+.sc-type .s { font-size:.78rem; color:var(--sc-muted); margin-top:2px; }
+
+.sc-form { display:grid; grid-template-columns:140px 1.2fr 130px 150px 1.4fr auto; gap:10px; align-items:end; }
+@media (max-width:1100px) { .sc-form { grid-template-columns:repeat(2,1fr); } }
+@media (max-width:640px)  { .sc-form { grid-template-columns:1fr; } }
+.sc-form label { font-size:.78rem; font-weight:700; color:#334155; margin-bottom:4px; display:block; }
+
+.sc-table tbody tr:hover { background:#f8fafc; }
+.sc-table td.num { text-align:right; font-variant-numeric:tabular-nums; }
+.sc-badge { display:inline-block; padding:2px 10px; border-radius:99px; font-size:.74rem; font-weight:700; color:#1e3a5f; background:#e0ecff; white-space:nowrap; }
+.sc-table tfoot td { font-weight:800; background:#f1f5f9; position:sticky; bottom:0; }
+
+/* v2 — summary matrix, sales list, form */
+.sc-head-actions { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
+.sc-head-actions .erp-select { min-width:90px; }
+.sc-tabs .nav-link { font-size:.88rem; font-weight:700; }
+.sc-matrix th { white-space:nowrap; position:sticky; top:0; z-index:1; }
+.sc-matrix td.num, .sc-matrix th.num, .sc-table td.num { text-align:right; font-variant-numeric:tabular-nums; }
+.sc-matrix .sc-tot { background:#f1f5f9; font-weight:700; }
+.sc-matrix tbody tr.sc-clickable { cursor:pointer; }
+.sc-matrix tbody tr.sc-clickable:hover { background:#eef4ff; }
+.sc-matrix tbody tr.sc-empty-row td { color:#94a3b8; }
+.sc-matrix tfoot td { font-weight:800; background:#e8eef7; border-top:2px solid #1e3a5f; }
+.sc-dash { color:#cbd5e1; }
+.sc-chip { display:inline-block; margin:1px 2px 1px 0; padding:2px 9px; border-radius:99px; font-size:.74rem; font-weight:600; color:#1e3a5f; background:#e0ecff; white-space:nowrap; }
+.sc-ar { display:inline-block; padding:2px 9px; border-radius:99px; font-size:.74rem; font-weight:700; white-space:nowrap; }
+.sc-ar.ok { background:#dcfce7; color:#166534; } .sc-ar.pend { background:#fef3c7; color:#92400e; }
+.sc-lines th { font-size:.78rem; text-transform:uppercase; letter-spacing:.03em; color:#475569; }
+.sc-lines tfoot td { border-top:2px solid #1e3a5f; font-size:1rem; }
+.sc-finance { border:1px dashed #94a3b8; border-radius:10px; padding:12px 14px; background:#f8fafc; }
