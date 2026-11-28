@@ -408,9 +408,15 @@ tr.cancelled-row td code { text-decoration: line-through; }
 
         <!-- STEP 2: PRINT PREVIEW (Hidden by default) -->
         <div id="transmittalPreviewView" style="display: none; padding: 20px;">
-          <button class="btn btn-sm btn-outline-secondary mb-3" onclick="backToTransmittalSelection()">
-            <i class="bi bi-arrow-left me-1"></i>Back to Selection
-          </button>
+          <div class="d-flex align-items-center flex-wrap gap-3 mb-3">
+            <button class="btn btn-sm btn-outline-secondary" onclick="backToTransmittalSelection()">
+              <i class="bi bi-arrow-left me-1"></i>Back to Selection
+            </button>
+            <label class="form-check d-flex align-items-center gap-2 m-0 small fw-bold" style="cursor:pointer;" title="Paliliitin ang print para magkasya sa isang pahina">
+              <input type="checkbox" class="form-check-input m-0" id="trnFitOnePage" onchange="trnSetFit(this.checked)">
+              <span><i class="bi bi-file-earmark me-1"></i>Fit to one page <span class="text-muted fw-normal">(tipid sa papel)</span></span>
+            </label>
+          </div>
           
           <div id="transmittalSheet" style="background: #fff; width: 100%; max-width: 800px; margin: 0 auto; padding: 40px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); font-family: 'Inter', sans-serif;">
             <div style="margin-bottom: 20px;">
