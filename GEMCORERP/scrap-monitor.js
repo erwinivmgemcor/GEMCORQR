@@ -482,10 +482,10 @@ function scBuildPrintHtml(s, logoUrl) {
     'td:first-child{font-weight:600}' +
     'tr.tot td{background:#e8eef7;border-top:2px solid #1e3a5f;border-bottom:2px solid #1e3a5f;font-weight:800;font-size:13.5px}' +
     '.words{margin-top:10px;padding:8px 12px;background:#f1f5f9;border-left:4px solid #16a34a;font-size:12px}.words b{color:#1e3a5f}' +
-    '.sigs{display:flex;gap:36px;margin-top:38px}.sig{flex:1}.sig .name{border-bottom:1.5px solid #334155;min-height:26px;padding:2px;font-weight:600;font-size:13px}' +
+    '.sigs{display:flex;gap:36px;margin-top:32px}.sig{flex:1}.sig .name{border-bottom:1.5px solid #334155;min-height:26px;padding:2px;font-weight:600;font-size:13px}' +
     '.sig .cap{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#475569;margin-top:4px}' +
     '.sig .dt{font-size:11px;color:#475569;margin-top:2px}' +
-    '.fin{margin-top:30px;border:1.5px solid #1e3a5f;border-radius:8px;overflow:hidden}' +
+    '.fin{margin-top:22px;border:1.5px solid #1e3a5f;border-radius:8px;overflow:hidden}' +
     '.fin .h{background:#e8eef7;padding:7px 14px;font-weight:800;font-size:11.5px;letter-spacing:.07em;color:#1e3a5f}' +
     '.fin .b{display:flex;gap:28px;padding:14px 14px 16px}.fin .b>div{flex:1}' +
     '.ar{font-size:15px;font-weight:800;color:#1e3a5f}' +
@@ -500,6 +500,10 @@ function scBuildPrintHtml(s, logoUrl) {
     (s.remarks ? '<div class="words" style="border-left-color:#f59e0b"><b>Remarks:</b> ' + scEsc(s.remarks) + '</div>' : '') +
     '<div class="sigs"><div class="sig"><div class="name">' + val(s.disposed_by) + '</div><div class="cap">Disposed By</div><div class="dt">Date: ' + scEsc(scFmtDate(s.sale_date)) + '</div></div>' +
     '<div class="sig"><div class="name">' + val(s.approved_by) + '</div><div class="cap">Approved By</div><div class="dt">Date: ________________</div></div></div>' +
+    '<div class="fin"><div class="h">SCRAP RECEIVED BY (BUYER)</div><div class="b">' +
+    '<div><div class="lbl">Name</div><div class="line">' + blank + '</div></div>' +
+    '<div><div class="lbl">Signature</div><div class="line">' + blank + '</div></div>' +
+    '<div style="flex:0 0 150px"><div class="lbl">Date</div><div class="line">' + blank + '</div></div></div></div>' +
     '<div class="fin"><div class="h">PAYMENT RECEIVED BY (FINANCE)</div><div class="b">' +
     '<div><div class="lbl">Name</div><div class="line">' + val(s.received_by) + '</div></div>' +
     '<div><div class="lbl">Signature / Date</div><div class="line">' + blank + '</div></div>' +
