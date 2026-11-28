@@ -1066,6 +1066,7 @@ window.buildTransmittalPreview = async function() {
   document.getElementById('transmittalPreviewView').style.display = 'block';
   document.getElementById('btnProceedToPreview').style.display = 'none';
   document.getElementById('btnPrintTransmittal').style.display = 'inline-block';
+  var fitChk = document.getElementById('trnFitOnePage'); if (fitChk) fitChk.checked = trnFitPref();
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -1133,24 +1134,56 @@ window.printTransmittal = async function() {
 };
 
 var _trnBusy = false;
+
+// "Fit to one page" option (remembered in this browser). Default: ON — para tipid sa papel.
+function trnFitPref() { try { return localStorage.getItem('erp_trn_fit_one_page') !== '0'; } catch (e) { return true; } }
+window.trnSetFit = function(on) { try { localStorage.setItem('erp_trn_fit_one_page', on ? '1' : '0'); } catch (e) {} };
+
 function _trnOpenPrint(printContents) {
+  var fit = trnFitPref();
   var printWindow = window.open('', '_blank');
   if (!printWindow) { erpShowToast('Na-block ng browser ang print window. Payagan ang pop-up, tapos gamitin ang Reprint sa Transmittal History.', 'warning'); return; }
-  printWindow.document.write(
-    '<html><head><title>MRR Transmittal</title>' +
-    '<style>' +
+
+  var baseCss =
     '  body { font-family: "Inter", Arial, sans-serif; padding: 20px; }' +
     '  table { width: 100%; border-collapse: collapse; font-size: 12px; }' +
     '  th, td { padding: 8px; text-align: left; }' +
     '  th { border-top: 2px solid #000; border-bottom: 2px solid #000; text-align: center; font-weight: bold; }' +
     '  tr { border-bottom: 1px solid #ccc; }' +
     '  h3 { margin-bottom: 20px; }' +
-    '  @media print { @page { size: portrait; margin: 0.5in; } body { padding: 0; } }' +
-    '</style></head><body>' + printContents + '</body></html>'
+    '  @media print { @page { size: portrait; margin: 0.5in; } body { padding: 0; } }';
+
+  // Compact layout: tighter rows/margins, then (if still too tall) the whole sheet is scaled down to fit ONE page.
+  // Safe for both A4 and Letter (width 700px, usable height ~930px with 0.4in margins).
+  var fitCss =
+    '  html, body { margin: 0; padding: 0; }' +
+    '  body { font-family: "Inter", Arial, sans-serif; }' +
+    '  #trnFitWrap { width: 700px; margin: 0 auto; }' +
+    '  h3 { margin: 0 0 10px !important; font-size: 17px; }' +
+    '  table { width: 100%; border-collapse: collapse; font-size: 11px !important; }' +
+    '  th { border-top: 2px solid #000; border-bottom: 2px solid #000; text-align: center; font-weight: bold; padding: 5px 6px !important; }' +
+    '  td { padding: 3px 6px !important; text-align: left; border-bottom: 1px solid #ccc; }' +
+    '  tr { page-break-inside: avoid; }' +
+    '  #trnFitWrap > div { margin-bottom: 12px !important; }' +
+    '  div[style*="margin-top: 60px"] { margin-top: 28px !important; }' +
+    '  @media print { @page { size: auto; margin: 0.4in; } }';
+
+  printWindow.document.write(
+    '<html><head><title>MRR Transmittal</title><style>' + (fit ? fitCss : baseCss) + '</style></head><body>' +
+    (fit ? '<div id="trnFitWrap">' + printContents + '</div>' : printContents) + '</body></html>'
   );
   printWindow.document.close();
   printWindow.focus();
-  setTimeout(function() { printWindow.print(); printWindow.close(); }, 250);
+  setTimeout(function() {
+    if (fit) {
+      try {
+        var w = printWindow.document.getElementById('trnFitWrap'), AVAIL = 930;
+        var h = w.scrollHeight;
+        if (h > AVAIL) w.style.zoom = String(Math.max(AVAIL / h, 0.45));   // very long lists: smallest readable size, rest flows to page 2
+      } catch (e) {}
+    }
+    printWindow.print(); printWindow.close();
+  }, 300);
 }
 
 // ═══════════════════════════════════════════════════════════
